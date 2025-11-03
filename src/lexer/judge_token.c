@@ -1,0 +1,119 @@
+#include "token.h"
+
+
+char last_token_chr(char text) {
+    static char t = '\0';
+    if (text == '\0') {
+        return text;
+    } else {
+        t = text;
+    }
+    return text;
+}
+
+TokenType last_token_type(TokenType type) {
+    static TokenType last_type = TypeNull;
+    if (type != TypeNull) {
+        if (last_type != type) {
+            last_type = type;
+        }
+        return type;
+    }
+    return last_type;
+}
+
+
+int _is_normal(char chr) {
+    if (isalpha(chr) || chr == '_' || last_token_type(TypeNull) == TypeNormal && isdigit(chr)) {
+        last_token_type(TypeNormal);
+        return 1;
+    }
+    return 0;
+}
+
+int _is_number(char chr) {
+    if (isdigit(chr)) {
+        last_token_type(TypeNumber);
+        return 1;
+    }
+    return 0;
+}
+
+int _is_space(char chr) {
+    if (isspace(chr) && chr != '\0') {
+        last_token_type(TypeSpace);
+        return 1;
+    }
+    return 0;
+}
+
+int _is_symbol(char chr) {
+    if (ispunct(chr)) {
+        last_token_type(TypeSymbol);
+        return 1;
+    }
+    return 0;
+}
+
+TokenType is_token_type(char chr) {
+    if (_is_normal(chr)) {
+        return TypeNormal;
+    } else if (_is_number(chr)) {
+        return TypeNumber;
+    } else if (_is_space(chr)) {
+        return TypeSpace;
+    } else if (_is_symbol(chr)) {
+        return TypeSymbol;
+    }
+
+    return TypeEnd;
+}
+
+int is_token(char chr, TokenType type) {
+    static int lparen = 0;
+    static int rparen = 0;
+
+    int result = 0;
+    switch (type) {
+        case TypeNormal:
+            result = _is_normal(chr);
+            break;
+        case TypeNumber:
+            result = _is_number(chr);
+            break;
+        case TypeSpace:
+            result = _is_space(chr);
+            break;
+        case TypeSymbol:
+            result = _is_symbol(chr);
+            break;
+        default:
+            break;
+    }
+    last_token_chr(chr);
+    return result;
+}
+
+
+
+TokenType change_op_symbol(char *value) {
+    if (!strcmp(value, "(")) {
+        return TypeLparen;
+    } else if (!strcmp(value, ")")) {
+        return TypeRparen;
+    }
+    
+    //  ===  算術演算子 ===
+    if (!strcmp(value, "+")) {
+        return TypeOpAdd;
+    } else if (!strcmp(value, "-")) {
+        return TypeOpSub;
+    } else if (!strcmp(value, "*")) {
+        return TypeOpMul;
+    } else if (!strcmp(value, "/")) {
+        return TypeOpDiv;
+    } else if (!strcmp(value, "=")) {
+        return TypeOpAssign;
+    }
+    return TypeSymbol;
+}
