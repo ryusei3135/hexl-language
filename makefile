@@ -1,6 +1,6 @@
 TARGET = banana
-CC = gcc
-CXX = g++
+CC = clang
+CXX = clang++
 
 # CXXFLAGS = -Wall -O2 -I./src
 # RUST_LIB = src/eval/release/eval_lib.a
@@ -12,6 +12,7 @@ CC_SRCS := $(shell find src -name '*.c')
 CXX_SRCS := $(shell find src -name '*.cpp')
 
 OBJS := $(CC_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
+
 
 # ===  rule ===
 all: $(TARGET)
@@ -35,7 +36,7 @@ $(TARGET): $(OBJS)
 	$(CXX) -o $@ $(OBJS)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS)
 # 	cd rustlib && cargo clean
 
 test: $(TARGET)

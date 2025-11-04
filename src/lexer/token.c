@@ -1,14 +1,6 @@
 #include "token.h"
 
 
-TokenType sorting_normal_token(char *token_text) {
-    if (!strcmp(token_text, "def")) {
-        return TypeFuncSym;
-    }
-
-    return TypeNormal;
-}
-
 
 static Token token_end_ptr() {
     char *end_text = (char *)malloc(5);
@@ -19,6 +11,8 @@ static Token token_end_ptr() {
 static void assign_token_list_ptr(Token **token_list_ptr, Token assign_token, int *token_ptr_memory_count) {
     //  もし前回のトークンが"-"なら1
     static int minus_token = 0;
+    int token_paren = 0;
+    Token parts;
 
     if (!strcmp(assign_token.token, "-")) {
         minus_token = 1;
@@ -36,30 +30,48 @@ static void assign_token_list_ptr(Token **token_list_ptr, Token assign_token, in
         }
     }
 
+    if (!strcmp(assign_token.token, "()")) {
+        free(assign_token.token);
+        assign_token.token = (char *)malloc(2);
+        strcpy(assign_token.token, "(");
+        assign_token.type = TypeLparen;
+        token_paren = 1;
+
+        parts.token = (char *)malloc(2);
+        strcpy(parts.token, ")");
+        parts.type = TypeRparen;
+    }
+
     if (*token_ptr_memory_count > 1) {
         (*token_list_ptr) = (Token *)realloc(
                 (*token_list_ptr), 
                 sizeof(Token) 
                     * (*token_ptr_memory_count));
     }
-
-    if (assign_token.type == TypeNormal) {
-        assign_token.type = sorting_normal_token(assign_token.token);
-    }
     
     (*token_list_ptr)[*token_ptr_memory_count - 1] = assign_token;
     (*token_ptr_memory_count)++;
+
+    if (token_paren) {
+        assign_token_list_ptr(token_list_ptr, parts, token_ptr_memory_count);
+    }
 }
 
 static Token cut_token_text(char **buffer, TokenType type) {
     int token_length = 0;
 
-    while (is_token(*((*buffer) + token_length), type)) token_length++;
+    while (is_token(*((*buffer) + token_length), type)) {
+        token_length++;
+    }
 
     char *token_text = (char *)malloc(token_length);
     strncpy(token_text, (*buffer), token_length);
     token_text[token_length] = '\0';
     *buffer += token_length;
+
+    if (type == TypeNormal) {
+        type = statement_sorting(token_text);
+    }
 
     if (type == TypeSymbol) {
         type = change_op_symbol(token_text);
@@ -95,6 +107,5 @@ Token* make_token_list_ptr(char *buffer) {
         buffer++;
     }
     assign_token_list_ptr(&token_list_ptr, token_end_ptr(), &token_ptr_memory_count);
-
     return token_list_ptr;
 }

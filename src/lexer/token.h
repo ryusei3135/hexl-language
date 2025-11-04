@@ -19,8 +19,8 @@ typedef enum {
     TypeRparen,
     TypeLparen,
 
-    TypeFuncSym,
-    TypeCondition,
+    TypeFunc,
+    
     TypeNull,
 } TokenType;
 
@@ -43,6 +43,7 @@ TokenType is_token_type(char chr);
 int is_token(char chr, TokenType type);
 
 TokenType change_op_symbol(char *value);
+TokenType statement_sorting(char *token);
 
 
 void free_all_token_ptr(Token *token_list_ptr);

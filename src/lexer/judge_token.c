@@ -4,11 +4,11 @@
 char last_token_chr(char text) {
     static char t = '\0';
     if (text == '\0') {
-        return text;
+        return t;
     } else {
         t = text;
     }
-    return text;
+    return t;
 }
 
 TokenType last_token_type(TokenType type) {
@@ -17,7 +17,7 @@ TokenType last_token_type(TokenType type) {
         if (last_type != type) {
             last_type = type;
         }
-        return type;
+        return last_type;
     }
     return last_type;
 }
@@ -49,7 +49,6 @@ int _is_space(char chr) {
 
 int _is_symbol(char chr) {
     if (ispunct(chr)) {
-        last_token_type(TypeSymbol);
         return 1;
     }
     return 0;
@@ -116,4 +115,12 @@ TokenType change_op_symbol(char *value) {
         return TypeOpAssign;
     }
     return TypeSymbol;
+}
+
+TokenType statement_sorting(char *token) {
+    if (!strcmp(token, "def")) {
+        return TypeFunc;
+    }
+
+    return TypeNormal;
 }

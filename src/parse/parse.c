@@ -32,7 +32,9 @@ void make_process_data(Token *token_list_ptr) {
     while (token_list_ptr[pos].type != TypeEnd) {
         if (token_list_ptr[pos].type == TypeNumber || token_list_ptr[pos].type == TypeNormal) {
             CalculNode *node = parse_assign_var(token_list_ptr, &pos);
-            // free_all_calcul_node(node);
+            add_func_process(node);
+        } else if (token_list_ptr[pos].type == TypeFunc) {
+            make_func_header(token_list_ptr, &pos);
         }
     }
 }

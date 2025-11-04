@@ -5,6 +5,7 @@ void load_file(char *file_name) {
     FILE *file = fopen(file_name, "r");
 
     char buffer[80];
+    load();
 
     while (fgets(buffer, sizeof(buffer), file) != NULL) {
         buffer[strcspn(buffer, "\n")] = '\0';
@@ -12,6 +13,7 @@ void load_file(char *file_name) {
         make_process_data(token_list_ptr);
         free_all_token_ptr(token_list_ptr);
     }
+    func_eval("main");
 
     fclose(file);
 }

@@ -50,7 +50,6 @@ public:
     ~ManageVariables() {
         for (int count = 0; this->blocks_length - 1 > count; count++) {
             free(this->blocks[count].name);
-            free_all_calcul_node(this->blocks[count].value);
         }
 
         free(this->blocks);

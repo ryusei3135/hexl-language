@@ -8,8 +8,10 @@
 #include "ctype.h"
 #include "stdlib.h"
 
+#include "extern_lib/load.h"
 #include "lexer/token.h"
 #include "variable/variable.h"
+#include "func/func.h"
 #include "parse/parse.h"
 
 

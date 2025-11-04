@@ -32,6 +32,10 @@ typedef struct CalculNode {
 } CalculNode;
 
 
+//  === statement.c ===
+void make_func_header(Token *token_list_ptr, int *pos);
+
+
 //  === calcul.c ===
 CalculNode *parse_operator(Token *token_list_ptr, int *pos);
 CalculNode *parse_assign_var(Token *token_list_ptr, int *pos);
