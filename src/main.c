@@ -5,7 +5,8 @@ void load_file(char *file_name) {
     FILE *file = fopen(file_name, "r");
 
     char buffer[80];
-    load();
+    load_lib_func("build/lib/io/io.so", "print");
+    eval_lib_func("print");
 
     while (fgets(buffer, sizeof(buffer), file) != NULL) {
         buffer[strcspn(buffer, "\n")] = '\0';

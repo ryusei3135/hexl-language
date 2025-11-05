@@ -8,7 +8,14 @@
 #include <dlfcn.h>
 #endif
 
-void load();
+#include "../banana.h"
+
+
+// === manage_lib.cpp ===
+// bananaファイルでは、なくc言語などで作った
+// 関数を実行、読み込みする
+void load_lib_func(char *path, char *name);
+void eval_lib_func(char *name);
 
 
 #endif

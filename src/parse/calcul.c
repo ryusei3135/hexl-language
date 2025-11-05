@@ -169,7 +169,6 @@ int calcul_eval(CalculNode* n) {
 }
 
 void free_all_calcul_node(CalculNode *n) {
-    printf("%d value free\n", calcul_eval(n));
     if (n->value) {
         free(n->value);
     }

@@ -1,3 +1,4 @@
 .vscode/
+build/
 line_count.py
 git.sh

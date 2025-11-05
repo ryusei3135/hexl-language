@@ -24,7 +24,7 @@ void add_func(char *name);
 void add_func_process(CalculNode *process);
 FuncBlock* get_func_data(char *func_name);
 
-//  === 関数を実行することが、できる ===
+//  === 関数を実行することができる ===
 void func_eval(char *func_name);
 
 
