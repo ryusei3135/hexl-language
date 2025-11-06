@@ -13,3 +13,6 @@ import std::io::io.print
 このように読み込める
 呼び出すときは、
 io.print()
+# banana alpha 0.3.2
+ビルドされたときのディレクトリを変更
+build -> bin

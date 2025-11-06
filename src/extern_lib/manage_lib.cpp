@@ -21,7 +21,7 @@ int judge_this_expr_is_import(Token *token_list_ptr, int *pos) {
 int setting_load_lib(Token *token_list_ptr, int *pos, char *dir_stack) {
     if (token_list_ptr[*pos].type == TypeLibSpace) {
         dir_stack = (char *)realloc(
-                dir_stack, 
+                dir_stack,
                 (int)strlen(dir_stack) + 1);
         strcat(dir_stack, "/");
     } else if (token_list_ptr[*pos].type == TypeComma) {
@@ -73,11 +73,11 @@ private:
         // === 一番最初の名前が、"std"なら、標準ライブラリなので、ディレクトリを指定する ===
         if (!strcmp(token_list_ptr[*pos].token, "std") && !(*dir_stack)) {
             token_list_ptr[*pos].token = (char *)realloc(token_list_ptr[*pos].token, 9);
-            strcpy(token_list_ptr[*pos].token, "build/lib");
+            strcpy(token_list_ptr[*pos].token, "bin/lib");
             this->now_lib_type = LibStd;
         } else {
             dir_stack = (char *)realloc(
-                    dir_stack, 
+                    dir_stack,
                     (int)strlen(dir_stack)
                     + (int)strlen(token_list_ptr[*pos].token));
         }

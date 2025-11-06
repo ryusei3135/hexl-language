@@ -4,7 +4,7 @@ CXX = clang++
 
 SRC_DIR = src
 LIB_DIR = lib
-BUILD_DIR = build
+BUILD_DIR = bin
 
 TARGET = $(BUILD_DIR)/banana
 
@@ -51,11 +51,6 @@ $(BUILD_DIR)/%.o: %.cpp
 $(BUILD_DIR)/%.so: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(LIB_FLAGS) $< -o $@
-
-# Rust静的ライブラリをビルド
-# $(RUST_LIB):
-# 	@echo "🦀 Building Rust static library..."
-# 	cd rustlib && cargo build --release
 
 
 # 最終リンク
