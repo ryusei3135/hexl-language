@@ -23,6 +23,9 @@ ifeq ($(UNAME), Windows_NT)
 endif
 
 
+# go build -buildmode=c-shared -o libhello.so hello.go
+
+
 SRC_CC_FILES  := $(shell find $(SRC_DIR) -name '*.c')
 SRC_CXX_FILES := $(shell find $(SRC_DIR) -name '*.cpp')
 LIB_CC_FILES  := $(shell find $(LIB_DIR) -name '*.c')

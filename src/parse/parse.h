@@ -12,6 +12,7 @@ typedef enum {
     Div,
 
     Num,
+    CallFunc,
     //  ===  関係演算子 ===
     TypeOpEpual,
     TypeOpBigger,
@@ -24,16 +25,32 @@ typedef enum {
     TypeOpOr,
 } OpType;
 
+typedef struct ArgsNode {
+    char *arg_value;
+} ArgsNode;
+
+typedef struct CallFuncNode {
+    char *func_name;
+    char *lib_header;
+} CallFuncNode;
+
 typedef struct CalculNode {
-    char *value;
+    union {
+        char *value;
+        CallFuncNode *call_data;
+    };
     OpType type;
-    struct CalculNode *left;
+    union {
+        ArgsNode *args;
+        struct CalculNode *left;
+    };
     struct CalculNode *right;
 } CalculNode;
 
 
 //  === statement.c ===
 void make_func_header(Token *token_list_ptr, int *pos);
+CalculNode* make_call_func_node(Token *token_list_ptr, int *pos);
 
 
 //  === calcul.c ===
@@ -42,7 +59,7 @@ CalculNode *parse_assign_var(Token *token_list_ptr, int *pos);
 int calcul_eval(CalculNode* n);
 void free_all_calcul_node(CalculNode *n);
 
-//  === parse.c ===
+//  === parse.c
 OpType soring_operator_token_type(char *token_text);
 void make_process_data(Token *token_list_ptr);
 

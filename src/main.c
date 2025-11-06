@@ -5,8 +5,6 @@ void load_file(char *file_name) {
     FILE *file = fopen(file_name, "r");
 
     char buffer[80];
-    load_lib_func("build/lib/io/io.so", "print");
-    eval_lib_func("print");
 
     while (fgets(buffer, sizeof(buffer), file) != NULL) {
         buffer[strcspn(buffer, "\n")] = '\0';
@@ -14,7 +12,10 @@ void load_file(char *file_name) {
         make_process_data(token_list_ptr);
         free_all_token_ptr(token_list_ptr);
     }
-    func_eval("main");
+    CallFuncNode *call_node = (CallFuncNode *)malloc(sizeof(CallFuncNode));
+    call_node->func_name = (char *)malloc(5);
+    strcpy(call_node->func_name, "main");
+    func_eval(call_node, NULL);
 
     fclose(file);
 }

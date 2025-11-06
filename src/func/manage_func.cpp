@@ -20,8 +20,8 @@ public:
         //  関数の情報を入れる変数のメモリを拡張
         this->block_length++;
         this->blocks = (FuncBlock *)realloc(
-                this->blocks, 
-                this->block_length 
+                this->blocks,
+                this->block_length
                 * sizeof(FuncBlock));
     }
     //  === 関数に処理内容を追加 ===
@@ -35,7 +35,7 @@ public:
         this->blocks[this->block_length - 2].process \
                 = (ProcessList *)realloc(
                         this->blocks[this->block_length - 2].process,
-                        sizeof(ProcessList) 
+                        sizeof(ProcessList)
                         * (this->blocks[this->block_length - 2].process_length + 1));
     }
 
@@ -57,7 +57,7 @@ public:
     ~ManageFuncs() {
         for (int count = 0; this->block_length - 1 > count; count++) {
             free(this->blocks[count].name);
-            for (int process = 0; this->blocks[count].process_length > process; process++) {
+            for (int process = 0; this->blocks[count].process_length - 1 > process; process++) {
                 free_all_calcul_node(this->blocks[count].process[process].process_ptr);
             }
             free(this->blocks[count].process);

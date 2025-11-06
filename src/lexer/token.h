@@ -7,6 +7,7 @@ typedef enum {
     TypeNumber,
     TypeSpace,
     TypeSymbol,
+    TypeString,
     TypeEnd,
     //  ===  算術演算子 ===
     TypeOpAdd,
@@ -18,13 +19,16 @@ typedef enum {
 
     TypeRparen,
     TypeLparen,
+    TypeComma,
 
     TypeFunc,
-    
+    TypeImport,
+    TypeLibSpace,
+
     TypeNull,
 } TokenType;
 
-typedef struct {
+typedef struct Token {
     char *token;
     TokenType type;
 } Token;
@@ -48,5 +52,6 @@ TokenType statement_sorting(char *token);
 
 void free_all_token_ptr(Token *token_list_ptr);
 Token* make_token_list_ptr(char *buffer);
+char* make_string_token(Token *token_list_ptr, int *pos);
 
 #endif

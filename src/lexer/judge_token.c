@@ -48,6 +48,9 @@ int _is_space(char chr) {
 }
 
 int _is_symbol(char chr) {
+    if (chr == '"') {
+        return 0;
+    }
     if (ispunct(chr)) {
         return 1;
     }
@@ -63,6 +66,8 @@ TokenType is_token_type(char chr) {
         return TypeSpace;
     } else if (_is_symbol(chr)) {
         return TypeSymbol;
+    } else if (chr == '"') {
+        return TypeString;
     }
 
     return TypeEnd;
@@ -87,6 +92,9 @@ int is_token(char chr, TokenType type) {
             result = _is_symbol(chr);
             break;
         default:
+            if (chr == '"') {
+                result = 1;
+            }
             break;
     }
     last_token_chr(chr);
@@ -100,8 +108,10 @@ TokenType change_op_symbol(char *value) {
         return TypeLparen;
     } else if (!strcmp(value, ")")) {
         return TypeRparen;
+    } else if (!strcmp(value, ".")) {
+        return TypeComma;
     }
-    
+
     //  ===  算術演算子 ===
     if (!strcmp(value, "+")) {
         return TypeOpAdd;
@@ -114,12 +124,19 @@ TokenType change_op_symbol(char *value) {
     } else if (!strcmp(value, "=")) {
         return TypeOpAssign;
     }
+
+    if (!strcmp(value, "::")) {
+        return TypeLibSpace;
+    }
+
     return TypeSymbol;
 }
 
 TokenType statement_sorting(char *token) {
     if (!strcmp(token, "def")) {
         return TypeFunc;
+    } else if (!strcmp(token, "import")) {
+        return TypeImport;
     }
 
     return TypeNormal;

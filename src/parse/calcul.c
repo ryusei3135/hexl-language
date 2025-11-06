@@ -125,15 +125,19 @@ CalculNode *parse_operator(Token *token_list_ptr, int *pos) {
 CalculNode *parse_assign_var(Token *token_list_ptr, int *pos) {
     CalculNode *node;
     int variable_node_status = 0;
-    int var_name_pos;
+    int var_name_pos = -1;
 
     while (token_list_ptr[*pos].type != TypeEnd) {
         if (token_list_ptr[*pos].type == TypeNormal && !variable_node_status) {
+            if (token_list_ptr[(*pos) + 1].type == TypeLparen || token_list_ptr[(*pos) + 1].type == TypeComma) {
+                return make_call_func_node(token_list_ptr, pos);
+            }
             var_name_pos = (*pos);
             (*pos)++;
         }
 
-        if (token_list_ptr[*pos].type == TypeOpAssign) {
+        // もし、変数に代入する式なら、実行
+        if (token_list_ptr[*pos].type == TypeOpAssign && var_name_pos >= 0) {
             (*pos)++;
             node = parse_operator(token_list_ptr, pos);
 
@@ -164,6 +168,7 @@ int calcul_eval(CalculNode* n) {
         case TypeOpIsNot: return calcul_eval(n->left) != calcul_eval(n->right);
         case TypeOpAnd: return calcul_eval(n->left) && calcul_eval(n->right);
         case TypeOpOr: return calcul_eval(n->left) ||  calcul_eval(n->right);
+        case CallFunc: return func_eval(n->call_data, n->args);
     }
     return 0;
 }
@@ -171,6 +176,10 @@ int calcul_eval(CalculNode* n) {
 void free_all_calcul_node(CalculNode *n) {
     if (n->value) {
         free(n->value);
+    } else if (n->call_data) {
+        free(n->call_data->func_name);
+        free(n->call_data->lib_header);
+        free(n->call_data);
     }
     if (n->left) {
         free_all_calcul_node(n->left);
@@ -178,5 +187,10 @@ void free_all_calcul_node(CalculNode *n) {
     } else if (n->right) {
         free_all_calcul_node(n->right);
         free(n->right);
+    } else if (n->args) {
+        for (int count = 0; n->args[count].arg_value; count++) {
+            free(n->args[count].arg_value);
+        }
+        free(n->args);
     }
 }

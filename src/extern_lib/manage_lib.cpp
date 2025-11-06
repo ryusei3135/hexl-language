@@ -2,122 +2,115 @@ extern "C" {
     #include "load.h"
 }
 
+// === 文法が正しいか、調べる ===
+int judge_this_expr_is_import(Token *token_list_ptr, int *pos) {
+    if (token_list_ptr[*pos].type == TypeImport) {
+        while (token_list_ptr[*pos].type != TypeNormal) {
+            (*pos)++;
 
-typedef struct {
-    void *ptr;
-    char *func_name;
-} LibFuncBlock;
-
-
-void *load(char *path, char *name) {
-#if defined(_WIN32)
-    HMODULE handle = LoadLibraryA(path);
-    if (!handle) {
-        exit(1);
+            if (token_list_ptr[*pos].type == TypeEnd) {
+                return 0;
+            }
+        }
     }
-    void *ptr = GetProcAddress(handle, name);
-#else
-    void *handle = dlopen(path, RTLD_LAZY);
-    if (!handle) {
-        exit(1);
-    }
-    void *ptr = dlsym(handle, name);
-#endif
 
-#if defined(_WIN32)
-    FreeLibrary(handle);
-#else
-    dlclose(handle);
-#endif
-    return ptr;
+    return 1;
+}
+
+// === 読み込む関数やファイルの場所などを処理 ===
+int setting_load_lib(Token *token_list_ptr, int *pos, char *dir_stack) {
+    if (token_list_ptr[*pos].type == TypeLibSpace) {
+        dir_stack = (char *)realloc(
+                dir_stack, 
+                (int)strlen(dir_stack) + 1);
+        strcat(dir_stack, "/");
+    } else if (token_list_ptr[*pos].type == TypeComma) {
+        return 1;
+    }
+
+    return 0;
 }
 
 
-class ManageLibFuncs {
+class ManageLibs {
 public:
-    void add_func(char *path, char *name) {
-        this->blocks[this->block_length - 1].ptr = load(path, name);
-        this->blocks[this->block_length - 1].func_name \
-                = (char *)malloc((int)strlen(name));
-        
-        strcpy(this->blocks[this->block_length - 1].func_name, name);
+    void import_lib(Token *token_list_ptr, int *pos) {
+        char *dir_stack = (char *)malloc(1);
 
-        this->block_length++;
-        this->blocks = (LibFuncBlock *)realloc(
-                this->blocks, 
-                sizeof(LibFuncBlock) 
-                * this->block_length);
-    }
-
-    void* get_lib_func_ptr(char *name) {
-        int func_pos = 0;
-
-        if ((func_pos = this->search_lib_func(name)) >= 0) {
-            return this->blocks[func_pos].ptr;
+        if (!judge_this_expr_is_import(token_list_ptr, pos)) {
+            exit(1);//err
         }
 
-        exit(1);
-    }
+        while (token_list_ptr[*pos].type != TypeEnd) {
+            if (token_list_ptr[*pos].type == TypeNormal) {
+                this->setting_lib_dir(token_list_ptr, pos, dir_stack);
+            }
+            if (setting_load_lib(token_list_ptr, pos, dir_stack)) {
+                // === ライブラリをロード ===
+                (*pos)++;
+                load_lib_func(dir_stack, token_list_ptr[*pos].token, this->last_lib_dir);
+            }
 
-    ManageLibFuncs() {
-        this->blocks = (LibFuncBlock *)malloc(sizeof(LibFuncBlock));
-        this->block_length = 1;
-    }
-
-    ~ManageLibFuncs() {
-        for (int count = 0; this->block_length > count; count++) {
-            free(this->blocks[count].func_name);
+            (*pos)++;
         }
 
-        free(this->blocks);
+        printf("%s\n", dir_stack);
+        free(dir_stack);
+    }
+
+    ManageLibs() {
+        this->now_lib_type = LibNull;
+    }
+
+    ~ManageLibs() {
+        if (this->last_lib_dir) {
+            free(this->last_lib_dir);
+        }
     }
 private:
-    int search_lib_func(char *name) {
-        for (int count = 0; this->block_length > count; count++) {
-            if (!strcmp(this->blocks[count].func_name, name)) {
-                return count;
-            }
+    // === ライブラリの名前の処理をする ===
+    void setting_lib_dir(Token *token_list_ptr, int *pos, char *dir_stack) {
+        // === 一番最初の名前が、"std"なら、標準ライブラリなので、ディレクトリを指定する ===
+        if (!strcmp(token_list_ptr[*pos].token, "std") && !(*dir_stack)) {
+            token_list_ptr[*pos].token = (char *)realloc(token_list_ptr[*pos].token, 9);
+            strcpy(token_list_ptr[*pos].token, "build/lib");
+            this->now_lib_type = LibStd;
+        } else {
+            dir_stack = (char *)realloc(
+                    dir_stack, 
+                    (int)strlen(dir_stack)
+                    + (int)strlen(token_list_ptr[*pos].token));
         }
-        return -1;
+
+        this->setting_last_lib_name(token_list_ptr[*pos].token);
+        strcat(dir_stack, token_list_ptr[*pos].token);
     }
-    LibFuncBlock *blocks;
-    int block_length;
+
+    // === 前回指定された、ライブラリの名前を代入 ===
+    void setting_last_lib_name(char *name) {
+        if (this->last_lib_dir) {
+            free(last_lib_dir);
+        }
+        this->last_lib_dir = (char *)malloc((int)strlen(name));
+        strcpy(this->last_lib_dir, name);
+    }
+
+    typedef enum {
+        LibNull,
+        LibNormal,
+        LibStd,
+    } LibType;
+
+    LibType now_lib_type;
+    char *last_lib_dir;
 };
 
 
-ManageLibFuncs* access_lib_func() {
-    static ManageLibFuncs lib_funcs;
-    return &lib_funcs;
+ManageLibs* access_manage_libs() {
+    static ManageLibs libs;
+    return &libs;
 }
 
-void load_lib_func(char *path, char *name) {
-    access_lib_func()->add_func(path, name);
-}
-
-// === 外部関数を呼び出す ===
-extern "C" void eval_lib_func(char *name) {
-    void *ptr = access_lib_func()->get_lib_func_ptr(name);
-    char *msg = (char *)malloc(12);
-    strcpy(msg, "hello world");
-    int result;
-
-#if defined(_WIN32)
-    asm volatile(
-        "mov %[text], %%rcx\n\t"
-        "call *%[fptr]\n\t"
-        "mov %%eax, %[res]\n\t"
-        : [res] "=r"(result)
-        : [text] "r"(msg), [fptr] "r"(ptr)
-        : "rax", "rcx"
-    );
-#else
-    asm volatile(
-        "mov %[text], %%rdi\n\t"
-        "call *%[fptr]\n\t"
-        "mov %%eax, %[res]\n\t"
-        : [res] "=r"(result)
-        : [text] "r"(msg), [fptr] "r"(ptr)
-        : "rax", "rdi"
-    );
-#endif
+void import_lib(Token *token_list_ptr, int *pos) {
+    access_manage_libs()->import_lib(token_list_ptr, pos);
 }

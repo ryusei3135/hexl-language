@@ -35,6 +35,12 @@ void make_process_data(Token *token_list_ptr) {
             add_func_process(node);
         } else if (token_list_ptr[pos].type == TypeFunc) {
             make_func_header(token_list_ptr, &pos);
+        } else if (token_list_ptr[pos].type == TypeImport) {
+            import_lib(token_list_ptr, &pos);
+        }
+
+        if (token_list_ptr[pos].type == TypeSpace) {
+            pos++;
         }
     }
 }

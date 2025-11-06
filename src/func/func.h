@@ -6,6 +6,8 @@
 
 
 //  === parse/parse.hで定義 ===
+typedef struct CallFuncNode CallFuncNode;
+typedef struct ArgsNode ArgsNode;
 typedef struct CalculNode CalculNode;
 
 
@@ -25,7 +27,7 @@ void add_func_process(CalculNode *process);
 FuncBlock* get_func_data(char *func_name);
 
 //  === 関数を実行することができる ===
-void func_eval(char *func_name);
+int func_eval(CallFuncNode *call_data, ArgsNode *args);
 
 
 #endif

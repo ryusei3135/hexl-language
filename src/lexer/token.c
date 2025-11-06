@@ -44,11 +44,11 @@ static void assign_token_list_ptr(Token **token_list_ptr, Token assign_token, in
 
     if (*token_ptr_memory_count > 1) {
         (*token_list_ptr) = (Token *)realloc(
-                (*token_list_ptr), 
-                sizeof(Token) 
+                (*token_list_ptr),
+                sizeof(Token)
                     * (*token_ptr_memory_count));
     }
-    
+
     (*token_list_ptr)[*token_ptr_memory_count - 1] = assign_token;
     (*token_ptr_memory_count)++;
 
@@ -108,4 +108,29 @@ Token* make_token_list_ptr(char *buffer) {
     }
     assign_token_list_ptr(&token_list_ptr, token_end_ptr(), &token_ptr_memory_count);
     return token_list_ptr;
+}
+
+
+char* make_string_token(Token *token_list_ptr, int *pos) {
+    int string_status = 0;
+    char *string_token = (char *)malloc(1);
+
+    while (token_list_ptr[*pos].type != TypeEnd) {
+        if (token_list_ptr[*pos].type == TypeString) {
+            if (string_status) {
+                strcat(string_token, "\"");
+                (*pos)++;
+                return string_token;
+            }
+            string_status = 1;
+        }
+        string_token = (char *)realloc(
+            string_token,
+            (int)strlen(token_list_ptr[*pos].token)
+            + (int)strlen(string_token) + 1);
+        strcat(string_token, token_list_ptr[*pos].token);
+        (*pos)++;
+    }
+    //err
+    exit(1);
 }

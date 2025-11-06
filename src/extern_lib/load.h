@@ -2,20 +2,20 @@
 #define BANANA_SRC_EXTERN_LIB_LOAD_H
 
 
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 #include "../banana.h"
 
 
-// === manage_lib.cpp ===
+typedef struct Token Token;
+
+
+// === bin_lib.cpp ===
 // bananaファイルでは、なくc言語などで作った
 // 関数を実行、読み込みする
-void load_lib_func(char *path, char *name);
-void eval_lib_func(char *name);
+void load_lib_func(char *path, char *name, char *lib_header);
+void eval_lib_func(char *name, char *lib_header);
+
+// === manage_lib.cpp ===
+void import_lib(Token *token_list_ptr, int *pos);
 
 
 #endif

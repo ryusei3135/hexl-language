@@ -1,4 +1,7 @@
+import std::io::io.print
+
 def main()
 a = 10
 b = 20
 c = a + b
+io.print("Hello world")
