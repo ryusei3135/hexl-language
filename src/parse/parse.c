@@ -28,18 +28,34 @@ OpType soring_operator_token_type(char *token_text) {
 
 
 void make_process_data(Token *token_list_ptr) {
+    static int indent_len = 0;
+    static int start_indent = 0;
+
     int pos = 0;
     while (token_list_ptr[pos].type != TypeEnd) {
         if (token_list_ptr[pos].type == TypeNumber || token_list_ptr[pos].type == TypeNormal) {
             CalculNode *node = parse_assign_var(token_list_ptr, &pos);
             add_func_process(node);
         } else if (token_list_ptr[pos].type == TypeFunc) {
+            start_indent = 1;
             make_func_header(token_list_ptr, &pos);
         } else if (token_list_ptr[pos].type == TypeImport) {
             import_lib(token_list_ptr, &pos);
         }
 
         if (token_list_ptr[pos].type == TypeSpace) {
+            int space_len = (int)strlen(token_list_ptr[pos].token);
+
+            if (start_indent) {
+                start_indent = 0;
+                indent_len = space_len;
+            } else {
+                if (space_len != indent_len) {
+                    if (token_list_ptr[pos + 1].type != TypeEnd) {
+                        exit(1);//err
+                    }
+                }
+            }
             pos++;
         }
     }

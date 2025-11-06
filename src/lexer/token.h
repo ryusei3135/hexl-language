@@ -24,6 +24,8 @@ typedef enum {
     TypeFunc,
     TypeImport,
     TypeLibSpace,
+    // === 制御構文 ===
+    TypeCondExpr,
 
     TypeNull,
 } TokenType;

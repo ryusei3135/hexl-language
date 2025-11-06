@@ -54,7 +54,6 @@ public:
             (*pos)++;
         }
 
-        printf("%s\n", dir_stack);
         free(dir_stack);
     }
 

@@ -22,3 +22,6 @@ build -> bin
 引数を入れることで出力する文字列を変更可能
 
 io.print("Hello World!!") -> Hello World!!
+# banana alpha 0.3.4
+インデントを追加、インポートしたライブラリ
+の名前が出力されるバグを修正

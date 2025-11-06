@@ -137,6 +137,8 @@ TokenType statement_sorting(char *token) {
         return TypeFunc;
     } else if (!strcmp(token, "import")) {
         return TypeImport;
+    } else if (!strcmp(token, "if")) {
+        return TypeCondExpr;
     }
 
     return TypeNormal;
