@@ -4,4 +4,4 @@ def main()
 a = 10
 b = 20
 c = a + b
-io.print("Hello world")
+io.print("Hello World!!")

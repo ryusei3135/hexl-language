@@ -118,11 +118,11 @@ char* make_string_token(Token *token_list_ptr, int *pos) {
     while (token_list_ptr[*pos].type != TypeEnd) {
         if (token_list_ptr[*pos].type == TypeString) {
             if (string_status) {
-                strcat(string_token, "\"");
                 (*pos)++;
                 return string_token;
             }
             string_status = 1;
+            (*pos)++;
         }
         string_token = (char *)realloc(
             string_token,

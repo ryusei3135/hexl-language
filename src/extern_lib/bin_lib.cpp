@@ -110,10 +110,8 @@ void load_lib_func(char *path, char *name, char *lib_header) {
 }
 
 // === 外部関数を呼び出す ===
-extern "C" void eval_lib_func(char *name, char *lib_header) {
+extern "C" void eval_lib_func(char *name, char *lib_header, ArgsNode *args) {
     void *ptr = access_lib_func()->get_lib_func_ptr(name, lib_header);
-    char *msg = (char *)malloc(12);
-    strcpy(msg, "hello world");
     int result;
 
 #if defined(_WIN32)
@@ -122,7 +120,7 @@ extern "C" void eval_lib_func(char *name, char *lib_header) {
         "call *%[fptr]\n\t"
         "mov %%eax, %[res]\n\t"
         : [res] "=r"(result)
-        : [text] "r"(msg), [fptr] "r"(ptr)
+        : [text] "r"(args->arg_value), [fptr] "r"(ptr)
         : "rax", "rcx"
     );
 #else
@@ -131,7 +129,7 @@ extern "C" void eval_lib_func(char *name, char *lib_header) {
         "call *%[fptr]\n\t"
         "mov %%eax, %[res]\n\t"
         : [res] "=r"(result)
-        : [text] "r"(msg), [fptr] "r"(ptr)
+        : [text] "r"(args->arg_value), [fptr] "r"(ptr)
         : "rax", "rdi"
     );
 #endif

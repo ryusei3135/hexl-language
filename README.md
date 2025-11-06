@@ -16,3 +16,9 @@ io.print()
 # banana alpha 0.3.2
 ビルドされたときのディレクトリを変更
 build -> bin
+# banana alpha 0.3.3
+標準ライブラリ io
+の print関数の修正
+引数を入れることで出力する文字列を変更可能
+
+io.print("Hello World!!") -> Hello World!!

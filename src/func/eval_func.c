@@ -8,7 +8,7 @@ int func_eval(CallFuncNode *call_data, ArgsNode *args) {
             printf("%d value\n", calcul_eval(data->process[count].process_ptr));
         }
     } else {
-        eval_lib_func(call_data->func_name, call_data->lib_header);
+        eval_lib_func(call_data->func_name, call_data->lib_header, args);
     }
 
     return 1;
