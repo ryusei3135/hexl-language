@@ -40,7 +40,10 @@ void make_process_data(Token *token_list_ptr) {
             start_indent = 1;
             make_func_header(token_list_ptr, &pos);
         } else if (token_list_ptr[pos].type == TypeImport) {
+            // extern_lib/manage_lib.cppで定義
             import_lib(token_list_ptr, &pos);
+        } else if (token_list_ptr[pos].type == TypeCondExpr) {
+            make_cond_expr(token_list_ptr, &pos);
         }
 
         if (token_list_ptr[pos].type == TypeSpace) {

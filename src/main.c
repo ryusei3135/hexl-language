@@ -14,7 +14,9 @@ void load_file(char *file_name) {
     }
     CallFuncNode *call_node = (CallFuncNode *)malloc(sizeof(CallFuncNode));
     call_node->func_name = (char *)malloc(5);
+    call_node->lib_header = (char *)malloc(9);
     strcpy(call_node->func_name, "main");
+    strcpy(call_node->lib_header, "[local]");
     func_eval(call_node, NULL);
 
     fclose(file);

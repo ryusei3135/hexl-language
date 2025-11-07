@@ -26,8 +26,8 @@ public:
         this->blocks[this->blocks_length - 1].value = value;
         this->blocks_length++;
         this->blocks = (VariableBlock *)realloc(
-                this->blocks, 
-                sizeof(VariableBlock) 
+                this->blocks,
+                sizeof(VariableBlock)
                 * this->blocks_length);
     }
 

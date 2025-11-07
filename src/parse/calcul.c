@@ -130,6 +130,7 @@ CalculNode *parse_assign_var(Token *token_list_ptr, int *pos) {
     while (token_list_ptr[*pos].type != TypeEnd) {
         if (token_list_ptr[*pos].type == TypeNormal && !variable_node_status) {
             if (token_list_ptr[(*pos) + 1].type == TypeLparen || token_list_ptr[(*pos) + 1].type == TypeComma) {
+                // parse/statement.cで定義
                 return make_call_func_node(token_list_ptr, pos);
             }
             var_name_pos = (*pos);
@@ -174,23 +175,26 @@ int calcul_eval(CalculNode* n) {
 }
 
 void free_all_calcul_node(CalculNode *n) {
-    if (n->value) {
-        free(n->value);
-    } else if (n->call_data) {
+    if (n->type == CallFunc) {
         free(n->call_data->func_name);
         free(n->call_data->lib_header);
-        free(n->call_data);
+
+        for (int count = 0; n->args[count].arg_value; count++) {
+            free(n->args[count].arg_value);
+        }
+        free(n->args);
+        return;
     }
+    
+    if (n->value) {
+        free(n->value);
+    }
+
     if (n->left) {
         free_all_calcul_node(n->left);
         free(n->left);
     } else if (n->right) {
         free_all_calcul_node(n->right);
         free(n->right);
-    } else if (n->args) {
-        for (int count = 0; n->args[count].arg_value; count++) {
-            free(n->args[count].arg_value);
-        }
-        free(n->args);
     }
 }

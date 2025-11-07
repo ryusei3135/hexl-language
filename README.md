@@ -25,3 +25,6 @@ io.print("Hello World!!") -> Hello World!!
 # banana alpha 0.3.4
 インデントを追加、インポートしたライブラリ
 の名前が出力されるバグを修正
+# banana alpha 0.3.5
+処理が終了した後に、すべてのメモリを
+解放するときに、出るエラーを修正

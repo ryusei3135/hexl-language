@@ -58,7 +58,9 @@ public:
         for (int count = 0; this->block_length - 1 > count; count++) {
             free(this->blocks[count].name);
             for (int process = 0; this->blocks[count].process_length - 1 > process; process++) {
-                free_all_calcul_node(this->blocks[count].process[process].process_ptr);
+                if (this->blocks[count].process[process].process_ptr) {
+                    free_all_calcul_node(this->blocks[count].process[process].process_ptr);
+                }
             }
             free(this->blocks[count].process);
         }
