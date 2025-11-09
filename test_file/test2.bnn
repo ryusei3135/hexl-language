@@ -1,0 +1,9 @@
+import std::io::io.print
+import std::lib::lib.range
+
+def main()
+    if 1
+        io.print("HELLLI")
+    a = 10
+    b = a + 10
+    c = b * a

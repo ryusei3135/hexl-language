@@ -132,5 +132,6 @@ char* make_string_token(Token *token_list_ptr, int *pos) {
         (*pos)++;
     }
     //err
+    printf("syntax err string\n");
     exit(1);
 }

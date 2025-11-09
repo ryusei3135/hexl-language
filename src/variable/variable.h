@@ -13,7 +13,7 @@ typedef struct CalculNode CalculNode;
 // =============================
 
 // === 変数を新しく作成 & 上書き ===
-void add_variable_value(char *name, CalculNode *value);
+int add_variable_value(char *name, CalculNode *value);
 // === 変数の値をゲット ===
 CalculNode* get_variable_value(char *name);
 

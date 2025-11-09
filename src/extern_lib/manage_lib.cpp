@@ -2,7 +2,7 @@ extern "C" {
     #include "load.h"
 }
 
-// === 文法が正しいか、調べる ===
+// === 文法が正しいか調べる ===
 int judge_this_expr_is_import(Token *token_list_ptr, int *pos) {
     if (token_list_ptr[*pos].type == TypeImport) {
         while (token_list_ptr[*pos].type != TypeNormal) {
@@ -35,9 +35,11 @@ int setting_load_lib(Token *token_list_ptr, int *pos, char *dir_stack) {
 class ManageLibs {
 public:
     void import_lib(Token *token_list_ptr, int *pos) {
-        char *dir_stack = (char *)malloc(1);
+        char *dir_stack = (char *)malloc(2);
+        strcpy(dir_stack, "?");
 
         if (!judge_this_expr_is_import(token_list_ptr, pos)) {
+            printf("syntax err import expr\n");
             exit(1);//err
         }
 
@@ -70,8 +72,10 @@ private:
     // === ライブラリの名前の処理をする ===
     void setting_lib_dir(Token *token_list_ptr, int *pos, char *dir_stack) {
         // === 一番最初の名前が、"std"なら、標準ライブラリなので、ディレクトリを指定する ===
-        if (!strcmp(token_list_ptr[*pos].token, "std") && !(*dir_stack)) {
-            token_list_ptr[*pos].token = (char *)realloc(token_list_ptr[*pos].token, 9);
+        if (!strcmp(token_list_ptr[*pos].token, "std") && !strcmp(dir_stack, "?")) {
+            dir_stack[0] = '\0';
+            free(token_list_ptr[*pos].token);
+            token_list_ptr[*pos].token = (char *)malloc(9);
             strcpy(token_list_ptr[*pos].token, "bin/lib");
             this->now_lib_type = LibStd;
         } else {

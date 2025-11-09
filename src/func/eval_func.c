@@ -34,7 +34,8 @@ int func_eval(CallFuncNode *call_data, ArgsNode *args) {
                     skip_indent_len = data->process[count + 1].process_ptr->indent_len;
                 }
             }
-            printf("%d value\n", calcul_eval(data->process[count].process_ptr));
+            //  処理を実行
+            calcul_eval(data->process[count].process_ptr);
         }
     } else {
         eval_lib_func(call_data->func_name, call_data->lib_header, args);

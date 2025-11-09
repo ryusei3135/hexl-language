@@ -19,12 +19,14 @@ void* load(char *path, char *name) {
 #if defined(_WIN32)
     HMODULE handle = LoadLibraryA(path);
     if (!handle) {
+        printf("this lib is not found %s\n", path);
         exit(1);
     }
     void *ptr = GetProcAddress(handle, name);
 #else
     void *handle = dlopen(path, RTLD_LAZY);
     if (!handle) {
+        printf("this lib is not found %s\n", path);
         exit(1);
     }
     void *ptr = dlsym(handle, name);
@@ -68,6 +70,7 @@ public:
             return this->blocks[func_pos].ptr;
         }
 
+        printf("this lib func is not found %s\n", name);
         exit(1);
     }
 
@@ -110,7 +113,7 @@ void load_lib_func(char *path, char *name, char *lib_header) {
 }
 
 // === 外部関数を呼び出す ===
-extern "C" void eval_lib_func(char *name, char *lib_header, ArgsNode *args) {
+extern "C" int eval_lib_func(char *name, char *lib_header, ArgsNode *args) {
     void *ptr = access_lib_func()->get_lib_func_ptr(name, lib_header);
     int result;
 
@@ -133,4 +136,5 @@ extern "C" void eval_lib_func(char *name, char *lib_header, ArgsNode *args) {
         : "rax", "rdi"
     );
 #endif
+    return result;
 }

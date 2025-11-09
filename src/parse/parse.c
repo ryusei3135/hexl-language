@@ -49,6 +49,8 @@ void make_process_data(Token *token_list_ptr) {
             CalculNode *node = make_cond_expr_node(token_list_ptr, &pos);
             node->indent_len = space_len;
             add_func_process(node);
+        } else if (token_list_ptr[pos].type == TypeLoopFor) {
+            //
         }
 
         if (token_list_ptr[pos].type == TypeSpace) {

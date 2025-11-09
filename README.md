@@ -31,3 +31,6 @@ io.print("Hello World!!") -> Hello World!!
 
 # banana alpha 0.4.0
 if 分を追加
+# banana alpha 0.4.1
+変数の価を代入する処理を変更
+変数を呼び出す処理を変更

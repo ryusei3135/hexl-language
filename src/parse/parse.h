@@ -13,6 +13,8 @@ typedef enum {
 
     Num,
     CallFunc,
+    AssignVar,
+    CallVar,
     //  ===  関係演算子 ===
     TypeOpEpual,
     TypeOpBigger,
@@ -25,6 +27,7 @@ typedef enum {
     TypeOpOr,
     // === 制御構文 ===
     OpIf,
+    OpFor,
 } OpType;
 
 typedef struct ArgsNode {

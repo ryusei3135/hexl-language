@@ -139,6 +139,10 @@ TokenType statement_sorting(char *token) {
         return TypeImport;
     } else if (!strcmp(token, "if")) {
         return TypeCondExpr;
+    } else if (!strcmp(token, "for")) {
+        return TypeLoopFor;
+    } else if (!strcmp(token, "while")) {
+        return TypeLoopWhile;
     }
 
     return TypeNormal;

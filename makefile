@@ -63,6 +63,6 @@ clean:
 # 	cd rustlib && cargo clean
 
 test: $(TARGET)
-	./$(TARGET) test_file/test.bnn
+	./$(TARGET) test_file/test2.bnn
 
 .PHONY: all clean

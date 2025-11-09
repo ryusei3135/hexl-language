@@ -1,3 +1,4 @@
+import std::lib::lib.range
 import std::io::io.print
 
 def test()

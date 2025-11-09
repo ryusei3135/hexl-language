@@ -39,6 +39,7 @@ public:
         }
 
         //err
+        printf("this variable is not found %s\n", name);
         exit(1);
     }
 
@@ -85,8 +86,9 @@ ManageVariables* access_variable_obj() {
 // =============================
 
 // === 変数を新しく作成 & 上書き ===
-void add_variable_value(char *name, CalculNode *value) {
+int add_variable_value(char *name, CalculNode *value) {
     access_variable_obj()->add_variable_data(name, value);
+    return 1;
 }
 
 // === 変数の値をゲット ===
