@@ -46,6 +46,7 @@ public:
             }
         }
 
+        printf("[err] this func is not found -> %s\n", func_name);
         exit(1);//err
     }
 

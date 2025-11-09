@@ -3,7 +3,14 @@ import std::io::io.print
 def test()
     io.print("test")
 
+def add()
+    io.print("add")
+    io.print("sub")
+
 def main()
+    if 10 + 1
+        io.print("if test ok")
+    add()
     test()
     a = 10
     b = 20

@@ -34,6 +34,7 @@ void make_func_header(Token *token_list_ptr, int *pos) {
 ArgsNode* make_args_node(Token *token_list_ptr, int *pos) {
     ArgsNode *node = (ArgsNode *)malloc(sizeof(ArgsNode));
     int start_paren = 0;
+    int arg_count = 0;
 
     while (token_list_ptr[*pos].type != TypeEnd) {
         if (token_list_ptr[*pos].type == TypeLparen && !start_paren) {
@@ -47,6 +48,8 @@ ArgsNode* make_args_node(Token *token_list_ptr, int *pos) {
                 (*pos)++;
                 break;
             } else {
+                arg_count++;
+
                 if (token_list_ptr[*pos].type == TypeString) {
                     char *string = make_string_token(token_list_ptr, pos);
 
@@ -56,6 +59,12 @@ ArgsNode* make_args_node(Token *token_list_ptr, int *pos) {
             }
             (*pos)++;
         }
+    }
+
+    //  引数が何もなかったときに実行
+    if (!arg_count) {
+        node->arg_value = (char *)malloc(7);
+        strcpy(node->arg_value, "[null]");
     }
 
     return node;

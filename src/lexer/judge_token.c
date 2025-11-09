@@ -40,7 +40,7 @@ int _is_number(char chr) {
 }
 
 int _is_space(char chr) {
-    if (isspace(chr) && chr != '\0') {
+    if (isspace(chr)) {
         last_token_type(TypeSpace);
         return 1;
     }

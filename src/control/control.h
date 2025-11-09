@@ -5,7 +5,7 @@
 #include "../banana.h"
 
 
-void make_cond_expr(Token *token_list_ptr, int *pos);
+CalculNode* make_cond_expr_node(Token *token_list_ptr, int *pos);
 
 
 #endif

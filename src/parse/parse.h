@@ -23,6 +23,8 @@ typedef enum {
     //  === 論理演算子 ===
     TypeOpAnd,
     TypeOpOr,
+    // === 制御構文 ===
+    OpIf,
 } OpType;
 
 typedef struct ArgsNode {
@@ -35,6 +37,7 @@ typedef struct CallFuncNode {
 } CallFuncNode;
 
 typedef struct CalculNode {
+    int indent_len;
     union {
         char *value;
         CallFuncNode *call_data;
