@@ -19,9 +19,6 @@ void load_file(char *file_name) {
     strcpy(call_node->lib_header, "[local]");
     func_eval(call_node, NULL);
 
-
-    printf("%d\n", calcul_eval(get_variable_value("c")));
-
     fclose(file);
 }
 
