@@ -26,8 +26,7 @@ typedef enum {
     TypeLibSpace,
     // === 制御構文 ===
     TypeCondExpr,
-    TypeLoopFor,
-    TypeLoopWhile,
+    TypeLoopExpr,
 
     TypeNull,
 } TokenType;

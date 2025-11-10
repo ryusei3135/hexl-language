@@ -1,22 +1,17 @@
 #include "control.h"
 
 
-CalculNode* make_for_expr_node(Token *token_list_ptr, int *pos) {
-    CalculNode *node = (CalculNode *)malloc(sizeof(CalculNode));
-    node->type = OpFor;
-    int for_expr = 0;
-
-    while (token_list_ptr[*pos].type != TypeEnd) {
-        if (token_list_ptr[*pos].type == TypeLoopFor) {
-            for_expr = 1;
-        }
-
-        if (token_list_ptr[*pos].type == TypeSpace) {
-            (*pos)++;
-        } else {
-            node->left = parse_operator(token_list_ptr, pos);
-        }
+CalculNode* make_loop_expr_node(Token *token_list_ptr, int *pos) {
+    if (token_list_ptr[*pos].type == TypeLoopExpr) {
+        (*pos)+=2;
+    } else {
+        exit(1);//err
     }
 
-    return node;
+    CalculNode *loop_node = (CalculNode *)malloc(sizeof(CalculNode));
+
+    loop_node->left = parse_operator(token_list_ptr, pos);
+    loop_node->type = OpLoop;
+
+    return loop_node;
 }

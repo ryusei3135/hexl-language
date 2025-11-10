@@ -11,8 +11,8 @@
 #include "lexer/token.h"
 #include "variable/variable.h"
 #include "func/func.h"
-#include "parse/parse.h"
 #include "control/control.h"
+#include "parse/parse.h"
 
 
 #endif

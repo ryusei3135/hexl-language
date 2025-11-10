@@ -5,6 +5,7 @@ int range(char *end) {
 
     if (start < atoi(end)) {
         start++;
+        return start;
     }
-    return start;
+    return 0;
 }

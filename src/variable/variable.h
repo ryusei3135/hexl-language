@@ -7,6 +7,8 @@
 //  === parse/parse.hで定義 ===
 typedef struct CalculNode CalculNode;
 
+extern int calcul_eval(CalculNode* n);
+
 
 // =============================
 // === c言語からアクセスできる ===

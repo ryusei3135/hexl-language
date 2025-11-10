@@ -37,6 +37,8 @@ static CalculNode *parse_factor(Token *token_list_ptr, int *pos) {
         node->value = (char *)malloc((int)strlen(token_list_ptr[*pos].token));
         strcpy(node->value, token_list_ptr[*pos].token);
         node->type = CallVar;
+        node->left = NULL;
+        node->right = NULL;
         (*pos)++;
         return node;
     }
@@ -47,7 +49,7 @@ static CalculNode *parse_factor(Token *token_list_ptr, int *pos) {
 
         //  エラー
         if (token_list_ptr[*pos].type != TypeRparen) {
-          puts("err paren");
+            puts("[err paren]");
             exit(1);
         }
 
@@ -158,6 +160,22 @@ CalculNode *parse_assign_var(Token *token_list_ptr, int *pos) {
     return node;
 }
 
+// 数列を文字列に変換
+static char* change_number_for_string(int target) {
+    char *str;
+    int len = sprintf(str, "%d", target);
+    char *number_text = (char *)malloc(len + 1);
+    sprintf(number_text, "%d", target);
+    return number_text;
+}
+
+//  変数に価を代入する前に、代入する変数の価を代入
+static CalculNode* make_assign_calcul_node(CalculNode *left) {
+    CalculNode *node = (CalculNode *)malloc(sizeof(CalculNode));
+    node->value = change_number_for_string(calcul_eval(left));
+    node->type = Num;
+    return node;
+}
 
 int calcul_eval(CalculNode* n) {
     switch (n->type) {
@@ -166,7 +184,7 @@ int calcul_eval(CalculNode* n) {
         case Sub: return calcul_eval(n->left) - calcul_eval(n->right);
         case Mul: return calcul_eval(n->left) * calcul_eval(n->right);
         case Div: return calcul_eval(n->left) / calcul_eval(n->right);
-        case AssignVar: return add_variable_value(n->value, n->left);
+        case AssignVar: return add_variable_value(n->value, make_assign_calcul_node(n->left));
         case CallVar: return calcul_eval(get_variable_value(n->value));
         case TypeOpEpual: return calcul_eval(n->left) == calcul_eval(n->right);
         case TypeOpBigger: return calcul_eval(n->left) > calcul_eval(n->right);
@@ -178,7 +196,8 @@ int calcul_eval(CalculNode* n) {
         case TypeOpOr: return calcul_eval(n->left) ||  calcul_eval(n->right);
         case CallFunc: return func_eval(n->call_data, n->args);
         case OpIf: return calcul_eval(n->left);
-        default: puts("err");
+        case OpLoop: return calcul_eval(n->left);
+        default: puts("err type");
     }
 
     return 0;

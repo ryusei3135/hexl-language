@@ -55,6 +55,9 @@ ArgsNode* make_args_node(Token *token_list_ptr, int *pos) {
 
                     node->arg_value = (char *)malloc((int)strlen(string));
                     strcpy(node->arg_value, string);
+                } else {
+                    node->arg_value = (char *)malloc((int)strlen(token_list_ptr[*pos].token));
+                    strcpy(node->arg_value, token_list_ptr[*pos].token);
                 }
             }
             (*pos)++;

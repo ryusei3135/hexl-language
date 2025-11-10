@@ -27,7 +27,7 @@ typedef enum {
     TypeOpOr,
     // === 制御構文 ===
     OpIf,
-    OpFor,
+    OpLoop,
 } OpType;
 
 typedef struct ArgsNode {

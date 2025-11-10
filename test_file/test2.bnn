@@ -2,8 +2,12 @@ import std::io::io.print
 import std::lib::lib.range
 
 def main()
+    h = 10
     if 1
         io.print("HELLLI")
+    loop h != 4
+        io.print("loop expr")
+        h = h - 1
     a = 10
     b = a + 10
     c = b * a

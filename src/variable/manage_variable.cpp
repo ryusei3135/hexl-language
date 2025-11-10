@@ -39,7 +39,7 @@ public:
         }
 
         //err
-        printf("this variable is not found %s\n", name);
+        printf("this variable is not found -> %s\n", name);
         exit(1);
     }
 
