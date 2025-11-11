@@ -1,0 +1,13 @@
+import std::io::io.print
+
+def main()
+    a = 30
+    if a == 20
+        io.print("a is 10")
+
+    if a == 5
+        io.print("a is 5")
+    } a == 10
+        io.print("a is 10")
+    } else
+        io.print("else")

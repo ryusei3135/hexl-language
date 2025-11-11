@@ -19,6 +19,8 @@ typedef enum {
 
     TypeRparen,
     TypeLparen,
+    TypeRbrace,
+    TypeLbrace,
     TypeComma,
 
     TypeFunc,
@@ -26,6 +28,7 @@ typedef enum {
     TypeLibSpace,
     // === 制御構文 ===
     TypeCondExpr,
+    TypeCondElse,
     TypeLoopExpr,
 
     TypeNull,

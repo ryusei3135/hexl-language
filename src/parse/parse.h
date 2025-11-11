@@ -5,6 +5,9 @@
 #include "../banana.h"
 
 
+#define TokenEndCond(type) (type != TypeEnd && type != TypeLbrace)
+
+
 typedef enum {
     Add,
     Sub,
@@ -27,6 +30,8 @@ typedef enum {
     TypeOpOr,
     // === 制御構文 ===
     OpIf,
+    OpIfElse,
+    OpElse,
     OpLoop,
 } OpType;
 

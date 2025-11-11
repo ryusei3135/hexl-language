@@ -110,6 +110,10 @@ TokenType change_op_symbol(char *value) {
         return TypeRparen;
     } else if (!strcmp(value, ".")) {
         return TypeComma;
+    } else if (!strcmp(value, "{")) {
+        return TypeLbrace;
+    } else if (!strcmp(value, "}")) {
+        return TypeRbrace;
     }
 
     //  ===  算術演算子 ===
@@ -139,6 +143,8 @@ TokenType statement_sorting(char *token) {
         return TypeImport;
     } else if (!strcmp(token, "if")) {
         return TypeCondExpr;
+    } else if (!strcmp(token, "else")) {
+        return TypeCondElse;
     } else if (!strcmp(token, "loop")) {
         return TypeLoopExpr;
     }

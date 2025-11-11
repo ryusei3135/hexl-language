@@ -27,32 +27,34 @@ OpType soring_operator_token_type(char *token_text) {
 }
 
 
+void assign_process_for_func(CalculNode *process, int indent_len) {
+    process->indent_len = indent_len;
+    add_func_process(process);
+}
+
 void make_process_data(Token *token_list_ptr) {
     int pos = 0;
     int space_len;
 
-    while (token_list_ptr[pos].type != TypeEnd) {
+    while (TokenEndCond(token_list_ptr[pos].type)) {
         if (token_list_ptr[pos].type == TypeSpace) {
             space_len = (int)strlen(token_list_ptr[pos].token);
         }
 
         if (token_list_ptr[pos].type == TypeNumber || token_list_ptr[pos].type == TypeNormal) {
-            CalculNode *node = parse_assign_var(token_list_ptr, &pos);
-            node->indent_len = space_len;
-            add_func_process(node);
+            assign_process_for_func(parse_assign_var(token_list_ptr, &pos), space_len);
         } else if (token_list_ptr[pos].type == TypeFunc) {
             make_func_header(token_list_ptr, &pos);
         } else if (token_list_ptr[pos].type == TypeImport) {
             // extern_lib/manage_lib.cppで定義
             import_lib(token_list_ptr, &pos);
         } else if (token_list_ptr[pos].type == TypeCondExpr) {
-            CalculNode *node = make_cond_expr_node(token_list_ptr, &pos);
-            node->indent_len = space_len;
-            add_func_process(node);
+            assign_process_for_func(make_cond_expr_node(token_list_ptr, &pos), space_len);
         } else if (token_list_ptr[pos].type == TypeLoopExpr) {
-            CalculNode *node = make_loop_expr_node(token_list_ptr, &pos);
-            node->indent_len = space_len;
-            add_func_process(node);
+            assign_process_for_func(make_loop_expr_node(token_list_ptr, &pos), space_len);
+        } else if (token_list_ptr[pos].type == TypeRbrace) {
+            //  "}"から始まる、物は大体"if else"文
+            assign_process_for_func(make_if_else_expr(token_list_ptr, &pos), space_len);
         }
 
         if (token_list_ptr[pos].type == TypeSpace) {

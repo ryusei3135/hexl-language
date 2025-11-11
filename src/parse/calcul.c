@@ -69,7 +69,7 @@ static CalculNode *parse_factor(Token *token_list_ptr, int *pos) {
 static CalculNode *parse_term(Token *token_list_ptr, int *pos) {
     CalculNode *node = parse_factor(token_list_ptr, pos);
 
-    while (token_list_ptr[*pos].type != TypeEnd) {
+    while (TokenEndCond(token_list_ptr[*pos].type)) {
         if (token_list_ptr[*pos].type == TypeOpMul) {
             (*pos)++;
             node = make_op_node(Mul, node, parse_factor(token_list_ptr, pos));
@@ -89,7 +89,7 @@ static CalculNode *parse_term(Token *token_list_ptr, int *pos) {
 static CalculNode *parse_expr(Token *token_list_ptr, int *pos) {
     CalculNode *node = parse_term(token_list_ptr, pos);
 
-    while (token_list_ptr[*pos].type != TypeEnd) {
+    while (TokenEndCond(token_list_ptr[*pos].type)) {
         if (token_list_ptr[*pos].type == TypeOpAdd) {
             (*pos)++;
             node = make_op_node(Add, node, parse_term(token_list_ptr, pos));
@@ -110,7 +110,7 @@ static CalculNode *parse_expr(Token *token_list_ptr, int *pos) {
 CalculNode *parse_operator(Token *token_list_ptr, int *pos) {
     CalculNode *node = parse_expr(token_list_ptr, pos);
 
-    while (token_list_ptr[*pos].type != TypeEnd) {
+    while (TokenEndCond(token_list_ptr[*pos].type)) {
         OpType type = soring_operator_token_type(token_list_ptr[*pos].token);
 
         if (type != -1) {
@@ -133,7 +133,7 @@ CalculNode *parse_assign_var(Token *token_list_ptr, int *pos) {
     int variable_node_status = 0;
     int var_name_pos = -1;
 
-    while (token_list_ptr[*pos].type != TypeEnd) {
+    while (TokenEndCond(token_list_ptr[*pos].type)) {
         if (token_list_ptr[*pos].type == TypeNormal && !variable_node_status) {
             if (token_list_ptr[(*pos) + 1].type == TypeLparen || token_list_ptr[(*pos) + 1].type == TypeComma) {
                 // parse/statement.cで定義
@@ -196,8 +196,10 @@ int calcul_eval(CalculNode* n) {
         case TypeOpOr: return calcul_eval(n->left) ||  calcul_eval(n->right);
         case CallFunc: return func_eval(n->call_data, n->args);
         case OpIf: return calcul_eval(n->left);
+        case OpIfElse: return calcul_eval(n->left);
+        case OpElse: return 1;
         case OpLoop: return calcul_eval(n->left);
-        default: puts("err type");
+        default: printf("%d <- err type\n", n->type);
     }
 
     return 0;

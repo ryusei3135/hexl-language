@@ -3,11 +3,15 @@ import std::lib::lib.range
 
 def main()
     h = 10
-    if 1
+    a = 5
+    if h == 5 {
         io.print("HELLLI")
-    loop h != 4
+    } h == 10 {
+        io.print("h is 10")
+    loop a <= 10
         io.print("loop expr")
         h = h - 1
+        a = a + 1
     a = 10
     b = a + 10
     c = b * a
