@@ -110,6 +110,8 @@ TokenType change_op_symbol(char *value) {
         return TypeRparen;
     } else if (!strcmp(value, ".")) {
         return TypeComma;
+    } else if (!strcmp(value, ",")) {
+        return TypePeriod;
     } else if (!strcmp(value, "{")) {
         return TypeLbrace;
     } else if (!strcmp(value, "}")) {

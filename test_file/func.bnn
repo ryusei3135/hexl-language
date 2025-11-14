@@ -1,0 +1,11 @@
+import std::io::io.print
+
+def a(hello, a)
+    hello = 100
+    io.print("a func")
+    io.print("test ok")
+    p = hello + 1
+
+def main()
+    io.print("main func")
+    a()

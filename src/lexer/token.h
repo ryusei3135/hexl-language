@@ -22,6 +22,7 @@ typedef enum {
     TypeRbrace,
     TypeLbrace,
     TypeComma,
+    TypePeriod,
 
     TypeFunc,
     TypeImport,

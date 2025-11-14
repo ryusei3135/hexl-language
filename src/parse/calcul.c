@@ -9,7 +9,6 @@ static CalculNode *make_num_node(char *value, int *pos) {
     strcpy(node->value, value);
     node->left = NULL;
     node->right = NULL;
-
     //  ノードのタイプを代入
     node->type = Num;
 
@@ -184,8 +183,8 @@ int calcul_eval(CalculNode* n) {
         case Sub: return calcul_eval(n->left) - calcul_eval(n->right);
         case Mul: return calcul_eval(n->left) * calcul_eval(n->right);
         case Div: return calcul_eval(n->left) / calcul_eval(n->right);
-        case AssignVar: return add_variable_value(n->value, make_assign_calcul_node(n->left));
-        case CallVar: return calcul_eval(get_variable_value(n->value));
+        case AssignVar: return add_variable_value(current_func_name("[null]"), n->value, make_assign_calcul_node(n->left));
+        case CallVar: return calcul_eval(get_variable_value(n->value, current_func_name("[null]")));
         case TypeOpEpual: return calcul_eval(n->left) == calcul_eval(n->right);
         case TypeOpBigger: return calcul_eval(n->left) > calcul_eval(n->right);
         case TypeOpSmallerThen: return calcul_eval(n->left) < calcul_eval(n->right);
@@ -194,7 +193,7 @@ int calcul_eval(CalculNode* n) {
         case TypeOpIsNot: return calcul_eval(n->left) != calcul_eval(n->right);
         case TypeOpAnd: return calcul_eval(n->left) && calcul_eval(n->right);
         case TypeOpOr: return calcul_eval(n->left) ||  calcul_eval(n->right);
-        case CallFunc: return func_eval(n->call_data, n->args);
+        case CallFunc: return func_eval(n->call_data, n->args, current_func_name("[null]"));
         case OpIf: return calcul_eval(n->left);
         case OpIfElse: return calcul_eval(n->left);
         case OpElse: return 1;

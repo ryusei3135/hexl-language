@@ -2,11 +2,14 @@ import std::io::io.print
 
 def main()
     a = 0
+    io.print("start")
     loop a != 10
         if a == 2
             io.print("a is 2")
         } a == 5
             io.print("a is 5")
+        } else
+            io.print("else")
         io.print("ok")
         a = a + 1
 

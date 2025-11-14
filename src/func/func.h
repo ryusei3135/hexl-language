@@ -19,15 +19,20 @@ typedef struct {
     char *name;
     ProcessList *process;
     int process_length;
+    ArgsNode *args;
 } FuncBlock;
 
 
-void add_func(char *name);
+//  manage_func.cpp
+ArgsNode** add_func(char *name);
 void add_func_process(CalculNode *process);
 FuncBlock* get_func_data(char *func_name);
 
+char* current_func_name(char *func_name);
+
+//eval_func.c
 //  === 関数を実行することができる ===
-int func_eval(CallFuncNode *call_data, ArgsNode *args);
+int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func);
 
 
 #endif

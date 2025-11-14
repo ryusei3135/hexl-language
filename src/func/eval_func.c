@@ -105,7 +105,11 @@ runing:
     }
 }
 
-int func_eval(CallFuncNode *call_data, ArgsNode *args) {
+int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func) {
+    //  変数のアクセス特権を現在実行中の関数にする
+    current_func_name(call_data->func_name);
+    printf("%s %s\n", call_data->func_name, caller_func);
+
     if (!strcmp(call_data->lib_header, "[local]")) {
         FuncBlock *data = get_func_data(call_data->func_name);
 
@@ -113,8 +117,10 @@ int func_eval(CallFuncNode *call_data, ArgsNode *args) {
             eval_func_block(data, &count);
         }
     } else {
+        //  外部の関数を呼び出す
         eval_lib_func(call_data->func_name, call_data->lib_header, args);
     }
-
+    //  変数のアクセス特権を戻す
+    current_func_name(caller_func);
     return 1;
 }

@@ -33,6 +33,7 @@ void assign_process_for_func(CalculNode *process, int indent_len) {
 }
 
 void make_process_data(Token *token_list_ptr) {
+  char *in_func_name;
     int pos = 0;
     int space_len;
 
@@ -44,7 +45,11 @@ void make_process_data(Token *token_list_ptr) {
         if (token_list_ptr[pos].type == TypeNumber || token_list_ptr[pos].type == TypeNormal) {
             assign_process_for_func(parse_assign_var(token_list_ptr, &pos), space_len);
         } else if (token_list_ptr[pos].type == TypeFunc) {
-            make_func_header(token_list_ptr, &pos);
+            in_func_name = make_func_header(token_list_ptr, &pos);
+            if (!strcmp(in_func_name, "[err]")) {
+                exit(1);//err
+            }
+            current_func_name(in_func_name);
         } else if (token_list_ptr[pos].type == TypeImport) {
             // extern_lib/manage_lib.cppで定義
             import_lib(token_list_ptr, &pos);

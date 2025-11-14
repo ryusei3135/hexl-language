@@ -15,8 +15,8 @@ extern int calcul_eval(CalculNode* n);
 // =============================
 
 // === 変数を新しく作成 & 上書き ===
-int add_variable_value(char *name, CalculNode *value);
+int add_variable_value(char *name, char *access_priv, CalculNode *value);
 // === 変数の値をゲット ===
-CalculNode* get_variable_value(char *name);
+CalculNode* get_variable_value(char *name, char *access_priv);
 
 #endif

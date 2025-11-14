@@ -15,6 +15,7 @@ typedef enum {
     Div,
 
     Num,
+    Value,
     CallFunc,
     AssignVar,
     CallVar,
@@ -37,6 +38,7 @@ typedef enum {
 
 typedef struct ArgsNode {
     char *arg_value;
+    OpType op_type;
 } ArgsNode;
 
 typedef struct CallFuncNode {
@@ -60,7 +62,7 @@ typedef struct CalculNode {
 
 
 //  === statement.c ===
-void make_func_header(Token *token_list_ptr, int *pos);
+char* make_func_header(Token *token_list_ptr, int *pos);
 CalculNode* make_call_func_node(Token *token_list_ptr, int *pos);
 
 
