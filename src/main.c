@@ -20,6 +20,8 @@ void load_file(char *file_name) {
     func_eval(call_node, NULL, "[start]");
 
     fclose(file);
+    //  メモリを解放
+    current_func_name("[free]");
 }
 
 int main(int argc, char *argv[]) {

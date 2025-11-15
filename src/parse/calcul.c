@@ -183,7 +183,7 @@ int calcul_eval(CalculNode* n) {
         case Sub: return calcul_eval(n->left) - calcul_eval(n->right);
         case Mul: return calcul_eval(n->left) * calcul_eval(n->right);
         case Div: return calcul_eval(n->left) / calcul_eval(n->right);
-        case AssignVar: return add_variable_value(current_func_name("[null]"), n->value, make_assign_calcul_node(n->left));
+        case AssignVar: return add_variable_value(n->value, current_func_name("[null]"), make_assign_calcul_node(n->left));
         case CallVar: return calcul_eval(get_variable_value(n->value, current_func_name("[null]")));
         case TypeOpEpual: return calcul_eval(n->left) == calcul_eval(n->right);
         case TypeOpBigger: return calcul_eval(n->left) > calcul_eval(n->right);

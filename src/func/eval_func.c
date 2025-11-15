@@ -108,7 +108,6 @@ runing:
 int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func) {
     //  変数のアクセス特権を現在実行中の関数にする
     current_func_name(call_data->func_name);
-    printf("%s %s\n", call_data->func_name, caller_func);
 
     if (!strcmp(call_data->lib_header, "[local]")) {
         FuncBlock *data = get_func_data(call_data->func_name);

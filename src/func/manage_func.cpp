@@ -154,16 +154,22 @@ FuncBlock* get_func_data(char *func_name) {
 //  を代入するときに関数の名前をゲットする
 char* current_func_name(char *func_name) {
     static char setting_func_log[6] = "[set]";
-    static current_func *current = (current_func *)malloc(sizeof(current_func));
+    static current_func current = {NULL};
     //  構造体が初期化されていないときに実行
-    if (!current->name) {
-        current->name = (char *)malloc(1);
+    if (current.name == NULL) {
+        current.name = (char *)malloc(1);
     }
 
     if (!strcmp(func_name, "[null]")) {
-        return current->name;
+        if (current.name) {
+            return current.name;
+        } else {
+            return setting_func_log;
+        }
+    } else if (!strcmp(func_name, "[free]")) {
+        free(current.name);
+        return setting_func_log;
     } else {
-        free(current->name);
         char *ptr = (char *)malloc((int)strlen(func_name) + 1);
         if (ptr == NULL) {
             puts("[   type   ]: [  filename  ]: [   func name   ]");
@@ -171,8 +177,8 @@ char* current_func_name(char *func_name) {
             puts("func args malloc failed");
             exit(1);
         }
-        current->name = ptr;
-        strcpy(current->name, func_name);
+        current.name = ptr;
+        strcpy(current.name, func_name);
 
         return setting_func_log;
     }
