@@ -34,6 +34,7 @@ typedef enum {
     OpIfElse,
     OpElse,
     OpLoop,
+    OpRet,
 } OpType;
 
 //  この構造体のポインタの最初は、必ずargs.lengthが来る
@@ -69,6 +70,7 @@ typedef struct CalculNode {
 
 
 //  === statement.c ===
+CalculNode* make_ret_expr(Token *token_list_ptr, int *pos);
 char* make_func_header(Token *token_list_ptr, int *pos);
 CalculNode* make_call_func_node(Token *token_list_ptr, int *pos);
 

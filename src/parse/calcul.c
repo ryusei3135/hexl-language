@@ -198,6 +198,7 @@ int calcul_eval(CalculNode* n) {
         case OpIfElse: return calcul_eval(n->left);
         case OpElse: return 1;
         case OpLoop: return calcul_eval(n->left);
+        case OpRet: return calcul_eval(n->left);
         default: printf("%d <- err type\n", n->type);
     }
 

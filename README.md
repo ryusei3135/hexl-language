@@ -7,11 +7,9 @@
 # banana alpha 0.3
 外部関数を読み込むことができるようになった
 標準ライブラリを作成
-
 int print(char *text)
 # banana alpha 0.3.1
 外部ライブラリの読み込む文法が完成
-
 import std::io::io.print
 このように読み込める
 呼び出すときは、
@@ -23,7 +21,6 @@ build -> bin
 標準ライブラリ io
 の print関数の修正
 引数を入れることで出力する文字列を変更可能
-
 io.print("Hello World!!") -> Hello World!!
 # banana alpha 0.3.4
 インデントを追加、インポートしたライブラリ
@@ -50,5 +47,9 @@ if else分とelseを追加、
 変数のアクセス特権を開発中
 次回、変数のアクセス特権と
 引数を完全に実装
-# banana aplha 0.7.1
+# banana alpha 0.7.1
 変数のアクセス権限を実装
+# banana alpha 0.7.2
+関数の引数を実装
+# banana alpha 0.7.3
+戻り値(仮)を実装

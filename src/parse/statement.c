@@ -1,6 +1,17 @@
 #include "parse.h"
 
 
+CalculNode* make_ret_expr(Token *token_list_ptr, int *pos) {
+    if (token_list_ptr[*pos].type == TypeReturnExpr) {
+        (*pos)++;
+        CalculNode *ret_node = (CalculNode *)malloc(sizeof(CalculNode));
+        ret_node->left = parse_operator(token_list_ptr, pos);
+        ret_node->type = OpRet;
+        return ret_node;
+    }
+    
+    exit(1);
+}
 
 ArgsNode* make_args(Token *token_list_ptr, int *pos, int call_args) {
     ArgsNode *args = (ArgsNode *)malloc(sizeof(ArgsNode) * 2);

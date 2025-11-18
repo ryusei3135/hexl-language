@@ -60,6 +60,8 @@ void make_process_data(Token *token_list_ptr) {
         } else if (token_list_ptr[pos].type == TypeRbrace) {
             //  "}"から始まる、物は大体"if else"文
             assign_process_for_func(make_if_else_expr(token_list_ptr, &pos), space_len);
+        } else if (token_list_ptr[pos].type == TypeReturnExpr) {
+            assign_process_for_func(make_ret_expr(token_list_ptr, &pos), space_len);//
         }
 
         if (token_list_ptr[pos].type == TypeSpace) {

@@ -31,6 +31,7 @@ typedef enum {
     TypeCondExpr,
     TypeCondElse,
     TypeLoopExpr,
+    TypeReturnExpr,
 
     TypeNull,
 } TokenType;

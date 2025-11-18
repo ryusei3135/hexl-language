@@ -26,7 +26,7 @@ static int manage_indent_len(int update_indent) {
 }
 
 
-static void eval_func_block(FuncBlock *data, int *count);
+static int eval_func_block(FuncBlock *data, int *count);
 
 // 条件分岐の処理
 static int cond_expr_eval(FuncBlock *data, int *count) {
@@ -86,7 +86,7 @@ static int loop_expr_eval(FuncBlock *data, int *count) {
     return 1;
 }
 
-static void eval_func_block(FuncBlock *data, int *count) {
+static int eval_func_block(FuncBlock *data, int *count) {
 runing:
     if (data->process[*count].process_ptr->type == OpLoop) {
         loop_expr_eval(data, count);
@@ -102,7 +102,11 @@ runing:
 
     if (get_skip_indent_len(-1) != data->process[*count].process_ptr->indent_len) {
         calcul_eval(data->process[*count].process_ptr);
+    } else if (data->process[*count].process_ptr->type == OpRet) {
+        //  もし戻り値を返す処理なら、1を返す
+        return 1;
     }
+    return 0;
 }
 
 void expand_args(ArgsNode *def, ArgsNode *value) {
@@ -122,11 +126,16 @@ int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func) {
         expand_args(data->args, args);
 
         for (int count = 0; data->process_length > count; count++) {
-            eval_func_block(data, &count);
+            if (eval_func_block(data, &count)) {
+                current_func_name(caller_func);
+                return calcul_eval(data->process[count].process_ptr);
+            }
         }
     } else {
         //  外部の関数を呼び出す
-        eval_lib_func(call_data->func_name, call_data->lib_header, args);
+
+        current_func_name(caller_func);
+        return eval_lib_func(call_data->func_name, call_data->lib_header, args);
     }
     //  変数のアクセス特権を戻す
     current_func_name(caller_func);
