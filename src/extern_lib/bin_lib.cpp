@@ -116,14 +116,14 @@ void load_lib_func(char *path, char *name, char *lib_header) {
 extern "C" int eval_lib_func(char *name, char *lib_header, ArgsNode *args) {
     void *ptr = access_lib_func()->get_lib_func_ptr(name, lib_header);
     int result;
-
+    
 #if defined(_WIN32)
     asm volatile(
         "mov %[text], %%rcx\n\t"
         "call *%[fptr]\n\t"
         "mov %%eax, %[res]\n\t"
         : [res] "=r"(result)
-        : [text] "r"(args->arg_value), [fptr] "r"(ptr)
+        : [text] "r"(args[1].value->value), [fptr] "r"(ptr)
         : "rax", "rcx"
     );
 #else
@@ -132,7 +132,7 @@ extern "C" int eval_lib_func(char *name, char *lib_header, ArgsNode *args) {
         "call *%[fptr]\n\t"
         "mov %%eax, %[res]\n\t"
         : [res] "=r"(result)
-        : [text] "r"(args->arg_value), [fptr] "r"(ptr)
+        : [text] "r"(args[1].value->value), [fptr] "r"(ptr)
         : "rax", "rdi"
     );
 #endif

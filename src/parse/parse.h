@@ -15,7 +15,7 @@ typedef enum {
     Div,
 
     Num,
-    Value,
+    String,
     CallFunc,
     AssignVar,
     CallVar,
@@ -36,11 +36,18 @@ typedef enum {
     OpLoop,
 } OpType;
 
+//  この構造体のポインタの最初は、必ずargs.lengthが来る
 typedef struct ArgsNode {
-    char *arg_value;
-    OpType op_type;
+    union {
+        //  長さを格納する
+        int length;
+        char *name;
+        CalculNode *value;
+    };
 } ArgsNode;
 
+//  関数を呼ぶ際に、関数の名前や、ライブラリの場合
+//  どのライブラリなのかを格納
 typedef struct CallFuncNode {
     char *func_name;
     char *lib_header;

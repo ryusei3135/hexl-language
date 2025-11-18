@@ -117,8 +117,10 @@ public:
                 }
             }
             //  引数の設定を代入するメモリを解放
-            for (int arg_count = 0; this->blocks[count].args[arg_count].arg_value; arg_count++) {
-                free(this->blocks[count].args[arg_count].arg_value);
+            for (int arg_count = 0; this->blocks[count].args[0].length > arg_count; arg_count++) {
+                if (arg_count != 0) {
+                    free(this->blocks[count].args[arg_count].name);
+                }
             }
             free(this->blocks[count].args);
 

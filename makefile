@@ -59,6 +59,6 @@ clean:
 	rm -f $(SRC_OBJS) $(LIB_SOS) $(TARGET)
 
 test: $(TARGET)
-	./$(TARGET) test_file/func.bnn
+	./$(TARGET) test_file/test3.bnn
 
 .PHONY: all clean

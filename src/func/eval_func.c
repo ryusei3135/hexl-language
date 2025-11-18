@@ -105,12 +105,21 @@ runing:
     }
 }
 
+void expand_args(ArgsNode *def, ArgsNode *value) {
+    for (int count = 0; def[0].length >= count; count++) {
+        if (count != 0) {
+            add_variable_value(def[count].name, current_func_name("[null]"), value[count].value);
+        }
+    }
+}
+
 int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func) {
     //  変数のアクセス特権を現在実行中の関数にする
     current_func_name(call_data->func_name);
 
     if (!strcmp(call_data->lib_header, "[local]")) {
         FuncBlock *data = get_func_data(call_data->func_name);
+        expand_args(data->args, args);
 
         for (int count = 0; data->process_length > count; count++) {
             eval_func_block(data, &count);

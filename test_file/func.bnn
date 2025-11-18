@@ -1,11 +1,16 @@
 import std::io::io.print
 
-def a(hello, a)
-    hello = 100
-    io.print("a func")
-    io.print("test ok")
-    p = hello + 1
+def ooo(hello, hello2,aaa, ooo)
+    io.print("hello world func a")
+
+    io.print("hrllo test")
+    b = hello + hello2
+    ppp = aaa + 100
+    kkkkkk = ooo * 2 + aaa
 
 def main()
+    a = 100
+    b = 50
+    j = a + b
     io.print("main func")
-    a()
+    ooo(100, 20, 5, 7)

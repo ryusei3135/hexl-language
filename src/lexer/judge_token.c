@@ -58,10 +58,10 @@ int _is_symbol(char chr) {
 }
 
 TokenType is_token_type(char chr) {
-    if (_is_normal(chr)) {
-        return TypeNormal;
-    } else if (_is_number(chr)) {
+    if (_is_number(chr)) {
         return TypeNumber;
+    } else if (_is_normal(chr)) {
+        return TypeNormal;
     } else if (_is_space(chr)) {
         return TypeSpace;
     } else if (_is_symbol(chr)) {

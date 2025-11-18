@@ -35,10 +35,10 @@ static CalculNode *parse_factor(Token *token_list_ptr, int *pos) {
         CalculNode *node = (CalculNode *)malloc(sizeof(CalculNode));
         node->value = (char *)malloc((int)strlen(token_list_ptr[*pos].token));
         strcpy(node->value, token_list_ptr[*pos].token);
+        (*pos)++;
         node->type = CallVar;
         node->left = NULL;
         node->right = NULL;
-        (*pos)++;
         return node;
     }
 
@@ -209,8 +209,14 @@ void free_all_calcul_node(CalculNode *n) {
         free(n->call_data->func_name);
         free(n->call_data->lib_header);
 
-        for (int count = 0; n->args[count].arg_value; count++) {
-            free(n->args[count].arg_value);
+        for (int count = 0; n->args[0].length > count; count++) {
+            if (count != 0) {
+                if (n->args[count].name) {
+                    free(n->args[count].name);
+                } else if (n->args[count].value) {
+                    free_all_calcul_node(n->args[count].value);
+                }
+            }
         }
         free(n->args);
         return;

@@ -15,13 +15,16 @@ void load_file(char *file_name) {
     CallFuncNode *call_node = (CallFuncNode *)malloc(sizeof(CallFuncNode));
     call_node->func_name = (char *)malloc(5);
     call_node->lib_header = (char *)malloc(9);
+    ArgsNode *args = (ArgsNode *)malloc(sizeof(ArgsNode));
+    args->length = 0;
     strcpy(call_node->func_name, "main");
     strcpy(call_node->lib_header, "[local]");
-    func_eval(call_node, NULL, "[start]");
+    func_eval(call_node, args, "[start]");
 
     fclose(file);
     //  メモリを解放
     current_func_name("[free]");
+    free(args);
 }
 
 int main(int argc, char *argv[]) {
