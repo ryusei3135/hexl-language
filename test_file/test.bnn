@@ -1,5 +1,4 @@
-import std::lib::lib.range
-import std::io::io.print
+import std::io.print
 
 def test()
     io.print("test")

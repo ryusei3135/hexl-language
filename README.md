@@ -55,3 +55,5 @@ if else分とelseを追加、
 loop分のバグを修正
 # banana alpha 0.7.5
 小さなバグを修正
+# banana alpha 0.7.6
+テストファイルの中身を修正

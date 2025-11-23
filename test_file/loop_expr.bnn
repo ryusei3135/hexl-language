@@ -1,4 +1,4 @@
-import std::io::io.print
+import std::io.print
 
 def main()
     a = 0

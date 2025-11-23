@@ -1,4 +1,4 @@
-import std::io::io.print
+import std::io.print
 
 def ooo(hello, hello2,aaa, ooo)
     io.print("hello world func a")
