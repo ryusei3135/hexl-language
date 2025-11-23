@@ -66,38 +66,45 @@ static int cond_expr_eval(FuncBlock *data, int *count) {
 
 //  反復処理を実行
 static int loop_expr_eval(FuncBlock *data, int *count) {
-    if (data->process[*count].process_ptr->type == OpLoop) {
-    loop_cond: // loop文が終わったら、ここに戻り条件がまだtrueか調べる
-        if (calcul_eval(data->process[*count].process_ptr)) {
-            manage_indent_len(data->process[*count].process_ptr->indent_len);
-            int start_pos = *count + 1;
+    (*count)++;
+    int start_pos;
+    if (data->process[*count - 1].process_ptr->type == OpLoop) {
+loop_cond: // loop文が終わったら、ここに戻り条件がまだtrueか調べる
+        if (calcul_eval(data->process[*count - 1].process_ptr)) {
+            manage_indent_len(data->process[*count - 1].process_ptr->indent_len);
+            start_pos = *count;
 
             while (data->process_length > start_pos) {
-                // loop 分の外に出たら、最初に戻る
+                //  if you go outside process, go back to the beginning
+                eval_func_block(data, &start_pos);
                 if (data->process[start_pos].process_ptr->indent_len == manage_indent_len(-1)) {
                     goto loop_cond;
                 }
-                eval_func_block(data, &start_pos);
+                if (data->process_length == start_pos + 1) {
+                    goto loop_cond;
+                }
                 start_pos++;
             }
         }
     }
-
+    (*count) = start_pos - 1;
     return 1;
 }
 
+<<<<<<< HEAD
 static int eval_func_block(FuncBlock *data, int *count) {
 runing:
+=======
+static void eval_func_block(FuncBlock *data, int *count) {
+>>>>>>> 7a5bb75 (alpha 0.7.3)
     if (data->process[*count].process_ptr->type == OpLoop) {
         loop_expr_eval(data, count);
         (*count)++;
-        goto runing;
     } else if (data->process[*count].process_ptr->type == OpIf \
             || data->process[*count].process_ptr->type == OpIfElse \
             || data->process[*count].process_ptr->type == OpElse) {
         cond_expr_eval(data, count);
         (*count)++;
-        goto runing;
     }
 
     if (get_skip_indent_len(-1) != data->process[*count].process_ptr->indent_len) {

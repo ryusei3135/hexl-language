@@ -1,0 +1,10 @@
+import std::io.print
+
+
+def call_me()
+    a = 10
+    ret a
+
+def main()
+    if call_me() == 10
+        io.print("call me is 10")

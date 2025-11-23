@@ -50,6 +50,6 @@ if else分とelseを追加、
 # banana alpha 0.7.1
 変数のアクセス権限を実装
 # banana alpha 0.7.2
-関数の引数を実装
 # banana alpha 0.7.3
-戻り値(仮)を実装
+# banana alpha 0.7.4
+loop分のバグを修正
