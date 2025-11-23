@@ -91,12 +91,7 @@ loop_cond: // loop文が終わったら、ここに戻り条件がまだtrueか�
     return 1;
 }
 
-<<<<<<< HEAD
 static int eval_func_block(FuncBlock *data, int *count) {
-runing:
-=======
-static void eval_func_block(FuncBlock *data, int *count) {
->>>>>>> 7a5bb75 (alpha 0.7.3)
     if (data->process[*count].process_ptr->type == OpLoop) {
         loop_expr_eval(data, count);
         (*count)++;

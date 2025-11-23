@@ -53,3 +53,5 @@ if else分とelseを追加、
 # banana alpha 0.7.3
 # banana alpha 0.7.4
 loop分のバグを修正
+# banana alpha 0.7.5
+小さなバグを修正
