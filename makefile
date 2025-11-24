@@ -1,5 +1,6 @@
 CC = clang
 CXX = clang++
+RSC = rustc
 
 
 SRC_DIR = src
@@ -26,10 +27,12 @@ endif
 SRC_CC_FILES  := $(shell find $(SRC_DIR) -name '*.c')
 SRC_CXX_FILES := $(shell find $(SRC_DIR) -name '*.cpp')
 LIB_CC_FILES  := $(shell find $(LIB_DIR) -name '*.c')
+SRC_RUST_FILES := $(shell find $(SRC_DIR) -name '*.rs')
 
 # --- 出力するオブジェクト名（build に移動）---
 SRC_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_CC_FILES)) \
-            $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRC_CXX_FILES))
+            $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRC_CXX_FILES))\
+						$(patsubst %.rs,$(BUILD_DIR)/%.a,$(SRC_RUST_FILES))
 
 LIB_SOS := $(patsubst %.c,$(BUILD_DIR)/%.so,$(LIB_CC_FILES))
 
@@ -43,6 +46,11 @@ $(BUILD_DIR)/%.o: %.c
 $(BUILD_DIR)/%.o: %.cpp
 	mkdir -p $(dir $@)
 	$(CXX) -c $< -o $@
+
+$(BUILD_DIR)/%.a: %.rs
+		mkdir -p $(dir $@)
+		$(RSC) --crate-type=staticlib -o $@ $<
+
 
 # --- lib の .c を .so にする ---
 $(BUILD_DIR)/%.so: %.c

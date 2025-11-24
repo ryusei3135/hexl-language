@@ -1,7 +1,4 @@
 import std::io.print
 
 def main()
-    a = 10
-    loop a != 0
-        io.print("a is not 0")
-        a = a - 1
+    io.print("hello world")

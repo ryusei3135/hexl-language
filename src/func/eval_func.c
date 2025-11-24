@@ -1,33 +1,6 @@
 #include "func.h"
 
-
-//  スキップするインデントの長さを保持
-static int get_skip_indent_len(int next_skip_indent) {
-    static int skip_indent = 0;
-    //  -1 は、インデントの長さを取得したいとき
-    if (next_skip_indent == -1) {
-        return skip_indent;
-    } else {
-        skip_indent = next_skip_indent;
-        return skip_indent;
-    }
-}
-
-//  インデントの長さを管理
-static int manage_indent_len(int update_indent) {
-    static int indent = 0;
-
-    if (update_indent == -1) {
-        return indent;
-    } else {
-        indent = update_indent;
-        return indent;
-    }
-}
-
-
 static int eval_func_block(FuncBlock *data, int *count);
-
 // 条件分岐の処理
 static int cond_expr_eval(FuncBlock *data, int *count) {
     //  条件分岐で条件がtrueになったときに、1になる、
@@ -41,6 +14,8 @@ static int cond_expr_eval(FuncBlock *data, int *count) {
     if (!skip_next_cond_expr) {
         if (data->process[*count].process_ptr->type == OpIf) {
             if (calcul_eval(data->process[*count].process_ptr)) {
+                //  下にあるつながっている条件分岐をすべてスキップするために
+                //  1にする。
                 skip_next_cond_expr = 1;
                 get_skip_indent_len(0);
                 return 1;
@@ -75,8 +50,8 @@ loop_cond: // loop文が終わったら、ここに戻り条件がまだtrueか�
             start_pos = *count;
 
             while (data->process_length > start_pos) {
-                //  if you go outside process, go back to the beginning
                 eval_func_block(data, &start_pos);
+                //  もし、loop文の外に出たり、関数の最後になった場合、loop_condに戻る
                 if (data->process[start_pos].process_ptr->indent_len == manage_indent_len(-1)) {
                     goto loop_cond;
                 }
@@ -91,6 +66,7 @@ loop_cond: // loop文が終わったら、ここに戻り条件がまだtrueか�
     return 1;
 }
 
+//  関数の処理を実行
 static int eval_func_block(FuncBlock *data, int *count) {
     if (data->process[*count].process_ptr->type == OpLoop) {
         loop_expr_eval(data, count);
@@ -107,6 +83,8 @@ static int eval_func_block(FuncBlock *data, int *count) {
     } else if (data->process[*count].process_ptr->type == OpRet) {
         //  もし戻り値を返す処理なら、1を返す
         return 1;
+    } else {
+        (*count)++;
     }
     return 0;
 }
@@ -117,6 +95,11 @@ void expand_args(ArgsNode *def, ArgsNode *value) {
             add_variable_value(def[count].name, current_func_name("[null]"), value[count].value);
         }
     }
+}
+
+//  rustから、呼び出される
+void execute_one_line(ProcessList *node, int pos) {
+    calcul_eval(node[pos].process_ptr);
 }
 
 int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func) {
@@ -135,7 +118,6 @@ int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func) {
         }
     } else {
         //  外部の関数を呼び出す
-
         current_func_name(caller_func);
         return eval_lib_func(call_data->func_name, call_data->lib_header, args);
     }

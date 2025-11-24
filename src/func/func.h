@@ -22,6 +22,9 @@ typedef struct {
     ArgsNode *args;
 } FuncBlock;
 
+//  indent.cpp
+int get_skip_indent_len(int next_skip_indent);
+int manage_indent_len(int update_indent);
 
 //  manage_func.cpp
 ArgsNode** add_func(char *name);
@@ -32,6 +35,7 @@ char* current_func_name(char *func_name);
 
 //eval_func.c
 //  === 関数を実行することができる ===
+extern int execute_func(CallFuncNode *call_data, ArgsNode *args, char *caller_func);
 int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func);
 
 
