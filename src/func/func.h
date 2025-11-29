@@ -23,8 +23,8 @@ typedef struct {
 } FuncBlock;
 
 //  indent.cpp
-int get_skip_indent_len(int next_skip_indent);
-int manage_indent_len(int update_indent);
+void setting_skip_indent(int skip_indent);
+int next_eval_indent_len();
 
 //  manage_func.cpp
 ArgsNode** add_func(char *name);
@@ -34,9 +34,10 @@ FuncBlock* get_func_data(char *func_name);
 char* current_func_name(char *func_name);
 
 //eval_func.c
+//  条件分の結果を調べて実行可能か調べる
+int check_cond_expr(FuncBlock *data, int process_num);
 //  === 関数を実行することができる ===
 extern int execute_func(CallFuncNode *call_data, ArgsNode *args, char *caller_func);
-int func_eval(CallFuncNode *call_data, ArgsNode *args, char *caller_func);
 
 
 #endif

@@ -3,9 +3,9 @@ import std::io.print
 def main()
     h = 10
     a = 5
-    if h == 5 {
+    if h == 5
         io.print("HELLLI")
-    } h == 10 {
+    h == 10
         io.print("h is 10")
     loop a <= 10
         io.print("loop expr")

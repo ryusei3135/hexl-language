@@ -33,7 +33,7 @@ void assign_process_for_func(CalculNode *process, int indent_len) {
 }
 
 void make_process_data(Token *token_list_ptr) {
-  char *in_func_name;
+    char *in_func_name;
     int pos = 0;
     int space_len;
 

@@ -1,4 +1,13 @@
 import std::io.print
 
 def main()
-    io.print("hello world")
+    a = 0
+    if a == 10 {
+        io.print("JJ")
+    } a == 19 {
+        io.print("a is zero")
+    } else
+        io.print("else out")
+
+    if a == 0
+        io.print("oo")

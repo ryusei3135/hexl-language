@@ -19,7 +19,7 @@ void load_file(char *file_name) {
     args->length = 0;
     strcpy(call_node->func_name, "main");
     strcpy(call_node->lib_header, "[local]");
-    func_eval(call_node, args, "[start]");
+    execute_func(call_node, args, "[start]");
 
     fclose(file);
     //  メモリを解放

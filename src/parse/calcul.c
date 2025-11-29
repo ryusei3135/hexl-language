@@ -60,7 +60,7 @@ static CalculNode *parse_factor(Token *token_list_ptr, int *pos) {
         (*pos)++;
         return parse_factor(token_list_ptr, pos);
     }
-    puts("err");
+    puts("parse_factor err");
     exit(1);
 }
 
@@ -193,7 +193,7 @@ int calcul_eval(CalculNode* n) {
         case TypeOpIsNot: return calcul_eval(n->left) != calcul_eval(n->right);
         case TypeOpAnd: return calcul_eval(n->left) && calcul_eval(n->right);
         case TypeOpOr: return calcul_eval(n->left) ||  calcul_eval(n->right);
-        case CallFunc: return func_eval(n->call_data, n->args, current_func_name("[null]"));
+        case CallFunc: return execute_func(n->call_data, n->args, current_func_name("[null]"));
         case OpIf: return calcul_eval(n->left);
         case OpIfElse: return calcul_eval(n->left);
         case OpElse: return 1;

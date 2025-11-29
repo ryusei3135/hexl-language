@@ -99,8 +99,12 @@ extern "C" {
             args: *mut ArgsNode) -> c_int;
     //  処理のデータが入っているノードを実行
     pub fn calcul_eval(n: *mut CalculNode) -> c_int;
-
+    //  処理の一行を実行
+    pub fn check_cond_expr(data: *mut FuncBlock, process_num: c_int) -> c_int;
+    pub fn skip_next_len_indent(data: *mut FuncBlock, pos: c_int) -> c_int;
     pub fn execute_one_line(node: *mut ProcessList, pos: c_int);
+    //  次に実行するインデントの長さを指定
+    pub fn setting_skip_indent(skip_indent: c_int);
 
     pub fn current_func_name(func_name: *mut c_char) -> *mut c_char;
     pub fn get_func_data(func_name: *mut c_char) -> *mut FuncBlock;
