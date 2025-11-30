@@ -97,6 +97,10 @@ extern "C" {
             name: *mut c_char,
             lib_header: *mut c_char,
             args: *mut ArgsNode) -> c_int;
+    //  indent.cppで定義
+    pub fn assign_indent_value(value: c_int, process_num: c_int);
+    pub fn get_now_indent_len() -> c_int;
+    pub fn get_last_indent_len() -> c_int;
     //  処理のデータが入っているノードを実行
     pub fn calcul_eval(n: *mut CalculNode) -> c_int;
     //  処理の一行を実行
