@@ -1,9 +1,18 @@
 import std::io.print
 
+def text()
+    io.print("func test")
+
 def main()
+    a = 0
+    text()
+    loop a != 10
+        io.print("aaa")
+        a = a + 1
     a = 0
     if a == 10 {
         io.print("JJ")
+        text()
     } a == 19 {
         io.print("a is zero")
     } else
