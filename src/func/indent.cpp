@@ -71,6 +71,7 @@ void assign_indent_value(int value, int process_num) {
             break;
         case 4:
             indent_datas()->update_indent_len(value);
+            break;
         default:
             puts("[err]system err: indent.cpp");
             puts("... func assign_indent_value");

@@ -67,6 +67,6 @@ clean:
 	rm -f $(SRC_OBJS) $(LIB_SOS) $(TARGET)
 
 test: $(TARGET)
-	./$(TARGET) test_file_2/if_else.bnn
+	./$(TARGET) test_file_2/loop.bnn
 
 .PHONY: all clean

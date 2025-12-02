@@ -56,40 +56,6 @@ unsafe fn match_control_expr(data: *mut func::FuncBlock, run_number: i32) -> i32
     return result;
 }
 
-//  反復処理を実行
-unsafe fn iterate_process(data: *mut func::FuncBlock, start: i32, end_indent: i32) -> i32 {
-    let mut result: i32;
-    //  反復処理の条件を除くため、1を足す
-    let mut count: i32 = start + 1;
-
-    while (*(*(*data).process.add(count as usize)).process_ptr).indent_len as i32 != end_indent {
-        result = match_control_expr(data, count);
-        //  制御構文の条件が,falseのため、中の処理をすべてスキップ
-        if result == -2 {
-            //  -2なので、インデントの中のすべての処理をスキップ
-            count = func::skip_next_len_indent(data, count as c_int) as i32;
-            continue;
-        } else if result == 4 {
-            count = iterate_process(
-                    data,
-                    count,
-                    (*(*(*data).process.add(count as usize)).process_ptr).indent_len as i32
-                ) as i32;
-        }
-        count += 1;
-        //  反復処理の条件に戻る
-        if (*(*(*data).process.add(count as usize)).process_ptr).indent_len as i32 == end_indent {
-            if func::calcul_eval((*(*data).process.add(start as usize)).process_ptr) != 0 {
-                count = start + 1;
-            } else {
-                break;
-            }
-        }
-    }
-
-    return count;
-}
-
 //  指定された、場所のインデントの長さを取得
 unsafe fn get_target_indent_len(data: *mut func::FuncBlock, target_num: i32) -> Result<c_int, c_int> {
     let calcul_data = (*data).process.add(target_num as usize);
@@ -99,6 +65,49 @@ unsafe fn get_target_indent_len(data: *mut func::FuncBlock, target_num: i32) -> 
     }
     println!("[execute_func.rs err] pos get_target_indent_len");
     Err(-1)
+}
+
+
+//  反復処理を実行
+unsafe fn iterate_process(data: *mut func::FuncBlock, start: i32, end_indent: i32) -> i32 {
+    let mut result: i32;
+    //  反復処理の条件を除くため、1を足す
+    let mut count: i32 = start + 1;
+
+    while end_indent != get_target_indent_len(data, count).unwrap() as i32 {
+        result = match_control_expr(data, count);
+        //  制御構文の条件が,falseのため、中の処理をすべてスキップ
+        if result == -1 {
+            let indent_len = get_target_indent_len(data, count).unwrap();
+            if func::get_now_indent_len() == indent_len {
+                func::execute_one_line((*data).process, count as c_int);
+            } else if func::get_last_indent_len() == indent_len {
+                func::assign_indent_value(0, 3);
+                continue;
+            }
+        } else if result == -2 {
+            //  -2なので、インデントの中のすべての処理をスキップ
+            count = func::skip_next_len_indent(data, count as c_int) as i32;
+            continue;
+        } else if result == 4 {
+            count = iterate_process(
+                    data,
+                    count,
+                    get_target_indent_len(data, count).unwrap() as i32
+                ) as i32;
+        }
+        count += 1;
+        //  反復処理の条件に戻る
+        if end_indent == get_target_indent_len(data, count).unwrap() as i32 {
+            if func::calcul_eval((*(*data).process.add(start as usize)).process_ptr) != 0 {
+                count = start + 1;
+            } else {
+                break;
+            }
+        }
+    }
+
+    return count;
 }
 
 //  関数を実行
@@ -126,6 +135,7 @@ unsafe fn execute_func_process(data: *mut func::FuncBlock) {
             run_number = func::skip_next_len_indent(data, run_number as c_int) as i32;
             continue;
         } else if result == 4 {
+            func::assign_indent_value(get_target_indent_len(data, run_number + 1).unwrap(), 4);
             run_number = iterate_process(
                 data,
                 run_number,
