@@ -60,6 +60,7 @@ static CalculNode *parse_factor(Token *token_list_ptr, int *pos) {
         (*pos)++;
         return parse_factor(token_list_ptr, pos);
     }
+
     puts("parse_factor err");
     exit(1);
 }
@@ -105,7 +106,7 @@ static CalculNode *parse_expr(Token *token_list_ptr, int *pos) {
     return node;
 }
 
-//  === 関係演算子や論理演算 ===
+//  === 関係演算子 ===
 CalculNode *parse_operator(Token *token_list_ptr, int *pos) {
     CalculNode *node = parse_expr(token_list_ptr, pos);
 
@@ -176,6 +177,7 @@ static CalculNode* make_assign_calcul_node(CalculNode *left) {
     return node;
 }
 
+//  インタプリタとして実行する関数
 int calcul_eval(CalculNode* n) {
     switch (n->type) {
         case Num: return atoi(n->value);

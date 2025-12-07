@@ -1,9 +1,9 @@
 import std::io.print
 
-
 def main()
     a = 0
     loop a != 10
         io.print("hello world")
         a = a + 1
-    a = 10
+
+    io.print("end")
