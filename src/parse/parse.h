@@ -83,6 +83,7 @@ void free_all_calcul_node(CalculNode *n);
 
 //  === parse.c
 OpType soring_operator_token_type(char *token_text);
+void assign_process_for_func(CalculNode *process, int indent_len);
 void make_process_data(Token *token_list_ptr);
 
 

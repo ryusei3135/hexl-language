@@ -3,7 +3,15 @@ import std::io.print
 def main()
     a = 0
     loop a != 10
-        io.print("hello world")
+        if a == 0 {
+            io.print("a is 0")
+        } a == 2 {
+            io.print("a is 2")
+        } a == 5 {
+            io.print("a is 5")
+        } else {
+            io.print("hello world")
+        }
         a = a + 1
 
     io.print("end")

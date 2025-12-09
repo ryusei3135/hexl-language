@@ -12,11 +12,12 @@ int check_cond_expr(FuncBlock *data, int process_num) {
     if (!calcul_eval(data->process[process_num].process_ptr)) {
         //  条件がfalseなら、戻る
         goto result_false;
-    } else {
-        //  elseになるまでの条件で一度も、trueにならなければ、実行
-        if (!get_now_indent_status() && data->process[process_num].process_ptr->type == OpElse) {
-            goto result_true;
-        }
+    }
+
+    //  elseになるまでの条件で一度も、trueにならなければ、実行
+    if (!get_now_indent_status() && data->process[process_num].process_ptr->type == OpElse) {
+        cond_type = 3;
+        goto result_true;
     }
 
     if (get_now_indent_status() == 0) {

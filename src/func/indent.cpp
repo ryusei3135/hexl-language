@@ -7,14 +7,17 @@ extern "C" {
 class ManageIndentDatas {
 public:
     void new_indent(int indent_len) {
-        this->indent_len.insert(this->indent_len.begin(), indent_len);
-        this->manage_indent_data.insert(this->manage_indent_data.begin(), 0);
+        //  現在のインデントの長さを代入
+        this->indent_len.push_back(indent_len);
+        //  インデントの情報を代入
+        this->manage_indent_data.push_back(0);
     }
+    //  インデントの情報を更新
     void update_now_status(int status) {
-        this->manage_indent_data.front() = status;
+        this->manage_indent_data.back() = status;
     }
     void update_indent_len(int len) {
-        this->indent_len.front() = len;
+        this->indent_len.back() = len;
     }
     int get_last_indent_len() {
         if (this->indent_len.size() > 1) {
@@ -29,21 +32,21 @@ public:
     }
     int get_now_status() {
         if (!this->manage_indent_data.empty()) {
-            return this->manage_indent_data.front();
+            return this->manage_indent_data.back();
         }
         // err
         return -1;
     }
     int get_now_indent() {
         if (!this->indent_len.empty()) {
-            return this->indent_len.front();
+            return this->indent_len.back();
         }
         // err
         return -1;
     }
     void end_now_indent() {
-        this->manage_indent_data.erase(this->manage_indent_data.begin());
-        this->indent_len.erase(this->indent_len.begin());
+        this->manage_indent_data.pop_back();
+        this->indent_len.pop_back();
     }
 private:
     std::vector<int> indent_len = {0};

@@ -59,7 +59,13 @@ void make_process_data(Token *token_list_ptr) {
             assign_process_for_func(make_loop_expr_node(token_list_ptr, &pos), space_len);
         } else if (token_list_ptr[pos].type == TypeRbrace) {
             //  "}"から始まる、物は大体"if else"文
-            assign_process_for_func(make_if_else_expr(token_list_ptr, &pos), space_len);
+            make_if_else_expr(token_list_ptr, &pos, space_len);
+        } else if (token_list_ptr[pos].type == TypeLbrace) {
+            if (check_block()) {
+                exit(1);
+            }
+            pos++;
+            continue;
         } else if (token_list_ptr[pos].type == TypeReturnExpr) {
             assign_process_for_func(make_ret_expr(token_list_ptr, &pos), space_len);//
         }
