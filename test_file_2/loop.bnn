@@ -1,8 +1,8 @@
 import std::io.print
 
-def main()
+def main() {
     a = 0
-    loop a != 10
+    loop a != 10 {
         if a == 0 {
             io.print("a is 0")
         } a == 2 {
@@ -13,5 +13,6 @@ def main()
             io.print("hello world")
         }
         a = a + 1
-
+    }
     io.print("end")
+}

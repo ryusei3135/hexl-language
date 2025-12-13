@@ -1,28 +1,15 @@
 import std::io.print
 
 
-def main()
+def main() {
     io.print("start")
-    a = 10
-    b = 10
-    if a == 1 {
-        io.print("a is 1")
-    } a == 10 {
-        io.print("a is 10")
-        if b == 10 {
-            io.print("b is 10")
-        } else
-            io.print("b is other")
-    } else
-        io.print("a is other")
 
-    a = 100
-    if a == 100 {
-        io.print("a is 100")
-    } else
-        io.print("a is other")
-    a = 200
-    if a == 100 {
-        io.print("a is 100")
-    } else
-        io.print("a is other")
+
+    a = 1
+
+    if a == 1 {
+        io.print("true")
+    } else {
+        io.print("false")
+    }
+}

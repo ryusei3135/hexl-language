@@ -71,9 +71,10 @@ typedef struct CalculNode {
 
 //  === statement.c ===
 CalculNode* make_ret_expr(Token *token_list_ptr, int *pos);
-char* make_func_header(Token *token_list_ptr, int *pos);
+ArgsNode* make_args(Token *token_list_ptr, int *pos, int call_args);
 CalculNode* make_call_func_node(Token *token_list_ptr, int *pos);
-
+//  === func_parse.cpp ===
+char* make_func_header(Token *token_list_ptr, int *pos);
 
 //  === calcul.c ===
 CalculNode *parse_operator(Token *token_list_ptr, int *pos);

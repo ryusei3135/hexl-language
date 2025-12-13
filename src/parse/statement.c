@@ -9,7 +9,7 @@ CalculNode* make_ret_expr(Token *token_list_ptr, int *pos) {
         ret_node->type = OpRet;
         return ret_node;
     }
-    
+
     exit(1);
 }
 
@@ -82,42 +82,6 @@ ArgsNode* make_args(Token *token_list_ptr, int *pos, int call_args) {
     }
 
     return args;
-}
-
-//   関数の名前と引数を設定
-//   add_funcにデータを渡す
-char* make_func_header(Token *token_list_ptr, int *pos) {
-    if (token_list_ptr[*pos].type == TypeFunc) {
-        (*pos)++;
-        int func_name_pos = 0;
-
-        while (token_list_ptr[*pos].type != TypeEnd) {
-            if (token_list_ptr[*pos].type == TypeNormal) {
-                if (func_name_pos) {
-                    //
-                }
-                func_name_pos = (*pos);
-                (*pos)++;
-                if (token_list_ptr[*pos].type == TypeLparen) {
-                    //  第一引数は、add_funcの戻り値，ArgsNodeのポインタ
-                    //  このポインタに引数のデータを代入する
-                    *add_func(token_list_ptr[func_name_pos].token) = make_args(token_list_ptr, pos, 1);
-
-                    while (token_list_ptr[*pos].type != TypeEnd) {
-                        (*pos)++;
-                    }
-                    break;
-                }
-            }
-            if (token_list_ptr[*pos].type == TypeSpace) {
-                (*pos)++;
-            }
-        }
-
-        return token_list_ptr[func_name_pos].token;
-    }
-
-    return "[err]";
 }
 
 //  関数を呼び出すときに呼び出すデータを作成

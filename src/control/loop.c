@@ -12,5 +12,7 @@ CalculNode* make_loop_expr_node(Token *token_list_ptr, int *pos) {
     loop_node->left = parse_operator(token_list_ptr, pos);
     loop_node->type = OpLoop;
 
+    assign_left_brace_token(token_list_ptr[*pos].type);
+
     return loop_node;
 }

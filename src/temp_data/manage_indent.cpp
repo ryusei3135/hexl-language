@@ -4,6 +4,7 @@
 
 #include <vector>
 
+//  インデントを一つ上げる
 void BlockTokens::add_block() {
     this->blocks.block_count++;
     this->blocks.appeared = 0;
@@ -12,12 +13,12 @@ void BlockTokens::add_block() {
 void BlockTokens::end_block() {
     this->blocks.block_count--;
 }
-
+//  "{"が前回のトークンになくこのトークンが来ること
+//  が予約されているか確認
 int BlockTokens::check_reserve() {
     return this->blocks.appeared;
 }
-//  次のトークンが、インデントを一つ上げる
-//  ことを代入
+
 void BlockTokens::reserve_block() {
     if (!this->blocks.appeared) {
         this->blocks.appeared = 1;
