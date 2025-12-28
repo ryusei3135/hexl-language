@@ -25,9 +25,12 @@ pub enum TokenKind {
     TokenLBrace,
     TokenRBrace,
     TokenAssign,
+    TokenVarType,
 
     //  キーワード
     TokenFuncStart, // "def"
+    TokenUsePackage,// "use"
+    TokenNewVar,    // "let"
     TokenEOF,
 }
 

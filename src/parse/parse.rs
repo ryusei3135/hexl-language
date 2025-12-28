@@ -5,8 +5,6 @@ use crate::parse::expr;
 use crate::parse::semantic;
 use crate::manager::func;
 
-use crate::runner::run;
-
 
 
 pub struct Parser {

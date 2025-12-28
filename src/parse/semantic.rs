@@ -1,2 +1,2 @@
 pub mod func;
-pub mod support;
+pub mod package;

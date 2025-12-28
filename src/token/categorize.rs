@@ -27,6 +27,7 @@ pub fn categorize_symbol(symbol: &str) -> token::TokenKind {
         "{" => token::TokenKind::TokenLBrace,
         "}" => token::TokenKind::TokenRBrace,
         "=" => token::TokenKind::TokenAssign,
+        ":" => token::TokenKind::TokenVarType,
         _   => {
             println!("what is this symbol?: {}", symbol);
             token::TokenKind::TokenEOF
