@@ -22,6 +22,13 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
                 node::NodeKind::NodeCallVar,
             );
         }
+        token::TokenKind::TokenString => {
+            *index += 1;
+            return resp::handler::convert_value_to_node(
+                current_token.lexeme.clone(),
+                node::NodeKind::NodeStr,
+            );
+        }
         token::TokenKind::TokenLParen => {
             *index += 1; // '('をスキップ
             let node = parse_expr(tokens.clone(), index);

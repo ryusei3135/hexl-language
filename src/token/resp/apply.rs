@@ -1,6 +1,7 @@
 use crate::token::categorize;
 use crate::token::token;
 use crate::token::state;
+use crate::token::token_passes::judge;
 
 pub struct ApplyProcessor {}
 
@@ -20,6 +21,7 @@ impl ApplyProcessor {
             &state.stack_token_txt,
             state.last_char_kind.clone(),
         );
+
         //  トークンを追加
         state.tokens.push(
             token::Token {
@@ -31,6 +33,8 @@ impl ApplyProcessor {
         //  次のトークンの準備
         state.stack_token_txt.clear();
         state.last_token_kind = token_kind.clone();
+
+        judge::judge_merge_token(&mut state.tokens);
     }
 
     pub fn combine_char(

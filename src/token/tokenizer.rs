@@ -36,7 +36,7 @@ impl Tokenizer {
 
             if check::same_char_kind(self.lexer_state.clone(), char_kind.clone()) {
                 //  もし、括弧なら記号のトークンは続かないので、ここでトークンを確定させる
-                if check::is_parlen(self.lexer_state.last_char, c) {
+                if check::is_symbol(self.lexer_state.last_char_kind.clone(), char_kind.clone()) {
                     self.lexer_role.processor.emit_token(
                         &mut self.lexer_state,
                         c

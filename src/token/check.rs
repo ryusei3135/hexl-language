@@ -12,11 +12,9 @@ pub fn same_char_kind(lexer_state: LexerState, char_kind: token::CharKind) -> bo
     false
 }
 
-pub fn is_parlen(last_char: char, c: char) -> bool {
-    let is_last_parlen = last_char == '(' || last_char == ')';
-    let is_parlen = c == '(' || c == ')';
-    
-    if is_parlen && is_last_parlen {
+pub fn is_symbol(last_char_kind: token::CharKind, char_kind: token::CharKind) -> bool {
+
+    if last_char_kind == token::CharKind::CharSymbol && char_kind == token::CharKind::CharSymbol {
         return true;
     }
     false

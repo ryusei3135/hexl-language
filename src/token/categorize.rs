@@ -10,8 +10,10 @@ pub fn categorize_char(c: char) -> token::CharKind {
         return token::CharKind::CharNum;
     } else if c.is_whitespace() {
         return token::CharKind::CharSpace;
-    } else {
+    } else if c.is_ascii_punctuation() {
         return token::CharKind::CharSymbol;
+    } else {
+        panic!("[system err]");
     }
 }
 
@@ -30,8 +32,10 @@ pub fn categorize_symbol(symbol: &str) -> token::TokenKind {
         ":" => token::TokenKind::TokenVarType,
         "<" => token::TokenKind::TokenLessThan,
         ">" => token::TokenKind::TokenGreaterThan,
+        "\"" => token::TokenKind::TokenString,
+        "_" => token::TokenKind::TokenName,
         _   => {
-            println!("what is this symbol?: {}", symbol);
+            println!("what is this symbol?: {:?}", symbol);
             token::TokenKind::TokenEOF
         },
     }
@@ -47,9 +51,7 @@ pub fn categorize_token(token: &str, kind: token::CharKind) -> token::TokenKind 
         },
         //  文字の種類が記号の場合は、記号ごとに分類する
         token::CharKind::CharSymbol  => categorize_symbol(token),
-        token::CharKind::CharSpace => {
-            token::TokenKind::TokenSpace
-        },
+        token::CharKind::CharSpace => token::TokenKind::TokenSpace,
         _ => {
             println!("what is this text?: {}", token);
             token::TokenKind::TokenEOF

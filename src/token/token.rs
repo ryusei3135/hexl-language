@@ -14,6 +14,7 @@ pub enum TokenKind {
     TokenNum,
     TokenName,
     TokenSpace,
+    TokenString,
 
     TokenAdd,
     TokenSub,

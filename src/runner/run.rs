@@ -1,7 +1,8 @@
 use crate::parse::node;
-use crate::parse::resp;
 use crate::manager::func::FuncManager;
 use crate::manager::variable::VariableManager;
+
+use crate::runner::storage::var;
 
 
 pub fn node_run(
@@ -12,6 +13,9 @@ pub fn node_run(
         node::NodeKind::NodeNum => {
             node.value.clone()
         },
+        node::NodeKind::NodeStr => {
+            node.value.clone()
+        }
         node::NodeKind::NodeAdd => {
             let left_value = node_run(*node.left_node.unwrap(), variable_data);
             let right_value = node_run(*node.right_node.unwrap(), variable_data);
@@ -36,40 +40,9 @@ pub fn node_run(
             let result = left_value.parse::<i32>().unwrap() / right_value.parse::<i32>().unwrap();
             result.to_string()
         },
-        node::NodeKind::NodeAssignVar => {
-            if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
-                let var_name = node.left_node.unwrap().value.clone();
-                //  代入する値を計算
-                let assign_value = resp::handler::convert_value_to_node(
-                    node_run(*node.right_node.unwrap(), variable_data),
-                    node::NodeKind::NodeNum,
-                );
-                variable_data.update_var(
-                    var_name.clone(),
-                    assign_value
-                );
-                return node_run(variable_data.get_var(var_name.clone()), variable_data);
-            } else {
-                println!("syntax err: assign var");
-                panic!("assign var");
-            }
-        }
-        node::NodeKind::NodeCallVar => {
-            let var_name = node.value.clone();
-            node_run(variable_data.get_var(var_name.clone()), variable_data)
-        }
-        node::NodeKind::NodeDefVar => {
-            let var_name = node.value;
-            let assign_value = resp::handler::convert_value_to_node(
-                node_run(*node.right_node.unwrap(), variable_data),
-                node::NodeKind::NodeNum,
-            );
-            variable_data.add_var(
-                var_name.clone(),
-                assign_value
-            );
-            return node_run(variable_data.get_var(var_name.clone()), variable_data);
-        }
+        node::NodeKind::NodeAssignVar => return var::update_var_value(node.clone(), variable_data),
+        node::NodeKind::NodeCallVar => return var::call_var_value(node.value, variable_data),
+        node::NodeKind::NodeDefVar => return var::define_var(node.clone(), variable_data),
         _ => {
             String::new()
         }

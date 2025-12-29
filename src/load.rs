@@ -3,7 +3,6 @@ use std::io::{BufRead, BufReader};
 use std::io::Error;
 
 use crate::parse::parse;
-use crate::runner::run;
 use crate::token::tokenizer;
 use crate::manager::func;
 
