@@ -44,7 +44,7 @@ pub fn node_run(
                     node_run(*node.right_node.unwrap(), variable_data),
                     node::NodeKind::NodeNum,
                 );
-                variable_data.add_var(
+                variable_data.update_var(
                     var_name.clone(),
                     assign_value
                 );
@@ -57,6 +57,18 @@ pub fn node_run(
         node::NodeKind::NodeCallVar => {
             let var_name = node.value.clone();
             node_run(variable_data.get_var(var_name.clone()), variable_data)
+        }
+        node::NodeKind::NodeDefVar => {
+            let var_name = node.value;
+            let assign_value = resp::handler::convert_value_to_node(
+                node_run(*node.right_node.unwrap(), variable_data),
+                node::NodeKind::NodeNum,
+            );
+            variable_data.add_var(
+                var_name.clone(),
+                assign_value
+            );
+            return node_run(variable_data.get_var(var_name.clone()), variable_data);
         }
         _ => {
             String::new()

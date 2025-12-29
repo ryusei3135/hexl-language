@@ -31,7 +31,8 @@ impl VariableManager {
 
     pub fn add_var(&mut self, name: String, value: node::CalculNode) {
         if let Some(var) = self.variables.iter_mut().find(|var| var.name == name) {
-            var.value = value;
+            eprintln!("[name err]: variable `{}` is already defined", name);
+            panic!("");
         } else {
             self.variables.push(
                 VariableData {
@@ -39,6 +40,15 @@ impl VariableManager {
                     value: value
                 }
             );
+        }
+    }
+
+    pub fn update_var(&mut self, name: String, value: node::CalculNode) {
+        if let Some(var) = self.variables.iter_mut().find(|var| var.name == name) {
+            var.value = value;
+        } else {
+            eprintln!("[name err]: undefined variable `{}`", name);
+            panic!("");
         }
     }
 }

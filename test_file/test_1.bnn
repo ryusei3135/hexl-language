@@ -1,4 +1,6 @@
 def start() {
-    a = 100
+    let <i32>a = 100
     a = a + 1
+    let <i32>b = 0
+    a = b
 }

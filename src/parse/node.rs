@@ -10,10 +10,13 @@ pub enum NodeKind {
     NodeDiv,
 
     NodeNull,
-
+    //  変数
     NodeCallVar,
     NodeAssignVar,
     NodeVarName,
+    NodeDefVar,
+    //  型
+    NodeType,
 }
 
 #[derive(Clone, Debug)]

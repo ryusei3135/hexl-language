@@ -24,8 +24,10 @@ pub enum TokenKind {
     TokenRParen,
     TokenLBrace,
     TokenRBrace,
-    TokenAssign,
-    TokenVarType,
+    TokenAssign,    //  "="
+    TokenVarType,   //  ":"
+    TokenLessThan,  //  <
+    TokenGreaterThan,// >
 
     //  キーワード
     TokenFuncStart, // "def"

@@ -43,7 +43,8 @@ impl Parser {
                     func_datas.add_func(func_node);
                 },
                 token::TokenKind::TokenNewVar => {
-                    //
+                    let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
+                    func_datas.add_func_calcul_node(node);
                 },
                 token::TokenKind::TokenName => {
                     let node = expr::parse_assign::parse_assign(token.clone(), &mut index);
