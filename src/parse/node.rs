@@ -18,6 +18,8 @@ pub enum NodeKind {
     NodeDefVar,
     //  型
     NodeType,
+    //  関数
+    NodeCallFunc,
 }
 
 #[derive(Clone, Debug)]
@@ -29,9 +31,16 @@ pub struct CalculNode {
 }
 
 #[derive(Clone)]
+pub struct FuncArgsNode {
+    pub name: String,
+    pub type_name: String
+}
+
+#[derive(Clone)]
 pub struct FuncNode {
     //  関数の名前
     pub name: String,
+    pub args: Vec<FuncArgsNode>,
     //  関数の処理
     pub nodes: Vec<CalculNode>,
 }
