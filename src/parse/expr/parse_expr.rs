@@ -19,7 +19,6 @@ pub fn parse_expr(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNod
                 );
             }
             token::TokenKind::TokenSub => {
-                let operator = &tokens[*index as usize];
                 *index += 1;
                 let right = parse_trim(tokens.clone(), index);
                 node = resp::handler::make_operator_node(

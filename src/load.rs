@@ -4,7 +4,6 @@ use std::io::Error;
 
 use crate::parse::parse;
 use crate::token::tokenizer;
-use crate::manager::func;
 
 use crate::runner;
 
@@ -16,19 +15,14 @@ pub fn load_file(file_path: &str) -> Result<(), Error> {
     let mut tokenizer = tokenizer::Tokenizer::new();
     let mut parser = parse::Parser::new();
 
-    let mut func_datas = func::FuncManager::new();
-
     for (number, line) in reader.lines().enumerate() {
         let line = line?;
         let token_data = tokenizer.make_token(line, number);
 
-        parser.make_node(
-            token_data, 
-            &mut func_datas
-        );
+        parser.make_node(token_data);
     }
 
-    runner::run::start_process(&func_datas);
+    runner::run::start_process();
 
     Ok(())
 }

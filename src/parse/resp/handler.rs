@@ -4,7 +4,7 @@ use crate::parse::node;
 
 
 pub fn make_value_node(
-        token: &token::Token, 
+        token: &token::Token,
         node_type: node::NodeKind
 ) -> node::CalculNode {
     node::CalculNode {
@@ -16,7 +16,7 @@ pub fn make_value_node(
 }
 
 pub fn make_operator_node(
-        left: node::CalculNode, 
+        left: node::CalculNode,
         right: node::CalculNode,
         node_type: node::NodeKind
 ) -> node::CalculNode {
@@ -37,5 +37,14 @@ pub fn convert_value_to_node(
         node_type: node_type,
         left_node: None,
         right_node: None,
+    };
+}
+
+pub fn make_null_node() -> node::CalculNode {
+    return node::CalculNode {
+        value: "[*null*]".to_string(),
+        node_type: node::NodeKind::NodeNull,
+        left_node: None,
+        right_node: None
     };
 }

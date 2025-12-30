@@ -7,10 +7,8 @@ use crate::parse::resp;
 pub fn parse_type_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
     let mut starts_with_less_than: bool = false;
     let mut ident_seen_name: bool = false;
-    let mut node = resp::handler::convert_value_to_node(
-        "[null]".to_string(),
-        node::NodeKind::NodeType
-    );
+    let mut node = resp::handler::make_null_node();
+    node.node_type = node::NodeKind::NodeType;
 
     while tokens.len() > *index as usize {
         if starts_with_less_than {

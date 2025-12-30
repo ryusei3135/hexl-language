@@ -3,7 +3,7 @@ use crate::token::token;
 use crate::parse::node;
 use crate::parse::expr;
 use crate::parse::semantic;
-use crate::manager::func;
+use crate::manager::global_state::func_manager;
 
 
 
@@ -27,8 +27,7 @@ impl Parser {
 
     pub fn make_node(
             &mut self,
-            token: Vec<token::Token>,
-            func_datas: &mut func::FuncManager
+            token: Vec<token::Token>
     ) {
         let mut index: i32 = 0;
 
@@ -36,19 +35,23 @@ impl Parser {
             match token[index as usize].kind {
                 token::TokenKind::TokenNum => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
-                    func_datas.add_func_calcul_node(node);
+                    func_manager().add_func_calcul_node(node);
                 },
                 token::TokenKind::TokenFuncStart => {
                     let func_node = semantic::func::make_func_header(token.clone(), &mut index);
-                    func_datas.add_func(func_node);
+                    func_manager().add_func(func_node);
+                },
+                token::TokenKind::TokenUsePackage => {
+                    let package_node = semantic::package::make_use_package_node(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(package_node);
                 },
                 token::TokenKind::TokenNewVar => {
                     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
-                    func_datas.add_func_calcul_node(node);
+                    func_manager().add_func_calcul_node(node);
                 },
                 token::TokenKind::TokenName => {
                     let node = expr::parse_assign::parse_assign(token.clone(), &mut index);
-                    func_datas.add_func_calcul_node(node);
+                    func_manager().add_func_calcul_node(node);
                 },
                 token::TokenKind::TokenSpace => {
                     index += 1;

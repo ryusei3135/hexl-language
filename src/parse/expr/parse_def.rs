@@ -8,10 +8,10 @@ use crate::parse::resp;
 
 //  変数を上書きするノードを変数を宣言するノードに変換
 fn format_assign_var_node(
-        node: node::CalculNode, 
+        node: node::CalculNode,
         var_type_node: node::CalculNode
 ) -> node::CalculNode {
-    let mut formated_node: node::CalculNode = node::CalculNode {
+    let formated_node: node::CalculNode = node::CalculNode {
         value: node.left_node.unwrap().value.clone(),
         node_type: node::NodeKind::NodeDefVar,
         left_node: Some(Box::new(var_type_node)),

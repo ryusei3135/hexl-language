@@ -4,8 +4,69 @@ use crate::parse::resp;
 use crate::parse::expr::parse_expr::parse_expr;
 
 
+fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+    let mut start_with_l_paren: bool = false;
+    let mut args = resp::handler::make_null_node();
+
+    while tokens.len() > *index as usize {
+        match tokens[*index as usize].kind {
+            token::TokenKind::TokenLParen => {
+                start_with_l_paren = true;
+            },
+            token::TokenKind::TokenRParen => {
+                *index += 1;
+                break;
+            },
+            token::TokenKind::TokenName | token::TokenKind::TokenNum => {
+                if start_with_l_paren {
+                    args = resp::handler::make_operator_node(
+                        parse_expr(tokens.clone(), index),
+                        args.clone(),
+                        node::NodeKind::NodeArgsValue
+                    );
+                } else {
+                    eprintln!("[syntax err]: args");
+                }
+            },
+            _ => {
+                //
+            }
+        }
+
+        *index += 1;
+    }
+
+    args.clone()
+}
+
+//  呼び出す値が関数か変数かを調べる
+fn call_value_node(
+        tokens: Vec<token::Token>,
+        current_token: token::Token,
+        index: &mut i32
+) -> node::CalculNode {
+    *index += 1;
+    if tokens[*index as usize].kind == token::TokenKind::TokenLParen {
+        //  関数
+        let args_node = parse_func_arg(tokens, index);
+        let func_head_data = node::CalculNode {
+            value: current_token.lexeme.clone(),
+            node_type: node::NodeKind::NodeCallFunc,
+            left_node: None,
+            right_node: Some(Box::new(args_node))
+        };
+        return func_head_data;
+    } else {
+        //  変数
+        return resp::handler::make_value_node(
+            &current_token,
+            node::NodeKind::NodeCallVar,
+        );
+    }
+}
+
 pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
-    let current_token = &tokens[*index as usize];
+    let current_token = &tokens.clone()[*index as usize];
 
     match current_token.kind {
         token::TokenKind::TokenNum => {
@@ -15,13 +76,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
                 node::NodeKind::NodeNum,
             );
         }
-        token::TokenKind::TokenName => {
-            *index += 1;
-            return resp::handler::make_value_node(
-                current_token,
-                node::NodeKind::NodeCallVar,
-            );
-        }
+        token::TokenKind::TokenName => return call_value_node(tokens, current_token.clone(), index),
         token::TokenKind::TokenString => {
             *index += 1;
             return resp::handler::convert_value_to_node(
@@ -45,12 +100,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
         }
         _ => {
             println!("Error: Unexpected token {:?}", current_token);
-            return node::CalculNode {
-                value: String::new(),
-                node_type: node::NodeKind::NodeNull,
-                left_node: None,
-                right_node: None,
-            };
+            return resp::handler::make_null_node();
         }
     }
 }

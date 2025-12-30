@@ -20,6 +20,10 @@ pub enum NodeKind {
     NodeType,
     //  関数
     NodeCallFunc,
+    NodeArgsValue,
+    NodeArgsData,//  引数のデータの始まり
+    //  処理
+    NodeUsePackage,
 }
 
 #[derive(Clone, Debug)]
@@ -33,7 +37,7 @@ pub struct CalculNode {
 #[derive(Clone)]
 pub struct FuncArgsNode {
     pub name: String,
-    pub type_name: String
+    pub type_name: String,
 }
 
 #[derive(Clone)]
@@ -41,6 +45,7 @@ pub struct FuncNode {
     //  関数の名前
     pub name: String,
     pub args: Vec<FuncArgsNode>,
+    pub ret_value_type: CalculNode,
     //  関数の処理
     pub nodes: Vec<CalculNode>,
 }

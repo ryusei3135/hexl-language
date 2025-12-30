@@ -1,9 +1,10 @@
 use crate::token::token;
-
 use crate::parse::node;
 use crate::parse::expr::parse_type;
+use crate::parse::resp;
 
 
+//  関数の引数
 fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> Vec<node::FuncArgsNode> {
     let mut args = Vec::<node::FuncArgsNode>::new();
     let mut arg_type: Option<String> = None;
@@ -51,6 +52,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> node::Fun
     //  関数の名前がある場所を代入
     let mut func_name_index: i32 = -1;
     let mut args = Vec::<node::FuncArgsNode>::new();
+    let mut func_ret_value_node: node::CalculNode = resp::handler::make_null_node();
 
     while tokens.len() > *index as usize {
         match tokens[*index as usize].kind {
@@ -72,6 +74,9 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> node::Fun
             token::TokenKind::TokenLParen => {
                 args = make_args_node(tokens.clone(), index);
                 continue;
+            },
+            token::TokenKind::TokenLessThan => {
+                func_ret_value_node = parse_type::parse_type_node(tokens.clone(), index);
             }
             token::TokenKind::TokenFuncStart => {
                 func_start_keyword = true;
@@ -88,6 +93,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> node::Fun
         return node::FuncNode {
             name: tokens[func_name_index as usize].lexeme.clone(),
             args: args,
+            ret_value_type: func_ret_value_node,
             nodes: Vec::<node::CalculNode>::new(),
         };
     } else {

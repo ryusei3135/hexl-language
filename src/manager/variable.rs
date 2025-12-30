@@ -18,7 +18,7 @@ impl VariableManager {
             variables: Vec::<VariableData>::new(),
         }
     }
-
+    //  変数のデータを返す
     pub fn get_var(&self, name: String) -> VariableData {
         self.variables
             .iter()
@@ -29,9 +29,9 @@ impl VariableManager {
                 panic!("this variable is not defined");
             })
     }
-
+    //  変数を追加
     pub fn add_var(&mut self, name: String, value: node::CalculNode, type_name: String) {
-        if let Some(var) = self.variables.iter_mut().find(|var| var.name == name) {
+        if self.variables.iter_mut().find(|var| var.name == name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
         } else {
@@ -44,7 +44,7 @@ impl VariableManager {
             );
         }
     }
-
+    //  変数の値を上書き
     pub fn update_var(&mut self, name: String, value: node::CalculNode) {
         if let Some(var) = self.variables.iter_mut().find(|var| var.name == name) {
             var.value = value;

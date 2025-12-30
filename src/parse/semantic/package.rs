@@ -1,9 +1,12 @@
 use crate::token::token;
+use crate::parse::node;
+use crate::parse::resp;
 
 
-pub fn make_use_package_node(tokens: Vec<token::Token>, index: &mut i32) {
+pub fn make_use_package_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
     let mut first_use_package_token: bool = false;
-    let mut package_name: String;
+    let mut package_node = resp::handler::make_null_node();
+    package_node.node_type = node::NodeKind::NodeUsePackage;
 
     while tokens.len() > *index as usize {
         match tokens[*index as usize].kind {
@@ -21,7 +24,10 @@ pub fn make_use_package_node(tokens: Vec<token::Token>, index: &mut i32) {
             token::TokenKind::TokenName => {
                 //  use_packageトークンの後に、文字トークンが来ないと構文エラー
                 if first_use_package_token {
-                    package_name = tokens[*index as usize].lexeme.clone();
+                    package_node.value = tokens[*index as usize].lexeme.clone();
+                    break;
+                } else {
+                    break;
                 }
             },
             _ => {
@@ -31,4 +37,6 @@ pub fn make_use_package_node(tokens: Vec<token::Token>, index: &mut i32) {
 
         *index += 1;
     }
+
+    package_node
 }
