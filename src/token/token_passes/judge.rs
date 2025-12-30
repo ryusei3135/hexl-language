@@ -65,16 +65,33 @@ fn connect_string_literal(
     false
 }
 
+fn connect_comper_op(
+        tokens: &mut token::Token,
+        now_token: token::Token
+) -> bool {
+    return match tokens.kind {
+        token::TokenKind::TokenAssign => tokens.change(token::TokenKind::TokenEqTo).connect(&now_token.lexeme),
+        token::TokenKind::TokenNot => tokens.change(token::TokenKind::TokenNotEqTo).connect(&now_token.lexeme),
+        _ => false,
+    };
+}
+
 pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
     if tokens.len() > 2 {
         let last_token = tokens.pop().unwrap();
 
-        let result = match tokens.last().unwrap().kind {
+        let mut result = match tokens.last().unwrap().kind {
             token::TokenKind::TokenName => connect_with_name_token(tokens, last_token.clone()),
             token::TokenKind::TokenSub => connect_minus_token(tokens, last_token.clone()),
             token::TokenKind::TokenString => connect_string_literal(tokens, last_token.clone()),
             _ => false,
         };
+        if !result {
+            result = match last_token.kind {
+                token::TokenKind::TokenAssign => connect_comper_op(&mut tokens.last_mut().unwrap(), last_token.clone()),
+                _ => false,
+            };
+        }
         if !result {
             tokens.push(last_token);
         }

@@ -9,6 +9,9 @@ pub enum NodeKind {
     NodeSub,
     NodeMul,
     NodeDiv,
+    //  比較演算子
+    NodeEqTo,
+    NodeNotEqTo,
 
     NodeNull,
     //  変数

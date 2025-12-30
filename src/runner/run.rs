@@ -37,6 +37,18 @@ pub fn node_run(
             let result = left_value.parse::<i32>().unwrap() / right_value.parse::<i32>().unwrap();
             result.to_string()
         },
+        node::NodeKind::NodeEqTo => {
+            let left_value = node_run(*node.left_node.unwrap());
+            let right_value = node_run(*node.right_node.unwrap());
+            let result = left_value.parse::<i32>().unwrap() == right_value.parse::<i32>().unwrap();
+            result.to_string()
+        },
+        node::NodeKind::NodeNotEqTo => {
+            let left_value = node_run(*node.left_node.unwrap());
+            let right_value = node_run(*node.right_node.unwrap());
+            let result = left_value.parse::<i32>().unwrap() != right_value.parse::<i32>().unwrap();
+            result.to_string()
+        }
         node::NodeKind::NodeAssignVar => return var::update_var_value(node.clone()),
         node::NodeKind::NodeCallVar => return var::call_var_value(node.value),
         node::NodeKind::NodeDefVar => return var::define_var(node.clone()),
@@ -67,8 +79,9 @@ pub fn start_process() {
 
     while start_process.nodes.len() > index as usize {
         println!(
-            "[{}] [value]",
-            node_run(start_process.nodes[index as usize].clone())
+            "[{}] [value] [{}]",
+            node_run(start_process.nodes[index as usize].clone()),
+            index
         );
 
         index += 1;

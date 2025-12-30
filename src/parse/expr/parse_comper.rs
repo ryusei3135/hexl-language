@@ -1,40 +1,41 @@
 use crate::token::token;
 use crate::parse::node;
+use crate::parse::expr::parse_expr;
 use crate::parse::resp;
-use crate::parse::expr::parse_trim::parse_trim;
 
 
-pub fn parse_expr(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
-    let mut node = parse_trim(tokens.clone(), index);
+
+pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+    let mut node = parse_expr::parse_expr(tokens.clone(), index);
 
     while tokens.len() > *index as usize {
         match tokens[*index as usize].kind {
-            token::TokenKind::TokenAdd => {
+            token::TokenKind::TokenEqTo => {
                 *index += 1;
-                let right = parse_trim(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index);
                 node = resp::handler::make_operator_node(
                     node,
                     right,
-                    node::NodeKind::NodeAdd,
+                    node::NodeKind::NodeEqTo,
                 );
-            }
-            token::TokenKind::TokenSub => {
+            },
+            token::TokenKind::TokenNotEqTo => {
                 *index += 1;
-                let right = parse_trim(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index);
                 node = resp::handler::make_operator_node(
                     node,
                     right,
-                    node::NodeKind::NodeSub,
+                    node::NodeKind::NodeNotEqTo,
                 );
-            }
+            },
             token::TokenKind::TokenSpace => {
                 *index += 1;
-            }
+            },
             _ => {
                 break;
             }
         }
     }
 
-    return node;
+    node
 }

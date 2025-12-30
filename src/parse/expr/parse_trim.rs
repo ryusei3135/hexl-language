@@ -7,7 +7,7 @@ use crate::parse::resp;
 pub fn parse_trim(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
     let mut node = parse_factor(tokens.clone(), index);
 
-    while tokens.len() as i32 > *index {
+    while tokens.len() > *index as usize {
         match tokens[*index as usize].kind {
             token::TokenKind::TokenMul => {
                 *index += 1;

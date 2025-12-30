@@ -2,6 +2,7 @@ use crate::token::token;
 use crate::parse::node;
 use crate::parse::resp;
 use crate::parse::expr::parse_expr::parse_expr;
+use crate::parse::expr::parse_comper::parse_comper_op;
 
 
 fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
@@ -20,7 +21,7 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNod
             token::TokenKind::TokenName | token::TokenKind::TokenNum => {
                 if start_with_l_paren {
                     args = resp::handler::make_operator_node(
-                        parse_expr(tokens.clone(), index),
+                        parse_comper_op(tokens.clone(), index),
                         args.clone(),
                         node::NodeKind::NodeArgsValue
                     );
@@ -45,8 +46,8 @@ fn call_value_node(
         current_token: token::Token,
         index: &mut i32
 ) -> node::CalculNode {
-    *index += 1;
-    if tokens[*index as usize].kind == token::TokenKind::TokenLParen {
+    if tokens.len() > 1 + *index as usize && tokens[1 + *index as usize].kind == token::TokenKind::TokenLParen {
+        *index += 1;
         //  関数
         let args_node = parse_func_arg(tokens, index);
         let func_head_data = node::CalculNode {
@@ -58,6 +59,7 @@ fn call_value_node(
         return func_head_data;
     } else {
         //  変数
+        *index += 1;
         return resp::handler::make_value_node(
             &current_token,
             node::NodeKind::NodeCallVar,
@@ -86,7 +88,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
         }
         token::TokenKind::TokenLParen => {
             *index += 1; // '('をスキップ
-            let node = parse_expr(tokens.clone(), index);
+            let node = parse_comper_op(tokens.clone(), index);
             if tokens[*index as usize].kind == token::TokenKind::TokenRParen {
                 *index += 1; // ')'をスキップ
             } else {

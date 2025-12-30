@@ -1,11 +1,11 @@
 use crate::parse::node;
 use crate::token::token;
 
-use crate::parse::expr::parse_expr::parse_expr;
+use crate::parse::expr::parse_comper;
 use crate::parse::resp;
 
 
-
+//  変数に値を代入するノードを作成
 pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
     let mut first_var_name: bool = false;
     let mut node = resp::handler::make_value_node(
@@ -18,7 +18,7 @@ pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
             token::TokenKind::TokenAssign => {
                 if first_var_name {
                     *index += 1;
-                    let right = parse_expr(tokens.clone(), index);
+                    let right = parse_comper::parse_comper_op(tokens.clone(), index);
                     node = resp::handler::make_operator_node(
                         node,
                         right,

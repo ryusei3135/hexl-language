@@ -21,6 +21,9 @@ pub enum TokenKind {
     TokenMul,
     TokenDiv,
 
+    TokenEqTo,
+    TokenNotEqTo,
+
     TokenLParen,
     TokenRParen,
     TokenLBrace,
@@ -29,6 +32,7 @@ pub enum TokenKind {
     TokenVarType,   //  ":"
     TokenLessThan,  //  <
     TokenGreaterThan,// >
+    TokenNot,       //  "!"
 
     //  キーワード
     TokenFuncStart, // "def"
@@ -42,4 +46,16 @@ pub struct Token {
     pub kind: TokenKind,
     pub lexeme: String,
     pub line: usize,
+}
+
+impl Token {
+    pub fn connect(&mut self, txt: &str) -> bool {
+        self.lexeme.push_str(txt);
+        true
+    }
+
+    pub fn change(&mut self, kind: TokenKind) -> &mut Self {
+        self.kind = kind;
+        self
+    }
 }
