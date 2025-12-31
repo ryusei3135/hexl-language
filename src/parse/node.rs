@@ -13,6 +13,8 @@ pub enum NodeKind {
     NodeEqTo,
     NodeNotEqTo,
 
+    NodeNot,
+
     NodeNull,
     //  変数
     NodeCallVar,

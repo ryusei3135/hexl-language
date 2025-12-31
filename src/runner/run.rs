@@ -10,6 +10,11 @@ pub fn node_run(
         node::NodeKind::NodeNum => {
             node.value.clone()
         },
+        node::NodeKind::NodeNot => {
+            let left_value = node_run(*node.left_node.unwrap());
+            let result = !left_value.parse::<i32>().unwrap();
+            result.to_string()
+        }
         node::NodeKind::NodeStr => {
             node.value.clone()
         }

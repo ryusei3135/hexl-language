@@ -2,15 +2,15 @@ use crate::token::token;
 
 
 fn connect_with_name_token(
-        tokens: &mut Vec<token::Token>,
+        tokens: &mut token::Token,
         now_token: token::Token
 ) -> bool {
     if now_token.kind == token::TokenKind::TokenNum {
-        tokens.last_mut().unwrap().lexeme.push_str(&now_token.lexeme);
+        tokens.connect(&now_token.lexeme);
     } else if now_token.lexeme == "_" {
-        tokens.last_mut().unwrap().lexeme.push_str(&now_token.lexeme);
+        tokens.connect(&now_token.lexeme);
     } else if now_token.kind == token::TokenKind::TokenName {
-        tokens.last_mut().unwrap().lexeme.push_str(&now_token.lexeme);
+        tokens.connect(&now_token.lexeme);
     } else {
         return false;
     }
@@ -18,14 +18,13 @@ fn connect_with_name_token(
 }
 
 fn connect_minus_token(
-        tokens: &mut Vec<token::Token>,
+        tokens: &mut token::Token,
         now_token: token::Token
 ) -> bool {
-    if tokens.last().unwrap().lexeme.chars().next() == Some('-') {
+    if tokens.lexeme.chars().next() == Some('-') {
             //  トークン"-"が最初に来た場合負の数になる
         if now_token.kind == token::TokenKind::TokenNum {
-            tokens.last_mut().unwrap().kind = token::TokenKind::TokenNum;
-            tokens.last_mut().unwrap().lexeme.push_str(&now_token.lexeme);
+            tokens.change(token::TokenKind::TokenNum).connect(&now_token.lexeme);
         } else {
             return false;
         }
@@ -53,12 +52,11 @@ mod str_literal {
 }
 
 fn connect_string_literal(
-        tokens: &mut Vec<token::Token>,
+        tokens: &mut token::Token,
         now_token: token::Token
 ) -> bool {
-    if str_literal::can_extend_str_literal(tokens.last().unwrap().clone()) {
-        tokens.last_mut().unwrap().lexeme.push_str(&now_token.lexeme);
-        tokens.last_mut().unwrap().kind = token::TokenKind::TokenString;
+    if str_literal::can_extend_str_literal(tokens.clone()) {
+        tokens.change(token::TokenKind::TokenString).connect(&now_token.lexeme);
         return true;
     }
 
@@ -81,9 +79,9 @@ pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
         let last_token = tokens.pop().unwrap();
 
         let mut result = match tokens.last().unwrap().kind {
-            token::TokenKind::TokenName => connect_with_name_token(tokens, last_token.clone()),
-            token::TokenKind::TokenSub => connect_minus_token(tokens, last_token.clone()),
-            token::TokenKind::TokenString => connect_string_literal(tokens, last_token.clone()),
+            token::TokenKind::TokenName => connect_with_name_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenSub => connect_minus_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenString => connect_string_literal(&mut tokens.last_mut().unwrap(), last_token.clone()),
             _ => false,
         };
         if !result {

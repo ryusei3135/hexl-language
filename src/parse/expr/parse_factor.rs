@@ -78,6 +78,19 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
                 node::NodeKind::NodeNum,
             );
         }
+        token::TokenKind::TokenNot => {
+            if tokens.len() > 1 + *index as usize {
+                *index += 1;
+                return resp::handler::make_operator_node(
+                    parse_factor(tokens, index),
+                    resp::handler::make_null_node(),
+                    node::NodeKind::NodeNot
+                );
+            } else {
+                println!("[syntax err]: line {}", tokens[*index as usize].line);
+                panic!("");
+            }
+        }
         token::TokenKind::TokenName => return call_value_node(tokens, current_token.clone(), index),
         token::TokenKind::TokenString => {
             *index += 1;

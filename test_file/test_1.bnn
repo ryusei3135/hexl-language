@@ -11,5 +11,5 @@ def start() {
     let <str>j_l = "hello world!!"
     let <i32>hello_world = 1
     let <i32>hoge = 1
-    o = hello_world == hoge
+    o = hello_world == !hoge
 }
