@@ -26,7 +26,6 @@ pub enum NodeKind {
     //  関数
     NodeCallFunc,
     NodeArgsValue,
-    NodeArgsData,//  引数のデータの始まり
     //  処理
     NodeUsePackage,
 }

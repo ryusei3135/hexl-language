@@ -5,7 +5,6 @@ mod parse;
 mod runner;
 mod token;
 mod manager;
-mod reader;
 
 
 fn main() {

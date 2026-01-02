@@ -12,9 +12,8 @@ impl ApplyProcessor {
     }
 
     pub fn emit_token(
-            &mut self, 
-            state: &mut state::LexerState,
-            c: char
+            &mut self,
+            state: &mut state::LexerState
     ) {
         //  直前のトークンの種類を確定させる
         let token_kind = categorize::categorize_token(
@@ -38,13 +37,13 @@ impl ApplyProcessor {
     }
 
     pub fn combine_char(
-            &self, 
-            state: &mut state::LexerState, 
-            char_kind: token::CharKind, 
-            c: char
+            &self,
+            state: &mut state::LexerState,
+            char_kind: token::CharKind,
+            chr: char
     ) {
-        state.stack_token_txt.push(c);
+        state.stack_token_txt.push(chr);
         state.last_char_kind = char_kind.clone();
-        state.last_char = c;
+        state.last_char = chr;
     }
 }

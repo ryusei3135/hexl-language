@@ -1,6 +1,5 @@
 use crate::token::token;
 
-use crate::parse::node;
 use crate::parse::expr;
 use crate::parse::semantic;
 use crate::manager::global_state::func_manager;
@@ -8,19 +7,12 @@ use crate::manager::global_state::func_manager;
 
 
 pub struct Parser {
-    pub calucl_node: node::CalculNode,
     pub brace_depth: i32,
 }
 
 impl Parser {
     pub fn new() -> Self {
         Parser {
-            calucl_node: node::CalculNode {
-                value: String::new(),
-                node_type: node::NodeKind::NodeNull,
-                left_node: None,
-                right_node: None,
-            },
             brace_depth: 0,
         }
     }
