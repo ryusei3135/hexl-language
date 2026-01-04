@@ -41,6 +41,7 @@ pub enum TokenKind {
     TokenNewVar,    // "let"
     TokenIf,        // "if"
     TokenElse,      // "else"
+    TokenRet,
     TokenEOF,
 }
 

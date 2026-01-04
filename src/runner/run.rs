@@ -45,6 +45,10 @@ pub fn node_run(
             runtime::process_kind(node::NodeKind::NodeElse);
             "1".to_string()
         }
+        node::NodeKind::NodeRet => {
+            runtime::process_kind(node::NodeKind::NodeRet);
+            node_run(*node.left_node.unwrap().clone())
+        }
         _ => {
             String::new()
         }
@@ -90,6 +94,10 @@ fn run_func(func_process: node::FuncNode) -> String {
                         executable_area = func_process.nodes[1 + index as usize].block.unwrap();
                     }
                 }
+                node::NodeKind::NodeRet => {
+                    runtime::process_kind(node::NodeKind::NodeNull);
+                    return result;
+                }
                 _ => println!("[{}] [value]", result),
             }
         } else if now_area < executable_area {
@@ -97,7 +105,7 @@ fn run_func(func_process: node::FuncNode) -> String {
         }
         index += 1;
     }
-    "end".to_string()
+    "[*end*]".to_string()
 }
 
 

@@ -50,10 +50,11 @@ impl Parser {
                     let node = expr::parse_assign::parse_assign(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 },
-                token::TokenKind::TokenSpace => {
-                    index += 1;
-                    continue;
-                },
+                token::TokenKind::TokenSpace => {}
+                token::TokenKind::TokenRet => {
+                    let node = semantic::ret::make_ret_node(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                }
                 token::TokenKind::TokenLBrace => self.brace_depth += 1,
                 token::TokenKind::TokenRBrace => {
                     self.brace_depth -= 1;

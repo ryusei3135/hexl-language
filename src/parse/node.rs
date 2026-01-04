@@ -30,7 +30,8 @@ pub enum NodeKind {
     NodeUsePackage,
     NodeIf,
     NodeIfElse,
-    NodeElse
+    NodeElse,
+    NodeRet
 }
 
 #[derive(Clone, Debug)]
