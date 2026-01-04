@@ -37,8 +37,14 @@ pub fn node_run(
             runtime::process_kind(node::NodeKind::NodeIf);
             node_run(*node.left_node.unwrap().clone())
         }
-        node::NodeKind::NodeIfElse => "[null]".to_string(),
-        node::NodeKind::NodeElse => "[null]".to_string(),
+        node::NodeKind::NodeIfElse => {
+            runtime::process_kind(node::NodeKind::NodeIfElse);
+            node_run(*node.left_node.unwrap().clone())
+        }
+        node::NodeKind::NodeElse => {
+            runtime::process_kind(node::NodeKind::NodeElse);
+            "1".to_string()
+        }
         _ => {
             String::new()
         }
@@ -46,11 +52,12 @@ pub fn node_run(
 }
 
 fn run_func(func_process: node::FuncNode) -> String {
+    let mut cond_status = runtime::CondStatus::new();
     let mut index: u32 = 0;
     let mut executable_area: i32 = 1;
 
     while func_process.nodes.len() > index as usize {
-        let now_area = func_process.nodes[index as usize].block.unwrap();
+        let mut now_area = func_process.nodes[index as usize].block.unwrap();
 
         if now_area == executable_area {
             let result = node_run(func_process.nodes[index as usize].clone());
@@ -59,11 +66,34 @@ fn run_func(func_process: node::FuncNode) -> String {
                 node::NodeKind::NodeIf => {
                     runtime::process_kind(node::NodeKind::NodeNull);
                     if result.parse().unwrap() {
-                        executable_area = now_area;
+                        //  trueを代入すると、つながっている条件分岐がスキップされる
+                        cond_status.push(true, now_area);
+                        executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                    } else {
+                        cond_status.push(false, now_area);
+                    }
+                }
+                node::NodeKind::NodeIfElse => {
+                    runtime::process_kind(node::NodeKind::NodeNull);
+                    if result.parse().unwrap() {
+                        if cond_status.judge_cond(now_area) {
+                            cond_status.cond_true();
+                            executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                        }
+                    }
+                }
+                node::NodeKind::NodeElse => {
+                    runtime::process_kind(node::NodeKind::NodeNull);
+                    if cond_status.judge_cond(now_area) {
+                        //  else文なので、条件のデータを削除する
+                        cond_status.del();
+                        executable_area = func_process.nodes[1 + index as usize].block.unwrap();
                     }
                 }
                 _ => println!("[{}] [value]", result),
             }
+        } else if now_area < executable_area {
+            executable_area = now_area;
         }
         index += 1;
     }

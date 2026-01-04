@@ -52,3 +52,13 @@ pub fn make_null_node() -> node::CalculNode {
         block: None
     };
 }
+
+pub fn make_true_node(kind: node::NodeKind) -> node::CalculNode {
+    return node::CalculNode {
+        value: "1".to_string(),
+        node_type: kind,
+        left_node: None,
+        right_node: None,
+        block: None
+    }
+}

@@ -3,6 +3,7 @@ use crate::parse::expr;
 use crate::parse::expr::parse_comper;
 use crate::parse::semantic;
 use crate::parse::semantic::cond_branch::make_if_node;
+use crate::parse::semantic::cond_branch::make_if_else_node;
 use crate::parse::resp;
 use crate::parse::node;
 use crate::manager::global_state::func_manager;
@@ -54,7 +55,14 @@ impl Parser {
                     continue;
                 },
                 token::TokenKind::TokenLBrace => self.brace_depth += 1,
-                token::TokenKind::TokenRBrace => self.brace_depth -= 1,
+                token::TokenKind::TokenRBrace => {
+                    self.brace_depth -= 1;
+                    index += 1;
+                    if let Some(node) = make_if_else_node(token.clone(), &mut index) {
+                        func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    }
+                    continue;
+                }
                 token::TokenKind::TokenIf => {
                     let node = make_if_node(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
