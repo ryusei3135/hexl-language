@@ -1,7 +1,10 @@
 use crate::token::token;
-
 use crate::parse::expr;
+use crate::parse::expr::parse_comper;
 use crate::parse::semantic;
+use crate::parse::semantic::cond_branch::make_if_node;
+use crate::parse::resp;
+use crate::parse::node;
 use crate::manager::global_state::func_manager;
 
 
@@ -27,23 +30,24 @@ impl Parser {
             match token[index as usize].kind {
                 token::TokenKind::TokenNum => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 },
                 token::TokenKind::TokenFuncStart => {
                     let func_node = semantic::func::make_func_header(token.clone(), &mut index);
                     func_manager().add_func(func_node);
+                    continue;
                 },
                 token::TokenKind::TokenUsePackage => {
                     let package_node = semantic::package::make_use_package_node(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(package_node);
+                    func_manager().add_func_calcul_node(package_node, self.brace_depth.clone());
                 },
                 token::TokenKind::TokenNewVar => {
                     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 },
                 token::TokenKind::TokenName => {
                     let node = expr::parse_assign::parse_assign(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 },
                 token::TokenKind::TokenSpace => {
                     index += 1;
@@ -51,6 +55,11 @@ impl Parser {
                 },
                 token::TokenKind::TokenLBrace => self.brace_depth += 1,
                 token::TokenKind::TokenRBrace => self.brace_depth -= 1,
+                token::TokenKind::TokenIf => {
+                    let node = make_if_node(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    continue;
+                }
                 _ => {
                     println!("{:?}", token[index as usize].kind);
                 }

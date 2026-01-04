@@ -28,6 +28,9 @@ pub enum NodeKind {
     NodeArgsValue,
     //  処理
     NodeUsePackage,
+    NodeIf,
+    NodeIfElse,
+    NodeElse
 }
 
 #[derive(Clone, Debug)]
@@ -36,13 +39,15 @@ pub struct CalculNode {
     pub node_type: NodeKind,
     pub left_node: Option<Box<CalculNode>>,
     pub right_node: Option<Box<CalculNode>>,
+    //  どこのブロックの中か
+    pub block: Option<i32>
 }
 
 #[derive(Clone)]
 pub struct FuncArgsNode {
     pub name: String,
     pub type_name: Option<CalculNode>,
-    pub next: Option<Box<FuncArgsNode>>
+    pub next: Option<Box<FuncArgsNode>>,
 }
 
 #[derive(Clone)]

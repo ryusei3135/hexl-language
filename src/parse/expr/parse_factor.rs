@@ -58,7 +58,8 @@ fn call_value_node(
             value: current_token.lexeme.clone(),
             node_type: node::NodeKind::NodeCallFunc,
             left_node: Some(Box::new(args_node)),
-            right_node: None
+            right_node: None,
+            block: None
         };
         return func_head_data;
     } else {

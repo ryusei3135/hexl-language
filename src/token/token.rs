@@ -39,6 +39,8 @@ pub enum TokenKind {
     TokenFuncStart, // "def"
     TokenUsePackage,// "use"
     TokenNewVar,    // "let"
+    TokenIf,        // "if"
+    TokenElse,      // "else"
     TokenEOF,
 }
 

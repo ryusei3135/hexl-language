@@ -23,6 +23,10 @@ fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> node::FuncArgsN
         match tokens[*index as usize].kind {
             token::TokenKind::TokenName => args_node.name = tokens[*index as usize].lexeme.clone(),
             token::TokenKind::TokenSpace => {},
+            token::TokenKind::TokenRParen => {
+                *index += 1;
+                break;
+            }
             token::TokenKind::TokenLessThan => {
                 args_node.type_name = {
                     Some(

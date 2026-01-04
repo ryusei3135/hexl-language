@@ -15,7 +15,8 @@ fn format_assign_var_node(
         value: node.left_node.unwrap().value.clone(),
         node_type: node::NodeKind::NodeDefVar,
         left_node: Some(Box::new(var_type_node)),
-        right_node: node.right_node
+        right_node: node.right_node,
+        block: None
     };
 
     return formated_node;

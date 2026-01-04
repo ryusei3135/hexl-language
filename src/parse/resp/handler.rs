@@ -12,6 +12,7 @@ pub fn make_value_node(
         node_type: node_type,
         left_node: None,
         right_node: None,
+        block: None
     }
 }
 
@@ -25,6 +26,7 @@ pub fn make_operator_node(
         node_type: node_type,
         left_node: Some(Box::new(left)),
         right_node: Some(Box::new(right)),
+        block: None
     }
 }
 
@@ -37,6 +39,7 @@ pub fn convert_value_to_node(
         node_type: node_type,
         left_node: None,
         right_node: None,
+        block: None
     };
 }
 
@@ -45,6 +48,7 @@ pub fn make_null_node() -> node::CalculNode {
         value: "[*null*]".to_string(),
         node_type: node::NodeKind::NodeNull,
         left_node: None,
-        right_node: None
+        right_node: None,
+        block: None
     };
 }

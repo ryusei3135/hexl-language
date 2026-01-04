@@ -1,6 +1,7 @@
 use crate::parse::node;
 use crate::manager::global_state::func_manager;
 use crate::runner::storage::var;
+use crate::runner::runtime;
 
 
 fn get_left_value(node: &node::CalculNode) -> i32 {
@@ -32,6 +33,12 @@ pub fn node_run(
             var::make_args_var(func_data.clone().args.clone(), *node.left_node.unwrap().clone());
             run_func(func_data)
         }
+        node::NodeKind::NodeIf => {
+            runtime::process_kind(node::NodeKind::NodeIf);
+            node_run(*node.left_node.unwrap().clone())
+        }
+        node::NodeKind::NodeIfElse => "[null]".to_string(),
+        node::NodeKind::NodeElse => "[null]".to_string(),
         _ => {
             String::new()
         }
@@ -40,9 +47,24 @@ pub fn node_run(
 
 fn run_func(func_process: node::FuncNode) -> String {
     let mut index: u32 = 0;
+    let mut executable_area: i32 = 1;
 
     while func_process.nodes.len() > index as usize {
-        println!("[{}] [value]", node_run(func_process.nodes[index as usize].clone()));
+        let now_area = func_process.nodes[index as usize].block.unwrap();
+
+        if now_area == executable_area {
+            let result = node_run(func_process.nodes[index as usize].clone());
+
+            match runtime::get_process_kind() {
+                node::NodeKind::NodeIf => {
+                    runtime::process_kind(node::NodeKind::NodeNull);
+                    if result.parse().unwrap() {
+                        executable_area = now_area;
+                    }
+                }
+                _ => println!("[{}] [value]", result),
+            }
+        }
         index += 1;
     }
     "end".to_string()
@@ -52,15 +74,5 @@ fn run_func(func_process: node::FuncNode) -> String {
 pub fn start_process() {
     let start_process = func_manager().get_func("start");
 
-    let mut index: u32 = 0;
-
-    while start_process.nodes.len() > index as usize {
-        println!(
-            "[{}] [value] [{}]",
-            node_run(start_process.nodes[index as usize].clone()),
-            index
-        );
-
-        index += 1;
-    }
+    run_func(start_process);
 }
