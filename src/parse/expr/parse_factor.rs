@@ -3,40 +3,45 @@ use crate::parse::node;
 use crate::parse::resp;
 use crate::parse::expr::parse_comper::parse_comper_op;
 
-
+//  関数に渡す引数の値
 fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
-    let mut start_with_l_paren: bool = false;
-    let mut args = resp::handler::make_null_node();
+    *index += 1;
+    let mut args_node = resp::handler::make_null_node();
+    let mut allow_arg: bool = true;
 
     while tokens.len() > *index as usize {
         match tokens[*index as usize].kind {
-            token::TokenKind::TokenLParen => {
-                start_with_l_paren = true;
-            },
+            token::TokenKind::TokenComma => {
+                args_node = resp::handler::make_operator_node(
+                    resp::handler::make_null_node(),
+                    args_node,
+                    node::NodeKind::NodeArgsValue
+                );
+                allow_arg = true;
+            }
+            token::TokenKind::TokenSpace => {}
             token::TokenKind::TokenRParen => {
                 *index += 1;
                 break;
-            },
-            token::TokenKind::TokenName | token::TokenKind::TokenNum => {
-                if start_with_l_paren {
-                    args = resp::handler::make_operator_node(
-                        parse_comper_op(tokens.clone(), index),
-                        args.clone(),
-                        node::NodeKind::NodeArgsValue
-                    );
-                } else {
-                    eprintln!("[syntax err]: args");
-                }
-            },
+            }
             _ => {
-                //
+                if allow_arg {
+                    args_node.left_node = Some(
+                        Box::new(
+                            parse_comper_op(tokens.clone(), index)
+                        )
+                    );
+                    allow_arg = false;
+                    continue;
+                } else {
+                    println!("[syntax err]: args");
+                }
             }
         }
-
         *index += 1;
     }
 
-    args.clone()
+    args_node
 }
 
 //  呼び出す値が関数か変数かを調べる
@@ -48,12 +53,12 @@ fn call_value_node(
     if tokens.len() > 1 + *index as usize && tokens[1 + *index as usize].kind == token::TokenKind::TokenLParen {
         *index += 1;
         //  関数
-        let args_node = parse_func_arg(tokens, index);
+        let args_node = parse_func_arg(tokens.clone(), index);
         let func_head_data = node::CalculNode {
             value: current_token.lexeme.clone(),
             node_type: node::NodeKind::NodeCallFunc,
-            left_node: None,
-            right_node: Some(Box::new(args_node))
+            left_node: Some(Box::new(args_node)),
+            right_node: None
         };
         return func_head_data;
     } else {

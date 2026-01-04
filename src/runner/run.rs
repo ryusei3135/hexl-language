@@ -27,7 +27,11 @@ pub fn node_run(
         node::NodeKind::NodeAssignVar => var::update_var_value(node.clone()),
         node::NodeKind::NodeCallVar => var::call_var_value(node.value),
         node::NodeKind::NodeDefVar => var::define_var(node.clone()),
-        node::NodeKind::NodeCallFunc => run_func(func_manager().get_func(&node.value.clone())),
+        node::NodeKind::NodeCallFunc => {
+            let func_data = func_manager().get_func(&node.value.clone());
+            var::make_args_var(func_data.clone().args.clone(), *node.left_node.unwrap().clone());
+            run_func(func_data)
+        }
         _ => {
             String::new()
         }

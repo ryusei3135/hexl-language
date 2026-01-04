@@ -1,11 +1,11 @@
 
 def add(<i32>h, <i32>l)<i32> {
-    let <i32>j = 0
+    let <i32>j = 0 + h
     j = (j + 1) * 10
 }
 
 def start() {
-    let <i32>o = add(1, 2)
+    let <i32>o = add(120, 2)
     let <i32>a100 = -100
     a100 = a100 + 1
     let <str>j_l = "hello world!!"
