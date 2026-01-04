@@ -35,6 +35,7 @@ pub fn categorize_symbol(symbol: &str) -> token::TokenKind {
         ">" => token::TokenKind::TokenGreaterThan,
         "\"" => token::TokenKind::TokenString,
         "_" => token::TokenKind::TokenName,
+        "," => token::TokenKind::TokenComma,
         _   => {
             println!("what is this symbol?: {:?}", symbol);
             token::TokenKind::TokenEOF

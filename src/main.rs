@@ -5,6 +5,7 @@ mod parse;
 mod runner;
 mod token;
 mod manager;
+mod error;
 
 
 fn main() {

@@ -33,6 +33,7 @@ pub enum TokenKind {
     TokenLessThan,  //  <
     TokenGreaterThan,// >
     TokenNot,       //  "!"
+    TokenComma,
 
     //  キーワード
     TokenFuncStart, // "def"
