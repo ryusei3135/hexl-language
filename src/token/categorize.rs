@@ -30,7 +30,7 @@ pub fn categorize_symbol(symbol: &str) -> token::TokenKind {
         "}" => token::TokenKind::TokenRBrace,
         "=" => token::TokenKind::TokenAssign,
         "!" => token::TokenKind::TokenNot,
-        ":" => token::TokenKind::TokenVarType,
+        ":" => token::TokenKind::TokenSpacer,
         "<" => token::TokenKind::TokenLessThan,
         ">" => token::TokenKind::TokenGreaterThan,
         "\"" => token::TokenKind::TokenString,

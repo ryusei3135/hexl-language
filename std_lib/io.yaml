@@ -1,0 +1,8 @@
+file: "io.so"
+func:
+  - name: "print"
+    args: ["str"]
+    ret: "void"
+  - name: "input"
+    args: []
+    ret: "str"

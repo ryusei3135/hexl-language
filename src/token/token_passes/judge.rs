@@ -51,6 +51,7 @@ mod str_literal {
     }
 }
 
+//  文字列トークンをつなげる
 fn connect_string_literal(
         tokens: &mut token::Token,
         now_token: token::Token
@@ -63,6 +64,7 @@ fn connect_string_literal(
     false
 }
 
+//  比較演算子
 fn connect_comper_op(
         tokens: &mut token::Token,
         now_token: token::Token
@@ -74,6 +76,19 @@ fn connect_comper_op(
     };
 }
 
+fn connect_spacer(
+        tokens: &mut token::Token,
+        now_token: token::Token
+) -> bool {
+    if tokens.lexeme.len() == 1 {
+        if now_token.kind == token::TokenKind::TokenSpacer {
+            tokens.change(token::TokenKind::TokenScope).connect(&now_token.lexeme);
+            return true;
+        }
+    }
+    false
+}
+
 pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
     if tokens.len() > 2 {
         let last_token = tokens.pop().unwrap();
@@ -82,6 +97,7 @@ pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
             token::TokenKind::TokenName => connect_with_name_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
             token::TokenKind::TokenSub => connect_minus_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
             token::TokenKind::TokenString => connect_string_literal(&mut tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenSpacer => connect_spacer(&mut tokens.last_mut().unwrap(), last_token.clone()),
             _ => false,
         };
         if !result {

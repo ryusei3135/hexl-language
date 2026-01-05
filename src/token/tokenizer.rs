@@ -27,6 +27,18 @@ impl Tokenizer {
         }
     }
 
+    pub fn init(&mut self) {
+        //  トークンの情報を初期化
+        self.lexer_state = state::LexerState {
+            stack_token_txt: String::new(),
+            last_token_kind: token::TokenKind::TokenEOF,
+            last_char: ' ',
+            last_char_kind: token::CharKind::CharSpace,
+            tokens: Vec::<token::Token>::new(),
+            line_number: 0,
+        };
+    }
+
     pub fn make_token(&mut self, line: String, line_number: usize) -> Vec<token::Token> {
         self.lexer_state.line_number = line_number;
 

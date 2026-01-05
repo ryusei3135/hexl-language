@@ -19,6 +19,7 @@ pub fn load_file(file_path: &str) -> Result<(), Error> {
         let line = line?;
         error::err_handling::add_line(line.clone());
         let token_data = tokenizer.make_token(line, number);
+        tokenizer.init();
 
         parser.make_node(token_data);
     }

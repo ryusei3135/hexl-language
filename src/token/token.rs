@@ -29,11 +29,12 @@ pub enum TokenKind {
     TokenLBrace,
     TokenRBrace,
     TokenAssign,    //  "="
-    TokenVarType,   //  ":"
+    TokenSpacer,   //  ":"
     TokenLessThan,  //  <
     TokenGreaterThan,// >
     TokenNot,       //  "!"
-    TokenComma,
+    TokenComma,     //  ","
+    TokenScope,     //  "::"
 
     //  キーワード
     TokenFuncStart, // "def"

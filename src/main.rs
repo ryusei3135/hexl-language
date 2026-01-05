@@ -6,6 +6,7 @@ mod runner;
 mod token;
 mod manager;
 mod error;
+mod package;
 
 
 fn main() {

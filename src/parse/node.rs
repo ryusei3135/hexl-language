@@ -31,7 +31,10 @@ pub enum NodeKind {
     NodeIf,
     NodeIfElse,
     NodeElse,
-    NodeRet
+    NodeRet,
+    //  参照
+    NodeStd,
+    NodeSrc,
 }
 
 #[derive(Clone, Debug)]
