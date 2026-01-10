@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use crate::package::native;
 use crate::parse::node;
 use crate::package::yaml;
+use crate::package::manage;
 
 
 fn judge_file_extension(filename: &str, extension: &str) -> PathBuf {
@@ -35,13 +36,17 @@ pub fn load_native_lib(package_node: node::CalculNode) {
         // yamlファイルを読み込み関数のデータを取得する
         let library_config = yaml::load::load_native_library_config(&path).unwrap();
         //  ネイティブ関数を取得
-        let hoge = native::load_exported_functions(
+        let native_module = native::load_exported_functions(
             library_config,
             library_dir.clone()
         );
 
-        if hoge.is_ok() {
-            let module_name = library_filename.split("/").last().unwrap();
+        if native_module.is_ok() {
+            let mut module = native_module.unwrap();
+            let module_name = library_filename.split("/").last().unwrap().to_string();
+            module.module_name = module_name.clone();
+
+            manage::add_module(module);
         } else {
         }
     }

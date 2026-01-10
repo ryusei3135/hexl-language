@@ -24,7 +24,8 @@ pub fn load_exported_functions(
     }
 
     Ok(abi::NativeFuncData {
-        lib,   // ← move OK（もう借りられていない）
+        module_name: "*null*".to_string(),
+        lib: lib.into(),
         func: map,
     })
 }
