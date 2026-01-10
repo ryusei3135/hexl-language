@@ -32,8 +32,18 @@ pub fn load_native_lib(package_node: node::CalculNode) {
 
     if let Some(path) = is_yaml_extension(&library_filename) {
         //  yamlファイルの場合
-        let library_config = yaml::load::load_native_library_config(&path);
-        native::load_exported_functions(library_config.unwrap());
+        // yamlファイルを読み込み関数のデータを取得する
+        let library_config = yaml::load::load_native_library_config(&path).unwrap();
+        //  ネイティブ関数を取得
+        let hoge = native::load_exported_functions(
+            library_config,
+            library_dir.clone()
+        );
+
+        if hoge.is_ok() {
+            let module_name = library_filename.split("/").last().unwrap();
+        } else {
+        }
     }
 
     println!("{}:{}", library_dir, library_filename);

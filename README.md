@@ -2,6 +2,4 @@
 ブランチ alphaの引継ぎ
 rustに置き換える
 # banana alpha 2
-
-# banana alpha 2 ver 0.1.0
-変数と四則演算の実装
+clangが必要

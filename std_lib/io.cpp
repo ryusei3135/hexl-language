@@ -9,8 +9,8 @@ extern "C" VmArgsValue print(VmArgsValue *args, size_t len) {
         }
     }
 
-    return VmArgsValue {
-        Void,
-        CValue { .void_value = 0 }
-    };
+    VmArgsValue ret;
+    ret.arg_type = Void;
+    ret.value.void_value = 0;
+    return ret;
 }

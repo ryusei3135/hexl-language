@@ -5,7 +5,7 @@ use std::process::Command;
 
 
 fn compile_std_lib() {
-    let cpp_file = "src/io.cpp";
+    let cpp_file = "std_lib/io.cpp";
     // 出力先
     let target_dir = Path::new("extern_lib/std");
     fs::create_dir_all(target_dir).unwrap();

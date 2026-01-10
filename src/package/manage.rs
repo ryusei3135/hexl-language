@@ -1,29 +1,14 @@
-// use std::collections::HashMap;
-// use libloading::{Library, Symbol};
-// use crate::package::abi;
+use std::sync::{OnceLock, Mutex, MutexGuard};
+use crate::package::abi;
 
 
+static NATIVE_FUNC_DATA: OnceLock<Mutex<Vec<abi::NativeFuncData>>> = OnceLock::new();
 
 
-// fn call_native(func: NativeFn, args: Vec<Value>) -> Value {
-//     let mut natives = HashMap::new();
-
-//     let lib = unsafe { Library::new("libplugin.so")? };
-//     let add: Symbol<NativeFn> = unsafe { lib.get(b"add")? };
-
-//     natives.insert(
-//         "add".to_string(),
-//         NativeFunction { _lib: lib, func: add },
-//     );
-
-//     match args.as_slice() {
-//         [Value::Int(a), Value::Int(b)] => {
-//             let result = unsafe { func(*a, *b) };
-//             Value::Int(result)
-//         }
-//         _ => panic!("invalid arguments"),
-//     }
-
-//     let f = natives.get("add").unwrap();
-//     let result = unsafe { (f.func)(1, 2) };
-// }
+//  関数のデータにアクセス
+pub fn native_func_manager() -> MutexGuard<'static, Vec<abi::NativeFuncData>> {
+    NATIVE_FUNC_DATA
+        .get_or_init(|| Mutex::new(Vec::<abi::NativeFuncData>::new()))
+        .lock()
+        .unwrap()
+}

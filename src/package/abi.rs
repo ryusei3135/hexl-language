@@ -4,7 +4,7 @@ use libloading::Library;
 use crate::lib::*;
 
 
-pub type NativeFunc = unsafe extern "C" fn(*mut VmArgsValue, usize) -> VmArgsValue;
+pub type NativeFunc = unsafe extern "C" fn(args: *mut VmArgsValue, len: usize) -> VmArgsValue;
 
 
 pub struct NativeFuncData {
