@@ -1,30 +1,20 @@
 use std::ffi::c_char;
 
 
-#[macro_export]  macro_rules! VmValueStruct {
-    ($($name:ident : $ty:ty, $field:ident),* $(,)?) => {
-        #[repr(C)]
-        pub enum ArgType {
-            $(
-                $name,
-            )*
-            Void,
-        }
-
-        #[repr(C)]
-        pub union CValue {
-            $(
-                pub $field: $ty,
-            )*
-        }
-    };
+#[repr(C)]
+pub enum ArgType {
+    Int,
+    Str,
+    Bool,
+    Void,
 }
 
-VmValueStruct!(
-    Int: i32, int_value,
-    Str: *mut c_char, str_value,
-    Bool: bool, bool_value,
-);
+#[repr(C)]
+pub union CValue {
+    pub int_value: i32,
+    pub str_value: *mut c_char,
+    pub bool_value: bool,
+}
 
 #[repr(C)]
 pub struct VmArgsValue {

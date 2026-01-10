@@ -1,4 +1,4 @@
 pub mod func;
-pub mod package;
+pub mod package_node;
 pub mod cond_branch;
 pub mod ret;

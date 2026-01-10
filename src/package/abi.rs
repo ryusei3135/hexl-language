@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use libloading::Library;
-use std::ffi::c_char;
-use crate::package::value::{ArgType, CValue, VmArgsValue};
+use crate::package::value::VmArgsValue;
 
 
 pub type NativeFunc = unsafe extern "C" fn(*mut VmArgsValue, usize) -> VmArgsValue;

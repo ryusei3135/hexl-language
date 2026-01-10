@@ -36,7 +36,7 @@ impl CondStatus {
     pub fn push(&mut self, cond: bool, area: i32) {
         if self.status.len() > 0 {
             if self.status.last().unwrap().1 == area {
-                if let Some((flag, value)) = self.status.last_mut() {
+                if let Some((flag, _value)) = self.status.last_mut() {
                     *flag = cond;
                     return;
                 }

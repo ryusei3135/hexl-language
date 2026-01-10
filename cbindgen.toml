@@ -1,0 +1,13 @@
+# C出力
+language = "C"
+
+# includeガードを自動生成
+include_guard = "MY_CRATE_H"
+
+# バージョン情報を出力したい場合だけ使う
+include_version = true
+
+# 解析設定
+[parse]
+parse_deps = false
+clean = true
