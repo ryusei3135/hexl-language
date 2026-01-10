@@ -11,6 +11,7 @@ serde_yaml = "0.9"
 
 [build-dependencies]
 cbindgen = "0.26"
+cc = "1.0"   # C/C++コンパイル用
 
 [lib]
 name = "banana_lang"

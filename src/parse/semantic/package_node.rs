@@ -45,9 +45,9 @@ fn make_lib_name(state: &mut PackageState, token: token::Token) {
             match token.lexeme.as_str() {
                 "std" => {
                     //  標準ライブラリのディレクトリは、lib/std/にある
-                    state.package_node.value = "./lib/std/".to_string();
+                    state.package_node.value = "./extern_lib/std/".to_string();
                     state.package_node.node_type = node::NodeKind::NodeStd;
-                    state.package_dir = "./lib/std/".to_string();
+                    state.package_dir = "./extern_lib/std/".to_string();
                 }
                 "src" => {
                     state.package_node.value = "./".to_string();

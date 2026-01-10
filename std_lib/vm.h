@@ -19,6 +19,7 @@ typedef union CValue {
   int32_t int_value;
   char *str_value;
   bool bool_value;
+  uint8_t void_value;
 } CValue;
 
 typedef struct VmArgsValue {

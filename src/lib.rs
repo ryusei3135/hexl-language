@@ -14,6 +14,7 @@ pub union CValue {
     pub int_value: i32,
     pub str_value: *mut c_char,
     pub bool_value: bool,
+    pub void_value: u8,
 }
 
 #[repr(C)]
