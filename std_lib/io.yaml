@@ -1,8 +1,6 @@
-file: "io.so"
-func:
+metadata:
+  filename: "io.so"
+functions:
   - name: "print"
-    args: ["str"]
-    ret: "void"
-  - name: "input"
-    args: []
-    ret: "str"
+    args_types: ["str"]
+    return_type: "void"

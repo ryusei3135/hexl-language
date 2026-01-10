@@ -1,52 +1,40 @@
-use libloading::{Library, Symbol};
-use std::fs::File;
-use std::error::Error;
-use serde::Deserialize;
-use std::path::Path;
+use std::path::PathBuf;
+use crate::package::native;
 use crate::parse::node;
-use crate::package::state::*;
-use crate::package::manager;
-
-mod file;
-pub mod state;
+use crate::package::yaml;
 
 
-
-fn make_lib_data_to_func(
-    lib_data: &mut file::LoadLibFile,
-    path: String,
-    src_path: String
-) -> Result<(), Box<dyn std::error::Error>> {
-    //  ライブラリの中にある関数の情報
-    let func_datas = lib_data.load(path);
-    unsafe {
-        let lib = Library::new(
-            &(
-                src_path.as_str().to_owned()
-                + lib_data.get_lib_header().as_str()
-            )
-        ).expect("this lib is not found");
-
-        for data in func_datas {
-            let func_name = data.func_name.clone();
-            let func: Symbol<CFunc> = lib.get(func_name.as_bytes())?;
-            manager::add_c_func(func_name, func, data.clone());
-        }
-    }
-    Ok(())
+fn judge_file_extension(filename: &str, extension: &str) -> PathBuf {
+    let mut pb = PathBuf::from(filename);
+    pb.set_extension(extension);
+    pb
 }
 
-pub fn load_lib(package_node: node::CalculNode) {
-    if package_node.node_type == node::NodeKind::NodeUsePackage {
-        let dir = package_node.left_node.unwrap().clone();
-        let src = package_node.right_node.unwrap().clone();
-        let path = dir.value;
-
-        let mut lib = file::LoadLibFile::new();
-        make_lib_data_to_func(&mut lib, path, src.value.clone());
-    } else {
-        println!("[system err]: [file]: package/load.rs");
-        println!("[func]: load_lib");
-        panic!("The passed node is not 'NodeUsePackage'");
+///  ファイルがyamlか調べる
+fn is_yaml_extension(filename: &str) -> Option<PathBuf> {
+    for ext in ["yaml", "yml"] {
+        let path = judge_file_extension(filename, ext);
+        if path.exists() {
+            return Some(path);
+        }
     }
+    None
+}
+
+///  ライブラリを使う処理をするノードを実行
+pub fn load_native_lib(package_node: node::CalculNode) {
+    if package_node.node_type != node::NodeKind::NodeUsePackage {
+        eprintln!("[system err]: [file]: package/load.rs");
+        panic!("[start node type is not NodeUsePackage]");
+    }
+    let library_filename = package_node.left_node.clone().unwrap().value;
+    let library_dir = package_node.right_node.clone().unwrap().value;
+
+    if let Some(path) = is_yaml_extension(&library_filename) {
+        //  yamlファイルの場合
+        let library_config = yaml::load::load_native_library_config(&path);
+        native::load_exported_functions(library_config.unwrap());
+    }
+
+    println!("{}:{}", library_dir, library_filename);
 }

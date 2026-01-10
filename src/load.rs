@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::io::Error;
 
-use crate::parse::parse;
+use crate::parse::ast;
 use crate::token::tokenizer;
 use crate::runner;
 use crate::error;
@@ -13,7 +13,7 @@ pub fn load_file(file_path: &str) -> Result<(), Error> {
     let reader = BufReader::new(file);
 
     let mut tokenizer = tokenizer::Tokenizer::new();
-    let mut parser = parse::Parser::new();
+    let mut parser = ast::Parser::new();
 
     for (number, line) in reader.lines().enumerate() {
         let line = line?;

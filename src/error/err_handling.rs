@@ -1,5 +1,4 @@
-use crate::manager::{func, variable};
-use std::sync::{OnceLock, Mutex, MutexGuard};
+use std::sync::{OnceLock, Mutex};
 
 
 static LINE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();

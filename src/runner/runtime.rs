@@ -1,5 +1,4 @@
-use crate::manager::{func, variable};
-use std::sync::{OnceLock, Mutex, MutexGuard};
+use std::sync::{OnceLock, Mutex};
 
 use crate::parse::node;
 
@@ -53,7 +52,7 @@ impl CondStatus {
     }
 
     pub fn cond_true(&mut self) {
-        if let Some((flag, value)) = self.status.last_mut() {
+        if let Some((flag, _value)) = self.status.last_mut() {
             *flag = true;   // ← list[last].0 を変更
         }
     }

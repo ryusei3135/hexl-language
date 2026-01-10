@@ -1,11 +1,8 @@
 use crate::token::token;
 use crate::parse::expr;
-use crate::parse::expr::parse_comper;
 use crate::parse::semantic;
 use crate::parse::semantic::cond_branch::make_if_node;
 use crate::parse::semantic::cond_branch::make_if_else_node;
-use crate::parse::resp;
-use crate::parse::node;
 use crate::manager::global_state::func_manager;
 use crate::package::load;
 
@@ -41,8 +38,8 @@ impl Parser {
                 }
                 token::TokenKind::TokenUsePackage => {
                     let package_node = semantic::package::make_use_package_node(token.clone(), &mut index);
-                    load::load_lib(package_node);
-                    continue;
+                    load::load_native_lib(package_node);
+                    break;
                 }
                 token::TokenKind::TokenNewVar => {
                     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);

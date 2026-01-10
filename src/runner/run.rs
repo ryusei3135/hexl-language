@@ -61,7 +61,7 @@ fn run_func(func_process: node::FuncNode) -> String {
     let mut executable_area: i32 = 1;
 
     while func_process.nodes.len() > index as usize {
-        let mut now_area = func_process.nodes[index as usize].block.unwrap();
+        let now_area = func_process.nodes[index as usize].block.unwrap();
 
         if now_area == executable_area {
             let result = node_run(func_process.nodes[index as usize].clone());

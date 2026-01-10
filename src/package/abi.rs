@@ -1,11 +1,13 @@
-// type NativeFn = fn(&[Value]) -> Value;
+use std::collections::HashMap;
+use libloading::Library;
+use std::ffi::c_char;
+use crate::package::value::{ArgType, CValue, VmArgsValue};
 
-// let mut table: HashMap<String, NativeFn> = HashMap::new();
 
-// table.insert("print".into(), builtin_print);
-// table.insert("input".into(), builtin_input);
-// rust
-// コードをコピーする
-// if let Some(func) = table.get(&name) {
-//     func(args);
-// }
+pub type NativeFunc = unsafe extern "C" fn(*mut VmArgsValue, usize) -> VmArgsValue;
+
+
+pub struct NativeFuncData {
+    pub lib: Library,
+    pub func: HashMap<String, NativeFunc>,
+}
