@@ -62,3 +62,23 @@ pub fn make_true_node(kind: node::NodeKind) -> node::CalculNode {
         block: None
     }
 }
+
+pub fn make_receiver_node(module_name: String) -> node::CalculNode {
+    return node::CalculNode {
+        value: module_name,
+        node_type: node::NodeKind::NodeReceiver,
+        left_node: None,
+        right_node: None,
+        block: None
+    }
+}
+
+pub fn make_method_node(name: String, method_type: node::NodeKind) -> node::CalculNode {
+    return node::CalculNode {
+        value: name,
+        node_type: method_type,
+        left_node: None,
+        right_node: None,
+        block: None
+    }
+}

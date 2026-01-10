@@ -21,6 +21,7 @@ pub enum NodeKind {
     NodeAssignVar,
     NodeVarName,
     NodeDefVar,
+    NodeReceiver,
     //  型
     NodeType,
     //  関数
@@ -35,6 +36,7 @@ pub enum NodeKind {
     //  参照
     NodeStd,
     NodeSrc,
+    NodeNativeFunc,
 }
 
 #[derive(Clone, Debug)]

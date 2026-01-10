@@ -6,10 +6,17 @@ pub struct VariableData {
     pub name: String,
     pub value: node::CalculNode,
     pub type_name: String,
+    pub method: Option<Vec<methods>>,
 }
 
 pub struct VariableManager {
     pub variables: Vec<VariableData>,
+}
+
+#[derive(Clone)]
+pub struct methods {
+    pub name: String,
+    pub node: node::CalculNode,
 }
 
 
@@ -40,9 +47,30 @@ impl VariableManager {
                 VariableData {
                     name: name,
                     value: value,
-                    type_name: type_name
+                    type_name: type_name,
+                    method: None,
                 }
             );
+        }
+    }
+    //  変数にメゾットを追加
+    pub fn add_method(&mut self, node: node::CalculNode, name: String) {
+        if self.variables.last().unwrap().method.clone().unwrap().iter_mut().find(|var| var.name == name).is_some() {
+            eprintln!("[name err]: variable `{}` is already defined", name);
+            panic!("");
+        } else {
+            if let Some(last_var) = self.variables.last_mut() {
+                if let Some(method) = last_var.method.as_mut() {
+                    if method.iter_mut().any(|var| var.name == name) {
+                        method.push(
+                            methods {
+                                name: name,
+                                node: node,
+                            }
+                        );
+                    }
+                }
+            }
         }
     }
     //  変数の値を上書き
