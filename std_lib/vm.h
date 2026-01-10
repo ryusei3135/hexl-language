@@ -8,4 +8,22 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef enum ArgType {
+  Int,
+  Str,
+  Bool,
+  Void,
+} ArgType;
+
+typedef union CValue {
+  int32_t int_value;
+  char *str_value;
+  bool bool_value;
+} CValue;
+
+typedef struct VmArgsValue {
+  enum ArgType arg_type;
+  union CValue value;
+} VmArgsValue;
+
 #endif /* VM_STRUCT_H */
