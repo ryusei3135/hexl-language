@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use libloading::Library;
-use crate::package::value::VmArgsValue;
+// use crate::package::value::VmArgsValue;
+use crate::lib::*;
 
 
 pub type NativeFunc = unsafe extern "C" fn(*mut VmArgsValue, usize) -> VmArgsValue;

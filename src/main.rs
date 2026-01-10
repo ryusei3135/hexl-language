@@ -1,5 +1,6 @@
 use std::env;
 mod load;
+mod lib;
 
 mod parse;
 mod runner;

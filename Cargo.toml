@@ -1,5 +1,5 @@
 [package]
-name = "banana"
+name = "banana_lang"
 version = "0.2.0"
 edition = "2021"
 build = "build.rs"
@@ -11,3 +11,7 @@ serde_yaml = "0.9"
 
 [build-dependencies]
 cbindgen = "0.26"
+
+[lib]
+name = "banana_lang"
+crate-type = ["cdylib"]      # Cから利用できるライブラリ形式

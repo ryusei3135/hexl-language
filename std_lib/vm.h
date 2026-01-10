@@ -1,5 +1,5 @@
-#ifndef MY_CRATE_H
-#define MY_CRATE_H
+#ifndef VM_STRUCT_H
+#define VM_STRUCT_H
 
 /* Generated with cbindgen:0.26.0 */
 
@@ -8,4 +8,4 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#endif /* MY_CRATE_H */
+#endif /* VM_STRUCT_H */
