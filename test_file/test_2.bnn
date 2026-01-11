@@ -6,5 +6,8 @@ def add(<i32>a, <i32>b) {
 
 def start() {
     io.print("Hello World")
-    add(10, 20)
+    if add(10, 20) >= 0 {
+        io.print("a is bigger")
+        let <i32>c = 0
+    }
 }

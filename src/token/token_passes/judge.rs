@@ -72,6 +72,8 @@ fn connect_comper_op(
     return match tokens.kind {
         token::TokenKind::TokenAssign => tokens.change(token::TokenKind::TokenEqTo).connect(&now_token.lexeme),
         token::TokenKind::TokenNot => tokens.change(token::TokenKind::TokenNotEqTo).connect(&now_token.lexeme),
+        token::TokenKind::TokenLessThan => tokens.change(token::TokenKind::TokenLessThanOrEqualTo).connect(&now_token.lexeme),
+        token::TokenKind::TokenGreaterThan => tokens.change(token::TokenKind::TokenGreaterThanOrEqualTo).connect(&now_token.lexeme),
         _ => false,
     };
 }

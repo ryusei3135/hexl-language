@@ -23,6 +23,8 @@ pub enum TokenKind {
 
     TokenEqTo,
     TokenNotEqTo,
+    TokenLessThanOrEqualTo,
+    TokenGreaterThanOrEqualTo,
 
     TokenLParen,
     TokenRParen,

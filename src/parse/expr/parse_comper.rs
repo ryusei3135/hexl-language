@@ -28,6 +28,42 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut i32) -> node::Calc
                     node::NodeKind::NodeNotEqTo,
                 );
             },
+            token::TokenKind::TokenLessThanOrEqualTo => {
+                *index += 1;
+                let right = parse_expr::parse_expr(tokens.clone(), index);
+                node = resp::handler::make_operator_node(
+                    node,
+                    right,
+                    node::NodeKind::NodeLessThanOrEqualTo,
+                );
+            }
+            token::TokenKind::TokenGreaterThanOrEqualTo => {
+                *index += 1;
+                let right = parse_expr::parse_expr(tokens.clone(), index);
+                node = resp::handler::make_operator_node(
+                    node,
+                    right,
+                    node::NodeKind::NodeGreaterThanOrEqualTo,
+                );
+            }
+            token::TokenKind::TokenLessThan => {
+                *index += 1;
+                let right = parse_expr::parse_expr(tokens.clone(), index);
+                node = resp::handler::make_operator_node(
+                    node,
+                    right,
+                    node::NodeKind::NodeLessThan,
+                );
+            }
+            token::TokenKind::TokenGreaterThan => {
+                *index += 1;
+                let right = parse_expr::parse_expr(tokens.clone(), index);
+                node = resp::handler::make_operator_node(
+                    node,
+                    right,
+                    node::NodeKind::NodeGreaterThan,
+                );
+            }
             token::TokenKind::TokenSpace => {
                 *index += 1;
             },

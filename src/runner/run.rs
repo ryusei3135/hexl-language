@@ -40,6 +40,10 @@ pub fn node_run(
         node::NodeKind::NodeDiv => (get_left_value(&node) / get_right_value(&node)).to_string(),
         node::NodeKind::NodeEqTo => (get_left_value(&node) == get_right_value(&node)).to_string(),
         node::NodeKind::NodeNotEqTo => (get_left_value(&node) != get_right_value(&node)).to_string(),
+        node::NodeKind::NodeLessThanOrEqualTo => (get_left_value(&node) <= get_right_value(&node)).to_string(),
+        node::NodeKind::NodeGreaterThanOrEqualTo => (get_left_value(&node) >= get_right_value(&node)).to_string(),
+        node::NodeKind::NodeLessThan => (get_left_value(&node) < get_right_value(&node)).to_string(),
+        node::NodeKind::NodeGreaterThan => (get_left_value(&node) > get_right_value(&node)).to_string(),
         node::NodeKind::NodeAssignVar => var::update_var_value(node.clone()),
         node::NodeKind::NodeCallVar => var::call_var_value(node.value),
         node::NodeKind::NodeDefVar => var::define_var(node.clone()),
@@ -63,11 +67,13 @@ pub fn node_run(
         }
         node::NodeKind::NodeIf => {
             runtime::process_kind(node::NodeKind::NodeIf);
-            node_run(*node.left_node.unwrap().clone())
+            // node_run(*node.left_node.unwrap().clone())
+            "1".to_string()
         }
         node::NodeKind::NodeIfElse => {
             runtime::process_kind(node::NodeKind::NodeIfElse);
-            node_run(*node.left_node.unwrap().clone())
+            // node_run(*node.left_node.unwrap().clone())
+            "1".to_string()
         }
         node::NodeKind::NodeElse => {
             runtime::process_kind(node::NodeKind::NodeElse);
@@ -97,7 +103,7 @@ fn run_func(func_process: node::FuncNode) -> String {
             match runtime::get_process_kind() {
                 node::NodeKind::NodeIf => {
                     runtime::process_kind(node::NodeKind::NodeNull);
-                    if result.parse().unwrap() {
+                    if node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()).parse().unwrap() {
                         //  trueを代入すると、つながっている条件分岐がスキップされる
                         cond_status.push(true, now_area);
                         executable_area = func_process.nodes[1 + index as usize].block.unwrap();
@@ -107,7 +113,7 @@ fn run_func(func_process: node::FuncNode) -> String {
                 }
                 node::NodeKind::NodeIfElse => {
                     runtime::process_kind(node::NodeKind::NodeNull);
-                    if result.parse().unwrap() {
+                    if node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()).parse().unwrap() {
                         if cond_status.judge_cond(now_area) {
                             cond_status.cond_true();
                             executable_area = func_process.nodes[1 + index as usize].block.unwrap();

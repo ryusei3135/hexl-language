@@ -10,8 +10,12 @@ pub enum NodeKind {
     NodeMul,
     NodeDiv,
     //  比較演算子
+    NodeLessThan,
+    NodeGreaterThan,
     NodeEqTo,
     NodeNotEqTo,
+    NodeLessThanOrEqualTo,
+    NodeGreaterThanOrEqualTo,
 
     NodeNot,
 
