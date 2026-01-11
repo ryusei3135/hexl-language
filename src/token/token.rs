@@ -35,6 +35,7 @@ pub enum TokenKind {
     TokenNot,       //  "!"
     TokenComma,     //  ","
     TokenScope,     //  "::"
+    TokenDot,
 
     //  キーワード
     TokenFuncStart, // "def"

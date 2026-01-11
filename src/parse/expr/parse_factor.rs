@@ -50,18 +50,41 @@ fn call_value_node(
         current_token: token::Token,
         index: &mut i32
 ) -> node::CalculNode {
-    if tokens.len() > 1 + *index as usize && tokens[1 + *index as usize].kind == token::TokenKind::TokenLParen {
+    if tokens.len() > 1 + *index as usize {
         *index += 1;
-        //  関数
-        let args_node = parse_func_arg(tokens.clone(), index);
-        let func_head_data = node::CalculNode {
-            value: current_token.lexeme.clone(),
-            node_type: node::NodeKind::NodeCallFunc,
-            left_node: Some(Box::new(args_node)),
-            right_node: None,
-            block: None
-        };
-        return func_head_data;
+        match tokens[*index as usize].kind {
+            token::TokenKind::TokenLParen => {
+                let args_node = parse_func_arg(tokens.clone(), index);
+                let func_head_data = node::CalculNode {
+                    value: current_token.lexeme.clone(),
+                    node_type: node::NodeKind::NodeCallFunc,
+                    left_node: Some(Box::new(args_node)),
+                    right_node: None,
+                    block: None
+                };
+                return func_head_data;
+            }
+            token::TokenKind::TokenDot => {
+                *index += 1;
+                let current_token_dot = tokens[*index as usize].clone();
+                let method_node = call_value_node(tokens, current_token_dot, index);
+
+                return resp::handler::make_receiver_node(
+                    current_token.lexeme.clone(),
+                    method_node.clone(),
+                );
+            }
+            token::TokenKind::TokenSpace => {
+                //  変数
+                if tokens[(*index as usize) - 1].kind == token::TokenKind::TokenName {
+                    return resp::handler::make_value_node(
+                        &current_token,
+                        node::NodeKind::NodeCallVar,
+                    );
+                }
+            }
+            _ => println!("what is token -> {:?}", tokens[*index as usize].kind),
+        }
     } else {
         //  変数
         *index += 1;
@@ -70,6 +93,8 @@ fn call_value_node(
             node::NodeKind::NodeCallVar,
         );
     }
+
+    resp::handler::make_null_node()
 }
 
 pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {

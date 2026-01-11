@@ -36,6 +36,7 @@ pub fn categorize_symbol(symbol: &str) -> token::TokenKind {
         "\"" => token::TokenKind::TokenString,
         "_" => token::TokenKind::TokenName,
         "," => token::TokenKind::TokenComma,
+        "." => token::TokenKind::TokenDot,
         _   => {
             println!("what is this symbol?: {:?}", symbol);
             token::TokenKind::TokenEOF
