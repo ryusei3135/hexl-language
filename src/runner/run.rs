@@ -1,7 +1,9 @@
 use crate::parse::node;
-use crate::manager::global_state::func_manager;
+use crate::manager::global_state::{func_manager, var_manager};
+use crate::manager::variable;
 use crate::runner::storage::var;
 use crate::runner::runtime;
+use crate::package::manage;
 
 
 fn get_left_value(node: &node::CalculNode) -> i32 {
@@ -10,6 +12,19 @@ fn get_left_value(node: &node::CalculNode) -> i32 {
 
 fn get_right_value(node: &node::CalculNode) -> i32 {
     node_run(*node.right_node.clone().unwrap()).parse::<i32>().unwrap()
+}
+
+fn call_method(
+        receiver_name: String,
+        method: variable::methods,
+        call_value: node::CalculNode
+) -> String {
+    return match method.node.node_type {
+        node::NodeKind::NodeNativeFunc => {
+            manage::run_native_func(receiver_name, method.name, *call_value.left_node.clone().unwrap())
+        }
+        _ => "none".to_string(),
+    };
 }
 
 pub fn node_run(
@@ -32,6 +47,18 @@ pub fn node_run(
             let func_data = func_manager().get_func(&node.value.clone());
             var::make_args_var(func_data.clone().args.clone(), *node.left_node.unwrap().clone());
             run_func(func_data)
+        }
+        node::NodeKind::NodeReceiver => {
+            let receiver_name = node.value.clone();
+            //  引数や、メゾットの名前
+            let method = *node.left_node.clone().unwrap();
+
+            let method_data = var_manager().get_method(receiver_name.clone(), method.value.clone());
+            if method_data.name == method.value.clone() {
+                call_method(receiver_name, method_data, method);
+                println!("ok");
+            }
+            "method".to_string()
         }
         node::NodeKind::NodeIf => {
             runtime::process_kind(node::NodeKind::NodeIf);

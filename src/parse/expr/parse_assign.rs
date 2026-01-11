@@ -1,7 +1,7 @@
 use crate::parse::node;
 use crate::token::token;
 
-use crate::parse::expr::parse_comper;
+use crate::parse::expr::{parse_comper, parse_factor};
 use crate::parse::resp;
 
 
@@ -37,6 +37,20 @@ pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
                     );
                     first_var_name = true;
                     *index += 1;
+                    if tokens[*index as usize].kind == token::TokenKind::TokenDot {
+                        *index += 1;
+                        let current_token = tokens[*index as usize].clone();
+                        node.left_node = Some(
+                            Box::new(
+                                parse_factor::call_value_node(
+                                    tokens.clone(),
+                                    current_token,
+                                    index
+                                )
+                            )
+                        );
+                        node.node_type = node::NodeKind::NodeReceiver;
+                    }
                 } else {
                     break;
                 }

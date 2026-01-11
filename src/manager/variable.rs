@@ -37,6 +37,20 @@ impl VariableManager {
                 panic!("this variable is not defined");
             })
     }
+    //  メゾットのデータを取得
+    pub fn get_method(&self, receiver_name: String, method_name: String) -> methods {
+        let receiver = self.get_var(receiver_name).method;
+        receiver
+            .unwrap_or_else(|| {
+                panic!("this method is not found");
+            })
+            .iter()
+            .find(|m| m.name == method_name)
+            .map(|m| m.clone())
+            .unwrap_or_else(|| {
+                panic!("this method is not defined");
+            })
+    }
     //  変数を追加
     pub fn add_var(&mut self, name: String, value: node::CalculNode, type_name: String) {
         if self.variables.iter_mut().find(|var| var.name == name).is_some() {

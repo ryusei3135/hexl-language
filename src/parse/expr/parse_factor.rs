@@ -7,16 +7,12 @@ use crate::parse::expr::parse_comper::parse_comper_op;
 fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
     *index += 1;
     let mut args_node = resp::handler::make_null_node();
+    let mut args_list = Vec::<node::CalculNode>::new();
     let mut allow_arg: bool = true;
 
     while tokens.len() > *index as usize {
         match tokens[*index as usize].kind {
             token::TokenKind::TokenComma => {
-                args_node = resp::handler::make_operator_node(
-                    resp::handler::make_null_node(),
-                    args_node,
-                    node::NodeKind::NodeArgsValue
-                );
                 allow_arg = true;
             }
             token::TokenKind::TokenSpace => {}
@@ -26,11 +22,7 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNod
             }
             _ => {
                 if allow_arg {
-                    args_node.left_node = Some(
-                        Box::new(
-                            parse_comper_op(tokens.clone(), index)
-                        )
-                    );
+                    args_list.push(parse_comper_op(tokens.clone(), index));
                     allow_arg = false;
                     continue;
                 } else {
@@ -41,11 +33,19 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNod
         *index += 1;
     }
 
+    while args_list.len() > 0 {
+        args_node = resp::handler::make_operator_node(
+            args_list.pop().unwrap(),
+            args_node,
+            node::NodeKind::NodeArgsValue,
+        );
+    }
+
     args_node
 }
 
 //  呼び出す値が関数か変数かを調べる
-fn call_value_node(
+pub fn call_value_node(
         tokens: Vec<token::Token>,
         current_token: token::Token,
         index: &mut i32
