@@ -17,6 +17,7 @@ pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
         match tokens[*index as usize].kind {
             token::TokenKind::TokenAssign => {
                 if first_var_name {
+                    node.node_type = node::NodeKind::NodeVarName;
                     *index += 1;
                     let right = parse_comper::parse_comper_op(tokens.clone(), index);
                     node = resp::handler::make_operator_node(
@@ -31,26 +32,13 @@ pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
             },
             token::TokenKind::TokenName => {
                 if !first_var_name {
-                    node = resp::handler::make_value_node(
-                        &tokens[*index as usize],
-                        node::NodeKind::NodeVarName,
+                    let current_token = tokens[*index as usize].clone();
+                    node = parse_factor::call_value_node(
+                        tokens.clone(),
+                        current_token,
+                        index
                     );
                     first_var_name = true;
-                    *index += 1;
-                    if tokens[*index as usize].kind == token::TokenKind::TokenDot {
-                        *index += 1;
-                        let current_token = tokens[*index as usize].clone();
-                        node.left_node = Some(
-                            Box::new(
-                                parse_factor::call_value_node(
-                                    tokens.clone(),
-                                    current_token,
-                                    index
-                                )
-                            )
-                        );
-                        node.node_type = node::NodeKind::NodeReceiver;
-                    }
                 } else {
                     break;
                 }

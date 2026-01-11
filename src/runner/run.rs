@@ -18,12 +18,12 @@ fn call_method(
         receiver_name: String,
         method: variable::methods,
         call_value: node::CalculNode
-) -> String {
+) -> Option<String> {
     return match method.node.node_type {
         node::NodeKind::NodeNativeFunc => {
             manage::run_native_func(receiver_name, method.name, *call_value.left_node.clone().unwrap())
         }
-        _ => "none".to_string(),
+        _ => None,
     };
 }
 
@@ -55,8 +55,9 @@ pub fn node_run(
 
             let method_data = var_manager().get_method(receiver_name.clone(), method.value.clone());
             if method_data.name == method.value.clone() {
-                call_method(receiver_name, method_data, method);
-                println!("ok");
+                if let Some(result) = call_method(receiver_name, method_data, method) {
+                    return result;
+                }
             }
             "method".to_string()
         }

@@ -6,5 +6,5 @@ def add(<i32>a, <i32>b) {
 
 def start() {
     io.print("Hello World")
-    let <i32>c = add(10, 20)
+    add(10, 20)
 }

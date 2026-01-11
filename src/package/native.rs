@@ -19,7 +19,13 @@ pub fn load_exported_functions(
             // 関数ポインタをコピー（ここが重要）
             let ptr: abi::NativeFunc = *symbol;
 
-            map.insert(f.name.clone(), ptr);
+            map.insert(
+                f.name.clone(),
+                abi::NativeCall {
+                    func_ptr: ptr,
+                    args_type: f.args_types.clone(),
+                }
+            );
         }
     }
 
