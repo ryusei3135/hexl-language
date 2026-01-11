@@ -48,20 +48,20 @@ impl VariableManager {
                     name: name,
                     value: value,
                     type_name: type_name,
-                    method: None,
+                    method: Some(Vec::<methods>::new()),
                 }
             );
         }
     }
     //  変数にメゾットを追加
     pub fn add_method(&mut self, node: node::CalculNode, name: String) {
-        if self.variables.last().unwrap().method.clone().unwrap().iter_mut().find(|var| var.name == name).is_some() {
+        if self.variables.last().is_none() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
         } else {
             if let Some(last_var) = self.variables.last_mut() {
                 if let Some(method) = last_var.method.as_mut() {
-                    if method.iter_mut().any(|var| var.name == name) {
+                    if method.iter_mut().find(|var| var.name == name).is_none() {
                         method.push(
                             methods {
                                 name: name,
