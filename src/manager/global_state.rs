@@ -1,5 +1,4 @@
-use crate::manager::{func, variable};
-use std::sync::{OnceLock, Mutex, MutexGuard};
+use super::*;
 
 
 static FUNC_STATE: OnceLock<Mutex<func::FuncManager>> = OnceLock::new();

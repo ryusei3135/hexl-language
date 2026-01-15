@@ -1,9 +1,10 @@
 use crate::parse::node;
 use crate::manager::global_state::{func_manager, var_manager};
 use crate::manager::variable;
-use crate::runner::storage::var;
+use crate::manager::func;
 use crate::runner::runtime;
 use crate::package::manage;
+use crate::api::{variable_api, arg_api};
 
 
 fn get_left_value(node: &node::CalculNode) -> i32 {
@@ -16,7 +17,7 @@ fn get_right_value(node: &node::CalculNode) -> i32 {
 
 fn call_method(
         receiver_name: String,
-        method: variable::methods,
+        method: variable::MethodInfo,
         call_value: node::CalculNode
 ) -> Option<String> {
     return match method.node.node_type {
@@ -44,12 +45,12 @@ pub fn node_run(
         node::NodeKind::NodeGreaterThanOrEqualTo => (get_left_value(&node) >= get_right_value(&node)).to_string(),
         node::NodeKind::NodeLessThan => (get_left_value(&node) < get_right_value(&node)).to_string(),
         node::NodeKind::NodeGreaterThan => (get_left_value(&node) > get_right_value(&node)).to_string(),
-        node::NodeKind::NodeAssignVar => var::update_var_value(node.clone()),
-        node::NodeKind::NodeCallVar => var::call_var_value(node.value),
-        node::NodeKind::NodeDefVar => var::define_var(node.clone()),
+        node::NodeKind::NodeAssignVar => variable_api::update_var_value(node.clone()),
+        node::NodeKind::NodeCallVar => variable_api::call_var_value(node.value),
+        node::NodeKind::NodeDefVar => variable_api::define_var(node.clone()),
         node::NodeKind::NodeCallFunc => {
             let func_data = func_manager().get_func(&node.value.clone());
-            var::make_args_var(func_data.clone().args.clone(), *node.left_node.unwrap().clone());
+            arg_api::make_args_var(func_data.clone().args.clone(), *node.left_node.unwrap().clone());
             run_func(func_data)
         }
         node::NodeKind::NodeReceiver => {
@@ -89,7 +90,7 @@ pub fn node_run(
     }
 }
 
-fn run_func(func_process: node::FuncNode) -> String {
+fn run_func(func_process: func::FuncNode) -> String {
     let mut cond_status = runtime::CondStatus::new();
     let mut index: u32 = 0;
     let mut executable_area: i32 = 1;

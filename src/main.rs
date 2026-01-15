@@ -8,6 +8,7 @@ mod token;
 mod manager;
 mod error;
 mod package;
+mod api;
 
 
 fn main() {

@@ -1,11 +1,12 @@
 use crate::token::token;
+use crate::manager::func;
 use crate::parse::node;
 use crate::parse::expr::parse_type;
 use crate::parse::resp;
 
 
-fn make_init_args_node(last_node: Option<node::FuncArgsNode>) -> node::FuncArgsNode {
-    node::FuncArgsNode {
+fn make_init_args_node(last_node: Option<func::FuncArgsNode>) -> func::FuncArgsNode {
+    func::FuncArgsNode {
         name: "[*null*]".to_string(),
         type_name: None,
         next: match last_node {
@@ -16,7 +17,7 @@ fn make_init_args_node(last_node: Option<node::FuncArgsNode>) -> node::FuncArgsN
 }
 
 //  関数の引数
-fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> node::FuncArgsNode {
+fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> func::FuncArgsNode {
     let mut args_node = make_init_args_node(None);
 
     while tokens.len() > *index as usize {
@@ -49,7 +50,7 @@ fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> node::FuncArgsN
 }
 
 //  関数ヘッダーを作成する関数
-pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> node::FuncNode {
+pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> func::FuncNode {
     let mut func_start_keyword: bool = false;
     //  関数の名前がある場所を代入
     let mut func_name_index: i32 = -1;
@@ -92,7 +93,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> node::Fun
 
     //  もし、"func_name_index"が0未満なら、構文エラー
     if func_name_index >= 0 {
-        return node::FuncNode {
+        return func::FuncNode {
             name: tokens[func_name_index as usize].lexeme.clone(),
             args: args,
             ret_value_type: func_ret_value_node,

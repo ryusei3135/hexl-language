@@ -1,15 +1,32 @@
-use crate::parse::node;
+use super::*;
 
 
 #[derive(Clone)]
 pub struct FuncManager {
-    pub func_datas: Vec<node::FuncNode>,
+    pub func_datas: Vec<FuncNode>,
+}
+
+#[derive(Clone)]
+pub struct FuncArgsNode {
+    pub name: String,
+    pub type_name: Option<node::CalculNode>,
+    pub next: Option<Box<FuncArgsNode>>,
+}
+
+#[derive(Clone)]
+pub struct FuncNode {
+    //  関数の名前
+    pub name: String,
+    pub args: FuncArgsNode,
+    pub ret_value_type: node::CalculNode,
+    //  関数の処理
+    pub nodes: Vec<node::CalculNode>,
 }
 
 impl FuncManager {
     pub fn new() -> Self {
         Self {
-            func_datas: Vec::<node::FuncNode>::new(),
+            func_datas: Vec::<FuncNode>::new(),
         }
     }
 
@@ -20,7 +37,7 @@ impl FuncManager {
         None
     }
 
-    pub fn get_func(&self, name: &str) -> node::FuncNode {
+    pub fn get_func(&self, name: &str) -> FuncNode {
         if let Some(index) = self.search_func(name) {
             return self.func_datas[index as usize].clone();
         } else {
@@ -28,7 +45,7 @@ impl FuncManager {
         }
     }
 
-    pub fn add_func(&mut self, new_func_node: node::FuncNode) {
+    pub fn add_func(&mut self, new_func_node: FuncNode) {
         if let Some(_) = self.search_func(new_func_node.name.as_str()) {
             panic!("function already defined");
         } else {
