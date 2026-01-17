@@ -1,10 +1,4 @@
-use crate::parse::node;
-use crate::manager::global_state::{func_manager, var_manager};
-use crate::manager::variable;
-use crate::manager::func;
-use crate::runner::runtime;
-use crate::package::manage;
-use crate::api::{variable_api, arg_api};
+use super::*;
 
 
 fn get_left_value(node: &node::CalculNode) -> i32 {
@@ -88,6 +82,10 @@ pub fn node_run(
             String::new()
         }
     }
+}
+
+fn node_run_2(node: node::CalculNode) {
+    //
 }
 
 fn run_func(func_process: func::FuncNode) -> String {

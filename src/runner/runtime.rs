@@ -1,6 +1,4 @@
-use std::sync::{OnceLock, Mutex};
-
-use crate::parse::node;
+use super::*;
 
 
 static PROCESS_KIND: OnceLock<Mutex<node::NodeKind>> = OnceLock::new();
