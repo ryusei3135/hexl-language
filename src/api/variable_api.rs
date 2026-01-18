@@ -19,10 +19,12 @@ pub fn call_var_value(name: String) -> type_info::VarValue {
 pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
     let var_name = node.value;
 
+    let value = run::node_run(*node.right_node.clone().unwrap());
+
     let var_type = node.left_node.unwrap().value;
     global_state::var_manager().add_var(
         var_name.clone(),
-        run::node_run(*node.right_node.clone().unwrap()),
+        value,
         var_type,
     );
     return call_var_value(var_name.clone());
@@ -32,10 +34,11 @@ pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
 pub fn update_var_value(node: node::CalculNode) -> type_info::VarValue {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
         let var_name = node.left_node.unwrap().value.clone();
+        let value = run::node_run(*node.right_node.unwrap());
 
         global_state::var_manager().update_var(
             var_name.clone(),
-            run::node_run(*node.right_node.unwrap()),
+            value,
         );
         return call_var_value(var_name.clone());
     } else {

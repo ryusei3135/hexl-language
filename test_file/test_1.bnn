@@ -3,7 +3,7 @@ def sub(<i32>ooo, <i32>kkk) {
     let <i32>ppp = ooo - kkk
 }
 
-def add(<i32>h, <i32>l)<i32> {
+def add(<i32>h, <i32>l) {
     let <i32>j = 0 + h
     j = (j + 1) * 10
 }

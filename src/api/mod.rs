@@ -19,12 +19,5 @@ macro_rules! create_type_api {
                 _ => false,
             }
         }
-        ///  渡された値の型のタイプを返す
-        pub fn get_value_type(value: type_info::VarValue) -> type_info::VarType {
-            match value {
-                $(type_info::VarValue::$member(_) => type_info::VarType::$member,)*
-                _ => panic!(""),
-            }
-        }
     };
 }

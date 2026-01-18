@@ -1,6 +1,7 @@
 use std::io
 
 def add() {
+    let <i32>o = 0
     io.print("add")
     ret 1
 }
