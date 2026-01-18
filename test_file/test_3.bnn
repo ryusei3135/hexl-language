@@ -1,0 +1,11 @@
+use std::io
+
+def add() {
+    io.print("add")
+    ret 1
+}
+
+def start() {
+    let <i32>k = add()
+    io.print("Hello world")
+}

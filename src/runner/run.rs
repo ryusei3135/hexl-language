@@ -1,19 +1,11 @@
 use super::*;
 
 
-fn get_left_value(node: &node::CalculNode) -> i32 {
-    node_run(*node.left_node.clone().unwrap()).parse::<i32>().unwrap()
-}
-
-fn get_right_value(node: &node::CalculNode) -> i32 {
-    node_run(*node.right_node.clone().unwrap()).parse::<i32>().unwrap()
-}
-
 fn call_method(
         receiver_name: String,
         method: variable::MethodInfo,
         call_value: node::CalculNode
-) -> Option<String> {
+) -> Option<type_info::VarValue> {
     return match method.node.node_type {
         node::NodeKind::NodeNativeFunc => {
             manage::run_native_func(receiver_name, method.name, *call_value.left_node.clone().unwrap())
@@ -22,23 +14,94 @@ fn call_method(
     };
 }
 
+
+fn get_left_value(node: &node::CalculNode) -> type_info::VarValue {
+    node_run(*node.left_node.clone().unwrap())
+}
+
+fn get_right_value(node: &node::CalculNode) -> type_info::VarValue {
+    node_run(*node.right_node.clone().unwrap())
+}
+
+
 pub fn node_run(
-        node: node::CalculNode,
-) -> String {
+        node: node::CalculNode
+) -> type_info::VarValue {
     match node.node_type {
-        node::NodeKind::NodeNum => node.value.clone(),
-        node::NodeKind::NodeNot => (!get_left_value(&node)).to_string(),
-        node::NodeKind::NodeStr => node.value.clone(),
-        node::NodeKind::NodeAdd => (get_left_value(&node) + get_right_value(&node)).to_string(),
-        node::NodeKind::NodeSub => (get_left_value(&node) - get_right_value(&node)).to_string(),
-        node::NodeKind::NodeMul => (get_left_value(&node) * get_right_value(&node)).to_string(),
-        node::NodeKind::NodeDiv => (get_left_value(&node) / get_right_value(&node)).to_string(),
-        node::NodeKind::NodeEqTo => (get_left_value(&node) == get_right_value(&node)).to_string(),
-        node::NodeKind::NodeNotEqTo => (get_left_value(&node) != get_right_value(&node)).to_string(),
-        node::NodeKind::NodeLessThanOrEqualTo => (get_left_value(&node) <= get_right_value(&node)).to_string(),
-        node::NodeKind::NodeGreaterThanOrEqualTo => (get_left_value(&node) >= get_right_value(&node)).to_string(),
-        node::NodeKind::NodeLessThan => (get_left_value(&node) < get_right_value(&node)).to_string(),
-        node::NodeKind::NodeGreaterThan => (get_left_value(&node) > get_right_value(&node)).to_string(),
+        node::NodeKind::NodeNum => {
+            if node.value.clone().parse::<i32>().is_ok() {
+                return type_info::VarValue::Int32(node.value.clone().parse::<i32>().unwrap());
+            }
+            panic!("[system err] This sequence cannot be classified into any category");
+        }
+        node::NodeKind::NodeNot => {
+            match get_left_value(&node) {
+                type_info::VarValue::Int32(v) => type_info::VarValue::Bool(!(v != 0)),
+                type_info::VarValue::Bool(v) => type_info::VarValue::Bool(!v),
+                _ => panic!("err not node"),
+            }
+        }
+        node::NodeKind::NodeStr => type_info::VarValue::Str(node.value.clone()),
+        node::NodeKind::NodeAdd => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l + r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeSub => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l - r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeMul => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l * r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeDiv => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l / r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeEqTo => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l == r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeNotEqTo => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l != r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeLessThanOrEqualTo => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l <= r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeGreaterThanOrEqualTo => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l >= r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeLessThan => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l < r),
+                _ => panic!("node run 2 add"),
+            }
+        }
+        node::NodeKind::NodeGreaterThan => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l > r),
+                _ => panic!("node run 2 add"),
+            }
+        }
         node::NodeKind::NodeAssignVar => variable_api::update_var_value(node.clone()),
         node::NodeKind::NodeCallVar => variable_api::call_var_value(node.value),
         node::NodeKind::NodeDefVar => variable_api::define_var(node.clone()),
@@ -58,37 +121,29 @@ pub fn node_run(
                     return result;
                 }
             }
-            "method".to_string()
+            type_info::VarValue::None(false)
         }
         node::NodeKind::NodeIf => {
             runtime::process_kind(node::NodeKind::NodeIf);
-            // node_run(*node.left_node.unwrap().clone())
-            "1".to_string()
+            type_info::VarValue::None(true)
         }
         node::NodeKind::NodeIfElse => {
             runtime::process_kind(node::NodeKind::NodeIfElse);
-            // node_run(*node.left_node.unwrap().clone())
-            "1".to_string()
+            type_info::VarValue::None(true)
         }
         node::NodeKind::NodeElse => {
             runtime::process_kind(node::NodeKind::NodeElse);
-            "1".to_string()
+            type_info::VarValue::None(true)
         }
         node::NodeKind::NodeRet => {
             runtime::process_kind(node::NodeKind::NodeRet);
             node_run(*node.left_node.unwrap().clone())
         }
-        _ => {
-            String::new()
-        }
+        _ => panic!("node run 2"),
     }
 }
 
-fn node_run_2(node: node::CalculNode) {
-    //
-}
-
-fn run_func(func_process: func::FuncNode) -> String {
+fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     let mut cond_status = runtime::CondStatus::new();
     let mut index: u32 = 0;
     let mut executable_area: i32 = 1;
@@ -102,7 +157,7 @@ fn run_func(func_process: func::FuncNode) -> String {
             match runtime::get_process_kind() {
                 node::NodeKind::NodeIf => {
                     runtime::process_kind(node::NodeKind::NodeNull);
-                    if node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()).parse().unwrap() {
+                    if boolify::node_to_bool(*func_process.nodes[index as usize].left_node.clone().unwrap()) {
                         //  trueを代入すると、つながっている条件分岐がスキップされる
                         cond_status.push(true, now_area);
                         executable_area = func_process.nodes[1 + index as usize].block.unwrap();
@@ -112,7 +167,7 @@ fn run_func(func_process: func::FuncNode) -> String {
                 }
                 node::NodeKind::NodeIfElse => {
                     runtime::process_kind(node::NodeKind::NodeNull);
-                    if node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()).parse().unwrap() {
+                    if boolify::node_to_bool(*func_process.nodes[index as usize].left_node.clone().unwrap()) {
                         if cond_status.judge_cond(now_area) {
                             cond_status.cond_true();
                             executable_area = func_process.nodes[1 + index as usize].block.unwrap();
@@ -131,14 +186,21 @@ fn run_func(func_process: func::FuncNode) -> String {
                     runtime::process_kind(node::NodeKind::NodeNull);
                     return result;
                 }
-                _ => println!("[{}] [value]", result),
+                _ => {
+                    println!("[{}] [value]", match result {
+                        type_info::VarValue::Int32(v) => v.to_string(),
+                        type_info::VarValue::Bool(v) => v.to_string(),
+                        type_info::VarValue::Str(v) => v,
+                        _ => "*null*".to_string(),
+                    });
+                }
             }
         } else if now_area < executable_area {
             executable_area = now_area;
         }
         index += 1;
     }
-    "[*end*]".to_string()
+    type_info::VarValue::None(false)
 }
 
 

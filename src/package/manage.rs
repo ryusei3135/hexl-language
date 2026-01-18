@@ -1,11 +1,4 @@
-use std::ffi::{CString, c_char, CStr};
-use std::sync::{OnceLock, Mutex, MutexGuard};
-use crate::package::abi;
-use crate::parse::node;
-use crate::parse::resp::handler;
-use crate::manager::global_state;
-use crate::manager::variable;
-use crate::lib;
+use super::*;
 
 
 static NATIVE_FUNC_DATA: OnceLock<Mutex<Vec<abi::NativeFuncData>>> = OnceLock::new();
@@ -22,10 +15,7 @@ fn native_func_manager() -> MutexGuard<'static, Vec<abi::NativeFuncData>> {
 fn make_receiver(module: &abi::NativeFuncData) {
     global_state::var_manager().add_var(
         module.module_name.clone(),
-        handler::convert_value_to_node(
-            module.module_name.clone(),
-            node::NodeKind::NodeReceiver,
-        ),
+        type_info::VarValue::Receiver(module.module_name.clone()),
         "[*null*]".to_string(),
     );
 
@@ -56,10 +46,10 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
                 }
                 "int" => {
                     lib::VmArgsValue {
-                        arg_type: lib::ArgType::Int,
+                        arg_type: lib::ArgType::Int32,
                         value: unsafe {
                             lib::CValue {
-                                int_value: arg_node.value.clone().parse::<i32>().unwrap(),
+                                i32_value: arg_node.value.clone().parse::<i32>().unwrap(),
                             }
                         }
                     }
@@ -87,18 +77,22 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
     return vm_args;
 }
 
-fn get_vm_ret_value(ret_value: lib::VmArgsValue) -> Option<String> {
+fn get_vm_ret_value(ret_value: lib::VmArgsValue) -> Option<type_info::VarValue> {
     return unsafe {
         match ret_value.arg_type {
-            lib::ArgType::Str => Some(CStr::from_ptr(ret_value.value.str_value).to_string_lossy().into_owned()),
-            lib::ArgType::Int => Some(ret_value.value.int_value.to_string()),
-            lib::ArgType::Bool => Some(ret_value.value.bool_value.to_string()),
+            lib::ArgType::Str => Some(type_info::VarValue::Str(CStr::from_ptr(ret_value.value.str_value).to_string_lossy().into_owned())),
+            lib::ArgType::Int32 => Some(type_info::VarValue::Int32(ret_value.value.i32_value)),
+            lib::ArgType::Bool => Some(type_info::VarValue::Bool(ret_value.value.bool_value)),
             lib::ArgType::Void => None,
         }
     }
 }
 
-pub fn run_native_func(receiver_name: String, func_name: String, args: node::CalculNode) -> Option<String> {
+pub fn run_native_func(
+        receiver_name: String,
+        func_name: String,
+        args: node::CalculNode
+) -> Option<type_info::VarValue> {
     let func = native_func_manager()
         .iter()
         .find(|n| n.module_name == receiver_name)
@@ -110,7 +104,7 @@ pub fn run_native_func(receiver_name: String, func_name: String, args: node::Cal
         .get(&func_name)
         .expect("this netive func is false");
     let vm_func = func_call_data.func_ptr;
-    let mut ret_value: Option<String> = None;
+    let mut ret_value: Option<type_info::VarValue> = None;
     unsafe {
         let vm_args = make_vm_args(args.clone(), func_call_data.args_type.clone());
         let ret = vm_func(vm_args.as_ptr() as *mut lib::VmArgsValue, vm_args.len());

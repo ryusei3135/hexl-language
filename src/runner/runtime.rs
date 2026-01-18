@@ -1,6 +1,6 @@
 use super::*;
 
-
+///  条件分岐などの現在の式が何かを代入
 static PROCESS_KIND: OnceLock<Mutex<node::NodeKind>> = OnceLock::new();
 
 

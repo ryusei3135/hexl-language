@@ -9,14 +9,14 @@
 #include <stdlib.h>
 
 typedef enum ArgType {
-  Int,
+  Int32,
   Str,
   Bool,
   Void,
 } ArgType;
 
 typedef union CValue {
-  int32_t int_value;
+  int32_t i32_value;
   char *str_value;
   bool bool_value;
   uint8_t void_value;

@@ -1,6 +1,7 @@
-use crate::create_var_type_data;
+use crate::manager::type_info;
+use crate::create_type_api;
 
-create_var_type_data!(
+create_type_api!(
     Int32: i32,
     Str: String,
     Bool: bool,

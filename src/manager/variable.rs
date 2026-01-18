@@ -4,7 +4,7 @@ use super::*;
 #[derive(Clone)]
 pub struct VariableInfo {
     pub name: String,
-    pub value: node::CalculNode,
+    pub value: type_info::VarValue,
     pub type_name: String,
     pub method: Option<Vec<MethodInfo>>,
 }
@@ -38,7 +38,7 @@ impl VariableManager {
             })
     }
     //  変数を追加
-    pub fn add_var(&mut self, name: String, value: node::CalculNode, type_name: String) {
+    pub fn add_var(&mut self, name: String, value: type_info::VarValue, type_name: String) {
         if self.variables_info_vec.iter_mut().find(|var| var.name == name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
@@ -54,7 +54,7 @@ impl VariableManager {
         }
     }
     //  変数の値を上書き
-    pub fn update_var(&mut self, name: String, value: node::CalculNode) -> bool {
+    pub fn update_var(&mut self, name: String, value: type_info::VarValue) -> bool {
         if let Some(var) = self.variables_info_vec.iter_mut().find(|var| var.name == name) {
             var.value = value;
             true
