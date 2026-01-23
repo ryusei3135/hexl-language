@@ -34,6 +34,11 @@ pub fn node_run(
             }
             panic!("[system err] This sequence cannot be classified into any category");
         }
+        node::NodeKind::NodeArray => {
+            //  配列を展開
+            let mut array_value = expand::expand_array_node(node);
+            return type_info::VarValue::Array(array_value.to_vec());
+        }
         node::NodeKind::NodeNot => {
             match get_left_value(&node) {
                 type_info::VarValue::Int32(v) => type_info::VarValue::Bool(!(v != 0)),
@@ -135,6 +140,10 @@ pub fn node_run(
             runtime::process_kind(node::NodeKind::NodeElse);
             type_info::VarValue::None(true)
         }
+        node::NodeKind::NodeFor => {
+            runtime::process_kind(node::NodeKind::NodeFor);
+            type_info::VarValue::None(true)
+        }
         node::NodeKind::NodeRet => {
             runtime::process_kind(node::NodeKind::NodeRet);
             node_run(*node.left_node.unwrap().clone())
@@ -148,7 +157,11 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     let mut index: u32 = 0;
     let mut executable_area: i32 = 1;
 
-    while func_process.nodes.len() > index as usize {
+    while func_process.nodes.len() >= index as usize {
+        ///  配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
+        if func_process.nodes.len() == index as usize {
+            crate::update_array_index!(index, cond_status);
+        }
         let now_area = func_process.nodes[index as usize].block.unwrap();
 
         if now_area == executable_area {
@@ -182,6 +195,15 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                         executable_area = func_process.nodes[1 + index as usize].block.unwrap();
                     }
                 }
+                node::NodeKind::NodeFor => {
+                    runtime::process_kind(node::NodeKind::NodeNull);
+                    cond_status.push(true, now_area);
+                    cond_status.now_loop(
+                        Some(index.try_into().unwrap()),
+                        Some(node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()))
+                    );
+                    executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                }
                 node::NodeKind::NodeRet => {
                     runtime::process_kind(node::NodeKind::NodeNull);
                     return result;
@@ -196,6 +218,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 }
             }
         } else if now_area < executable_area {
+            crate::update_array_index!(index, cond_status);
             executable_area = now_area;
         }
         index += 1;

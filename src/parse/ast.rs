@@ -1,11 +1,4 @@
-use crate::token::token;
-use crate::parse::expr;
-use crate::parse::semantic;
-use crate::parse::semantic::cond_branch::make_if_node;
-use crate::parse::semantic::cond_branch::make_if_else_node;
-use crate::manager::global_state::func_manager;
-use crate::package::load;
-
+use super::*;
 
 
 pub struct Parser {
@@ -24,7 +17,8 @@ impl Parser {
             token: Vec<token::Token>
     ) {
         let mut index: i32 = 0;
-
+        // 式などのノードを作成する関数を呼び出すときは、indexを何もせずに
+        // そのままで渡すこと
         while token.len() > index as usize {
             match token[index as usize].kind {
                 token::TokenKind::TokenNum => {
@@ -65,6 +59,12 @@ impl Parser {
                 }
                 token::TokenKind::TokenIf => {
                     let node = make_if_node(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    continue;
+                }
+                token::TokenKind::TokenFor => {
+                    let node = make_for_node(token.clone(), &mut index);
+                    println!("{:?} ::", node);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                     continue;
                 }

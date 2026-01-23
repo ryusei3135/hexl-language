@@ -28,15 +28,17 @@ pub enum TokenKind {
 
     TokenLParen,
     TokenRParen,
-    TokenLBrace,
-    TokenRBrace,
+    TokenLBrace,    // "{"
+    TokenRBrace,    // "}"
     TokenAssign,    //  "="
-    TokenSpacer,   //  ":"
-    TokenLessThan,  //  <
-    TokenGreaterThan,// >
+    TokenSpacer,    //  ":"
+    TokenLessThan,  //  "<"
+    TokenGreaterThan,// ">"
     TokenNot,       //  "!"
     TokenComma,     //  ","
     TokenScope,     //  "::"
+    TokenLBracket,  //  "["
+    TokenRBracket,  //  "]"
     TokenDot,
 
     //  キーワード
@@ -45,6 +47,8 @@ pub enum TokenKind {
     TokenNewVar,    // "let"
     TokenIf,        // "if"
     TokenElse,      // "else"
+    TokenFor,       // "for"
+    TokenIn,        // "in"
     TokenRet,
     TokenEOF,
 }

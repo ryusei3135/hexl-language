@@ -12,12 +12,6 @@ use crate::manager::func;
 #[macro_export]
 macro_rules! create_type_api {
     ($($member:ident : $type:ty,)*) => {
-        ///  VarValue同士を比較し、計算可能ならばtrueを返す
-        pub fn match_type(left: type_info::VarValue, right: type_info::VarValue) -> bool {
-            match (left, right) {
-                $((type_info::VarValue::$member(_), type_info::VarValue::$member(_)) => true,)*
-                _ => false,
-            }
-        }
+        //
     };
 }

@@ -26,6 +26,7 @@ pub enum NodeKind {
     NodeVarName,
     NodeDefVar,
     NodeReceiver,
+    NodeArray,
     //  型
     NodeType,
     //  関数
@@ -36,6 +37,7 @@ pub enum NodeKind {
     NodeIf,
     NodeIfElse,
     NodeElse,
+    NodeFor,
     NodeRet,
     //  参照
     NodeStd,

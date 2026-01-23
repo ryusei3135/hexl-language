@@ -8,7 +8,9 @@ pub fn categorize_keyword(text: &str) -> token::TokenKind {
         "let" => token::TokenKind::TokenNewVar,
         "if" => token::TokenKind::TokenIf,
         "else" => token::TokenKind::TokenElse,
+        "for" => token::TokenKind::TokenFor,
         "ret" => token::TokenKind::TokenRet,
+        "in" => token::TokenKind::TokenIn,
         _     => token::TokenKind::TokenName,
     }
 }

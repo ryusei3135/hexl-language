@@ -1,6 +1,8 @@
 pub mod run;
 pub mod runtime;
 mod boolify;
+mod expand;
+mod result;
 
 
 use std::sync::{OnceLock, Mutex};
@@ -11,5 +13,10 @@ use crate::manager::{
     global_state::*,
 };
 use crate::package::manage;
-use crate::api::{variable_api, arg_api, type_api};
+use crate::api::{
+    variable_api,
+    arg_api,
+    type_api::*
+};
 use crate::parse::node;
+use crate::error::control_syn;

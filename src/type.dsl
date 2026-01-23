@@ -3,3 +3,4 @@ Str String
 Bool bool
 Receiver String
 None bool
+Array Vec<Box<VarValue>>

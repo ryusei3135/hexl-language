@@ -44,7 +44,52 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNod
     args_node
 }
 
-//  呼び出す値が関数か変数かを調べる
+/// 配列のノードを作成、実行時に配列に展開
+fn make_array_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+    let mut array_node = resp::handler::make_null_node();
+    let mut can_next_be_value: bool = true;
+
+    while tokens.len() > *index as usize {
+        match tokens[*index as usize].kind {
+            token::TokenKind::TokenComma => {
+                if !can_next_be_value {
+                    can_next_be_value = true;
+                } else {
+                    //
+                }
+            }
+            token::TokenKind::TokenSpace => {}
+            token::TokenKind::TokenLBracket => {
+                if can_next_be_value {
+                    *index += 1;
+                    array_node = resp::handler::make_operator_node(
+                        make_array_node(tokens.clone(), index),
+                        array_node,
+                        node::NodeKind::NodeArray,
+                    );
+                    can_next_be_value = false;
+                    continue;
+                }
+            }
+            _ => {
+                if can_next_be_value {
+                    array_node = resp::handler::make_operator_node(
+                        parse_factor(tokens.clone(), index),
+                        array_node,
+                        node::NodeKind::NodeArray,
+                    );
+                    can_next_be_value = false;
+                    continue;
+                }
+            }
+        }
+        *index += 1;
+    }
+
+    array_node
+}
+
+///  呼び出す値が関数か変数かを調べる
 pub fn call_value_node(
         tokens: Vec<token::Token>,
         current_token: token::Token,
@@ -64,6 +109,15 @@ pub fn call_value_node(
                 };
                 return func_head_data;
             }
+            token::TokenKind::TokenRBracket => {
+                //  TokenNameの次にLParenでもTokenDotでもないかつRBracketならそれは変数
+                if tokens[(*index as usize) - 1].kind == token::TokenKind::TokenName {
+                    return resp::handler::make_value_node(
+                        &current_token,
+                        node::NodeKind::NodeCallVar,
+                    );
+                }
+            }
             token::TokenKind::TokenDot => {
                 *index += 1;
                 let current_token_dot = tokens[*index as usize].clone();
@@ -75,7 +129,7 @@ pub fn call_value_node(
                 );
             }
             token::TokenKind::TokenSpace => {
-                //  変数
+                //  TokenNameの次に空白が来たらそれは変数
                 if tokens[(*index as usize) - 1].kind == token::TokenKind::TokenName {
                     return resp::handler::make_value_node(
                         &current_token,
@@ -107,6 +161,10 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
                 current_token,
                 node::NodeKind::NodeNum,
             );
+        }
+        token::TokenKind::TokenLBracket => {
+            *index += 1;
+            return make_array_node(tokens.clone(), index);
         }
         token::TokenKind::TokenNot => {
             if tokens.len() > 1 + *index as usize {

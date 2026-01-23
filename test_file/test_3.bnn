@@ -1,12 +1,15 @@
 use std::io
 
 def add() {
-    let <i32>o = 0
+    let o = 0
     io.print("add")
     ret 1
 }
 
 def start() {
-    let <i32>k = add()
+    let k = add()
     io.print("Hello world")
+    for 5 {
+        io.print("for loop")
+    }
 }
