@@ -5,7 +5,6 @@ use super::*;
 pub struct VariableInfo {
     pub name: String,
     pub value: type_info::VarValue,
-    pub type_name: String,
     pub method: Option<Vec<MethodInfo>>,
 }
 
@@ -42,7 +41,6 @@ impl VariableManager {
             &mut self,
             name: String,
             value: type_info::VarValue,
-            type_name: String,
     ) {
         if self.variables_info_vec.iter_mut().find(|var| var.name == name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
@@ -52,7 +50,6 @@ impl VariableManager {
                 VariableInfo {
                     name: name,
                     value: value,
-                    type_name: type_name,
                     method: Some(Vec::<MethodInfo>::new()),
                 }
             );

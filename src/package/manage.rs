@@ -16,7 +16,6 @@ fn make_receiver(module: &abi::NativeFuncData) {
     global_state::var_manager().add_var(
         module.module_name.clone(),
         type_info::VarValue::Receiver(module.module_name.clone()),
-        "[*null*]".to_string(),
     );
 
     for (key, _func) in &module.func {

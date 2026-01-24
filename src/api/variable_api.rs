@@ -21,17 +21,15 @@ pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
 
     let value = run::node_run(*node.right_node.clone().unwrap());
 
-    let var_type = node.left_node.unwrap().value;
     global_state::var_manager().add_var(
         var_name.clone(),
         value,
-        var_type,
     );
     return call_var_value(var_name.clone());
 }
 
 //  変数の値の上書き
-pub fn update_var_value(node: node::CalculNode) -> type_info::VarValue {
+pub fn update_var_value(node: node::CalculNode) -> Result<type_info::VarValue, bool> {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
         let var_name = node.left_node.unwrap().value.clone();
         let value = run::node_run(*node.right_node.unwrap());
@@ -40,11 +38,11 @@ pub fn update_var_value(node: node::CalculNode) -> type_info::VarValue {
             var_name.clone(),
             value,
         );
-        return call_var_value(var_name.clone());
+        return Ok(call_var_value(var_name.clone()));
     } else {
         println!("syntax err: assign var");
-        panic!("assign var");
     }
+    return Err(false);
 }
 
 
