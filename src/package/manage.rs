@@ -19,7 +19,7 @@ fn make_receiver(module: &abi::NativeFuncData) {
         "[*null*]".to_string(),
     );
 
-    for (key, func) in &module.func {
+    for (key, _func) in &module.func {
         let method = handler::make_method_node(key.clone(), node::NodeKind::NodeNativeFunc);
         global_state::var_manager().add_method(method.clone(), key.to_string());
     }
@@ -35,37 +35,34 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
         vm_args.push(
             match args_type.remove(0).as_str() {
                 "str" => {
+                    let c_value = lib::CValue {
+                        str_value: CString::new(arg_node.value.clone()).unwrap().into_raw(),
+                    };
                     lib::VmArgsValue {
                         arg_type: lib::ArgType::Str,
-                        value: unsafe {
-                            lib::CValue {
-                                str_value: CString::new(arg_node.value.clone()).unwrap().into_raw(),
-                            }
-                        }
+                        value: c_value,
                     }
                 }
                 "int" => {
+                    let c_value = lib::CValue {
+                        str_value: CString::new(arg_node.value.clone()).unwrap().into_raw(),
+                    };
                     lib::VmArgsValue {
                         arg_type: lib::ArgType::Int32,
-                        value: unsafe {
-                            lib::CValue {
-                                i32_value: arg_node.value.clone().parse::<i32>().unwrap(),
-                            }
-                        }
+                        value: c_value,
                     }
                 }
                 "bool" => {
+                    let c_value = lib::CValue {
+                        bool_value: if let Ok(boolean) = arg_node.value.clone().parse() {
+                            boolean
+                        } else {
+                            true
+                        }
+                    };
                     lib::VmArgsValue {
                         arg_type: lib::ArgType::Bool,
-                        value: unsafe {
-                            lib::CValue {
-                                bool_value: if let Ok(boolean) = arg_node.value.clone().parse() {
-                                    boolean
-                                } else {
-                                    true
-                                }
-                            }
-                        }
+                        value: c_value,
                     }
                 }
                 "void" => return vm_args,

@@ -9,10 +9,10 @@ macro_rules! update_array_index {
             }
             Err(log) => {
                 match log {
-                    control_syn::ControlSynErr::DATA_IS_NOT_FOUND => {
+                    control_syn::ControlSynErr::DataIsNotFound => {
                         eprintln!("[err]: for loop data is not found");
                     }
-                    control_syn::ControlSynErr::INVALID_ITER_COND => {
+                    control_syn::ControlSynErr::InvalidIterCond => {
                         eprintln!("[err]: for loop cond is invalid");
                     }
                     _ => println!("err loop"),

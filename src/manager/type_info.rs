@@ -5,6 +5,6 @@ create_var_type_data!(
     Str: String,
     Bool: bool,
     Receiver: String,
-    None: bool,
+    Null: bool,
     Array: Vec<Box<VarValue>>,
 );

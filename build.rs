@@ -9,7 +9,7 @@ fn compile_std_lib() {
     fs::create_dir_all(target_dir).unwrap();
     let output_so = target_dir.join("io.so");
 
-    let status = Command::new("clang++")
+    Command::new("clang++")
             .args(&[
                 "-shared",         // 動的ライブラリ
                 "-fPIC",           // 位置独立コード

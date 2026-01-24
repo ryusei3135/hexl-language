@@ -23,3 +23,7 @@ macro_rules! create_var_type_data {
         }
     };
 }
+
+pub enum VarRegion {
+    Stack,
+}

@@ -38,7 +38,12 @@ impl VariableManager {
             })
     }
     //  変数を追加
-    pub fn add_var(&mut self, name: String, value: type_info::VarValue, type_name: String) {
+    pub fn add_var(
+            &mut self,
+            name: String,
+            value: type_info::VarValue,
+            type_name: String,
+    ) {
         if self.variables_info_vec.iter_mut().find(|var| var.name == name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");

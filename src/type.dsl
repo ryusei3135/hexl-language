@@ -2,5 +2,5 @@ Int32 i32
 Str String
 Bool bool
 Receiver String
-None bool
+Null bool
 Array Vec<Box<VarValue>>

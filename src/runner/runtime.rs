@@ -91,7 +91,7 @@ impl CondStatus {
     ) -> Result<u32, control_syn::ControlSynErr> {
 
         let status = self.status.last_mut()
-            .ok_or(control_syn::ControlSynErr::DATA_IS_NOT_FOUND)?;
+            .ok_or(control_syn::ControlSynErr::DataIsNotFound)?;
 
         // 設定フェーズ
         if cond_location.is_some() && loop_count.is_some() {
@@ -104,14 +104,14 @@ impl CondStatus {
         }
 
         let loop_status = status.2.as_mut()
-            .ok_or(control_syn::ControlSynErr::INVALID_ITER_COND)?;
+            .ok_or(control_syn::ControlSynErr::InvalidIterCond)?;
 
         // 実行フェーズ
         if !is_not_zero(loop_status.1.clone())
             .unwrap_or(false)
         {
             self.status.pop();
-            return Err(control_syn::ControlSynErr::END_LOOP);
+            return Err(control_syn::ControlSynErr::EndLoop);
         }
 
         match dec_and_get_item(loop_status.1.clone()) {

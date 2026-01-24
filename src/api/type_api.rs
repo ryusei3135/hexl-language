@@ -36,7 +36,7 @@ pub fn dec_and_get_item(
         /// 繰り返す値の型が無効な型
         _ => {
             eprintln!("[err]: value is of invalid type");
-            Err(control_syn::ControlSynErr::VALUE_IS_OF_INVALID_TYPE)
+            Err(control_syn::ControlSynErr::ValueIsOfInvalidType)
         }
     }
 }

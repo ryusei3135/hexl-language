@@ -16,6 +16,6 @@ pub struct NativeCall {
 #[derive(Clone)]
 pub struct NativeFuncData {
     pub module_name: String,
-    pub lib: Arc<Library>,
+    pub _lib: Arc<Library>,
     pub func: HashMap<String, NativeCall>,
 }

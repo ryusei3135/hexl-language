@@ -36,7 +36,7 @@ pub fn node_run(
         }
         node::NodeKind::NodeArray => {
             //  配列を展開
-            let mut array_value = expand::expand_array_node(node);
+            let array_value = expand::expand_array_node(node);
             return type_info::VarValue::Array(array_value.to_vec());
         }
         node::NodeKind::NodeNot => {
@@ -126,23 +126,23 @@ pub fn node_run(
                     return result;
                 }
             }
-            type_info::VarValue::None(false)
+            type_info::VarValue::Null(false)
         }
         node::NodeKind::NodeIf => {
             runtime::process_kind(node::NodeKind::NodeIf);
-            type_info::VarValue::None(true)
+            type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeIfElse => {
             runtime::process_kind(node::NodeKind::NodeIfElse);
-            type_info::VarValue::None(true)
+            type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeElse => {
             runtime::process_kind(node::NodeKind::NodeElse);
-            type_info::VarValue::None(true)
+            type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeFor => {
             runtime::process_kind(node::NodeKind::NodeFor);
-            type_info::VarValue::None(true)
+            type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeRet => {
             runtime::process_kind(node::NodeKind::NodeRet);
@@ -158,7 +158,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     let mut executable_area: i32 = 1;
 
     while func_process.nodes.len() >= index as usize {
-        ///  配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
+        // 配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
         if func_process.nodes.len() == index as usize {
             crate::update_array_index!(index, cond_status);
         }
@@ -225,7 +225,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
         }
         index += 1;
     }
-    type_info::VarValue::None(false)
+    type_info::VarValue::Null(false)
 }
 
 

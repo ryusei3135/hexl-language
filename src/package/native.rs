@@ -31,7 +31,7 @@ pub fn load_exported_functions(
 
     Ok(abi::NativeFuncData {
         module_name: "*null*".to_string(),
-        lib: lib.into(),
+        _lib: lib.into(),
         func: map,
     })
 }
