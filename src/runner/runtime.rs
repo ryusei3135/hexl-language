@@ -24,7 +24,8 @@ type LoopStatus =
     Option< // 反復処理に関すること
         (
             u32,  //  反復処理の条件がある場所
-            type_info::VarValue //  反復処理の繰り返すcount
+            type_info::VarValue, //  反復処理の繰り返すcount
+            Option<type_info::VarValue>, //  ループ変数
         )
     >;
 
@@ -32,6 +33,7 @@ pub struct CondStatus {
     pub status: Vec<(bool, i32, LoopStatus)>,
 }
 
+/// 条件分岐に関する処理
 impl CondStatus {
     pub fn new() -> Self {
         Self {
@@ -63,43 +65,6 @@ impl CondStatus {
         //  エリアが同じかつ、今までの条件で、trueになってなければ、今の条件を実行可能
         self.status.last().unwrap().1 == now_block && !self.status.last().unwrap().0
     }
-    ///  反復処理がこれから始まることを設定
-    pub fn now_loop(
-            &mut self,
-            // 反復処理の条件がある場所
-            cond_location: Option<u32>,
-            loop_count: Option<type_info::VarValue>
-    ) -> Result<u32, control_syn::ControlSynErr> {
-        /// 条件分岐や反復処理のデータがあれば
-        if !self.status.is_empty() {
-            let loop_status: &mut LoopStatus
-                = &mut self.status.last_mut().unwrap().2;
-
-            if cond_location.is_none() || loop_count.is_none() {
-                /// このブロック内で、Noneを返した場合、今の反復処理のデータは破棄する
-                ///  繰り返すloop_countが0でなければ、反復処理の条件がある場所を返す
-                if let Some(count_result) = is_not_zero(loop_status.clone().unwrap().1) {
-                    if count_result {
-                        return Ok(loop_status.clone().unwrap().0);
-                    } else {
-                        /// 反復処理が終わったので、データを破棄、反復処理が終了したことを返す
-                        self.status.pop();
-                        return Err(control_syn::ControlSynErr::END_LOOP);
-                    }
-                } else {
-                    /// そもそも反復処理の条件が無効なので、データを破棄し、エラーを返す
-                    self.status.pop();
-                    return Err(control_syn::ControlSynErr::INVALID_ITER_COND);
-                }
-            } else {
-                // 反復処理のデータを設定
-                *loop_status = Some((cond_location.unwrap(), loop_count.unwrap()));
-                return Err(control_syn::ControlSynErr::SETTING);
-            }
-        }
-        ///  条件分岐や反復処理のデータがないので、Noneを返す
-        Err(control_syn::ControlSynErr::DATA_IS_NOT_FOUND)
-    }
 
     pub fn cond_true(&mut self) {
         if let Some((flag, _value, _loop)) = self.status.last_mut() {
@@ -110,4 +75,53 @@ impl CondStatus {
     pub fn del(&mut self) {
         self.status.pop().unwrap();
     }
+}
+
+/// 反復処理に関する関数
+impl CondStatus {
+    /// for文のみ
+    pub fn get_loop_var(&self) -> type_info::VarValue {
+        self.status.last().unwrap().2.clone().unwrap().2.unwrap()
+    }
+    ///  反復処理がこれから始まることを設定
+    pub fn now_loop(
+        &mut self,
+        cond_location: Option<u32>,
+        loop_count: Option<type_info::VarValue>,
+    ) -> Result<u32, control_syn::ControlSynErr> {
+
+        let status = self.status.last_mut()
+            .ok_or(control_syn::ControlSynErr::DATA_IS_NOT_FOUND)?;
+
+        // 設定フェーズ
+        if cond_location.is_some() && loop_count.is_some() {
+            status.2 = Some((
+                cond_location.unwrap(),
+                loop_count.unwrap(),
+                None
+            ));
+            return Err(control_syn::ControlSynErr::SETTING);
+        }
+
+        let loop_status = status.2.as_mut()
+            .ok_or(control_syn::ControlSynErr::INVALID_ITER_COND)?;
+
+        // 実行フェーズ
+        if !is_not_zero(loop_status.1.clone())
+            .unwrap_or(false)
+        {
+            self.status.pop();
+            return Err(control_syn::ControlSynErr::END_LOOP);
+        }
+
+        match dec_and_get_item(loop_status.1.clone()) {
+            Ok(result) => {
+                loop_status.1 = result.clone();
+                loop_status.2 = Some(result);
+                Ok(loop_status.0)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
 }

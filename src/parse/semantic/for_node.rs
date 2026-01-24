@@ -22,9 +22,7 @@ pub fn make_for_node(
             // }
             // token::TokenKind::TokenIn => {}
             token::TokenKind::TokenSpace => {}
-            _ => {
-                println!("{:?} for type", tokens[*index as usize].kind);
-            }
+            _ => {}
         }
         *index += 1;
     }

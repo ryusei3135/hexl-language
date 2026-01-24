@@ -162,6 +162,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
         if func_process.nodes.len() == index as usize {
             crate::update_array_index!(index, cond_status);
         }
+
         let now_area = func_process.nodes[index as usize].block.unwrap();
 
         if now_area == executable_area {
@@ -203,6 +204,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                         Some(node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()))
                     );
                     executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                    crate::update_array_index!(index, cond_status);
                 }
                 node::NodeKind::NodeRet => {
                     runtime::process_kind(node::NodeKind::NodeNull);
@@ -213,7 +215,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                         type_info::VarValue::Int32(v) => v.to_string(),
                         type_info::VarValue::Bool(v) => v.to_string(),
                         type_info::VarValue::Str(v) => v,
-                        _ => "*null*".to_string(),
+                        _ => String::new(),
                     });
                 }
             }
