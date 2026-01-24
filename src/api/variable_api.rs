@@ -29,7 +29,9 @@ pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
 }
 
 //  変数の値の上書き
-pub fn update_var_value(node: node::CalculNode) -> Result<type_info::VarValue, bool> {
+pub fn update_var_value(
+        node: node::CalculNode
+) -> Result<type_info::VarValue, define_msg::VarErrorOrLog> {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
         let var_name = node.left_node.unwrap().value.clone();
         let value = run::node_run(*node.right_node.unwrap());
@@ -42,7 +44,7 @@ pub fn update_var_value(node: node::CalculNode) -> Result<type_info::VarValue, b
     } else {
         println!("syntax err: assign var");
     }
-    return Err(false);
+    return Err(define_msg::VarErrorOrLog::VarIsNotDefined);
 }
 
 

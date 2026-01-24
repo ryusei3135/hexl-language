@@ -7,7 +7,7 @@ use crate::manager::{variable, global_state, type_info};
 use crate::parse::node;
 use crate::runner::run;
 use crate::manager::func;
-use crate::error::control_syn;
+use crate::error::*;
 use crate::create_type_api;
 
 // type_api.rs

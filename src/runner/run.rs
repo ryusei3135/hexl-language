@@ -107,7 +107,12 @@ pub fn node_run(
                 _ => panic!("node run 2 add"),
             }
         }
-        node::NodeKind::NodeAssignVar => variable_api::update_var_value(node.clone()).unwrap(),
+        node::NodeKind::NodeAssignVar => {
+            match variable_api::update_var_value(node.clone()) {
+                Ok(v) => v,
+                Err(_) => type_info::VarValue::Null(false),
+            }
+        }
         node::NodeKind::NodeCallVar => variable_api::call_var_value(node.value),
         node::NodeKind::NodeDefVar => variable_api::define_var(node.clone()),
         node::NodeKind::NodeCallFunc => {
