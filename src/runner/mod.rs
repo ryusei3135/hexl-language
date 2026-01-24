@@ -14,9 +14,9 @@ use crate::manager::{
 };
 use crate::package::manage;
 use crate::api::{
+    variable_api::*,
     variable_api,
     arg_api,
-    type_api::*
 };
 use crate::parse::node;
 use crate::error::control_syn;

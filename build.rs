@@ -36,8 +36,7 @@ fn create_type_data() {
 
     type_info_head.push_str("use crate::create_var_type_data;\n\n");
     type_info_head.push_str("create_var_type_data!(\n");
-    type_api_head.push_str("use crate::manager::type_info;\n");
-    type_api_head.push_str("use crate::create_type_api;\n\n");
+    type_api_head.push_str("use super::*;\n\n");
     type_api_head.push_str("create_type_api!(\n");
 
     for line in src.lines() {
