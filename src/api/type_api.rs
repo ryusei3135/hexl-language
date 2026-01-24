@@ -21,7 +21,7 @@ pub fn is_not_zero(value: type_info::VarValue) -> Option<bool> {
 }
 /// 反復処理でfor文で回す値をデクリメントし、その結果を返す
 pub fn dec_and_get_item(
-        mut value: type_info::VarValue
+        value: type_info::VarValue
 ) -> Result<type_info::VarValue, control_syn::ControlSynErr> {
     match value {
         type_info::VarValue::Int32(mut result) => {
@@ -33,7 +33,7 @@ pub fn dec_and_get_item(
             type_info::VarValue::Str(result.remove(0).to_string());
             Ok(type_info::VarValue::Str(first.to_string()))
         }
-        /// 繰り返す値の型が無効な型
+        // 繰り返す値の型が無効な型
         _ => {
             eprintln!("[err]: value is of invalid type");
             Err(control_syn::ControlSynErr::ValueIsOfInvalidType)

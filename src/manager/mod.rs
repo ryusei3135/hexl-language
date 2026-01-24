@@ -17,10 +17,10 @@ macro_rules! create_var_type_data {
         pub enum VarValue {
             $($member($type)),*
         }
-        ///  この列挙型は、変数の型情報のみを表す。
-        pub enum VarType {
-            $($member),*
-        }
+        //  この列挙型は、変数の型情報のみを表す。
+        // pub enum VarType {
+        //     $($member),*
+        // }
     };
 }
 

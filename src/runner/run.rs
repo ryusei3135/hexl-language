@@ -199,7 +199,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 node::NodeKind::NodeFor => {
                     runtime::process_kind(node::NodeKind::NodeNull);
                     cond_status.push(true, now_area);
-                    cond_status.now_loop(
+                    let _ = cond_status.now_loop(
                         Some(index.try_into().unwrap()),
                         Some(node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()))
                     );
