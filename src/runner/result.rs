@@ -15,6 +15,7 @@ macro_rules! update_array_index {
                     control_syn::ControlSynErr::InvalidIterCond => {
                         eprintln!("[err]: for loop cond is invalid");
                     }
+                    control_syn::ControlSynErr::EndLoop => {},
                     _ => println!("err loop"),
                 }
             }
