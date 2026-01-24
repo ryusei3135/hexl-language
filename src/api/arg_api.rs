@@ -12,6 +12,7 @@ pub fn make_args_var(
     global_state::var_manager().add_var(
         args_node.name.clone(),
         run::node_run(*call_node.left_node.clone().unwrap()),
+        VarRegion::Stack,
     );
     if let Some(arg) = args_node.next.clone() {
         if let Some(value) = call_node.right_node {

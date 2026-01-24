@@ -16,6 +16,8 @@ pub struct MethodInfo {
 
 pub struct VariableManager {
     pub variables_info_vec: Vec<VariableInfo>,
+    pub region_stack_index: Vec<Vec<usize>>,
+    pub region_static_index: Vec<usize>,
 }
 
 
@@ -23,29 +25,76 @@ impl VariableManager {
     pub fn new() -> Self {
         Self {
             variables_info_vec: Vec::<VariableInfo>::new(),
+            region_stack_index: Vec::<Vec<usize>>::new(),
+            region_static_index: Vec::<usize>::new(),
         }
     }
-    //  変数のデータを返す
-    pub fn get_var(&self, name: String) -> VariableInfo {
-        self.variables_info_vec
-            .iter()
-            .find(|var| var.name == name)
-            .map(|var| var.clone())
-            .unwrap_or_else(|| {
-                eprintln!("[err] {}", name);
-                panic!("this variable is not defined");
-            })
+    /// 変数を探す
+    pub fn search_var(&self, name: &String) -> Option<usize> {
+        // 現在のスタック領域を探す
+        for index in 0..self.region_stack_index.last().unwrap().len()+1 {
+            if self.variables_info_vec[index].name == *name {
+                return Some(index);
+            }
+        }
+        // 静的領域を探す
+        for index in 0..self.region_static_index.len()+1 {
+            if self.variables_info_vec[index].name == *name {
+                return Some(index);
+            }
+        }
+
+        None
+    }
+    /// 新しくスタック領域を作成
+    pub fn make_new_stack(&mut self) {
+        self.region_stack_index.push(Vec::<usize>::new());
+    }
+    /// スタック領域を削除
+    pub fn remove_stack(&mut self) {
+        if let Some(index_vec) = self.region_stack_index.pop() {
+            for index in index_vec.iter().rev() {
+                self.variables_info_vec.remove(*index);
+            }
+        }
+    }
+    ///  変数のデータを返す
+    pub fn get_var(&self, name: String) -> Result<VariableInfo, define_msg::VarErrorOrLog> {
+        if let Some(index) = self.search_var(&name) {
+            Ok(self.variables_info_vec[index].clone())
+        } else {
+            eprintln!("[err] this variable is not defined -> {}", name);
+            Err(define_msg::VarErrorOrLog::VarIsNotDefined)
+        }
     }
     //  変数を追加
     pub fn add_var(
             &mut self,
             name: String,
             value: type_info::VarValue,
+            region: VarRegion,
     ) {
         if self.variables_info_vec.iter_mut().find(|var| var.name == name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
         } else {
+            if self.region_stack_index.is_empty() {
+                println!("[system err]: region stack index is empty");
+            }
+            match region {
+                VarRegion::Heap => {},
+                VarRegion::Static => {
+                    self.region_static_index
+                        .push(self.variables_info_vec.len() as usize);
+                },
+                VarRegion::Stack => {
+                    self.region_stack_index
+                        .last_mut()
+                        .unwrap()
+                        .push(self.variables_info_vec.len() as usize);
+                },
+            }
+
             self.variables_info_vec.push(
                 VariableInfo {
                     name: name,
@@ -57,13 +106,15 @@ impl VariableManager {
     }
     //  変数の値を上書き
     pub fn update_var(&mut self, name: String, value: type_info::VarValue) -> bool {
-        if let Some(var) = self.variables_info_vec.iter_mut().find(|var| var.name == name) {
+        if let Some(index) = self.search_var(&name) {
+            let var = &mut self.variables_info_vec[index];
             var.value = value;
-            true
+            return true;
         } else {
             eprintln!("[name err]: undefined variable `{}`", name);
-            false
         }
+
+        false
     }
     //  変数にメゾットを追加
     pub fn add_method(&mut self, node: node::CalculNode, name: String) {
@@ -88,16 +139,20 @@ impl VariableManager {
     }
     //  メゾットのデータを取得
     pub fn get_method(&self, receiver_name: String, method_name: String) -> MethodInfo {
-        let receiver = self.get_var(receiver_name).method;
-        receiver
-            .unwrap_or_else(|| {
-                panic!("this method is not found");
-            })
-            .iter()
-            .find(|m| m.name == method_name)
-            .map(|m| m.clone())
-            .unwrap_or_else(|| {
-                panic!("this method is not defined");
-            })
+        match self.get_var(receiver_name) {
+            Ok(info) => {
+                info.method
+                    .unwrap_or_else(|| {
+                        panic!("this method is not found");
+                    })
+                    .iter()
+                    .find(|m| m.name == method_name)
+                    .map(|m| m.clone())
+                    .unwrap_or_else(|| {
+                        panic!("this method is not defined");
+                    })
+            }
+            Err(e) => panic!("[system err] get method"),
+        }
     }
 }

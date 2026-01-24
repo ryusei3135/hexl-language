@@ -18,5 +18,5 @@ pub struct LibraryFile {
 pub struct Function {
     pub name: String,
     pub args_types: Vec<String>,
-    pub return_type: String,
+    // pub return_type: String,
 }

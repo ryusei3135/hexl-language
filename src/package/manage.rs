@@ -1,3 +1,5 @@
+use crate::manager::VarRegion;
+
 use super::*;
 
 
@@ -16,6 +18,7 @@ fn make_receiver(module: &abi::NativeFuncData) {
     global_state::var_manager().add_var(
         module.module_name.clone(),
         type_info::VarValue::Receiver(module.module_name.clone()),
+        VarRegion::Static,
     );
 
     for (key, _func) in &module.func {
@@ -100,12 +103,11 @@ pub fn run_native_func(
         .get(&func_name)
         .expect("this netive func is false");
     let vm_func = func_call_data.func_ptr;
-    let mut ret_value: Option<type_info::VarValue> = None;
-    unsafe {
+    let ret_value = unsafe {
         let vm_args = make_vm_args(args.clone(), func_call_data.args_type.clone());
         let ret = vm_func(vm_args.as_ptr() as *mut lib::VmArgsValue, vm_args.len());
-        ret_value = get_vm_ret_value(ret);
-    }
+        get_vm_ret_value(ret)
+    };
     ret_value
 }
 

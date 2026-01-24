@@ -64,7 +64,6 @@ impl Parser {
                 }
                 token::TokenKind::TokenFor => {
                     let node = make_for_node(token.clone(), &mut index);
-                    println!("{:?} ::", node);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                     continue;
                 }

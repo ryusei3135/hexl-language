@@ -1,13 +1,14 @@
 use std::io
 
 def add() {
-    let o = 0
+    let a = 0
     io.print("add")
     ret 1
 }
 
 def start() {
     let k = add()
+    let a = 10
     io.print("Hello world")
     for 5 {
         io.print("for loop")

@@ -1,3 +1,5 @@
+use crate::manager::global_state;
+
 use super::*;
 
 
@@ -158,6 +160,7 @@ pub fn node_run(
 }
 
 fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
+    global_state::var_manager().make_new_stack();
     let mut cond_status = runtime::CondStatus::new();
     let mut index: u32 = 0;
     let mut executable_area: i32 = 1;
@@ -212,6 +215,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     crate::update_array_index!(index, cond_status);
                 }
                 node::NodeKind::NodeRet => {
+                    global_state::var_manager().remove_stack();
                     runtime::process_kind(node::NodeKind::NodeNull);
                     return result;
                 }
@@ -230,6 +234,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
         }
         index += 1;
     }
+    global_state::var_manager().remove_stack();
     type_info::VarValue::Null(false)
 }
 

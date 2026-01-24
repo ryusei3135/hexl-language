@@ -1,6 +1,6 @@
-Int32 i32
-Str String
-Bool bool
-Receiver String
-Null bool
-Array Vec<Box<VarValue>>
+Int32 i32 "i32"
+Str String "char"
+Bool bool "bool"
+Receiver String "none"
+Null bool "null"
+Array Vec<Box<VarValue>> "arr"

@@ -18,7 +18,7 @@ pub struct FuncNode {
     //  関数の名前
     pub name: String,
     pub args: FuncArgsNode,
-    pub ret_value_type: node::CalculNode,
+    pub ret_value_type: type_info::VarType,
     //  関数の処理
     pub nodes: Vec<node::CalculNode>,
 }

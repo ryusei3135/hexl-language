@@ -6,6 +6,7 @@ pub mod type_info;
 
 use std::sync::{OnceLock, Mutex, MutexGuard};
 use crate::parse::node;
+use crate::error::define_msg;
 
 
 ///  変数の型の情報を持つ列挙型を作成する
@@ -17,13 +18,18 @@ macro_rules! create_var_type_data {
         pub enum VarValue {
             $($member($type)),*
         }
-        //  この列挙型は、変数の型情報のみを表す。
-        // pub enum VarType {
-        //     $($member),*
-        // }
+        ///  この列挙型は、変数の型情報のみを表す。
+        #[derive(Clone)]
+        pub enum VarType {
+            $($member),*
+        }
     };
 }
 
+/// 変数の領域を表す列挙型
+#[derive(Clone, PartialEq)]
 pub enum VarRegion {
     Stack,
+    Heap,
+    Static,
 }

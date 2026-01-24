@@ -1,7 +1,7 @@
 use super::*;
 
 
-pub fn get_variable_info(name: String) -> variable::VariableInfo {
+pub fn get_variable_info(name: String) -> Result<variable::VariableInfo, define_msg::VarErrorOrLog> {
     global_state::var_manager().get_var(name)
 }
 
@@ -12,8 +12,10 @@ pub fn update_variable_value(name: String, new_value: type_info::VarValue) {
 }
 
 pub fn call_var_value(name: String) -> type_info::VarValue {
-    let var_info = get_variable_info(name);
-    var_info.value
+    match get_variable_info(name) {
+        Ok(var_info) => var_info.value,
+        Err(_) => panic!("variable is not defined"),
+    }
 }
 
 pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
@@ -24,6 +26,7 @@ pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
     global_state::var_manager().add_var(
         var_name.clone(),
         value,
+        VarRegion::Stack,
     );
     return call_var_value(var_name.clone());
 }

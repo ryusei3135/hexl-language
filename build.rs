@@ -32,7 +32,8 @@ fn create_type_data() {
     let mut type_info_head = String::new();
     //  api/type_api.rs
     let mut type_api_head = String::new();
-    let mut body = String::new();
+    let mut body_info = String::new();
+    let mut body_api = String::new();
 
     type_info_head.push_str("use crate::create_var_type_data;\n\n");
     type_info_head.push_str("create_var_type_data!(\n");
@@ -41,23 +42,34 @@ fn create_type_data() {
 
     for line in src.lines() {
         let parts: Vec<_> = line.split_whitespace().collect();
-        let name = parts[0];
-        let fields = &parts[1..];
+        let name = &parts[0];
+        let fields = &parts[1];
+        let txt = &parts[2];
 
         if fields.is_empty() {
-            body.push_str(&format!("    {},\n", name));
+            body_info.push_str(&format!("    {},\n", name));
         } else {
-            body.push_str(&format!(
-                "    {}: {},\n",
+            body_info.push_str(&format!(
+                "    {}: {}",
                 name,
-                fields.join(", ")
+                fields
             ));
+            body_api.push_str(&format!(
+                "    {}: {}",
+                name,
+                fields
+            ));
+            body_api.push_str(&format!(
+                " : {},\n",
+                txt
+            ));
+            body_info.push_str(",\n");
         }
     }
 
-    type_info_head.push_str(&body);
+    type_info_head.push_str(&body_info);
     type_info_head.push_str(");\n");
-    type_api_head.push_str(&body);
+    type_api_head.push_str(&body_api);
     type_api_head.push_str(");\n");
     println!("build.rs cwd = {:?}", std::env::current_dir());
     println!("trying to access file here");
