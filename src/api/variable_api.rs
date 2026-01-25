@@ -56,55 +56,63 @@ pub fn update_var_value(
 pub fn is_for_iterable(
         loop_cond: node::CalculNode,
         now_value: &Option<type_info::VarValue>
-) -> Option<(bool, type_info::VarValue, ControlSemantics)> {
-    if loop_cond.node_type == node::NodeKind::NodeIn {
-        let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
-        let binds_var = {
-            if loop_cond.node_type == node::NodeKind::NodeIn {
-                true
-            } else {
-                false
-            }
-        };
-
-        if *now_value == None {
-            return match iterable_value {
-                type_info::VarValue::Int32(_) => {
-                    Some(
-                        (
-                            true,
-                            type_info::VarValue::Int32(0),
-                            if binds_var {
-                                ControlSemantics::binds_var(loop_cond.value.clone())
-                            } else {
-                                ControlSemantics::not_binds
-                            }
-                        )
-                    )
-                }
-                _ => {
-                    None
+) -> Result<(bool, type_info::VarValue, ControlSemantics), ControlSynErr> {
+    match loop_cond.node_type {
+        node::NodeKind::NodeIn => {
+            let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
+            let binds_var = {
+                if loop_cond.node_type == node::NodeKind::NodeIn {
+                    true
+                } else {
+                    false
                 }
             };
-        }
 
-        match (iterable_value, now_value.clone().unwrap()) {
-            (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
-                if l != r {
-                    return Some(
-                        (
-                            true,
-                            type_info::VarValue::Int32(r + 1),
-                            ControlSemantics::binds_var(loop_cond.value.clone()),
+            if *now_value == None {
+                return match iterable_value {
+                    type_info::VarValue::Int32(_) => {
+                        Ok(
+                            (
+                                true,
+                                type_info::VarValue::Int32(0),
+                                if binds_var {
+                                    ControlSemantics::BindsVar(loop_cond.value.clone())
+                                } else {
+                                    ControlSemantics::NotBinds
+                                }
+                            )
                         )
-                    );
-                } else {
-                    return Some((false, type_info::VarValue::Int32(r + 1), ControlSemantics::End));
-                }
+                    }
+                    _ => {
+                        Err(ControlSynErr::ValueIsOfInvalidType)
+                    }
+                };
             }
-            _ => return None,
-        }
-    }
 
-    None
+            iter::update_loop_var(iterable_value, now_value, binds_var, &loop_cond)
+        }
+        node::NodeKind::NodeNum => {
+            let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
+
+            if *now_value == None {
+                return match iterable_value {
+                    type_info::VarValue::Int32(_) => {
+                        Ok(
+                            (
+                                true,
+                                type_info::VarValue::Int32(0),
+                                ControlSemantics::NotBinds
+                            )
+                        )
+                    }
+                    _ => {
+                        Err(ControlSynErr::ValueIsOfInvalidType)
+                    }
+                };
+            }
+
+            iter::update_loop_var(iterable_value, now_value, false, &loop_cond)
+        }
+        _ => return Err(ControlSynErr::ValueIsOfInvalidType),
+    }
 }

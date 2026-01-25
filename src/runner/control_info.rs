@@ -1,6 +1,6 @@
 
 pub enum ControlSemantics {
-    binds_var(String),
-    not_binds,
+    BindsVar(String),
+    NotBinds,
     End,
 }

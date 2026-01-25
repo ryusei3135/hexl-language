@@ -230,7 +230,6 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
             }
         } else if now_area < executable_area {
             crate::update_array_index!(index, cond_status);
-            executable_area = now_area;
         }
         index += 1;
     }

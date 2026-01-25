@@ -6,7 +6,7 @@ pub enum CharKind {
     CharAlpha,
     CharSymbol,
     CharSpace,
-    CharNull,
+    // CharNull,
 }
 
 #[derive(Clone, Debug, PartialEq)]

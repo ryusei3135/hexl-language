@@ -152,7 +152,13 @@ impl VariableManager {
                         panic!("this method is not defined");
                     })
             }
-            Err(e) => panic!("[system err] get method"),
+            Err(e) => {
+                match e {
+                    define_msg::VarErrorOrLog::VarIsNotDefined => {
+                        panic!("this var is not found");
+                    }
+                }
+            },
         }
     }
 }

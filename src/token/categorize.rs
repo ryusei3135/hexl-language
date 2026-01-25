@@ -57,9 +57,9 @@ pub fn categorize_token(token: &str, kind: token::CharKind) -> token::TokenKind 
         //  文字の種類が記号の場合は、記号ごとに分類する
         token::CharKind::CharSymbol  => categorize_symbol(token),
         token::CharKind::CharSpace => token::TokenKind::TokenSpace,
-        _ => {
-            println!("what is this text?: {}", token);
-            token::TokenKind::TokenEOF
-        },
+        // _ => {
+        //     println!("what is this text?: {}", token);
+        //     token::TokenKind::TokenEOF
+        // },
     }
 }

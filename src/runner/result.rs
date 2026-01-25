@@ -15,10 +15,10 @@ macro_rules! update_array_index {
                     control_syn::ControlSynErr::InvalidIterCond => {
                         eprintln!("[err]: for loop cond is invalid");
                     }
-                    control_syn::ControlSynErr::EndLoop => {},
-                    control_syn::ControlSynErr::NotFoundIterCond => {
-                        eprintln!("[err]: iter cond is not found");
+                    control_syn::ControlSynErr::ValueIsOfInvalidType => {
+                        eprintln!("[err]: This type cannot be used in control statements");
                     }
+                    control_syn::ControlSynErr::EndLoop => {},
                     _ => println!("err loop"),
                 }
                 break;

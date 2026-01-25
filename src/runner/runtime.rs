@@ -78,32 +78,32 @@ impl CondStatus {
 }
 
 /// for文のみ
-fn start_for_loop(loop_status: &mut LoopStatus) -> Option<control_syn::ControlSynErr> {
-    if let Some(result) = is_for_iterable(loop_status.clone().unwrap().1.clone(), &loop_status.clone().unwrap().2.clone()) {
-        if result.0 {
-            if let control_info::ControlSemantics::binds_var(var_name) = result.2 {
-                var_manager().add_var(
-                    var_name,
-                    result.1.clone(),
-                    VarRegion::Stack,
-                );
+fn start_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::ControlSynErr> {
+    match is_for_iterable(loop_status.clone().unwrap().1.clone(), &loop_status.clone().unwrap().2.clone()) {
+        Ok(result) => {
+            if result.0 {
+                if let control_info::ControlSemantics::BindsVar(var_name) = result.2 {
+                    var_manager().add_var(
+                        var_name,
+                        result.1.clone(),
+                        VarRegion::Stack,
+                    );
+                }
+                loop_status.as_mut().unwrap().2 = Some(result.1.clone());
+                // *loop_status = loop_status;
+                Ok(())
+            } else {
+                //  反復処理の終了
+                var_manager().remove_stack();
+                Err(control_syn::ControlSynErr::EndLoop)
             }
-            loop_status.as_mut().unwrap().2 = Some(result.1.clone());
-            // *loop_status = loop_status;
-            return None;
-        } else {
-            //  反復処理の終了
-            var_manager().remove_stack();
-            return Some(control_syn::ControlSynErr::EndLoop);
         }
-    } else {
-        return Some(control_syn::ControlSynErr::InvalidIterCond);
+        Err(e) => Err(e),
     }
 }
 
 /// 反復処理に関する関数
 impl CondStatus {
-
     ///  反復処理がこれから始まることを設定
     pub fn now_loop(
         &mut self,
@@ -111,7 +111,7 @@ impl CondStatus {
         loop_count: Option<node::CalculNode>,
     ) -> Result<usize, control_syn::ControlSynErr> {
 
-        let mut status = self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)?;
+        let status = self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)?;
 
         // 設定フェーズ
         if cond_location.is_some() && loop_count.is_some() {
@@ -123,11 +123,11 @@ impl CondStatus {
             var_manager().make_new_stack();
             return Err(
                 match start_for_loop(&mut status.2.clone()) {
-                    Some(e) => {
+                    Ok(_) => control_syn::ControlSynErr::SETTING,
+                    Err(e) => {
                         self.status.pop();
                         e
                     }
-                    None => control_syn::ControlSynErr::SETTING,
                 }
             );
         }
@@ -136,12 +136,12 @@ impl CondStatus {
         var_manager().remove_stack();
         var_manager().make_new_stack();
         match start_for_loop(&mut status.2) {
-            Some(e) => {
+            //  for文が続くので、条件がある場所を返す
+            Ok(_) => Ok(status.2.clone().unwrap().0),
+            Err(e) => {
                 self.status.pop();
                 Err(e)
             }
-            //  for文が続くので、条件がある場所を返す
-            None => Ok(status.2.clone().unwrap().0),
         }
     }
 }
