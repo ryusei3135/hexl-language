@@ -81,6 +81,7 @@ impl VariableManager {
             if self.region_stack_index.is_empty() {
                 println!("[system err]: region stack index is empty");
             }
+            //  変数の領域を設定
             match region {
                 VarRegion::Heap => {},
                 VarRegion::Static => {

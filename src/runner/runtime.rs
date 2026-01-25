@@ -78,6 +78,7 @@ impl CondStatus {
 }
 
 /// for文のみ
+/// この関数を呼び出す前にスタックを新しく確保しているので、例外を返す前に現在のスタックを削除すること
 fn start_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::ControlSynErr> {
     match is_for_iterable(loop_status.clone().unwrap().1.clone(), &loop_status.clone().unwrap().2.clone()) {
         Ok(result) => {
@@ -98,7 +99,10 @@ fn start_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::Contr
                 Err(control_syn::ControlSynErr::EndLoop)
             }
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            var_manager().remove_stack();
+            Err(e)
+        }
     }
 }
 

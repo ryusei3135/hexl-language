@@ -11,6 +11,7 @@ def start() {
     let a = 10
     io.print("Hello world")
     for h in 5 {
+        let hello = 0
         io.print("for loop")
     }
 }
