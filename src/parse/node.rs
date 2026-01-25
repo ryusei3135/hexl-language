@@ -39,6 +39,7 @@ pub enum NodeKind {
     NodeElse,
     NodeFor,
     NodeRet,
+    NodeIn,
     //  参照
     NodeStd,
     NodeSrc,
@@ -52,5 +53,5 @@ pub struct CalculNode {
     pub left_node: Option<Box<CalculNode>>,
     pub right_node: Option<Box<CalculNode>>,
     //  どこのブロックの中か
-    pub block: Option<i32>
+    pub block: Option<usize>
 }

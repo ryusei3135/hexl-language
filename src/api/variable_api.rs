@@ -1,4 +1,6 @@
 use super::*;
+use crate::runner::control_info::ControlSemantics;
+use crate::runner::run::node_run;
 
 
 pub fn get_variable_info(name: String) -> Result<variable::VariableInfo, define_msg::VarErrorOrLog> {
@@ -51,32 +53,58 @@ pub fn update_var_value(
 }
 
 
-///  反復処理の条件をbooleanで返す
-pub fn is_not_zero(value: type_info::VarValue) -> Option<bool> {
-    match value {
-        type_info::VarValue::Int32(result) => Some(result > 0),
-        type_info::VarValue::Str(result) => Some(result.chars().count() != 0),
-        _ => None,
+pub fn is_for_iterable(
+        loop_cond: node::CalculNode,
+        now_value: &Option<type_info::VarValue>
+) -> Option<(bool, type_info::VarValue, ControlSemantics)> {
+    if loop_cond.node_type == node::NodeKind::NodeIn {
+        let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
+        let binds_var = {
+            if loop_cond.node_type == node::NodeKind::NodeIn {
+                true
+            } else {
+                false
+            }
+        };
+
+        if *now_value == None {
+            return match iterable_value {
+                type_info::VarValue::Int32(_) => {
+                    Some(
+                        (
+                            true,
+                            type_info::VarValue::Int32(0),
+                            if binds_var {
+                                ControlSemantics::binds_var(loop_cond.value.clone())
+                            } else {
+                                ControlSemantics::not_binds
+                            }
+                        )
+                    )
+                }
+                _ => {
+                    None
+                }
+            };
+        }
+
+        match (iterable_value, now_value.clone().unwrap()) {
+            (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
+                if l != r {
+                    return Some(
+                        (
+                            true,
+                            type_info::VarValue::Int32(r + 1),
+                            ControlSemantics::binds_var(loop_cond.value.clone()),
+                        )
+                    );
+                } else {
+                    return Some((false, type_info::VarValue::Int32(r + 1), ControlSemantics::End));
+                }
+            }
+            _ => return None,
+        }
     }
-}
-/// 反復処理でfor文で回す値をデクリメントし、その結果を返す
-pub fn dec_and_get_item(
-        value: type_info::VarValue
-) -> Result<type_info::VarValue, control_syn::ControlSynErr> {
-    match value {
-        type_info::VarValue::Int32(mut result) => {
-            result -= 1;
-            Ok(type_info::VarValue::Int32(result))
-        }
-        type_info::VarValue::Str(mut result) => {
-            let first = result.chars().next().unwrap();
-            type_info::VarValue::Str(result.remove(0).to_string());
-            Ok(type_info::VarValue::Str(first.to_string()))
-        }
-        // 繰り返す値の型が無効な型
-        _ => {
-            eprintln!("[err]: value is of invalid type");
-            Err(control_syn::ControlSynErr::ValueIsOfInvalidType)
-        }
-    }
+
+    None
 }

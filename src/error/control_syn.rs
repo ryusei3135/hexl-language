@@ -5,6 +5,7 @@ pub enum ControlSynErr {
     InvalidIterCond,
     DataIsNotFound,
     ValueIsOfInvalidType,
+    NotFoundIterCond,
     /// ログ
     EndLoop,
     SETTING,

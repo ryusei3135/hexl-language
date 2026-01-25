@@ -55,7 +55,7 @@ impl FuncManager {
 
     pub fn add_func_calcul_node(&mut self, mut node: node::CalculNode, brace_depth: i32) {
         if let Some(func) = self.func_datas.last_mut() {
-            node.block = Some(brace_depth);
+            node.block = Some(brace_depth as usize);
             func.nodes.push(node);
         } else {
             eprintln!("[syntax err]");

@@ -16,8 +16,12 @@ macro_rules! update_array_index {
                         eprintln!("[err]: for loop cond is invalid");
                     }
                     control_syn::ControlSynErr::EndLoop => {},
+                    control_syn::ControlSynErr::NotFoundIterCond => {
+                        eprintln!("[err]: iter cond is not found");
+                    }
                     _ => println!("err loop"),
                 }
+                break;
             }
         }
     };

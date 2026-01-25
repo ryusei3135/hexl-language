@@ -162,37 +162,37 @@ pub fn node_run(
 fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     global_state::var_manager().make_new_stack();
     let mut cond_status = runtime::CondStatus::new();
-    let mut index: u32 = 0;
-    let mut executable_area: i32 = 1;
+    let mut index: usize = 0;
+    let mut executable_area: usize = 1;
 
-    while func_process.nodes.len() >= index as usize {
+    while func_process.nodes.len() >= index {
         // 配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
-        if func_process.nodes.len() == index as usize {
+        if func_process.nodes.len() == index {
             crate::update_array_index!(index, cond_status);
         }
 
-        let now_area = func_process.nodes[index as usize].block.unwrap();
+        let now_area = func_process.nodes[index].block.unwrap();
 
         if now_area == executable_area {
-            let result = node_run(func_process.nodes[index as usize].clone());
+            let result = node_run(func_process.nodes[index].clone());
 
             match runtime::get_process_kind() {
                 node::NodeKind::NodeIf => {
                     runtime::process_kind(node::NodeKind::NodeNull);
-                    if boolify::node_to_bool(*func_process.nodes[index as usize].left_node.clone().unwrap()) {
+                    if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         //  trueを代入すると、つながっている条件分岐がスキップされる
                         cond_status.push(true, now_area);
-                        executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                        executable_area = func_process.nodes[1 + index].block.unwrap();
                     } else {
                         cond_status.push(false, now_area);
                     }
                 }
                 node::NodeKind::NodeIfElse => {
                     runtime::process_kind(node::NodeKind::NodeNull);
-                    if boolify::node_to_bool(*func_process.nodes[index as usize].left_node.clone().unwrap()) {
+                    if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         if cond_status.judge_cond(now_area) {
                             cond_status.cond_true();
-                            executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                            executable_area = func_process.nodes[1 + index].block.unwrap();
                         }
                     }
                 }
@@ -201,7 +201,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     if cond_status.judge_cond(now_area) {
                         //  else文なので、条件のデータを削除する
                         cond_status.del();
-                        executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                        executable_area = func_process.nodes[1 + index].block.unwrap();
                     }
                 }
                 node::NodeKind::NodeFor => {
@@ -209,9 +209,9 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     cond_status.push(true, now_area);
                     let _ = cond_status.now_loop(
                         Some(index.try_into().unwrap()),
-                        Some(node_run(*func_process.nodes[index as usize].left_node.clone().unwrap()))
+                        Some(*func_process.nodes[index].left_node.clone().unwrap())
                     );
-                    executable_area = func_process.nodes[1 + index as usize].block.unwrap();
+                    executable_area = func_process.nodes[1 + index].block.unwrap();
                     crate::update_array_index!(index, cond_status);
                 }
                 node::NodeKind::NodeRet => {

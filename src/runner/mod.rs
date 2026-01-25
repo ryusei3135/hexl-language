@@ -1,3 +1,4 @@
+pub mod control_info;
 pub mod run;
 pub mod runtime;
 mod boolify;
@@ -10,6 +11,7 @@ use crate::manager::{
     func,
     variable,
     type_info,
+    VarRegion,
     global_state::*,
 };
 use crate::package::manage;
