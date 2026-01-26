@@ -47,7 +47,7 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
                 }
                 "int" => {
                     let c_value = lib::CValue {
-                        str_value: CString::new(arg_node.value.clone()).unwrap().into_raw(),
+                        i32_value: arg_node.value.clone().parse::<i32>().unwrap(),
                     };
                     lib::VmArgsValue {
                         arg_type: lib::ArgType::Int32,
@@ -56,7 +56,7 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
                 }
                 "bool" => {
                     let c_value = lib::CValue {
-                        bool_value: if let Ok(boolean) = arg_node.value.clone().parse() {
+                        bool_value: if let Ok(boolean) = arg_node.value.clone().parse::<bool>() {
                             boolean
                         } else {
                             true
