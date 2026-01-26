@@ -207,11 +207,17 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 node::NodeKind::NodeFor => {
                     runtime::process_kind(node::NodeKind::NodeNull);
                     cond_status.push(true, now_area);
-                    let _ = cond_status.now_loop(
+                    // for文の設定をする
+                    match cond_status.now_loop(
                         Some(index.try_into().unwrap()),
                         Some(*func_process.nodes[index].left_node.clone().unwrap())
-                    );
+                    ) {
+                        Err(control_syn::ControlSynErr::SETTING) => {}
+                        Err(log) => result::output_log(log),
+                        Ok(_) => {},
+                    }
                     executable_area = func_process.nodes[1 + index].block.unwrap();
+                    // for文を呼び出す indexをfor文の最初の処理の位置にする
                     crate::update_array_index!(index, cond_status);
                 }
                 node::NodeKind::NodeRet => {

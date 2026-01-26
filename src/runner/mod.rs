@@ -21,4 +21,5 @@ use crate::api::{
     arg_api,
 };
 use crate::parse::node;
+use crate::runner::result::output_log;
 use crate::error::control_syn;
