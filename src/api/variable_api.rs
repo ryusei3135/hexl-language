@@ -60,13 +60,6 @@ pub fn is_for_iterable(
     match loop_cond.node_type {
         node::NodeKind::NodeIn => {
             let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
-            let binds_var = {
-                if loop_cond.node_type == node::NodeKind::NodeIn {
-                    true
-                } else {
-                    false
-                }
-            };
 
             if *now_value == None {
                 return match iterable_value {
@@ -75,11 +68,7 @@ pub fn is_for_iterable(
                             (
                                 true,
                                 type_info::VarValue::Int32(0),
-                                if binds_var {
-                                    ControlSemantics::BindsVar(loop_cond.value.clone())
-                                } else {
-                                    ControlSemantics::NotBinds
-                                }
+                                ControlSemantics::BindsVar(loop_cond.value.clone()),
                             )
                         )
                     }
@@ -89,7 +78,7 @@ pub fn is_for_iterable(
                 };
             }
 
-            iter::update_loop_var(iterable_value, now_value, binds_var, &loop_cond)
+            iter::update_loop_var(iterable_value, now_value, true, &loop_cond)
         }
         node::NodeKind::NodeNum => {
             let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
