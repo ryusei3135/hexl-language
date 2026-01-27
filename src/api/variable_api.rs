@@ -77,7 +77,7 @@ pub fn is_for_iterable(
                     }
                 };
             }
-
+            // mod.rsで定義
             iter::update_loop_var(iterable_value, now_value, true, &loop_cond)
         }
         node::NodeKind::NodeNum => {

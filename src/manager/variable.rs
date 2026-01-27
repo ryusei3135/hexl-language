@@ -74,14 +74,14 @@ impl VariableManager {
             value: type_info::VarValue,
             region: VarRegion,
     ) {
-        if self.variables_info_vec.iter_mut().find(|var| var.name == name).is_some() {
+        if self.variables_info_vec.iter().find(|var| var.name == name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
         } else {
             if self.region_stack_index.is_empty() {
                 println!("[system err]: region stack index is empty");
             }
-            //  変数の領域を設定
+            //  新しく作る変数の領域を設定
             match region {
                 VarRegion::Heap => {},
                 VarRegion::Static => {
