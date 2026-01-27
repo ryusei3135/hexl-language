@@ -1,5 +1,5 @@
 metadata:
-  filename: "io.a"
+  filename: "io.so"
 functions:
   - name: "print"
     args_types: ["str"]

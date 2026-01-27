@@ -7,11 +7,11 @@ pub fn get_variable_info(name: String) -> Result<variable::VariableInfo, define_
     global_state::var_manager().get_var(name)
 }
 
-pub fn update_variable_value(name: String, new_value: type_info::VarValue) {
-    if !global_state::var_manager().update_var(name, new_value) {
-        std::process::exit(1);
-    }
-}
+// pub fn update_variable_value(name: String, new_value: type_info::VarValue) {
+//     if !global_state::var_manager().update_var(name, new_value) {
+//         std::process::exit(1);
+//     }
+// }
 
 pub fn call_var_value(name: String) -> type_info::VarValue {
     match get_variable_info(name) {
