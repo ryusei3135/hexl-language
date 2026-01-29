@@ -212,9 +212,9 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                         Some(index.try_into().unwrap()),
                         Some(*func_process.nodes[index].left_node.clone().unwrap())
                     ) {
+                        Ok(_) => {/* そもそもここで、Okが帰ってくることはない */},
                         Err(control_syn::ControlSynErr::SETTING) => {}
                         Err(log) => result::output_log(log),
-                        Ok(_) => {},
                     }
                     executable_area = func_process.nodes[1 + index].block.unwrap();
                     // for文を呼び出す indexをfor文の最初の処理の位置にする
