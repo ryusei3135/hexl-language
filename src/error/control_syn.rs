@@ -1,5 +1,5 @@
 
-
+#[derive(PartialEq)]
 pub enum ControlSynErr {
     /// エラー
     InvalidIterCond,

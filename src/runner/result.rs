@@ -20,12 +20,16 @@ pub fn output_log(log: control_syn::ControlSynErr) {
 #[macro_export]
 macro_rules! update_array_index {
     ($index:ident, $cond_status:ident) => {
+        var_manager().remove_stack();
+        var_manager().make_new_stack();
+
         match $cond_status.now_loop(None, None) {
             Ok(cond_location) => {
                 $index = cond_location + 1;
                 continue;
             }
             Err(log) => {
+                var_manager().remove_stack();
                 output_log(log);
                 break;
             }

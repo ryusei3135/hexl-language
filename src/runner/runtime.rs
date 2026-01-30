@@ -91,16 +91,15 @@ fn start_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::Contr
                     );
                 }
                 loop_status.as_mut().unwrap().2 = Some(result.1.clone());
-                // *loop_status = loop_status;
                 Ok(())
             } else {
                 //  反復処理の終了
-                var_manager().remove_stack();
+                // var_manager().remove_stack();
                 Err(control_syn::ControlSynErr::EndLoop)
             }
         }
         Err(e) => {
-            var_manager().remove_stack();
+            // var_manager().remove_stack();
             Err(e)
         }
     }
@@ -124,7 +123,7 @@ impl CondStatus {
                 loop_count.unwrap(),
                 None
             ));
-            var_manager().make_new_stack();
+
             return Err(
                 match start_for_loop(&mut status.2.clone()) {
                     Ok(_) => control_syn::ControlSynErr::SETTING,
@@ -137,8 +136,6 @@ impl CondStatus {
         }
 
         // 実行フェーズ
-        var_manager().remove_stack();
-        var_manager().make_new_stack();
         match start_for_loop(&mut status.2) {
             //  for文が続くので、条件がある場所を返す
             Ok(_) => Ok(status.2.clone().unwrap().0),

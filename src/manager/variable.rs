@@ -32,13 +32,13 @@ impl VariableManager {
     /// 変数を探す
     pub fn search_var(&self, name: &String) -> Option<usize> {
         // 現在のスタック領域を探す
-        for index in 0..self.region_stack_index.last().unwrap().len()+1 {
-            if self.variables_info_vec[index].name == *name {
-                return Some(index);
+        for index in self.region_stack_index.last().unwrap() {
+            if self.variables_info_vec[*index].name == *name {
+                return Some(*index);
             }
         }
         // 静的領域を探す
-        for index in 0..self.region_static_index.len()+1 {
+        for index in self.region_static_index.clone() {
             if self.variables_info_vec[index].name == *name {
                 return Some(index);
             }

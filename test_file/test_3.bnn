@@ -10,7 +10,7 @@ def add() {
 def start() {
     let k = add()
     let a = 10
-    let o = 0
+    let o = 20
     io.print("Hello world")
     for h in 5 {
         io.print("for start")

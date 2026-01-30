@@ -208,17 +208,21 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     runtime::process_kind(node::NodeKind::NodeNull);
                     cond_status.push(true, now_area);
                     // for文の設定をする
+                    var_manager().make_new_stack();
                     match cond_status.now_loop(
                         Some(index.try_into().unwrap()),
                         Some(*func_process.nodes[index].left_node.clone().unwrap())
                     ) {
                         Ok(_) => {/* そもそもここで、Okが帰ってくることはない */},
-                        Err(control_syn::ControlSynErr::SETTING) => {}
-                        Err(log) => result::output_log(log),
+                        Err(log) => {
+                            if log != control_syn::ControlSynErr::SETTING {
+                                result::output_log(log);
+                            }
+                        }
                     }
                     executable_area = func_process.nodes[1 + index].block.unwrap();
                     // for文を呼び出す indexをfor文の最初の処理の位置にする
-                    crate::update_array_index!(index, cond_status);
+                    // crate::update_array_index!(index, cond_status);
                 }
                 node::NodeKind::NodeRet => {
                     global_state::var_manager().remove_stack();

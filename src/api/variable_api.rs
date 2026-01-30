@@ -30,7 +30,7 @@ pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
         value,
         VarRegion::Stack,
     );
-    return call_var_value(var_name.clone());
+    call_var_value(var_name.clone())
 }
 
 //  変数の値の上書き
