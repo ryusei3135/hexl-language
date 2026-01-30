@@ -217,12 +217,11 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                         Err(log) => {
                             if log != control_syn::ControlSynErr::SETTING {
                                 result::output_log(log);
+                            } else {
+                                executable_area = func_process.nodes[1 + index].block.unwrap();
                             }
                         }
                     }
-                    executable_area = func_process.nodes[1 + index].block.unwrap();
-                    // for文を呼び出す indexをfor文の最初の処理の位置にする
-                    // crate::update_array_index!(index, cond_status);
                 }
                 node::NodeKind::NodeRet => {
                     global_state::var_manager().remove_stack();
