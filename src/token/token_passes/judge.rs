@@ -1,4 +1,6 @@
-use crate::token::token;
+use super::*;
+/// このモジュールはトークン同士をつなげる
+/// 関数がある
 
 
 fn connect_with_name_token(

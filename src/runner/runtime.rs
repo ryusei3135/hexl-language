@@ -1,18 +1,18 @@
 use super::*;
 
 ///  条件分岐などの現在の式が何かを代入
-static PROCESS_KIND: OnceLock<Mutex<node::NodeKind>> = OnceLock::new();
+static CONTROL_SYN_FLAG: OnceLock<Mutex<node::NodeKind>> = OnceLock::new();
 
 
-pub fn process_kind(kind: node::NodeKind) {
-    *PROCESS_KIND
+pub fn control_syn_flag(kind: node::NodeKind) {
+    *CONTROL_SYN_FLAG
         .get_or_init(|| Mutex::new(node::NodeKind::NodeNull))
         .lock()
         .unwrap() = kind;
 }
 
-pub fn get_process_kind() -> node::NodeKind {
-    PROCESS_KIND
+pub fn get_control_syn_flag() -> node::NodeKind {
+    CONTROL_SYN_FLAG
         .get_or_init(|| Mutex::new(node::NodeKind::NodeNull))
         .lock()
         .unwrap()
@@ -29,12 +29,12 @@ type LoopStatus =
         )
     >;
 
-pub struct CondStatus {
+pub struct ControlSynFlag {
     pub status: Vec<(bool, usize, LoopStatus)>,
 }
 
 /// 条件分岐に関する処理
-impl CondStatus {
+impl ControlSynFlag {
     pub fn new() -> Self {
         Self {
             status: Vec::<
@@ -78,8 +78,7 @@ impl CondStatus {
 }
 
 /// for文のみ
-/// この関数を呼び出す前にスタックを新しく確保しているので、例外を返す前に現在のスタックを削除すること
-fn start_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::ControlSynErr> {
+fn running_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::ControlSynErr> {
     match is_for_iterable(loop_status.clone().unwrap().1.clone(), &loop_status.clone().unwrap().2.clone()) {
         Ok(result) => {
             if result.0 {
@@ -106,7 +105,7 @@ fn start_for_loop(loop_status: &mut LoopStatus) -> Result<(), control_syn::Contr
 }
 
 /// 反復処理に関する関数
-impl CondStatus {
+impl ControlSynFlag {
     ///  反復処理がこれから始まることを設定
     pub fn now_loop(
         &mut self,
@@ -125,7 +124,7 @@ impl CondStatus {
             ));
 
             return Err(
-                match start_for_loop(&mut status.2.clone()) {
+                match running_for_loop(&mut status.2.clone()) {
                     Ok(_) => control_syn::ControlSynErr::SETTING,
                     Err(e) => {
                         self.status.pop();
@@ -136,7 +135,7 @@ impl CondStatus {
         }
 
         // 実行フェーズ
-        match start_for_loop(&mut status.2) {
+        match running_for_loop(&mut status.2) {
             //  for文が続くので、条件がある場所を返す
             Ok(_) => Ok(status.2.clone().unwrap().0),
             Err(e) => {

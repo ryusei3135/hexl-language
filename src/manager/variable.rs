@@ -15,8 +15,12 @@ pub struct MethodInfo {
 }
 
 pub struct VariableManager {
+    // 変数のデータを保持する動的配列
     pub variables_info_vec: Vec<VariableInfo>,
+    // variables_info_vecの変数のうちスタック領域に属している
+    // 変数の場所を配列にしている
     pub region_stack_index: Vec<Vec<usize>>,
+    // 静的領域にある変数の場所
     pub region_static_index: Vec<usize>,
 }
 
@@ -29,7 +33,7 @@ impl VariableManager {
             region_static_index: Vec::<usize>::new(),
         }
     }
-    /// 変数を探す
+    /// 渡された変数の名前と合致する変数を各領域から探す
     pub fn search_var(&self, name: &String) -> Option<usize> {
         // 現在のスタック領域を探す
         for index in self.region_stack_index.last().unwrap() {

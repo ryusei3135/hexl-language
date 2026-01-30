@@ -136,23 +136,23 @@ pub fn node_run(
             type_info::VarValue::Null(false)
         }
         node::NodeKind::NodeIf => {
-            runtime::process_kind(node::NodeKind::NodeIf);
+            runtime::control_syn_flag(node::NodeKind::NodeIf);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeIfElse => {
-            runtime::process_kind(node::NodeKind::NodeIfElse);
+            runtime::control_syn_flag(node::NodeKind::NodeIfElse);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeElse => {
-            runtime::process_kind(node::NodeKind::NodeElse);
+            runtime::control_syn_flag(node::NodeKind::NodeElse);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeFor => {
-            runtime::process_kind(node::NodeKind::NodeFor);
+            runtime::control_syn_flag(node::NodeKind::NodeFor);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeRet => {
-            runtime::process_kind(node::NodeKind::NodeRet);
+            runtime::control_syn_flag(node::NodeKind::NodeRet);
             node_run(*node.left_node.unwrap().clone())
         }
         _ => panic!("node run 2"),
@@ -161,7 +161,7 @@ pub fn node_run(
 
 fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     global_state::var_manager().make_new_stack();
-    let mut cond_status = runtime::CondStatus::new();
+    let mut cond_status = runtime::ControlSynFlag::new();
     let mut index: usize = 0;
     let mut executable_area: usize = 1;
 
@@ -176,9 +176,9 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
         if now_area == executable_area {
             let result = node_run(func_process.nodes[index].clone());
 
-            match runtime::get_process_kind() {
+            match runtime::get_control_syn_flag() {
                 node::NodeKind::NodeIf => {
-                    runtime::process_kind(node::NodeKind::NodeNull);
+                    runtime::control_syn_flag(node::NodeKind::NodeNull);
                     if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         //  trueを代入すると、つながっている条件分岐がスキップされる
                         cond_status.push(true, now_area);
@@ -188,7 +188,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     }
                 }
                 node::NodeKind::NodeIfElse => {
-                    runtime::process_kind(node::NodeKind::NodeNull);
+                    runtime::control_syn_flag(node::NodeKind::NodeNull);
                     if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         if cond_status.judge_cond(now_area) {
                             cond_status.cond_true();
@@ -197,7 +197,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     }
                 }
                 node::NodeKind::NodeElse => {
-                    runtime::process_kind(node::NodeKind::NodeNull);
+                    runtime::control_syn_flag(node::NodeKind::NodeNull);
                     if cond_status.judge_cond(now_area) {
                         //  else文なので、条件のデータを削除する
                         cond_status.del();
@@ -205,7 +205,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     }
                 }
                 node::NodeKind::NodeFor => {
-                    runtime::process_kind(node::NodeKind::NodeNull);
+                    runtime::control_syn_flag(node::NodeKind::NodeNull);
                     cond_status.push(true, now_area);
                     // for文の設定をする
                     var_manager().make_new_stack();
@@ -226,7 +226,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 }
                 node::NodeKind::NodeRet => {
                     global_state::var_manager().remove_stack();
-                    runtime::process_kind(node::NodeKind::NodeNull);
+                    runtime::control_syn_flag(node::NodeKind::NodeNull);
                     return result;
                 }
                 _ => {

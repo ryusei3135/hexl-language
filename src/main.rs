@@ -1,6 +1,5 @@
-use std::env;
-mod load;
 mod lib;
+mod load;
 mod parse;
 mod runner;
 mod token;
@@ -8,6 +7,8 @@ mod manager;
 mod error;
 mod package;
 mod api;
+
+use std::env;
 
 
 fn main() {
