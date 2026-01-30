@@ -1,6 +1,4 @@
 use super::*;
-use crate::runner::control_info::ControlSemantics;
-use crate::runner::run::node_run;
 
 
 pub fn get_variable_info(name: String) -> Result<variable::VariableInfo, define_msg::VarErrorOrLog> {
@@ -56,7 +54,7 @@ pub fn update_var_value(
 pub fn is_for_iterable(
         loop_cond: node::CalculNode,
         now_value: &Option<type_info::VarValue>
-) -> Result<(bool, type_info::VarValue, ControlSemantics), ControlSynErr> {
+) -> IterStatus {
     match loop_cond.node_type {
         node::NodeKind::NodeIn => {
             let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());

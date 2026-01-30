@@ -1,8 +1,9 @@
 pub mod variable_api;
 pub mod arg_api;
 pub mod type_api;
+mod lang_api_type;
 
-
+use lang_api_type::*;
 use crate::manager::{variable, global_state, type_info};
 use crate::parse::node;
 use crate::runner::run;
@@ -11,6 +12,8 @@ use crate::manager::VarRegion;
 use crate::error::*;
 use crate::create_type_api;
 use crate::error::control_syn::ControlSynErr;
+use crate::runner::control_info::ControlSemantics;
+use crate::runner::run::node_run;
 
 // type_api.rs
 #[macro_export]
@@ -26,17 +29,14 @@ macro_rules! create_type_api {
 }
 
 mod iter {
-    use crate::error::control_syn::ControlSynErr;
-    use crate::manager::type_info;
-    use crate::parse::node;
-    use crate::runner::control_info::ControlSemantics;
+    use super::*;
 
     pub fn update_loop_var(
             iterable_value: type_info::VarValue,
             now_value: &Option<type_info::VarValue>,
             binds_var: bool,
             loop_cond: &node::CalculNode,
-    ) -> Result<(bool, type_info::VarValue, ControlSemantics), ControlSynErr> {
+    ) -> IterStatus {
         match (iterable_value, now_value.clone().unwrap()) {
             (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
                 if l != r {
