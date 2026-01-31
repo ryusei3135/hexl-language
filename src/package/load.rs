@@ -48,6 +48,7 @@ pub fn load_native_lib(package_node: node::CalculNode) {
 
             manage::add_module(module);
         } else {
+            println!("failure lib");
         }
     }
 

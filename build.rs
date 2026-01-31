@@ -3,6 +3,15 @@ use std::{env, fs, path::Path};
 
 
 fn compile_std_lib() {
+    let out_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let src = Path::new(&out_dir).join("std_lib/io.yaml");
+    let dst = Path::new(&out_dir).join("extern_lib/std/io.yaml");
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    println!("cargo:warning=src={}", src.display());
+    fs::copy(src, dst).expect("failed to copy io.yaml");
+
     let cpp_file = "std_lib/io.cpp";
     // 出力先
     let target_dir = Path::new("extern_lib/std");
