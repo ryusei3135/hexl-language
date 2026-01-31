@@ -1,6 +1,6 @@
 pub mod control_info;
 pub mod run;
-pub mod runtime;
+pub mod flags;
 mod boolify;
 mod expand;
 mod result;
