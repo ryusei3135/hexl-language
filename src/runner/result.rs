@@ -12,6 +12,9 @@ pub fn output_log(log: control_syn::ControlSynErr) {
         control_syn::ControlSynErr::ValueIsOfInvalidType => {
             eprintln!("[err]: This type cannot be used in control statements");
         }
+        control_syn::ControlSynErr::MissingCondInForStatement => {
+            eprintln!("[err]: For statement condition not found");
+        }
         control_syn::ControlSynErr::EndLoop => {},
         _ => println!("err loop"),
     }
@@ -29,6 +32,7 @@ macro_rules! update_array_index {
                 continue;
             }
             Err(log) => {
+                $cond_status.del();
                 var_manager().remove_stack();
                 output_log(log);
                 break;

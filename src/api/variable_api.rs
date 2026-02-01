@@ -50,56 +50,116 @@ pub fn update_var_value(
     return Err(define_msg::VarErrorOrLog::VarIsNotDefined);
 }
 
-
-pub fn is_for_iterable(
-        loop_cond: node::CalculNode,
-        now_value: &Option<type_info::VarValue>
-) -> IterStatus {
-    match loop_cond.node_type {
-        node::NodeKind::NodeIn => {
-            let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
-
-            if *now_value == None {
-                return match iterable_value {
-                    type_info::VarValue::Int32(_) => {
-                        Ok(
-                            (
-                                true,
-                                type_info::VarValue::Int32(0),
-                                ControlSemantics::BindsVar(loop_cond.value.clone()),
-                            )
-                        )
-                    }
-                    _ => {
-                        Err(ControlSynErr::ValueIsOfInvalidType)
-                    }
-                };
-            }
-            // mod.rsで定義
-            iter::update_loop_var(iterable_value, now_value, true, &loop_cond)
+fn setting_iter_status(
+        loop_range: type_info::VarValue,
+        bind_value: Option<String>
+) -> Result<IterStatus, ControlSynErr> {
+    return match loop_range {
+        type_info::VarValue::Int32(end) => {
+            init_iter_status(
+                [
+                    type_info::VarValue::Int32(0),
+                    type_info::VarValue::Int32(end),
+                ],
+                bind_value,
+            )
         }
-        node::NodeKind::NodeNum => {
-            let iterable_value = node_run(*loop_cond.left_node.clone().unwrap());
-
-            if *now_value == None {
-                return match iterable_value {
-                    type_info::VarValue::Int32(_) => {
-                        Ok(
-                            (
-                                true,
-                                type_info::VarValue::Int32(0),
-                                ControlSemantics::NotBinds
-                            )
-                        )
-                    }
-                    _ => {
-                        Err(ControlSynErr::ValueIsOfInvalidType)
-                    }
-                };
-            }
-
-            iter::update_loop_var(iterable_value, now_value, false, &loop_cond)
+        _ => {
+            // for文で使えない型
+            Err(ControlSynErr::ValueIsOfInvalidType)
         }
-        _ => return Err(ControlSynErr::ValueIsOfInvalidType),
+    };
+}
+
+pub fn update_loop_var(
+        iter_now_status: &mut IterStatus,
+) -> Result<(), ControlSynErr> {
+    let loop_var = iter_now_status.loop_var.clone();
+
+    match (iter_now_status.range.clone(), loop_var) {
+        ([type_info::VarValue::Int32(_), type_info::VarValue::Int32(r)], type_info::VarValue::Int32(v)) => {
+            if v + 1 < r {
+                iter_now_status.loop_var = type_info::VarValue::Int32(v + 1);
+            } else {
+                // 範囲の外になったので、for文を終わらせる
+                iter_now_status.executable = false;
+            }
+            Ok(())
+        }
+        _ => Err(ControlSynErr::ValueIsOfInvalidType),
     }
 }
+
+/// for文の初期化やループ変数の更新のどをする関数
+/// IterStatus は lang_api_type.rsを参照
+/// # 引数
+/// - loop_condはfor文の条件のノード
+/// - now_valueは現在のfor文の状態(ループ変数の値など)
+pub fn is_for_iterable(
+        loop_cond: Option<node::CalculNode>,
+        now_for_status: Option<IterStatus>,
+) -> Result<IterStatus, ControlSynErr> {
+    if let Some(cond) = loop_cond {
+        match cond.node_type {
+            node::NodeKind::NodeIn => {
+                return match now_for_status {
+                    Some(mut status) => {
+                        update_loop_var(&mut status)?;
+                        Ok(status)
+                    }
+                    None => {
+                        setting_iter_status(
+                            node_run(*cond.left_node.clone().unwrap()),
+                            Some(cond.value.clone())
+                        )
+                    }
+                };
+            }
+            node::NodeKind::NodeNum => {
+                return match now_for_status {
+                    Some(mut status) => {
+                        update_loop_var(&mut status)?;
+                        Ok(status)
+                    }
+                    None => {
+                        setting_iter_status(
+                            node_run(*cond.left_node.clone().unwrap()),
+                            None,
+                        )
+                    }
+                };
+            }
+            _ => return Err(ControlSynErr::ValueIsOfInvalidType),
+        }
+    } else {
+        return match now_for_status {
+            Some(mut status) => {
+                update_loop_var(&mut status)?;
+                Ok(status)
+            }
+            None => {
+                Err(ControlSynErr::MissingCondInForStatement)
+            }
+        };
+    }
+}
+
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::manager::type_info;
+
+//     #[test]
+//     fn check_setting_iter_status() {
+//         let result = setting_iter_status(
+//             type_info::VarValue::Int32(5),
+//             Some("test".to_string())
+//         );
+//     }
+
+//     #[test]
+//     fn check_init_for_iter_status() {
+//         is_for_iterable();
+//     }
+// }

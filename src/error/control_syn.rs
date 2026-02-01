@@ -1,10 +1,12 @@
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum ControlSynErr {
     /// エラー
-    InvalidIterCond,
     DataIsNotFound,
+    InvalidIterCond,
     ValueIsOfInvalidType,
+    /// システムエラー
+    MissingCondInForStatement,
     /// ログ
     EndLoop,
     SETTING,

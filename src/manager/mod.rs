@@ -14,7 +14,7 @@ use crate::error::define_msg;
 macro_rules! create_var_type_data {
     ($($member:ident : $type:ty,)*) => {
         ///  変数の値を持つデータつき列挙型
-        #[derive(Clone, PartialEq)]
+        #[derive(Clone, PartialEq, Debug)]
         pub enum VarValue {
             $($member($type)),*
         }
