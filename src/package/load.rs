@@ -51,6 +51,4 @@ pub fn load_native_lib(package_node: node::CalculNode) {
             println!("failure lib");
         }
     }
-
-    println!("{}:{}", library_dir, library_filename);
 }

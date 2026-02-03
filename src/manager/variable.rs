@@ -82,9 +82,6 @@ impl VariableManager {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
         } else {
-            if self.region_stack_index.is_empty() {
-                println!("[system err]: region stack index is empty");
-            }
             //  新しく作る変数の領域を設定
             match region {
                 VarRegion::Heap => {},

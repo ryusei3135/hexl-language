@@ -26,55 +26,103 @@ pub struct LoopStatus {
     status: Option<IterStatus>,          // 反復処理の情
 }
 
+enum SynFlag {
+    Cond {
+        executed_flag: bool,
+        my_block: usize,
+    },
+    For {
+        status: Option<IterStatus>,
+        for_start: Option<usize>,
+        my_block: usize,
+    },
+}
+
 pub struct ControlSynFlag {
-    pub status: Vec<(bool, usize, Option<LoopStatus>)>,
+    status: Vec<SynFlag>,
 }
 
 /// 条件分岐に関する処理
 impl ControlSynFlag {
     pub fn new() -> Self {
         Self {
-            status: Vec::<
-                (
-                    bool,   // 条件分岐ですでにtrueになっていないか
-                    usize,    // 条件分岐のブロックがある場所
-                    Option<LoopStatus>
-                )
-            >::new()
+            status: Vec::<SynFlag>::new()
         }
     }
 
-    pub fn push(&mut self, cond: bool, block: usize) {
-        if self.status.len() > 0 {
-            if self.status.last().unwrap().1 == block {
-                if let Some((flag, _value, _is_loop)) = self.status.last_mut() {
-                    *flag = cond;
-                    return;
-                }
+    pub fn make_new_flag(
+            &mut self,
+            cond: bool,
+            block: usize,
+            flag: node::NodeKind
+    ) {
+        match flag {
+            node::NodeKind::NodeIf => {
+                self.status.push(
+                    SynFlag::Cond {
+                        executed_flag: cond,
+                        my_block: block
+                    }
+                );
             }
+            node::NodeKind::NodeFor => {
+                self.status.push(
+                    SynFlag::For {
+                        status: None,
+                        for_start: None,
+                        my_block: block,
+                    }
+                );
+            }
+            _ => panic!("[system err]: An invalid flag was assigned when setting control syntax flags."),
         }
-
-        self.status.push((cond, block, None));
     }
     /// 今の条件分岐の条件がtrueのほかに、前回までに、trueになった場所がないか、
     /// 同じブロック内にいるかを確認し、booleanを返す
     pub fn judge_cond(&self, now_block: usize) -> bool {
         //  エリアが同じかつ、今までの条件で、trueになってなければ、今の条件を実行可能
-        self.status.last().unwrap().1 == now_block && !self.status.last().unwrap().0
-    }
-
-    pub fn cond_true(&mut self) {
-        if let Some((flag, _value, _loop)) = self.status.last_mut() {
-            *flag = true;   // ← list[last].0 を変更
+        match self.status.last().unwrap() {
+            SynFlag::Cond { executed_flag, my_block } => *my_block == now_block && !executed_flag,
+            _ => panic!("don't if flag"),
         }
     }
 
+    /// if else文がtrueになった際に、下に続いている条件分岐を実行しないようにする
+    pub fn cond_status_true(&mut self) {
+        match self.status.last().unwrap() {
+            SynFlag::Cond { mut executed_flag, my_block } => executed_flag = true,
+            _ => panic!("don't if flag"),
+        }
+    }
+    /// 現在のフラグを削除
     pub fn del(&mut self) {
         self.status.pop().unwrap();
     }
+
+    pub fn get_now_flag(&self) -> Option<node::NodeKind> {
+        if let Some(flags) = self.status.last() {
+            Some(
+                match flags {
+                    SynFlag::Cond {..} => node::NodeKind::NodeIf,
+                    SynFlag::For {..}=> node::NodeKind::NodeFor,
+                }
+            )
+        } else {
+            None
+        }
+    }
 }
 
-/// for文のみ
+/// # 引数
+/// - for_loop_status
+///     現在のｆｏｒ文の情報がある変数
+/// - loop_cond
+///     ｆｏｒ文の条件のノード初期化以外のときは、None
+/// # 戻り値
+/// - Ok
+///     更新されたfor文の情報
+/// - Err
+///     for文の情報を更新する際に起こったエラーの情報
 fn running_for_loop(
         for_loop_status: Option<IterStatus>,
         loop_cond: Option<node::CalculNode>,
@@ -97,27 +145,40 @@ fn running_for_loop(
 
 /// 反復処理に関する関数
 impl ControlSynFlag {
+    /// for文の初期化やループ変数などの更新などをする関数
+    /// # 引数
+    /// - iter_cond_node
+    ///     for文の条件のノード
+    ///     すでに条件が設定された場合はNoneを代入すること
+    /// # 戻り値
+    /// - もしfor文を初期化した場合、初期化したことを表す
+    /// - SETTINGを返す
+    /// - ふつうはｆｏｒ文の条件がある行を返す
     fn update_loop_var(
             &mut self,
             iter_cond_node: Option<node::CalculNode>,
     ) -> Result<usize, control_syn::ControlSynErr> {
-        let status = self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)?;
+        match self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)? {
+            SynFlag::For { status, for_start, my_block } => {
+                return match running_for_loop(status.clone(), iter_cond_node.clone()) {
+                    Ok(result) => {
+                        // ループ変数を更新
+                        *status = Some(result);
 
-        match running_for_loop(status.2.clone().unwrap().status, iter_cond_node.clone()) {
-            Ok(result) => {
-                if let Some(loop_status) = status.2.as_mut() {
-                    loop_status.status = Some(result);
-                }
-                if iter_cond_node.is_none() {
-                    Ok(status.2.clone().unwrap().for_start)
-                } else {
-                    Err(control_syn::ControlSynErr::SETTING)
-                }
+                        if iter_cond_node.is_none() {
+                            Ok(for_start.unwrap())
+                        } else {
+                            Err(control_syn::ControlSynErr::SETTING)
+                        }
+                    }
+                    Err(e) => {
+                        Err(e)
+                    }
+                };
             }
-            Err(e) => {
-                Err(e)
-            }
+            _ => panic!("JH"),
         }
+        Err(control_syn::ControlSynErr::DataIsNotFound)
     }
 
     ///  反復処理がこれから始まることを設定
@@ -126,17 +187,14 @@ impl ControlSynFlag {
         cond_location: Option<usize>,
         iter_cond_node: Option<node::CalculNode>,
     ) -> Result<usize, control_syn::ControlSynErr> {
-
-        let status = self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)?;
-
         // 設定フェーズ
         return if cond_location.is_some() && iter_cond_node.is_some() {
-            status.2 = Some(
-                LoopStatus {
-                    for_start: cond_location.unwrap(),
-                    status: None,
-                }
-            );
+            match self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)? {
+                SynFlag::For { status, for_start, my_block } => {
+                    *for_start = Some(cond_location.unwrap());
+                },
+                _ => panic!("JJJ"),
+            }
 
             self.update_loop_var(iter_cond_node.clone())
         } else {

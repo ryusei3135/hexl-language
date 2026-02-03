@@ -13,6 +13,11 @@ def start() {
     let o = 20
     io.print("Hello world")
     for h in 5 {
+        if h == 3 {
+            io.print("h is 3")
+        } else {
+            io.print("other")
+        }
         h = h + 0
         io.print("for loop")
     }

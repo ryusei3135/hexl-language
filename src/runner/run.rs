@@ -181,17 +181,17 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     flags::control_syn_flag(node::NodeKind::NodeNull);
                     if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         //  trueを代入すると、つながっている条件分岐がスキップされる
-                        cond_status.push(true, now_area);
+                        cond_status.make_new_flag(true, now_area, node::NodeKind::NodeIf);
                         executable_area = func_process.nodes[1 + index].block.unwrap();
                     } else {
-                        cond_status.push(false, now_area);
+                        cond_status.make_new_flag(false, now_area, node::NodeKind::NodeIf);
                     }
                 }
                 node::NodeKind::NodeIfElse => {
                     flags::control_syn_flag(node::NodeKind::NodeNull);
                     if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         if cond_status.judge_cond(now_area) {
-                            cond_status.cond_true();
+                            cond_status.cond_status_true();
                             executable_area = func_process.nodes[1 + index].block.unwrap();
                         }
                     }
@@ -199,14 +199,12 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 node::NodeKind::NodeElse => {
                     flags::control_syn_flag(node::NodeKind::NodeNull);
                     if cond_status.judge_cond(now_area) {
-                        //  else文なので、条件のデータを削除する
-                        cond_status.del();
                         executable_area = func_process.nodes[1 + index].block.unwrap();
                     }
                 }
                 node::NodeKind::NodeFor => {
                     flags::control_syn_flag(node::NodeKind::NodeNull);
-                    cond_status.push(true, now_area);
+                    cond_status.make_new_flag(true, now_area, node::NodeKind::NodeFor);
                     // for文の設定をする
                     var_manager().make_new_stack();
                     match cond_status.now_loop(
@@ -238,7 +236,21 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 }
             }
         } else if now_area < executable_area {
-            crate::update_array_index!(index, cond_status);
+            if let Some(flag) = cond_status.get_now_flag() {
+                match flag {
+                    node::NodeKind::NodeIf => {
+                        executable_area = now_area;
+                        cond_status.del();
+                        continue;
+                    }
+                    node::NodeKind::NodeFor => {
+                        crate::update_array_index!(index, cond_status);
+                    }
+                    _ => panic!("[err: run func run]"),
+                }
+            } else {
+                eprintln!("[what?]");
+            }
         }
         index += 1;
     }
