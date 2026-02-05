@@ -1,31 +1,8 @@
+//! 制御構文のフラグをもとに新しく一時的なデータを作成し
+//! それをもとに実行結果を変える
 use super::*;
 
-///  条件分岐などの現在の式が何かを代入
-static CONTROL_SYN_FLAG: OnceLock<Mutex<node::NodeKind>> = OnceLock::new();
-
-
-pub fn control_syn_flag(kind: node::NodeKind) {
-    *CONTROL_SYN_FLAG
-        .get_or_init(|| Mutex::new(node::NodeKind::NodeNull))
-        .lock()
-        .unwrap() = kind;
-}
-
-pub fn get_control_syn_flag() -> node::NodeKind {
-    CONTROL_SYN_FLAG
-        .get_or_init(|| Mutex::new(node::NodeKind::NodeNull))
-        .lock()
-        .unwrap()
-        .clone()
-}
-
-///  反復処理の情報
-#[derive(Clone)]
-pub struct LoopStatus {
-    for_start: usize,             // 反復処理の条件がある場所
-    status: Option<IterStatus>,          // 反復処理の情
-}
-
+/// 制御構文で使うフラグ
 enum SynFlag {
     Cond {
         executed_flag: bool,
@@ -38,6 +15,7 @@ enum SynFlag {
     },
 }
 
+/// この構造体で、フラグを元に実行結果を制御
 pub struct ControlSynFlag {
     status: Vec<SynFlag>,
 }
@@ -90,7 +68,7 @@ impl ControlSynFlag {
     /// if else文がtrueになった際に、下に続いている条件分岐を実行しないようにする
     pub fn cond_status_true(&mut self) {
         match self.status.last().unwrap() {
-            SynFlag::Cond { mut executed_flag, my_block } => executed_flag = true,
+            SynFlag::Cond { mut executed_flag, my_block: _ } => executed_flag = true,
             _ => panic!("don't if flag"),
         }
     }
@@ -159,7 +137,7 @@ impl ControlSynFlag {
             iter_cond_node: Option<node::CalculNode>,
     ) -> Result<usize, control_syn::ControlSynErr> {
         match self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)? {
-            SynFlag::For { status, for_start, my_block } => {
+            SynFlag::For { status, for_start, my_block: _ } => {
                 return match running_for_loop(status.clone(), iter_cond_node.clone()) {
                     Ok(result) => {
                         // ループ変数を更新
@@ -176,9 +154,8 @@ impl ControlSynFlag {
                     }
                 };
             }
-            _ => panic!("JH"),
+            _ => Err(control_syn::ControlSynErr::DataIsNotFound),
         }
-        Err(control_syn::ControlSynErr::DataIsNotFound)
     }
 
     ///  反復処理がこれから始まることを設定
@@ -190,7 +167,7 @@ impl ControlSynFlag {
         // 設定フェーズ
         return if cond_location.is_some() && iter_cond_node.is_some() {
             match self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)? {
-                SynFlag::For { status, for_start, my_block } => {
+                SynFlag::For { status: _, for_start, my_block: _ } => {
                     *for_start = Some(cond_location.unwrap());
                 },
                 _ => panic!("JJJ"),

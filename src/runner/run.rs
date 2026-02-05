@@ -136,23 +136,23 @@ pub fn node_run(
             type_info::VarValue::Null(false)
         }
         node::NodeKind::NodeIf => {
-            flags::control_syn_flag(node::NodeKind::NodeIf);
+            flags::syn_flag::control_syn_flag(node::NodeKind::NodeIf);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeIfElse => {
-            flags::control_syn_flag(node::NodeKind::NodeIfElse);
+            flags::syn_flag::control_syn_flag(node::NodeKind::NodeIfElse);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeElse => {
-            flags::control_syn_flag(node::NodeKind::NodeElse);
+            flags::syn_flag::control_syn_flag(node::NodeKind::NodeElse);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeFor => {
-            flags::control_syn_flag(node::NodeKind::NodeFor);
+            flags::syn_flag::control_syn_flag(node::NodeKind::NodeFor);
             type_info::VarValue::Null(true)
         }
         node::NodeKind::NodeRet => {
-            flags::control_syn_flag(node::NodeKind::NodeRet);
+            flags::syn_flag::control_syn_flag(node::NodeKind::NodeRet);
             node_run(*node.left_node.unwrap().clone())
         }
         _ => panic!("node run 2"),
@@ -161,7 +161,7 @@ pub fn node_run(
 
 fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     global_state::var_manager().make_new_stack();
-    let mut cond_status = flags::ControlSynFlag::new();
+    let mut cond_status = flags::handle_flag::ControlSynFlag::new();
     let mut index: usize = 0;
     let mut executable_area: usize = 1;
 
@@ -176,9 +176,9 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
         if now_area == executable_area {
             let result = node_run(func_process.nodes[index].clone());
 
-            match flags::get_control_syn_flag() {
+            match flags::syn_flag::get_control_syn_flag() {
                 node::NodeKind::NodeIf => {
-                    flags::control_syn_flag(node::NodeKind::NodeNull);
+                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
                     if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         //  trueを代入すると、つながっている条件分岐がスキップされる
                         cond_status.make_new_flag(true, now_area, node::NodeKind::NodeIf);
@@ -188,7 +188,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     }
                 }
                 node::NodeKind::NodeIfElse => {
-                    flags::control_syn_flag(node::NodeKind::NodeNull);
+                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
                     if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
                         if cond_status.judge_cond(now_area) {
                             cond_status.cond_status_true();
@@ -197,13 +197,13 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     }
                 }
                 node::NodeKind::NodeElse => {
-                    flags::control_syn_flag(node::NodeKind::NodeNull);
+                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
                     if cond_status.judge_cond(now_area) {
                         executable_area = func_process.nodes[1 + index].block.unwrap();
                     }
                 }
                 node::NodeKind::NodeFor => {
-                    flags::control_syn_flag(node::NodeKind::NodeNull);
+                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
                     cond_status.make_new_flag(true, now_area, node::NodeKind::NodeFor);
                     // for文の設定をする
                     var_manager().make_new_stack();
@@ -223,7 +223,7 @@ fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                 }
                 node::NodeKind::NodeRet => {
                     global_state::var_manager().remove_stack();
-                    flags::control_syn_flag(node::NodeKind::NodeNull);
+                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
                     return result;
                 }
                 _ => {
