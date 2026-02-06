@@ -133,13 +133,12 @@ pub fn node_run(
             }
             type_info::VarValue::Null(false)
         }
-        node::NodeKind::NodeRet => {
-            flags::syn_flag::control_syn_flag(node::NodeKind::NodeRet);
-            node_run(*node.left_node.unwrap().clone())
-        }
+        node::NodeKind::NodeRet => type_info::VarValue::Flag(node::NodeKind::NodeRet),
         flag => {
-            let _ = flags::flag_switch::set_runtime_flag(flag);
-            type_info::VarValue::Null(true)
+            match flags::flag_switch::set_runtime_flag(&flag) {
+                Ok(_) => type_info::VarValue::Flag(flag),
+                Err(_) => panic!("::"),
+            }
         }
     }
 }

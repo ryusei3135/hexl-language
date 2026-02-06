@@ -6,7 +6,6 @@ pub mod lang_api_type;
 use lang_api_type::*;
 use crate::manager::*;
 use crate::parse::node;
-use crate::runner::run;
 use crate::manager::func;
 use crate::manager::VarRegion;
 use crate::error::*;

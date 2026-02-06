@@ -11,7 +11,7 @@ mod cond_branch_flag {
             block_status: &mut [usize; 2],
             cond_status: &mut flags::handle_flag::ControlSynFlag,
     ) {
-        flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
+        cond_status.flag = node::NodeKind::NodeNull;
         if boolify::node_to_bool(*node[*index].left_node.clone().unwrap()) {
             //  trueを代入すると、つながっている条件分岐がスキップされる
             cond_status.make_new_flag(true, block_status[1], node::NodeKind::NodeIf);
@@ -27,7 +27,7 @@ mod cond_branch_flag {
             block_status: &mut [usize; 2],
             cond_status: &mut flags::handle_flag::ControlSynFlag,
     ) {
-        flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
+        cond_status.flag = node::NodeKind::NodeNull;
         if boolify::node_to_bool(*node[*index].left_node.clone().unwrap()) {
             if cond_status.judge_cond(block_status[1]) {
                 cond_status.cond_status_true();
@@ -43,7 +43,7 @@ unsafe fn node_for(
         block_status: &mut [usize; 2],
         cond_status: &mut flags::handle_flag::ControlSynFlag,
 ) {
-    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
+    cond_status.flag = node::NodeKind::NodeNull;
     cond_status.make_new_flag(true, block_status[1], node::NodeKind::NodeFor);
     // for文の設定をする
     var_manager().make_new_stack();
@@ -54,7 +54,7 @@ unsafe fn node_for(
         Ok(_) => {/* そもそもここで、Okが帰ってくることはない */},
         Err(log) => {
             if log != control_syn::ControlSynErr::SETTING {
-                log::output_log_L0(log);
+                log::output_log_l0(log);
             } else {
                 block_status[0] = node[1 + *index].block.unwrap();
             }
@@ -81,20 +81,27 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
         if block_status[1] == block_status[0] {
             let result = eval::node_run(func_process.nodes[index].clone());
 
-            match flags::syn_flag::get_control_syn_flag() {
-                node::NodeKind::NodeIf => unsafe {cond_branch_flag::node_if(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
-                node::NodeKind::NodeIfElse => unsafe {cond_branch_flag::node_if_else(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
-                node::NodeKind::NodeElse => {
-                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
-                    if cond_status.judge_cond(block_status[1]) {
-                        block_status[0] = func_process.nodes[1 + index].block.unwrap();
+            match result {
+                type_info::VarValue::Flag(syntax_flag) => {
+                    cond_status.flag = syntax_flag.clone();
+
+                    match syntax_flag {
+                        node::NodeKind::NodeIf => unsafe {cond_branch_flag::node_if(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
+                        node::NodeKind::NodeIfElse => unsafe {cond_branch_flag::node_if_else(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
+                        node::NodeKind::NodeElse => {
+                            cond_status.flag = node::NodeKind::NodeNull;
+                            if cond_status.judge_cond(block_status[1]) {
+                                block_status[0] = func_process.nodes[1 + index].block.unwrap();
+                            }
+                        }
+                        node::NodeKind::NodeFor => unsafe {node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
+                        node::NodeKind::NodeRet => {
+                            global_state::var_manager().remove_stack();
+                            cond_status.flag = node::NodeKind::NodeNull;
+                            return eval::node_run(*func_process.nodes[index].left_node.clone().unwrap());
+                        }
+                        _ => panic!("panic syntax flag"),
                     }
-                }
-                node::NodeKind::NodeFor => unsafe {node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
-                node::NodeKind::NodeRet => {
-                    global_state::var_manager().remove_stack();
-                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
-                    return result;
                 }
                 _ => {
                     println!("[{}] [value]", match result {

@@ -143,23 +143,3 @@ pub fn is_for_iterable(
         };
     }
 }
-
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::manager::type_info;
-
-//     #[test]
-//     fn check_setting_iter_status() {
-//         let result = setting_iter_status(
-//             type_info::VarValue::Int32(5),
-//             Some("test".to_string())
-//         );
-//     }
-
-//     #[test]
-//     fn check_init_for_iter_status() {
-//         is_for_iterable();
-//     }
-// }

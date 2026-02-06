@@ -1,7 +1,7 @@
 use super::*;
 
 
-pub fn output_log_L0(log: control_syn::ControlSynErr) {
+pub fn output_log_l0(log: control_syn::ControlSynErr) {
     match log {
         control_syn::ControlSynErr::DataIsNotFound => {
             eprintln!("[err]:[E:S00:L0] for loop data is not found");

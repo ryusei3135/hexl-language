@@ -1,4 +1,4 @@
-use crate::create_var_type_data;
+use super::*;
 
 create_var_type_data!(
     Int32: i32,
