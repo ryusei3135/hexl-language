@@ -64,11 +64,10 @@ impl ControlSynFlag {
             _ => panic!("don't if flag"),
         }
     }
-
     /// if else文がtrueになった際に、下に続いている条件分岐を実行しないようにする
     pub fn cond_status_true(&mut self) {
-        match self.status.last().unwrap() {
-            SynFlag::Cond { mut executed_flag, my_block: _ } => executed_flag = true,
+        match self.status.last_mut().unwrap() {
+            SynFlag::Cond { executed_flag, my_block: _ } => *executed_flag = true,
             _ => panic!("don't if flag"),
         }
     }
@@ -76,7 +75,7 @@ impl ControlSynFlag {
     pub fn del(&mut self) {
         self.status.pop().unwrap();
     }
-
+    /// 現在のフラグを返す
     pub fn get_now_flag(&self) -> Option<node::NodeKind> {
         if let Some(flags) = self.status.last() {
             Some(
@@ -95,7 +94,7 @@ impl ControlSynFlag {
 /// - for_loop_status
 ///     現在のｆｏｒ文の情報がある変数
 /// - loop_cond
-///     ｆｏｒ文の条件のノード初期化以外のときは、None
+///     ｆｏｒ文のノード初期化以外のときは、None
 /// # 戻り値
 /// - Ok
 ///     更新されたfor文の情報

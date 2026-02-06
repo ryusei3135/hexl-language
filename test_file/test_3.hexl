@@ -19,6 +19,5 @@ def start() {
             io.print("other")
         }
         h = h + 0
-        io.print("for loop")
     }
 }

@@ -1,9 +1,10 @@
 pub mod control_info;
 pub mod run;
 pub mod flags;
+pub mod eval;
 mod boolify;
 mod expand;
-mod result;
+mod runtime_macro;
 
 
 use crate::manager::{
@@ -21,5 +22,5 @@ use crate::api::{
     arg_api,
 };
 use crate::parse::node;
-use crate::runner::result::output_log;
-use crate::error::control_syn;
+use crate::error::*;
+use crate::manager::global_state;

@@ -8,3 +8,4 @@ pub mod control_syn;
 /// 変数や関数などの定義に関するログ
 pub mod define_msg;
 pub mod err_handling;
+pub mod log;

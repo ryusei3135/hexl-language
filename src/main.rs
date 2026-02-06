@@ -16,7 +16,7 @@ fn main() {
 
     if args.len() > 1 {
         let file_path = &args[1];
-        if file_path.contains(".bnn") {
+        if file_path.contains(".hexl") {
             load::load_file(file_path).unwrap();
         }
     }

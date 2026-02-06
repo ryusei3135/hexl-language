@@ -21,7 +21,7 @@ pub fn call_var_value(name: String) -> type_info::VarValue {
 pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
     let var_name = node.value;
 
-    let value = run::node_run(*node.right_node.clone().unwrap());
+    let value = eval::node_run(*node.right_node.clone().unwrap());
 
     global_state::var_manager().add_var(
         var_name.clone(),
@@ -37,7 +37,7 @@ pub fn update_var_value(
 ) -> Result<type_info::VarValue, define_msg::VarErrorOrLog> {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
         let var_name = node.left_node.unwrap().value.clone();
-        let value = run::node_run(*node.right_node.unwrap());
+        let value = eval::node_run(*node.right_node.unwrap());
 
         global_state::var_manager().update_var(
             var_name.clone(),
@@ -109,7 +109,7 @@ pub fn is_for_iterable(
                     }
                     None => {
                         setting_iter_status(
-                            node_run(*cond.left_node.clone().unwrap()),
+                            eval::node_run(*cond.left_node.clone().unwrap()),
                             Some(cond.value.clone())
                         )
                     }
@@ -123,7 +123,7 @@ pub fn is_for_iterable(
                     }
                     None => {
                         setting_iter_status(
-                            node_run(*cond.left_node.clone().unwrap()),
+                            eval::node_run(*cond.left_node.clone().unwrap()),
                             None,
                         )
                     }
