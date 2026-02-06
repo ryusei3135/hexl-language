@@ -5,7 +5,7 @@ use super::*;
 /// などを比較し処理を分岐させる
 #[macro_export]
 macro_rules! branch_if_cond_flag {
-    ($flag:expr, $cond_status:expr) => {
+    ($flag:expr, $cond_status:expr, $block:ident) => {
         match flags::flag_switch::set_runtime_flag($flag) {
             Ok(syn) => {
                 // ノードの種類が条件分岐でないなら
@@ -23,6 +23,8 @@ macro_rules! branch_if_cond_flag {
                 $cond_status.del();
             }
         }
+        $block[0] = $block[1];
+        continue;
     };
 }
 

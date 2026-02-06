@@ -1,13 +1,74 @@
 //! インタプリのパイプライン
-
 use super::*;
+
+/// 条件分岐のフラグを立てるかどうかを制御
+mod cond_branch_flag {
+    use super::*;
+
+    pub unsafe fn node_if(
+            node: &Vec<node::CalculNode>,
+            index: &usize,
+            block_status: &mut [usize; 2],
+            cond_status: &mut flags::handle_flag::ControlSynFlag,
+    ) {
+        flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
+        if boolify::node_to_bool(*node[*index].left_node.clone().unwrap()) {
+            //  trueを代入すると、つながっている条件分岐がスキップされる
+            cond_status.make_new_flag(true, block_status[1], node::NodeKind::NodeIf);
+            block_status[0] = node[1 + *index].block.unwrap();
+        } else {
+            cond_status.make_new_flag(false, block_status[1], node::NodeKind::NodeIf);
+        }
+    }
+
+    pub unsafe fn node_if_else(
+            node: &Vec<node::CalculNode>,
+            index: &usize,
+            block_status: &mut [usize; 2],
+            cond_status: &mut flags::handle_flag::ControlSynFlag,
+    ) {
+        flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
+        if boolify::node_to_bool(*node[*index].left_node.clone().unwrap()) {
+            if cond_status.judge_cond(block_status[1]) {
+                cond_status.cond_status_true();
+                block_status[0] = node[1 + *index].block.unwrap();
+            }
+        }
+    }
+}
+
+unsafe fn node_for(
+        node: &Vec<node::CalculNode>,
+        index: &usize,
+        block_status: &mut [usize; 2],
+        cond_status: &mut flags::handle_flag::ControlSynFlag,
+) {
+    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
+    cond_status.make_new_flag(true, block_status[1], node::NodeKind::NodeFor);
+    // for文の設定をする
+    var_manager().make_new_stack();
+    match cond_status.now_loop(
+        Some(*index),
+        Some(*node[*index].left_node.clone().unwrap())
+    ) {
+        Ok(_) => {/* そもそもここで、Okが帰ってくることはない */},
+        Err(log) => {
+            if log != control_syn::ControlSynErr::SETTING {
+                log::output_log_L0(log);
+            } else {
+                block_status[0] = node[1 + *index].block.unwrap();
+            }
+        }
+    }
+}
 
 /// インタプリを実行するパイプライン
 pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     global_state::var_manager().make_new_stack();
     let mut cond_status = flags::handle_flag::ControlSynFlag::new();
     let mut index: usize = 0;
-    let mut executable_area: usize = 1;
+    // 0は実行可能なブロック、1は現在のブロック
+    let mut block_status: [usize; 2] = [1, 0];
 
     while func_process.nodes.len() >= index {
         // 配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
@@ -15,56 +76,21 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
             crate::update_array_index!(index, cond_status);
         }
 
-        let now_area = func_process.nodes[index].block.unwrap();
+        block_status[1] = func_process.nodes[index].block.unwrap();
 
-        if now_area == executable_area {
+        if block_status[1] == block_status[0] {
             let result = eval::node_run(func_process.nodes[index].clone());
 
             match flags::syn_flag::get_control_syn_flag() {
-                node::NodeKind::NodeIf => {
-                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
-                    if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
-                        //  trueを代入すると、つながっている条件分岐がスキップされる
-                        cond_status.make_new_flag(true, now_area, node::NodeKind::NodeIf);
-                        executable_area = func_process.nodes[1 + index].block.unwrap();
-                    } else {
-                        cond_status.make_new_flag(false, now_area, node::NodeKind::NodeIf);
-                    }
-                }
-                node::NodeKind::NodeIfElse => {
-                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
-                    if boolify::node_to_bool(*func_process.nodes[index].left_node.clone().unwrap()) {
-                        if cond_status.judge_cond(now_area) {
-                            cond_status.cond_status_true();
-                            executable_area = func_process.nodes[1 + index].block.unwrap();
-                        }
-                    }
-                }
+                node::NodeKind::NodeIf => unsafe {cond_branch_flag::node_if(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
+                node::NodeKind::NodeIfElse => unsafe {cond_branch_flag::node_if_else(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
                 node::NodeKind::NodeElse => {
                     flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
-                    if cond_status.judge_cond(now_area) {
-                        executable_area = func_process.nodes[1 + index].block.unwrap();
+                    if cond_status.judge_cond(block_status[1]) {
+                        block_status[0] = func_process.nodes[1 + index].block.unwrap();
                     }
                 }
-                node::NodeKind::NodeFor => {
-                    flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
-                    cond_status.make_new_flag(true, now_area, node::NodeKind::NodeFor);
-                    // for文の設定をする
-                    var_manager().make_new_stack();
-                    match cond_status.now_loop(
-                        Some(index.try_into().unwrap()),
-                        Some(*func_process.nodes[index].left_node.clone().unwrap())
-                    ) {
-                        Ok(_) => {/* そもそもここで、Okが帰ってくることはない */},
-                        Err(log) => {
-                            if log != control_syn::ControlSynErr::SETTING {
-                                log::output_log_L0(log);
-                            } else {
-                                executable_area = func_process.nodes[1 + index].block.unwrap();
-                            }
-                        }
-                    }
-                }
+                node::NodeKind::NodeFor => unsafe {node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
                 node::NodeKind::NodeRet => {
                     global_state::var_manager().remove_stack();
                     flags::syn_flag::control_syn_flag(node::NodeKind::NodeNull);
@@ -79,16 +105,15 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     });
                 }
             }
-        } else if now_area < executable_area {
+        } else if block_status[1] < block_status[0] {
             if let Some(flag) = cond_status.get_now_flag() {
                 match flag {
                     node::NodeKind::NodeIf => {
                         crate::branch_if_cond_flag!(
                             func_process.nodes[index].node_type.clone(),
-                            cond_status
+                            cond_status,
+                            block_status
                         );
-                        executable_area = now_area;
-                        continue;
                     }
                     node::NodeKind::NodeFor => {
                         crate::update_array_index!(index, cond_status);
