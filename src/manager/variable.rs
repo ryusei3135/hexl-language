@@ -164,3 +164,60 @@ impl VariableManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RANGE: [&str; 5] = [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+    ];
+
+    /// スタック領域だけ確認
+    #[test]
+    fn check_remove_stack() {
+        let mut variables = VariableManager::new();
+        for i in 0..3 {
+            variables.make_new_stack();
+            for v in RANGE {
+                variables.add_var(
+                    (v.to_owned() + i.to_string().as_str()).to_string(),
+                    type_info::VarValue::Int32(10),
+                    VarRegion::Stack
+                );
+            }
+        }
+        assert_eq!(variables.variables_info_vec.len(), 15);
+        assert_eq!(variables.region_stack_index.len(), 3);
+        variables.remove_stack();
+        assert_eq!(variables.variables_info_vec.len(), 10);
+    }
+
+    #[test]
+    fn check_stack_and_static() {
+        let mut variables = VariableManager::new();
+        for i in 0..3 {
+            variables.make_new_stack();
+            for v in RANGE {
+                variables.add_var(
+                    (v.to_owned() + i.to_string().as_str()).to_string(),
+                    type_info::VarValue::Int32(10),
+                    VarRegion::Stack
+                );
+            }
+            variables.add_var(
+                ("k".to_owned() + i.to_string().as_str()).to_string(),
+                type_info::VarValue::Int32(10),
+                VarRegion::Static
+            );
+        }
+        assert_eq!(variables.variables_info_vec.len(), 18);
+        assert_eq!(variables.region_stack_index.len(), 3);
+        variables.remove_stack();
+        assert_eq!(variables.variables_info_vec.len(), 13);
+    }
+}

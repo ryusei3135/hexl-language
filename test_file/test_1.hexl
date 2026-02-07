@@ -1,6 +1,10 @@
+def add(<i32>arg_1, <i32>arg_2) {
+    ret arg_1 + 1 * arg_2
+}
+
 def start() {
-    let <i32>a100 = -100
-    a100 = a100 + 1
+    let <i32>a100 = add(10, 2)
+    a100 = a100 + 1 + add(20, 10)
     let <char>j_l = "hello world!!"
     let <i32>hello_world = 1
     let <i32>hoge = 1

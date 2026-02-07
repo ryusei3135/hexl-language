@@ -117,8 +117,7 @@ pub fn node_run(
         node::NodeKind::NodeDefVar => variable_api::define_var(node.clone()),
         node::NodeKind::NodeCallFunc => {
             let func_data = func_manager().get_func(&node.value.clone());
-            arg_api::make_args_var(func_data.clone().args.clone(), *node.left_node.unwrap().clone());
-            run::run_func(func_data)
+            run::run_func(func_data, &Some(*node.left_node.unwrap()))
         }
         node::NodeKind::NodeReceiver => {
             let receiver_name = node.value.clone();

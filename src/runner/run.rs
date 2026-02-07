@@ -66,8 +66,14 @@ unsafe fn node_for(
 }
 
 /// インタプリを実行するパイプライン
-pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
+pub(super) fn run_func(
+        func_process: func::FuncNode,
+        args_value: &Option<node::CalculNode>
+) -> type_info::VarValue {
     global_state::var_manager().make_new_stack();
+    if let Some(args) = args_value {
+        arg_api::make_args_var(&func_process.args, args);
+    }
     let mut cond_status = handle_flag::ControlSynFlag::new();
     let mut index: usize = 0;
     // 0は実行可能なブロック、1は現在のブロック
@@ -126,8 +132,11 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                         }
                         node::NodeKind::NodeFor => unsafe {node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
                         node::NodeKind::NodeRet => {
-                            global_state::var_manager().remove_stack();
-                            return eval::node_run(*func_process.nodes[index].left_node.clone().unwrap());
+                            return {
+                                let r = eval::node_run(*func_process.nodes[index].left_node.clone().unwrap());
+                                global_state::var_manager().remove_stack();
+                                r
+                            };
                         }
                         _ => panic!("panic syntax flag"),
                     }
@@ -170,5 +179,5 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
 pub fn start_process() {
     let start_process = func_manager().get_func("start");
 
-    run_func(start_process);
+    run_func(start_process, &None);
 }
