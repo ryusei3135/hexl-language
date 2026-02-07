@@ -44,7 +44,7 @@ fn create_type_data() {
     let mut body_info = String::new();
     let mut body_api = String::new();
 
-    type_info_head.push_str("use crate::create_var_type_data;\n\n");
+    type_info_head.push_str("use super::*;\n\n");
     type_info_head.push_str("create_var_type_data!(\n");
     type_api_head.push_str("use super::*;\n\n");
     type_api_head.push_str("create_type_api!(\n");
