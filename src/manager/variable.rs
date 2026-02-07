@@ -83,7 +83,7 @@ impl VariableManager {
     }
     /// スコープ内にあるすべてのスタック領域を削除し自身を削除する
     pub fn remove_scope(&mut self) {
-        for i in self.local_scope.last().unwrap().clone() {
+        for _ in self.local_scope.last().unwrap().clone() {
             self.remove_stack();
         }
         self.local_scope.pop();
