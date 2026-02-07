@@ -70,6 +70,7 @@ pub(super) fn run_func(
         func_process: func::FuncNode,
         args_value: &Option<node::CalculNode>
 ) -> type_info::VarValue {
+    global_state::var_manager().make_scope();
     global_state::var_manager().make_new_stack();
     if let Some(args) = args_value {
         arg_api::make_args_var(&func_process.args, args);
@@ -136,6 +137,7 @@ pub(super) fn run_func(
                             if type_api::match_type_kind(&func_process.ret_type, &r) {
                                 return {
                                     global_state::var_manager().remove_stack();
+                                    global_state::var_manager().remove_scope();
                                     r
                                 };
                             } else {
@@ -176,6 +178,7 @@ pub(super) fn run_func(
         index += 1;
     }
     global_state::var_manager().remove_stack();
+    global_state::var_manager().remove_scope();
     type_info::VarValue::Null(false)
 }
 

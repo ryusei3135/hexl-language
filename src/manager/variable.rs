@@ -20,6 +20,8 @@ pub struct VariableManager {
     // variables_info_vecの変数のうちスタック領域に属している
     // 変数の場所を配列にしている
     pub region_stack_index: Vec<Vec<usize>>,
+    // 関数の中にあるスタック領域をすべて管理
+    pub local_scope: Vec<Vec<usize>>,
     // 静的領域にある変数の場所
     pub region_static_index: Vec<usize>,
 }
@@ -30,15 +32,18 @@ impl VariableManager {
         Self {
             variables_info_vec: Vec::<VariableInfo>::new(),
             region_stack_index: Vec::<Vec<usize>>::new(),
+            local_scope: Vec::<Vec<usize>>::new(),
             region_static_index: Vec::<usize>::new(),
         }
     }
     /// 渡された変数の名前と合致する変数を各領域から探す
     pub fn search_var(&self, name: &String) -> Option<usize> {
         // 現在のスタック領域を探す
-        for index in self.region_stack_index.last().unwrap() {
-            if self.variables_info_vec[*index].name == *name {
-                return Some(*index);
+        for stack_pos in self.local_scope.last().unwrap() {
+            for index in &self.region_stack_index[*stack_pos] {
+                if self.variables_info_vec[*index].name == *name {
+                    return Some(*index);
+                }
             }
         }
         // 静的領域を探す
@@ -52,15 +57,36 @@ impl VariableManager {
     }
     /// 新しくスタック領域を作成
     pub fn make_new_stack(&mut self) {
-        self.region_stack_index.push(Vec::<usize>::new());
+        if self.local_scope.is_empty() {
+            panic!("[system err] scope is not found");
+        } else {
+            self.local_scope.last_mut().unwrap().push(self.region_stack_index.len());
+            self.region_stack_index.push(Vec::<usize>::new());
+        }
     }
     /// スタック領域を削除
     pub fn remove_stack(&mut self) {
-        if let Some(index_vec) = self.region_stack_index.pop() {
-            for index in index_vec.iter().rev() {
-                self.variables_info_vec.remove(*index);
+        if self.local_scope.last().unwrap().len() > 0 {
+            if let Some(index_vec) = self.region_stack_index.pop() {
+                for index in index_vec.iter().rev() {
+                    self.variables_info_vec.remove(*index);
+                }
             }
+            self.local_scope.last_mut().unwrap().pop();
+        } else {
+            panic!("[system err] No stack space in scope");
         }
+    }
+    /// 新しくスコープを作成
+    pub fn make_scope(&mut self) {
+        self.local_scope.push(Vec::<usize>::new());
+    }
+    /// スコープ内にあるすべてのスタック領域を削除し自身を削除する
+    pub fn remove_scope(&mut self) {
+        for i in self.local_scope.last().unwrap().clone() {
+            self.remove_stack();
+        }
+        self.local_scope.pop();
     }
     ///  変数のデータを返す
     pub fn get_var(&self, name: String) -> Result<VariableInfo, define_msg::VarErrorOrLog> {
@@ -177,19 +203,28 @@ mod tests {
         "e",
     ];
 
+    fn make_test_stack_var(
+            variables: &mut VariableManager,
+            i: usize,
+    ) {
+        for v in RANGE {
+            variables.add_var(
+                (v.to_owned() + i.to_string().as_str()).to_string(),
+                type_info::VarValue::Int32(10),
+                VarRegion::Stack
+            );
+        }
+    }
+
     /// スタック領域だけ確認
     #[test]
     fn check_remove_stack() {
         let mut variables = VariableManager::new();
+        variables.make_scope();
+
         for i in 0..3 {
             variables.make_new_stack();
-            for v in RANGE {
-                variables.add_var(
-                    (v.to_owned() + i.to_string().as_str()).to_string(),
-                    type_info::VarValue::Int32(10),
-                    VarRegion::Stack
-                );
-            }
+            make_test_stack_var(&mut variables, i);
         }
         assert_eq!(variables.variables_info_vec.len(), 15);
         assert_eq!(variables.region_stack_index.len(), 3);
@@ -200,15 +235,11 @@ mod tests {
     #[test]
     fn check_stack_and_static() {
         let mut variables = VariableManager::new();
+        variables.make_scope();
+
         for i in 0..3 {
             variables.make_new_stack();
-            for v in RANGE {
-                variables.add_var(
-                    (v.to_owned() + i.to_string().as_str()).to_string(),
-                    type_info::VarValue::Int32(10),
-                    VarRegion::Stack
-                );
-            }
+            make_test_stack_var(&mut variables, i);
             variables.add_var(
                 ("k".to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
@@ -219,5 +250,25 @@ mod tests {
         assert_eq!(variables.region_stack_index.len(), 3);
         variables.remove_stack();
         assert_eq!(variables.variables_info_vec.len(), 13);
+    }
+
+    #[test]
+    fn check_move_scope() {
+        let mut variables = VariableManager::new();
+        variables.make_scope();
+
+        for i in 0..3 {
+            variables.make_new_stack();
+            make_test_stack_var(&mut variables, i);
+        }
+        variables.make_scope();
+        for i in 3..6 {
+            variables.make_new_stack();
+            make_test_stack_var(&mut variables, i);
+        }
+        assert_eq!(variables.local_scope.last().unwrap().len(), 3);
+        variables.remove_scope();
+        assert_eq!(variables.local_scope.last().unwrap().len(), 3);
+        assert_eq!(variables.region_stack_index.len(), 3);
     }
 }
