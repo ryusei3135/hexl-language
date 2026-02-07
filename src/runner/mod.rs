@@ -16,10 +16,9 @@ use crate::manager::{
 };
 use crate::package::manage;
 use crate::api::{
+    *,
     lang_api_type::*,
     variable_api::*,
-    variable_api,
-    arg_api,
 };
 use crate::parse::node;
 use crate::error::*;

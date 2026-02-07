@@ -24,5 +24,14 @@ macro_rules! create_type_api {
                 _ => panic!("not found txt type"),
             }
         }
+        pub fn match_type_kind(
+                type_name: &type_info::VarType,
+                ret_value: &type_info::VarValue,
+        ) -> bool {
+            match (type_name, ret_value) {
+                $((type_info::VarType::$member, type_info::VarValue::$member(_)) => true,)*
+                _ => false,
+            }
+        }
     };
 }

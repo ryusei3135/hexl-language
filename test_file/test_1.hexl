@@ -1,4 +1,4 @@
-def add(<i32>arg_1, <i32>arg_2) {
+def add(<i32>arg_1, <i32>arg_2)<i32> {
     ret arg_1 + 1 * arg_2
 }
 

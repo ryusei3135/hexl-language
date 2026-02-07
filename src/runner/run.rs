@@ -132,11 +132,15 @@ pub(super) fn run_func(
                         }
                         node::NodeKind::NodeFor => unsafe {node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
                         node::NodeKind::NodeRet => {
-                            return {
-                                let r = eval::node_run(*func_process.nodes[index].left_node.clone().unwrap());
-                                global_state::var_manager().remove_stack();
-                                r
-                            };
+                            let r = eval::node_run(*func_process.nodes[index].left_node.clone().unwrap());
+                            if type_api::match_type_kind(&func_process.ret_type, &r) {
+                                return {
+                                    global_state::var_manager().remove_stack();
+                                    r
+                                };
+                            } else {
+                                panic!("Return type mismatch");
+                            }
                         }
                         _ => panic!("panic syntax flag"),
                     }

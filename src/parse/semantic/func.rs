@@ -92,7 +92,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut usize) -> manager
         return manager::func::FuncNode {
             name: tokens[func_name_index.unwrap()].lexeme.clone(),
             args: args,
-            ret_value_type: type_api::change_txt_type_to_type(
+            ret_type: type_api::change_txt_type_to_type(
                 if func_ret_value_node.is_none() {
                     "null".to_string()
                 } else {
