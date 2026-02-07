@@ -77,7 +77,23 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
     while func_process.nodes.len() >= index {
         // 配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
         if func_process.nodes.len() == index {
-            crate::update_array_index!(index, cond_status);
+            if let Some(flag) = cond_status.get_now_flag() {
+                match flag {
+                    node::NodeKind::NodeIf => {
+                        crate::branch_if_cond_flag!(
+                            func_process.nodes[index].node_type.clone(),
+                            cond_status,
+                            block_status
+                        );
+                    }
+                    node::NodeKind::NodeFor => {
+                        crate::update_array_index!(index, cond_status);
+                    }
+                    _ => panic!("[err: run func run]"),
+                }
+            } else {
+                break;
+            }
         }
 
         block_status[1] = func_process.nodes[index].block.unwrap();
@@ -141,7 +157,7 @@ pub(super) fn run_func(func_process: func::FuncNode) -> type_info::VarValue {
                     _ => panic!("[err: run func run]"),
                 }
             } else {
-                eprintln!("[what?]");
+                eprintln!("[what?]44");
             }
         }
         index += 1;
