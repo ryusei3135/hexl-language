@@ -18,7 +18,6 @@ enum SynFlag {
 /// この構造体で、フラグを元に実行結果を制御
 pub struct ControlSynFlag {
     status: Vec<SynFlag>,
-    pub flag: node::NodeKind,
 }
 
 /// 条件分岐に関する処理
@@ -26,7 +25,6 @@ impl ControlSynFlag {
     pub fn new() -> Self {
         Self {
             status: Vec::<SynFlag>::new(),
-            flag: node::NodeKind::NodeNull,
         }
     }
 

@@ -135,7 +135,7 @@ pub fn node_run(
         }
         node::NodeKind::NodeRet => type_info::VarValue::Flag(node::NodeKind::NodeRet),
         flag => {
-            match flags::flag_switch::set_runtime_flag(&flag) {
+            match flag_switch::set_runtime_flag(&flag) {
                 Ok(_) => type_info::VarValue::Flag(flag),
                 Err(_) => panic!("::"),
             }
