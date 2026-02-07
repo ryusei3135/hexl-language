@@ -39,6 +39,7 @@ pub enum TokenKind {
     TokenScope,     //  "::"
     TokenLBracket,  //  "["
     TokenRBracket,  //  "]"
+    TokenRangeOp,   //  ".."
     TokenDot,
 
     //  キーワード

@@ -18,13 +18,20 @@ pub struct IterStatus {
 ///     for文を使って反復処理をする際に
 ///     Someなら渡された変数に値を代入する
 pub fn init_iter_status(
-        range: [type_info::VarValue; 2],
+        mut range: [type_info::VarValue; 2],
         bind_var_name: Option<String>,
 ) -> Result<IterStatus, ControlSynErr> {
     Ok(
         IterStatus {
             executable: true,    // 最初は反復処理を実行可能なので、trueを代入
-            loop_var: range[0].clone(), // スタート地点
+            loop_var: {
+                if let type_info::VarValue::Array(arr) = range[0].clone() {
+                    range[1] = type_info::VarValue::Int32(1);
+                    *arr[0].clone()
+                } else {
+                    range[0].clone()
+                }
+            },
             var_setting: if let Some(name) = bind_var_name {
                 ControlSemantics::BindsVar(name.clone())
             } else {

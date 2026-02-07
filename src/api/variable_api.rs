@@ -64,6 +64,15 @@ fn setting_iter_status(
                 bind_value,
             )
         }
+        type_info::VarValue::Array(value) => {
+            init_iter_status(
+                [
+                    type_info::VarValue::Array(value),
+                    type_info::VarValue::Int32(0),
+                ],
+                bind_value,
+            )
+        }
         _ => {
             // for文で使えない型
             Err(ControlSynErr::ValueIsOfInvalidType)
@@ -82,6 +91,15 @@ pub fn update_loop_var(
                 iter_now_status.loop_var = type_info::VarValue::Int32(v + 1);
             } else {
                 // 範囲の外になったので、for文を終わらせる
+                iter_now_status.executable = false;
+            }
+            Ok(())
+        }
+        ([type_info::VarValue::Array(arr), type_info::VarValue::Int32(c)], type_info::VarValue::Int32(_)) => {
+            if arr.len() > c as usize {
+                iter_now_status.loop_var = *arr[c as usize].clone();
+                iter_now_status.range[1] = type_info::VarValue::Int32(c + 1);
+            } else {
                 iter_now_status.executable = false;
             }
             Ok(())

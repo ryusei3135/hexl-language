@@ -93,6 +93,19 @@ fn connect_spacer(
     false
 }
 
+fn connect_range_op(
+        tokens: &mut token::Token,
+        now_token: token::Token
+) -> bool {
+    if tokens.lexeme.len() == 1 {
+        if now_token.kind == token::TokenKind::TokenDot {
+            tokens.change(token::TokenKind::TokenRangeOp).connect(&now_token.lexeme);
+            return true;
+        }
+    }
+    false
+}
+
 pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
     if tokens.len() > 2 {
         let last_token = tokens.pop().unwrap();
@@ -102,6 +115,7 @@ pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
             token::TokenKind::TokenSub => connect_minus_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
             token::TokenKind::TokenString => connect_string_literal(&mut tokens.last_mut().unwrap(), last_token.clone()),
             token::TokenKind::TokenSpacer => connect_spacer(&mut tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenDot => connect_range_op(&mut tokens.last_mut().unwrap(), last_token.clone()),
             _ => false,
         };
         if !result {

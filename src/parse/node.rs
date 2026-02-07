@@ -40,6 +40,7 @@ pub enum NodeKind {
     NodeFor,
     NodeRet,
     NodeIn,
+    NodeRangeOp,
     //  参照
     NodeStd,
     NodeSrc,

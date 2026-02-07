@@ -89,6 +89,32 @@ fn make_array_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcul
     array_node
 }
 
+fn make_range_node(
+        tokens: &Vec<token::Token>,
+        index: &mut usize
+) -> node::CalculNode {
+    let mut node = resp::handler::make_null_node();
+    node.left_node = Some(
+        Box::new(
+            resp::handler::convert_value_to_node(
+                tokens[*index].lexeme.clone(),
+                node::NodeKind::NodeNum
+            )
+        )
+    );
+    node.right_node = Some(
+        Box::new(
+            resp::handler::convert_value_to_node(
+                tokens[*index + 2].lexeme.clone(),
+                node::NodeKind::NodeNum
+            )
+        )
+    );
+    node.node_type = node::NodeKind::NodeRangeOp;
+    *index += 3;
+    node
+}
+
 ///  呼び出す値が関数か変数かを調べる
 pub fn call_value_node(
         tokens: Vec<token::Token>,
@@ -156,6 +182,11 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcu
 
     match current_token.kind {
         token::TokenKind::TokenNum => {
+            if tokens.len() > *index + 1 {
+                if tokens[*index + 1].kind == token::TokenKind::TokenRangeOp {
+                    return make_range_node(&tokens, index);
+                }
+            }
             *index += 1;
             return resp::handler::make_value_node(
                 current_token,
