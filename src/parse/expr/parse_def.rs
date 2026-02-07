@@ -23,17 +23,17 @@ fn format_assign_var_node(
 }
 
 
-pub fn parse_var_def(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+pub fn parse_var_def(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     let mut starts_with_new_var: bool = false;
     let mut node = resp::handler::convert_value_to_node(
         "[*null*]".to_string(),
         node::NodeKind::NodeNull
     );
 
-    while tokens.len() > *index as usize {
+    while tokens.len() > *index {
         if starts_with_new_var {
             //  変数を宣言するノード作成成
-            match tokens[*index as usize].kind {
+            match tokens[*index].kind {
                 token::TokenKind::TokenNewVar => {
                     eprintln!("banana [syntax err]: line {}", tokens[0].line);
                     eprintln!("unexpected keyword `let`");
@@ -56,7 +56,7 @@ pub fn parse_var_def(tokens: Vec<token::Token>, index: &mut i32) -> node::Calcul
                 },
             }
         } else {
-            match tokens[*index as usize].kind {
+            match tokens[*index].kind {
                 //  変数を宣言
                 token::TokenKind::TokenNewVar => {
                     starts_with_new_var = true;

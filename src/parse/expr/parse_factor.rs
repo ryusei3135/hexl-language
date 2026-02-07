@@ -4,14 +4,14 @@ use crate::parse::resp;
 use crate::parse::expr::parse_comper::parse_comper_op;
 
 //  関数に渡す引数の値
-fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+fn parse_func_arg(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     *index += 1;
     let mut args_node = resp::handler::make_null_node();
     let mut args_list = Vec::<node::CalculNode>::new();
     let mut allow_arg: bool = true;
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenComma => {
                 allow_arg = true;
             }
@@ -45,12 +45,12 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNod
 }
 
 /// 配列のノードを作成、実行時に配列に展開
-fn make_array_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+fn make_array_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     let mut array_node = resp::handler::make_null_node();
     let mut can_next_be_value: bool = true;
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenComma => {
                 if !can_next_be_value {
                     can_next_be_value = true;
@@ -93,11 +93,11 @@ fn make_array_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNo
 pub fn call_value_node(
         tokens: Vec<token::Token>,
         current_token: token::Token,
-        index: &mut i32
+        index: &mut usize
 ) -> node::CalculNode {
-    if tokens.len() > 1 + *index as usize {
+    if tokens.len() > 1 + *index {
         *index += 1;
-        match tokens[*index as usize].kind {
+        match tokens[*index].kind {
             token::TokenKind::TokenLParen => {
                 let args_node = parse_func_arg(tokens.clone(), index);
                 let func_head_data = node::CalculNode {
@@ -111,7 +111,7 @@ pub fn call_value_node(
             }
             token::TokenKind::TokenRBracket => {
                 //  TokenNameの次にLParenでもTokenDotでもないかつRBracketならそれは変数
-                if tokens[(*index as usize) - 1].kind == token::TokenKind::TokenName {
+                if tokens[(*index) - 1].kind == token::TokenKind::TokenName {
                     return resp::handler::make_value_node(
                         &current_token,
                         node::NodeKind::NodeCallVar,
@@ -120,7 +120,7 @@ pub fn call_value_node(
             }
             token::TokenKind::TokenDot => {
                 *index += 1;
-                let current_token_dot = tokens[*index as usize].clone();
+                let current_token_dot = tokens[*index].clone();
                 let method_node = call_value_node(tokens, current_token_dot, index);
 
                 return resp::handler::make_receiver_node(
@@ -130,14 +130,14 @@ pub fn call_value_node(
             }
             token::TokenKind::TokenSpace => {
                 //  TokenNameの次に空白が来たらそれは変数
-                if tokens[(*index as usize) - 1].kind == token::TokenKind::TokenName {
+                if tokens[(*index) - 1].kind == token::TokenKind::TokenName {
                     return resp::handler::make_value_node(
                         &current_token,
                         node::NodeKind::NodeCallVar,
                     );
                 }
             }
-            _ => println!("what is token -> {:?}", tokens[*index as usize].kind),
+            _ => println!("what is token -> {:?}", tokens[*index].kind),
         }
     } else {
         //  変数
@@ -151,8 +151,8 @@ pub fn call_value_node(
     resp::handler::make_null_node()
 }
 
-pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
-    let current_token = &tokens.clone()[*index as usize];
+pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+    let current_token = &tokens.clone()[*index];
 
     match current_token.kind {
         token::TokenKind::TokenNum => {
@@ -167,7 +167,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
             return make_array_node(tokens.clone(), index);
         }
         token::TokenKind::TokenNot => {
-            if tokens.len() > 1 + *index as usize {
+            if tokens.len() > 1 + *index {
                 *index += 1;
                 return resp::handler::make_operator_node(
                     parse_factor(tokens, index),
@@ -175,7 +175,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
                     node::NodeKind::NodeNot
                 );
             } else {
-                println!("[syntax err]: line {}", tokens[*index as usize].line);
+                println!("[syntax err]: line {}", tokens[*index].line);
                 panic!("");
             }
         }
@@ -190,7 +190,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
         token::TokenKind::TokenLParen => {
             *index += 1; // '('をスキップ
             let node = parse_comper_op(tokens.clone(), index);
-            if tokens[*index as usize].kind == token::TokenKind::TokenRParen {
+            if tokens[*index].kind == token::TokenKind::TokenRParen {
                 *index += 1; // ')'をスキップ
             } else {
                 println!("Error: Expected ')'");

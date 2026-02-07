@@ -22,7 +22,7 @@ impl FuncManager {
 
     pub fn get_func(&self, name: &str) -> node::FuncNode {
         if let Some(index) = self.search_func(name) {
-            return self.func_datas[index as usize].clone();
+            return self.func_datas[index].clone();
         } else {
             panic!("this function is not found");
         }

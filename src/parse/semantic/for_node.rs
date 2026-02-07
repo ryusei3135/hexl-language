@@ -3,16 +3,16 @@ use super::*;
 
 pub fn make_for_node(
         tokens: Vec<token::Token>,
-        index: &mut i32
+        index: &mut usize
 ) -> node::CalculNode {
     *index += 1;
     let mut for_loop_node = resp::handler::make_null_node();
     let mut first_token = (token::TokenKind::TokenEOF, String::new());
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenNum => {
-                first_token = (token::TokenKind::TokenNum, tokens[*index as usize].lexeme.clone());
+                first_token = (token::TokenKind::TokenNum, tokens[*index].lexeme.clone());
                 for_loop_node = expr::parse_expr::parse_expr(tokens.clone(), index);
             }
             token::TokenKind::TokenLBrace => {
@@ -20,7 +20,7 @@ pub fn make_for_node(
             }
             token::TokenKind::TokenName => {
                 if first_token.0 == token::TokenKind::TokenEOF {
-                    first_token = (token::TokenKind::TokenName, tokens[*index as usize].lexeme.clone());
+                    first_token = (token::TokenKind::TokenName, tokens[*index].lexeme.clone());
                 } else {
                     println!("syntax err for semantic");
                     std::process::exit(1);

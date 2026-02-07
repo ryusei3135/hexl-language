@@ -4,15 +4,15 @@ use crate::token::token;
 use crate::parse::node;
 use crate::parse::resp;
 
-pub fn parse_type_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+pub fn parse_type_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     let mut starts_with_less_than: bool = false;
     let mut ident_seen_name: bool = false;
     let mut node = resp::handler::make_null_node();
     node.node_type = node::NodeKind::NodeType;
 
-    while tokens.len() > *index as usize {
+    while tokens.len() > *index {
         if starts_with_less_than {
-            match tokens[*index as usize].kind {
+            match tokens[*index].kind {
                 token::TokenKind::TokenGreaterThan => {
                     if !ident_seen_name {
                         eprintln!("banana [syntax err]: line {}", tokens[0].line);
@@ -32,14 +32,14 @@ pub fn parse_type_node(tokens: Vec<token::Token>, index: &mut i32) -> node::Calc
                 token::TokenKind::TokenName => {
                     //  変数の名前が来た
                     ident_seen_name = true;
-                    node.value = tokens[*index as usize].lexeme.clone();
+                    node.value = tokens[*index].lexeme.clone();
                 },
                 _ => {
                     //
                 },
             }
         } else {
-            if tokens[*index as usize].kind == token::TokenKind::TokenLessThan {
+            if tokens[*index].kind == token::TokenKind::TokenLessThan {
                 starts_with_less_than = true;
             }
         }

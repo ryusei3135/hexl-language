@@ -5,11 +5,11 @@ use crate::parse::resp;
 
 
 
-pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     let mut node = parse_expr::parse_expr(tokens.clone(), index);
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenEqTo => {
                 *index += 1;
                 let right = parse_expr::parse_expr(tokens.clone(), index);

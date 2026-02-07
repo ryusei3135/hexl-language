@@ -6,15 +6,15 @@ use crate::parse::resp;
 
 
 //  変数に値を代入するノードを作成
-pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+pub fn parse_assign(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     let mut first_var_name: bool = false;
     let mut node = resp::handler::make_value_node(
         &tokens[0],
         node::NodeKind::NodeVarName,
     );
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenAssign => {
                 if first_var_name {
                     node.node_type = node::NodeKind::NodeVarName;
@@ -32,7 +32,7 @@ pub fn parse_assign(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculN
             },
             token::TokenKind::TokenName => {
                 if !first_var_name {
-                    let current_token = tokens[*index as usize].clone();
+                    let current_token = tokens[*index].clone();
                     node = parse_factor::call_value_node(
                         tokens.clone(),
                         current_token,

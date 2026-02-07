@@ -16,11 +16,11 @@ impl Parser {
             &mut self,
             token: Vec<token::Token>
     ) {
-        let mut index: i32 = 0;
+        let mut index: usize = 0;
         // 式などのノードを作成する関数を呼び出すときは、indexを何もせずに
         // そのままで渡すこと
-        while token.len() > index as usize {
-            match token[index as usize].kind {
+        while token.len() > index {
+            match token[index].kind {
                 token::TokenKind::TokenNum => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
@@ -68,7 +68,7 @@ impl Parser {
                     continue;
                 }
                 _ => {
-                    println!("{:?}", token[index as usize].kind);
+                    println!("{:?}", token[index].kind);
                 }
             }
 

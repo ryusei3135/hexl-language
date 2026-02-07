@@ -71,27 +71,27 @@ fn make_lib_name(state: &mut PackageState, token: token::Token) {
     }
 }
 
-pub fn make_use_package_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
-    if tokens[*index as usize].kind != token::TokenKind::TokenUsePackage {
+pub fn make_use_package_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+    if tokens[*index].kind != token::TokenKind::TokenUsePackage {
         eprintln!("[system err]: [file]: parse/semantic/package.rs");
         eprintln!("[func]: make_use_package_node");
         panic!("");
     }
-    if tokens.len() > (*index as usize) + 1 {
+    if tokens.len() > (*index) + 1 {
         *index += 1;
     } else {
-        println!("[use err]: -> `{}` Incomplete Import Path", tokens[*index as usize].line);
+        println!("[use err]: -> `{}` Incomplete Import Path", tokens[*index].line);
         panic!("");
     }
 
     let mut state = PackageState::new();
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
-            token::TokenKind::TokenName => make_lib_name(&mut state, tokens[*index as usize].clone()),
+    while tokens.len() > *index {
+        match tokens[*index].kind {
+            token::TokenKind::TokenName => make_lib_name(&mut state, tokens[*index].clone()),
             token::TokenKind::TokenScope => {
                 if state.allow_name {
-                    println!("[syntax err]: line -> {}", tokens[*index as usize].line);
+                    println!("[syntax err]: line -> {}", tokens[*index].line);
                     panic!("");
                 } else {
                     state.allow_name = true;

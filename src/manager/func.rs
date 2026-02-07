@@ -30,16 +30,16 @@ impl FuncManager {
         }
     }
 
-    fn search_func(&self, name: &str) -> Option<i32> {
+    fn search_func(&self, name: &str) -> Option<usize> {
         if let Some(index) = self.func_datas.iter().position(|func| func.name == name) {
-            return Some(index as i32);
+            return Some(index);
         }
         None
     }
 
     pub fn get_func(&self, name: &str) -> FuncNode {
         if let Some(index) = self.search_func(name) {
-            return self.func_datas[index as usize].clone();
+            return self.func_datas[index].clone();
         } else {
             panic!("this function is not found");
         }

@@ -13,12 +13,12 @@ fn make_init_args_node(last_node: Option<manager::func::FuncArgsNode>) -> manage
 }
 
 //  関数の引数
-fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> manager::func::FuncArgsNode {
+fn make_args_node(tokens: Vec<token::Token>, index: &mut usize) -> manager::func::FuncArgsNode {
     let mut args_node = make_init_args_node(None);
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
-            token::TokenKind::TokenName => args_node.name = tokens[*index as usize].lexeme.clone(),
+    while tokens.len() > *index {
+        match tokens[*index].kind {
+            token::TokenKind::TokenName => args_node.name = tokens[*index].lexeme.clone(),
             token::TokenKind::TokenSpace => {},
             token::TokenKind::TokenRParen => {
                 *index += 1;
@@ -46,18 +46,18 @@ fn make_args_node(tokens: Vec<token::Token>, index: &mut i32) -> manager::func::
 }
 
 //  関数ヘッダーを作成する関数
-pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> manager::func::FuncNode {
+pub fn make_func_header(tokens: Vec<token::Token>, index: &mut usize) -> manager::func::FuncNode {
     let mut func_start_keyword: bool = false;
     //  関数の名前がある場所を代入
-    let mut func_name_index: i32 = -1;
+    let mut func_name_index: Option<usize> = None;
     let mut args = make_init_args_node(None);
     let mut func_ret_value_node: Option<node::CalculNode> = None;
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenName => {
                 if func_start_keyword {
-                    func_name_index = *index;
+                    func_name_index = Some(*index);
                 } else {
                     //  関数の初めに来るキーワードがまだ出てきていない
                     break;
@@ -81,16 +81,16 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut i32) -> manager::
                 func_start_keyword = true;
             }
             _ => {
-                println!("{:?}", tokens[*index as usize].kind);
+                println!("{:?}", tokens[*index].kind);
             }
         }
         *index += 1;
     }
 
     //  もし、"func_name_index"が0未満なら、構文エラー
-    if func_name_index >= 0 {
+    if func_name_index.is_some() && func_name_index.unwrap() >= 0 {
         return manager::func::FuncNode {
-            name: tokens[func_name_index as usize].lexeme.clone(),
+            name: tokens[func_name_index.unwrap()].lexeme.clone(),
             args: args,
             ret_value_type: type_api::change_txt_type_to_type(
                 if func_ret_value_node.is_none() {

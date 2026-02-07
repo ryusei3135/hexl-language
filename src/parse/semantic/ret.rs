@@ -4,13 +4,13 @@ use crate::parse::expr::parse_comper;
 use crate::parse::resp;
 
 
-pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut i32) -> node::CalculNode {
+pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
     let mut ret_node = resp::handler::make_null_node();
     let mut ret_token: bool = false;
     ret_node.node_type = node::NodeKind::NodeRet;
 
-    while tokens.len() > *index as usize {
-        match tokens[*index as usize].kind {
+    while tokens.len() > *index {
+        match tokens[*index].kind {
             token::TokenKind::TokenRet => ret_token = true,
             token::TokenKind::TokenSpace => {}
             _ => {
