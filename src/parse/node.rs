@@ -47,7 +47,7 @@ pub enum NodeKind {
     NodeNativeFunc,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CalculNode {
     pub value: String,
     pub node_type: NodeKind,

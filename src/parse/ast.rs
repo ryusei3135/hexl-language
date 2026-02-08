@@ -27,6 +27,7 @@ impl Parser {
                 }
                 token::TokenKind::TokenFuncStart => {
                     let func_node = semantic::func::make_func_header(token.clone(), &mut index);
+                    self.brace_depth = 0;
                     func_manager().add_func(func_node);
                     continue;
                 }
@@ -63,7 +64,7 @@ impl Parser {
                     continue;
                 }
                 token::TokenKind::TokenFor => {
-                    let node = make_for_node(token.clone(), &mut index);
+                    let node = make_for_node(&token, &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                     continue;
                 }

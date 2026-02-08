@@ -3,15 +3,23 @@ use std::io
 def add(<i32>arg1)<i32> {
     if arg1 == 1 {
         arg1 = 1
+        ret arg1 * 2
     } arg1 == 2 {
         arg1 = 10
     }
     ret arg1 * 2
 }
 
+def func2()<i32> {
+    for 5 {
+        io.print("hello world")
+    }
+    ret 10
+}
+
 def start() {
     let i = add(10)
-    for h in 10 {
+    for h in 0..10 {
         if h == 3 {
             i = 10
             io.print("h is 3")

@@ -1,6 +1,6 @@
 [package]
-name = "hexl_language"
-version = "0.6.1"
+name = "hexl"
+version = "0.6.2"
 edition = "2024"
 build = "build.rs"
 

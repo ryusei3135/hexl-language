@@ -131,7 +131,11 @@ pub(super) fn run_func(
                                 del_stack = true;
                             }
                         }
-                        node::NodeKind::NodeFor => unsafe {node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);},
+                        node::NodeKind::NodeFor => {
+                            unsafe {
+                                node_for(&func_process.nodes, &index, &mut block_status, &mut cond_status);
+                            }
+                        }
                         node::NodeKind::NodeRet => {
                             let r = eval::node_run(*func_process.nodes[index].left_node.clone().unwrap());
                             if type_api::match_type_kind(&func_process.ret_type, &r) {
