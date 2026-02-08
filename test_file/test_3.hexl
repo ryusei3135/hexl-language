@@ -14,11 +14,11 @@ def func2()<i32> {
     for 5 {
         io.print("hello world")
     }
-    ret 10
+    ret e * 10
 }
 
 def start() {
-    let i = add(10)
+    let i = func2()
     for h in 0..10 {
         if h == 3 {
             i = 10

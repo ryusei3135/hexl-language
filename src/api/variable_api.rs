@@ -117,7 +117,7 @@ pub fn is_for_iterable(
         loop_cond: Option<node::CalculNode>,
         now_for_status: Option<IterStatus>,
 ) -> Result<IterStatus, ControlSynErr> {
-    if let Some(cond) = loop_cond {
+    if let Some(ref cond) = loop_cond {
         match cond.node_type {
             node::NodeKind::NodeIn => {
                 return match now_for_status {
@@ -141,7 +141,7 @@ pub fn is_for_iterable(
                     }
                     None => {
                         setting_iter_status(
-                            eval::node_run(*cond.left_node.clone().unwrap()),
+                            eval::node_run(cond.clone()),
                             None,
                         )
                     }
