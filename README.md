@@ -18,3 +18,7 @@ Hexlはrustで実装されたプログラミング言語であり
 
 ## 目的（Motivation）
 言語処理系・コンパイラ・インタプリタの学習目的で開発しています。
+
+
+## Changelog
+- [CHANGELOG.md](./CHANGELOG.md)

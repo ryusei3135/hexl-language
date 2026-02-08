@@ -41,8 +41,10 @@ macro_rules! update_array_index {
             Err(log) => {
                 $cond_status.del();
                 var_manager().remove_stack();
-                log::output_log_l0(log);
-                break;
+                if log != control_syn::ControlSynErr::EndLoop {
+                    log::output_log_l0(log);
+                    break;
+                }
             }
         }
     };

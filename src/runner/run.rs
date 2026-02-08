@@ -98,9 +98,8 @@ pub(super) fn run_func(
                     }
                     _ => panic!("[err: run func run]"),
                 }
-            } else {
-                break;
             }
+            break;
         }
 
         block_status[1] = func_process.nodes[index].block.unwrap();
@@ -172,6 +171,9 @@ pub(super) fn run_func(
                     }
                     node::NodeKind::NodeFor => {
                         crate::update_array_index!(index, cond_status);
+
+                        block_status[0] = block_status[1];
+                        continue;
                     }
                     _ => panic!("[err: run func run]"),
                 }

@@ -133,7 +133,7 @@ pub fn is_for_iterable(
                     }
                 };
             }
-            node::NodeKind::NodeNum => {
+            node::NodeKind::NodeNum | node::NodeKind::NodeRangeOp => {
                 return match now_for_status {
                     Some(mut status) => {
                         update_loop_var(&mut status)?;

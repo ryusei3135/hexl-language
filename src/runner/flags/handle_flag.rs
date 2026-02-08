@@ -169,7 +169,7 @@ impl ControlSynFlag {
                 SynFlag::For { status: _, for_start, my_block: _ } => {
                     *for_start = Some(cond_location.unwrap());
                 },
-                _ => panic!("JJJ"),
+                _ => panic!("JJJ for eval"),
             }
 
             self.update_loop_var(iter_cond_node.clone())

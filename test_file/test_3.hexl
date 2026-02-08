@@ -7,18 +7,19 @@ def add(<i32>arg1)<i32> {
     } arg1 == 2 {
         arg1 = 10
     }
+    io.print("HH")
     ret arg1 * 2
 }
 
 def func2()<i32> {
-    for 5 {
+    for 0..5 {
         io.print("hello world")
     }
-    ret e * 10
+    ret 10
 }
 
 def start() {
-    let i = func2()
+    let i = add(10) + func2()
     for h in 0..10 {
         if h == 3 {
             i = 10
