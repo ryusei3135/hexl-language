@@ -104,7 +104,7 @@ pub fn update_loop_var(
             }
             Ok(())
         }
-        _ => Err(ControlSynErr::ValueIsOfInvalidType),
+        _ => Err(ControlSynErr::InvalidIterCond),
     }
 }
 

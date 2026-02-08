@@ -87,8 +87,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut usize) -> manager
         *index += 1;
     }
 
-    //  もし、"func_name_index"が0未満なら、構文エラー
-    if func_name_index.is_some() && func_name_index.unwrap() >= 0 {
+    if func_name_index.is_some() {
         return manager::func::FuncNode {
             name: tokens[func_name_index.unwrap()].lexeme.clone(),
             args: args,
