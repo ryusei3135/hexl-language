@@ -82,19 +82,17 @@ pub(super) fn run_func(
     let mut del_stack: bool = false;
 
     while func_process.nodes.len() >= index {
-        // 配列が最後の場所になったら、条件分岐や反復処理のどの制御構文がないか確認
+        // 配列が最後の場所になったら、条件分岐や反復処理のどの制御構文のフラグが
+        // 立っていないかを確認
         if func_process.nodes.len() == index {
             if let Some(flag) = cond_status.get_now_flag() {
                 match flag {
                     node::NodeKind::NodeIf => {
-                        crate::branch_if_cond_flag!(
-                            func_process.nodes[index].node_type.clone(),
-                            cond_status,
-                            block_status
-                        );
+                        cond_status.del();
+                        continue;
                     }
                     node::NodeKind::NodeFor => {
-                        crate::update_array_index!(index, cond_status);
+                        crate::update_array_index!(index, cond_status, block_status);
                     }
                     _ => panic!("[err: run func run]"),
                 }
@@ -170,7 +168,7 @@ pub(super) fn run_func(
                         );
                     }
                     node::NodeKind::NodeFor => {
-                        crate::update_array_index!(index, cond_status);
+                        crate::update_array_index!(index, cond_status, block_status);
 
                         block_status[0] = block_status[1];
                         continue;

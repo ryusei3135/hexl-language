@@ -9,6 +9,7 @@ pub enum NodeKind {
     NodeSub,
     NodeMul,
     NodeDiv,
+    NodeModulo,
     //  比較演算子
     NodeLessThan,
     NodeGreaterThan,

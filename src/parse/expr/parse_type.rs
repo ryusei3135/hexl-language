@@ -1,5 +1,3 @@
-//  変数や引数の型、関数の戻り値の型
-//  を決めるトークンをノードに変換する
 use crate::token::token;
 use crate::parse::node;
 use crate::parse::resp;

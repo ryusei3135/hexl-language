@@ -20,6 +20,7 @@ pub enum TokenKind {
     TokenSub,
     TokenMul,
     TokenDiv,
+    TokenModulo,
 
     TokenEqTo,
     TokenNotEqTo,

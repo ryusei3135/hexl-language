@@ -29,12 +29,14 @@ macro_rules! branch_if_cond_flag {
 
 #[macro_export]
 macro_rules! update_array_index {
-    ($index:ident, $cond_status:ident) => {
+    ($index:ident, $cond_status:ident, $block:ident) => {
         var_manager().remove_stack();
         var_manager().make_new_stack();
 
         match $cond_status.now_loop(None, None) {
             Ok(cond_location) => {
+                // ブロックをfor文の最初に戻す
+                $block[0] = $cond_status.get_me_block().unwrap() + 1;
                 $index = cond_location + 1;
                 continue;
             }

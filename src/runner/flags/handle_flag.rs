@@ -88,6 +88,19 @@ impl ControlSynFlag {
             None
         }
     }
+
+    pub fn get_me_block(&self) -> Option<usize> {
+        if let Some(flags) = self.status.last() {
+            Some(
+                match flags {
+                    SynFlag::Cond { executed_flag: _, my_block } => *my_block,
+                    SynFlag::For { status: _, for_start: _, my_block } => *my_block,
+                }
+            )
+        } else {
+            None
+        }
+    }
 }
 
 /// # 引数

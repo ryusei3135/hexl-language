@@ -94,6 +94,12 @@ pub fn node_run(
                 _ => panic!("node run 2 add"),
             }
         }
+        node::NodeKind::NodeModulo => {
+            match (get_left_value(&node), get_right_value(&node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l % r),
+                _ => panic!("node run 2 add"),
+            }
+        }
         node::NodeKind::NodeEqTo => {
             match (get_left_value(&node), get_right_value(&node)) {
                 (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l == r),
