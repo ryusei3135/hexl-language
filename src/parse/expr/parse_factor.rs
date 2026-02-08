@@ -154,6 +154,16 @@ pub fn call_value_node(
                     method_node.clone(),
                 );
             }
+            token::TokenKind::TokenScope => {
+                *index += 1;
+                let current_token_dot = tokens[*index].clone();
+                let module_node = call_value_node(tokens, current_token_dot, index);
+
+                return resp::handler::make_call_module(
+                    current_token.lexeme.clone(),
+                    module_node.clone(),
+                );
+            }
             token::TokenKind::TokenSpace => {
                 //  TokenNameの次に空白が来たらそれは変数
                 if tokens[(*index) - 1].kind == token::TokenKind::TokenName {

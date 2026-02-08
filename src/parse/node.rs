@@ -44,6 +44,7 @@ pub enum NodeKind {
     //  参照
     NodeStd,
     NodeSrc,
+    NodeCallModule,
     NodeNativeFunc,
 }
 

@@ -82,3 +82,13 @@ pub fn make_receiver_node(name: String, method: node::CalculNode) -> node::Calcu
         block: None,
     };
 }
+
+pub fn make_call_module(name: String, func: node::CalculNode) -> node::CalculNode {
+    return node::CalculNode {
+        value: name,
+        node_type: node::NodeKind::NodeCallModule,
+        left_node: Some(Box::new(func)),
+        right_node: None,
+        block: None,
+    };
+}

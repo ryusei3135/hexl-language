@@ -2,20 +2,21 @@ use std::io
 
 def add(<i32>arg1)<i32> {
     if arg1 == 1 {
-        arg1 = 1
         ret arg1 * 2
-    } arg1 == 2 {
-        arg1 = 10
+    } else {
+        ret arg1 * 3
     }
-    io.print("HH")
-    ret arg1 * 2
+}
+
+def func1()<i32> {
+    ret 10
 }
 
 def func2()<i32> {
     for 0..5 {
-        io.print("hello world")
+        io::print("hello world")
     }
-    ret 10
+    ret 10 + func1()
 }
 
 def start() {
@@ -23,9 +24,9 @@ def start() {
     for h in 0..10 {
         if h == 3 {
             i = 10
-            io.print("h is 3")
+            io::print("h is 3")
         } h == 8 {
-            io.print("h is 8")
+            io::print("h is 8")
         }
         h = h + 0
     }

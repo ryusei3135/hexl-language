@@ -15,6 +15,17 @@ fn call_method(
     };
 }
 
+fn call_module(
+        module_name: String,
+        call_value: node::CalculNode
+) -> Option<type_info::VarValue> {
+    manage::run_native_func(
+        module_name,
+        call_value.value.clone(),
+        *call_value.left_node.clone().unwrap()
+    )
+}
+
 fn get_left_value(node: &node::CalculNode) -> type_info::VarValue {
     node_run(*node.left_node.clone().unwrap())
 }
@@ -141,6 +152,16 @@ pub fn node_run(
                 if let Some(result) = call_method(receiver_name, method_data, method) {
                     return result;
                 }
+            }
+            type_info::VarValue::Null(false)
+        }
+        node::NodeKind::NodeCallModule => {
+            let module_name = node.value.clone();
+            //  引数や、メゾットの名前
+            let name = *node.left_node.clone().unwrap();
+
+            if let Some(result) = call_module(module_name, name) {
+                return result;
             }
             type_info::VarValue::Null(false)
         }

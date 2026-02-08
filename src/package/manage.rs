@@ -14,19 +14,6 @@ fn native_func_manager() -> MutexGuard<'static, Vec<abi::NativeFuncData>> {
         .unwrap()
 }
 
-fn make_receiver(module: &abi::NativeFuncData) {
-    global_state::var_manager().add_var(
-        module.module_name.clone(),
-        type_info::VarValue::Receiver(module.module_name.clone()),
-        VarRegion::Static,
-    );
-
-    for (key, _func) in &module.func {
-        let method = handler::make_method_node(key.clone(), node::NodeKind::NodeNativeFunc);
-        global_state::var_manager().add_method(method.clone(), key.to_string());
-    }
-}
-
 ///  ネイティブ関数に渡す引数を作成
 fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::VmArgsValue> {
     let mut vm_args = Vec::<lib::VmArgsValue>::new();
@@ -119,8 +106,6 @@ pub fn add_module(module: abi::NativeFuncData) -> bool {
         println!("already have this module.");
         return false;
     }
-
-    make_receiver(&module);
 
     // なければ追加
     manager.push(module);
