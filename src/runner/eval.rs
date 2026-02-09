@@ -204,7 +204,7 @@ pub fn node_run(
         flag => {
             match flag_switch::set_runtime_flag(&flag) {
                 Ok(_) => type_info::VarValue::Flag(flag),
-                Err(_) => panic!("::"),
+                Err(e) => panic!("what flag {:?}", e),
             }
         }
     }

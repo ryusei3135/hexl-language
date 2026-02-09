@@ -72,7 +72,13 @@ fn main() {
     println!("cargo:rerun-if-changed=cbindgen.toml");
     println!("cargo:rerun-if-changed=src/type.dsl");
 
-    Command::new("clang++")
-        .args(&["lib_build.py"]);
+    let status = Command::new("python3")
+        .args(&["lib_build.py"])
+        .status()
+        .expect("failed to run python");
+
+    if !status.success() {
+        eprintln!("python script failed");
+    }
     create_type_data();
 }

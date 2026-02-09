@@ -2,49 +2,57 @@ import subprocess
 import json
 import shutil
 import sys
+from pathlib import Path
 
 
-def copy_setting_file(src: str, dict: str):
-    shutil.copy(src, dict)
+def copy_setting_file(src: str, dst: str):
+    shutil.copy(src, dst)
+
 
 def main(path: str):
-    ext = ""
+    out_dir = Path("extern_lib/std")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     if sys.platform.startswith("win"):
-        ext = ".exe"
+        ext = ".dll"
     elif sys.platform.startswith("linux"):
         ext = ".so"
     elif sys.platform.startswith("darwin"):
-        print("macOS用の処理")
+        ext = ".dylib"
     else:
-        print("その他OS")
+        raise RuntimeError("未対応のOSです")
 
     with open(f"{path}/build.json", encoding="utf-8") as f:
         for obj in json.load(f):
+            output = out_dir / (obj["name"] + ext)
+
+            files = [f"{path}/{file}" for file in obj["files"]]
+
             result = subprocess.run(
                 [
-                    "g++",
+                    "clang++",
                     "-std=c++17",
                     "-shared",
                     "-fPIC",
-                    " ".join([f"{path}/" + file for file in obj["files"]]),
+                    *files,          # ← ここが重要
                     "-O2",
                     "-o",
-                    f"{"extern_lib/std/" + obj["name"] + ext}",
+                    str(output),
                 ],
                 capture_output=True,
                 text=True
             )
+
             if result.returncode != 0:
                 print("コンパイル失敗")
                 print(result.stderr)
             else:
                 print("コンパイル成功")
-                print(f"{path}/{obj["setting_file"]}", f"extern_lib/std/{obj["setting_file"]}")
-                copy_setting_file(
-                    f"{path}/{obj["setting_file"]}",
-                    f"extern_lib/std/{obj["setting_file"]}"
-                )
 
+                src_setting = f'{path}/{obj["setting_file"]}'
+                dst_setting = out_dir / obj["setting_file"]
 
-if __name__ == "__main__":
-    main("std_lib")
+                print(src_setting, dst_setting)
+                copy_setting_file(src_setting, dst_setting)
+
+main("std_lib")
