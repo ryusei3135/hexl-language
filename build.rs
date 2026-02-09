@@ -1,36 +1,6 @@
 use std::process::Command;
 use std::{env, fs, path::Path};
 
-
-fn compile_std_lib() {
-    let out_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let src = Path::new(&out_dir).join("std_lib/io.yaml");
-    let dst = Path::new(&out_dir).join("extern_lib/std/io.yaml");
-    if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent).unwrap();
-    }
-    println!("cargo:warning=src={}", src.display());
-    fs::copy(src, dst).expect("failed to copy io.yaml");
-
-    let cpp_file = "std_lib/io.cpp";
-    // 出力先
-    let target_dir = Path::new("extern_lib/std");
-    fs::create_dir_all(target_dir).unwrap();
-    let output_so = target_dir.join("io.so");
-
-    Command::new("clang++")
-            .args(&[
-                "-shared",         // 動的ライブラリ
-                "-fPIC",           // 位置独立コード
-                "-std=c++17",      // C++17
-                cpp_file,
-                "-o",
-                output_so.to_str().unwrap(),
-            ])
-            .status()
-            .expect("failed to execute g++");
-}
-
 //  変数の型に関する情報を作成
 fn create_type_data() {
     let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -102,6 +72,7 @@ fn main() {
     println!("cargo:rerun-if-changed=cbindgen.toml");
     println!("cargo:rerun-if-changed=src/type.dsl");
 
-    compile_std_lib();
+    Command::new("clang++")
+        .args(&["lib_build.py"]);
     create_type_data();
 }

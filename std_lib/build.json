@@ -1,0 +1,12 @@
+[
+  {
+    "name": "io",
+    "files": ["io.cpp"],
+    "setting_file": "io.yaml"
+  },
+  {
+    "name": "string",
+    "files": ["string.cpp"],
+    "setting_file": "string.yaml"
+  }
+]

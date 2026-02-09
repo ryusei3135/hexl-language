@@ -13,7 +13,7 @@ impl ApplyProcessor {
 
     pub fn emit_token(
             &mut self,
-            state: &mut state::LexerState
+            state: &mut state::LexerState,
     ) {
         //  直前のトークンの種類を確定させる
         let token_kind = categorize::categorize_token(

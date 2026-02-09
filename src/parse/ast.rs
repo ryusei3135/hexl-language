@@ -25,6 +25,10 @@ impl Parser {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 }
+                token::TokenKind::TokenFloat => {
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                }
                 token::TokenKind::TokenFuncStart => {
                     let func_node = semantic::func::make_func_header(token.clone(), &mut index);
                     self.brace_depth = 0;

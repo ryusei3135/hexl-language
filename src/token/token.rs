@@ -12,6 +12,7 @@ pub enum CharKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
     TokenNum,
+    TokenFloat,
     TokenName,
     TokenSpace,
     TokenString,

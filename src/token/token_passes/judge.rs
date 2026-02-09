@@ -93,29 +93,53 @@ fn connect_spacer(
     false
 }
 
-fn connect_range_op(
-        tokens: &mut token::Token,
-        now_token: token::Token
+/// 小数点などのトークンを作成
+fn connect_num_token(
+    tokens: &mut token::Token,
+    now_token: &token::Token,
 ) -> bool {
-    if tokens.lexeme.len() == 1 {
-        if now_token.kind == token::TokenKind::TokenDot {
-            tokens.change(token::TokenKind::TokenRangeOp).connect(&now_token.lexeme);
-            return true;
+    match tokens.kind {
+        token::TokenKind::TokenNum => {
+            return if now_token.kind == token::TokenKind::TokenDot {
+                tokens.change(token::TokenKind::TokenFloat).connect(&now_token.lexeme);
+                true
+            } else {
+                false
+            };
         }
+        token::TokenKind::TokenFloat => {
+            if now_token.kind != token::TokenKind::TokenNum {
+                panic!("Tokens that cannot be used with decimal points");
+            }
+
+            if let Some(c) = tokens.lexeme.chars().last() {
+                return if c == '.' {
+                    tokens.change(token::TokenKind::TokenFloat).connect(&now_token.lexeme);
+                    true
+                } else {
+                    false
+                };
+            }
+
+            false
+        }
+        _ => false,
     }
-    false
 }
 
+/// バラバラなトークン同士を比較し条件にあったトークンの場合
+/// トークン同士をつなげ場合によっては，トークンの種類を変える
 pub fn judge_merge_token(tokens: &mut Vec<token::Token>) -> bool {
-    if tokens.len() > 2 {
+    if tokens.len() >= 2 {
         let last_token = tokens.pop().unwrap();
 
         let mut result = match tokens.last().unwrap().kind {
-            token::TokenKind::TokenName => connect_with_name_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
-            token::TokenKind::TokenSub => connect_minus_token(&mut tokens.last_mut().unwrap(), last_token.clone()),
-            token::TokenKind::TokenString => connect_string_literal(&mut tokens.last_mut().unwrap(), last_token.clone()),
-            token::TokenKind::TokenSpacer => connect_spacer(&mut tokens.last_mut().unwrap(), last_token.clone()),
-            token::TokenKind::TokenDot => connect_range_op(&mut tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenName => connect_with_name_token(tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenNum => connect_num_token(tokens.last_mut().unwrap(), &last_token),
+            token::TokenKind::TokenSub => connect_minus_token(tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenString => connect_string_literal(tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenSpacer => connect_spacer(tokens.last_mut().unwrap(), last_token.clone()),
+            token::TokenKind::TokenFloat => connect_num_token(tokens.last_mut().unwrap(), &last_token),
             _ => false,
         };
         if !result {

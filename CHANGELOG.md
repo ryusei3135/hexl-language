@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-02-09
+
+### Syntax
+- 浮動小数型を使えるようになった
+  - 例 "0.1"
+
+### Type System
+- 浮動小数型f32を追加
+
+### Compiler / Interpreter
+- ビルドスクリプトの変更で、c++で作った標準ライブラリをビルドするのが楽になった
+
+### Standard Library
+- 標準ライブラリstd::stringを追加
+  - int_to_str 数字を文字列に変換する関数を実装
+
+### Tooling
+- ビルドスクリプトにpyhonを組み込んだ
+
 ## [0.7.2] - 2026-02-08
 
 ### Compiler / Interpreter

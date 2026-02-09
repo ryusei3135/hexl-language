@@ -1,0 +1,6 @@
+metadata:
+  filename: "string.so"
+functions:
+  - name: "int_to_str"
+    args_types: ["int"]
+    return_type: "str"

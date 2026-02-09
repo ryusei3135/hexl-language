@@ -3,6 +3,7 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum NodeKind {
     NodeNum,
+    NodeFloat,
     NodeStr,
     //  演算子
     NodeAdd,

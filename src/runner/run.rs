@@ -152,6 +152,7 @@ pub(super) fn run_func(
                     println!("[{}] [value]", match result {
                         type_info::VarValue::Int32(v) => v.to_string(),
                         type_info::VarValue::Bool(v) => v.to_string(),
+                        type_info::VarValue::Float32(v) => v.to_string(),
                         type_info::VarValue::Str(v) => v,
                         _ => String::new(),
                     });

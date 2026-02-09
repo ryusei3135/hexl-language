@@ -45,17 +45,24 @@ impl Tokenizer {
         for chr in line.chars() {
             let char_kind = categorize::categorize_char(chr);
 
-            if check::same_char_kind(self.lexer_state.clone(), char_kind.clone()) {
-                //  もし、括弧なら記号のトークンは続かないので、ここでトークンを確定させる
-                if check::is_symbol(self.lexer_state.last_char_kind.clone(), char_kind.clone()) {
-                    self.lexer_role.processor.emit_token(
-                        &mut self.lexer_state
+            // 前回の文字の種類と今の文字の種類が同じか調べる
+            if check::same_char_kind(&self.lexer_state, &char_kind) {
+                // ドット同士をつなげトークンを確定させる
+                if self.lexer_state.last_char == '.' && chr == '.' {
+                    self.lexer_role.processor.combine_char(
+                        &mut self.lexer_state,
+                        char_kind.clone(),
+                        chr
                     );
+                    self.lexer_role.processor.emit_token(&mut self.lexer_state);
+                    continue;
+                }
+                //  もしどっちも記号ならトークンを確定させる
+                if check::is_symbol(&self.lexer_state.last_char_kind, &char_kind) {
+                    self.lexer_role.processor.emit_token(&mut self.lexer_state);
                 }
             } else {
-                self.lexer_role.processor.emit_token(
-                    &mut self.lexer_state
-                );
+                self.lexer_role.processor.emit_token(&mut self.lexer_state);
             }
             self.lexer_role.processor.combine_char(
                 &mut self.lexer_state,
@@ -64,12 +71,24 @@ impl Tokenizer {
             );
         }
 
-        self.lexer_role.processor.emit_token(
-            &mut self.lexer_state
-        );
+        self.lexer_role.processor.emit_token(&mut self.lexer_state);
 
         let results = self.lexer_state.tokens.clone();
         self.lexer_state.tokens.clear();
         return results;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::token::tokenizer;
+
+    #[test]
+    fn check_float_token() {
+        let mut lexer = tokenizer::Tokenizer::new();
+        let float_token = lexer.make_token("1.1".to_string(), 0);
+
+        assert_eq!(float_token[0].kind, token::TokenKind::TokenFloat);
     }
 }

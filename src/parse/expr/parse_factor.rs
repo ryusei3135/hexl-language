@@ -203,6 +203,13 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcu
                 node::NodeKind::NodeNum,
             );
         }
+        token::TokenKind::TokenFloat => {
+            *index += 1;
+            return resp::handler::make_value_node(
+                current_token,
+                node::NodeKind::NodeFloat,
+            );
+        }
         token::TokenKind::TokenLBracket => {
             *index += 1;
             return make_array_node(tokens.clone(), index);
