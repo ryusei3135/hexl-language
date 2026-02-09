@@ -78,81 +78,92 @@ pub fn node_run(
         }
         node::NodeKind::NodeStr => type_info::VarValue::Str(node.value.clone()),
         node::NodeKind::NodeAdd => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l + r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Float32(l + r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::calcul_by_type!(
+                +,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeSub => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l - r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Float32(l - r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::calcul_by_type!(
+                -,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeMul => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l * r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Float32(l * r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::calcul_by_type!(
+                *,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeDiv => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l / r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Float32(l / r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::calcul_by_type!(
+                /,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeModulo => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Int32(l % r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Float32(l % r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::calcul_by_type!(
+                %,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeEqTo => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l == r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Bool(l == r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::comper_op_type!(
+                ==,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeNotEqTo => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l != r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Bool(l != r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::comper_op_type!(
+                !=,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeLessThanOrEqualTo => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l <= r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Bool(l <= r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::comper_op_type!(
+                <=,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeGreaterThanOrEqualTo => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l >= r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Bool(l >= r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::comper_op_type!(
+                >=,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeLessThan => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l < r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Bool(l < r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::comper_op_type!(
+                <,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeGreaterThan => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => type_info::VarValue::Bool(l > r),
-                (type_info::VarValue::Float32(l), type_info::VarValue::Float32(r)) => type_info::VarValue::Bool(l > r),
-                _ => panic!("node run 2 add"),
-            }
+            crate::comper_op_type!(
+                >,
+                node,
+                type_info::VarValue::Int32,
+                type_info::VarValue::Float32
+            )
         }
         node::NodeKind::NodeAssignVar => {
             match variable_api::update_var_value(node.clone()) {

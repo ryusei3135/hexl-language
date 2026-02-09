@@ -51,3 +51,77 @@ macro_rules! update_array_index {
         }
     };
 }
+
+#[macro_export]
+macro_rules! calcul_by_type {
+    (+, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => $type(l + r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (-, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => $type(l - r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (*, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => $type(l * r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (/, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => $type(l / r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (%, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => $type(l % r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! comper_op_type {
+    (==, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => type_info::VarValue::Bool(l == r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (!=, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => type_info::VarValue::Bool(l != r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (<=, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => type_info::VarValue::Bool(l <= r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (>=, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => type_info::VarValue::Bool(l >= r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (<, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => type_info::VarValue::Bool(l < r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+    (>, $node:path, $($type:path),*) => {
+        match (get_left_value(&$node), get_right_value(&$node)) {
+            $(($type(l), $type(r)) => type_info::VarValue::Bool(l > r),)*
+            _ => panic!("node run 2 add"),
+        }
+    };
+}

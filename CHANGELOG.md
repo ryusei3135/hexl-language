@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-02-09
+
+### Compiler / Interpreter
+- runner/eval.rsの演算をする場所をマクロにすることで、変更などをしやすくした
+
 ## [0.7.2] - 2026-02-09
 
 ### Syntax
