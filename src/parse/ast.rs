@@ -40,12 +40,16 @@ impl Parser {
                     load::load_native_lib(package_node);
                     break;
                 }
-                token::TokenKind::TokenNewVar => {
-                    let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
+                // token::TokenKind::TokenNewVar => {
+                //     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
+                //     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                // }
+                token::TokenKind::TokenName => {
+                    let node = expr::parse_assign::parse_assign(token.clone(), &mut index).0;
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 }
-                token::TokenKind::TokenName => {
-                    let node = expr::parse_assign::parse_assign(token.clone(), &mut index);
+                token::TokenKind::TokenLessThan => {
+                    let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 }
                 token::TokenKind::TokenSpace => {}

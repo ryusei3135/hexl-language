@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-02-10
+
+### Syntax
+- 変数の宣言方法を変更
+  - let var = value => var := value
+    - ”let”を削除
+
 ## [0.7.5] - 2026-02-10
 
 ### Compiler / Interpreter

@@ -7,11 +7,10 @@ def float()<f32> {
 }
 
 def start() {
-    let <i32>a100 = add(10, 2)
-    let <f32>tt = float() + 0.6
+    <i32>a100 := add(10, 2)
+    <f32>tt := float() + 0.6
     a100 = a100 + 1 + add(20, 10)
-    let <char>j_l = "hello world!!"
-    let <i32>hello_world = 1
-    let <i32>hoge = 1
-    let tomato = [0, 1, 2]
+    <char>j_l := "hello world!!"
+    <i32>hello_world := 1
+    <i32>hoge := 1
 }

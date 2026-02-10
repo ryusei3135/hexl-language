@@ -42,12 +42,13 @@ pub enum TokenKind {
     TokenLBracket,  //  "["
     TokenRBracket,  //  "]"
     TokenRangeOp,   //  ".."
+    TokenVarDefine, //  ":="
     TokenDot,
 
     //  キーワード
     TokenFuncStart, // "def"
     TokenUsePackage,// "use"
-    TokenNewVar,    // "let"
+    // TokenNewVar,    // "let"
     TokenIf,        // "if"
     TokenElse,      // "else"
     TokenFor,       // "for"

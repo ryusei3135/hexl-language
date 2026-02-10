@@ -20,7 +20,7 @@ def func2()<i32> {
 }
 
 def start() {
-    let i = add(10) + func2()
+    i := add(10) + func2()
     for h in 0..10 {
         if h == 3 {
             i = 10

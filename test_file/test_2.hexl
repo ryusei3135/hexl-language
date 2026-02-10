@@ -8,6 +8,6 @@ def start() {
     io.print("Hello World")
     if add(10, 20) >= 0 {
         io.print("a is bigger")
-        let <i32>c = 0
+        <i32>c := 0
     }
 }
