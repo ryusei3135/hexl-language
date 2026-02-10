@@ -11,6 +11,8 @@ pub fn categorize_keyword(text: &str) -> token::TokenKind {
         "for" => token::TokenKind::TokenFor,
         "ret" => token::TokenKind::TokenRet,
         "in" => token::TokenKind::TokenIn,
+        "true" => token::TokenKind::TokenBoolTrue,
+        "false" => token::TokenKind::TokenBoolFalse,
         _     => token::TokenKind::TokenName,
     }
 }

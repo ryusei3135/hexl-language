@@ -4,6 +4,8 @@
 pub enum NodeKind {
     NodeNum,
     NodeFloat,
+    NodeBoolTrue,
+    NodeBoolFalse,
     NodeStr,
     //  演算子
     NodeAdd,

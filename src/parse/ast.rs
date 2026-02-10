@@ -25,6 +25,14 @@ impl Parser {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 }
+                token::TokenKind::TokenBoolTrue => {
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                }
+                token::TokenKind::TokenBoolFalse => {
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                }
                 token::TokenKind::TokenFloat => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
                     func_manager().add_func_calcul_node(node, self.brace_depth.clone());

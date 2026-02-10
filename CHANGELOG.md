@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-02-10
+
+### Syntax
+- bool型を追加
+  - true, false
+
+### Type System
+- bool型を追加
+
 ## [0.7.6] - 2026-02-10
 
 ### Syntax

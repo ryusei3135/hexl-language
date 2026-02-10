@@ -45,6 +45,8 @@ pub fn node_run(
             }
             panic!("[system err] This sequence cannot be classified into any category");
         }
+        node::NodeKind::NodeBoolTrue => return type_info::VarValue::Bool(true),
+        node::NodeKind::NodeBoolFalse => return type_info::VarValue::Bool(false),
         node::NodeKind::NodeFloat => {
             if node.value.clone().parse::<f32>().is_ok() {
                 return type_info::VarValue::Float32(node.value.clone().parse::<f32>().unwrap());

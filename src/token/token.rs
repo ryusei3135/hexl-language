@@ -53,6 +53,8 @@ pub enum TokenKind {
     TokenElse,      // "else"
     TokenFor,       // "for"
     TokenIn,        // "in"
+    TokenBoolTrue,
+    TokenBoolFalse,
     TokenRet,
     TokenEOF,
 }
