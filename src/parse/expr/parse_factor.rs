@@ -164,7 +164,7 @@ pub fn call_value_node(
                     module_node.clone(),
                 );
             }
-            token::TokenKind::TokenSpace => {
+            token::TokenKind::TokenSpace | token::TokenKind::TokenRParen => {
                 //  TokenNameの次に空白が来たらそれは変数
                 if tokens[(*index) - 1].kind == token::TokenKind::TokenName {
                     return resp::handler::make_value_node(

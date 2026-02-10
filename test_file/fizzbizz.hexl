@@ -1,4 +1,5 @@
 use std::io
+use std::string
 
 def start() {
     for i in 0..10 {
@@ -9,7 +10,7 @@ def start() {
         } i % 3 == 0 {
             io::print("fizz")
         } else {
-            io::print("other")
+            io::print(string::int_to_str(i))
         }
     }
 }

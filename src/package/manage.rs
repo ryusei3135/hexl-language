@@ -23,7 +23,10 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
             match args_type.remove(0).as_str() {
                 "str" => {
                     let c_value = lib::CValue {
-                        str_value: CString::new(arg_node.value.clone()).unwrap().into_raw(),
+                        str_value: match eval::node_run(arg_node) {
+                            type_info::VarValue::Str(r) => CString::new(r).unwrap().into_raw(),
+                            _ => panic!("un match type"),
+                        }
                     };
                     lib::VmArgsValue {
                         arg_type: lib::ArgType::Str,
@@ -32,7 +35,10 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
                 }
                 "int" => {
                     let c_value = lib::CValue {
-                        i32_value: arg_node.value.clone().parse::<i32>().unwrap(),
+                        i32_value: match eval::node_run(arg_node) {
+                            type_info::VarValue::Int32(r) => r,
+                            _ => panic!("un match type"),
+                        }
                     };
                     lib::VmArgsValue {
                         arg_type: lib::ArgType::Int32,
@@ -62,13 +68,15 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
 }
 
 fn get_vm_ret_value(ret_value: lib::VmArgsValue) -> Option<type_info::VarValue> {
-    return unsafe {
-        match ret_value.arg_type {
-            lib::ArgType::Str => Some(type_info::VarValue::Str(CStr::from_ptr(ret_value.value.str_value).to_string_lossy().into_owned())),
+    unsafe {
+        return match ret_value.arg_type {
+            lib::ArgType::Str => {
+                Some(type_info::VarValue::Str(CStr::from_ptr(ret_value.value.str_value).to_string_lossy().into_owned()))
+            }
             lib::ArgType::Int32 => Some(type_info::VarValue::Int32(ret_value.value.i32_value)),
             lib::ArgType::Bool => Some(type_info::VarValue::Bool(ret_value.value.bool_value)),
             lib::ArgType::Void => None,
-        }
+        };
     }
 }
 

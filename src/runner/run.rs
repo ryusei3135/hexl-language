@@ -1,4 +1,4 @@
-//! インタプリのパイプライン
+//! インタプリタのパイプライン
 use super::*;
 
 /// 条件分岐のフラグを立てるかどうかを制御
@@ -154,7 +154,10 @@ pub(super) fn run_func(
                         type_info::VarValue::Bool(v) => v.to_string(),
                         type_info::VarValue::Float32(v) => v.to_string(),
                         type_info::VarValue::Str(v) => v,
-                        _ => String::new(),
+                        _ => {
+                            index += 1;
+                            continue;
+                        },
                     });
                 }
             }
