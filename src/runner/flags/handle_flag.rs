@@ -172,7 +172,7 @@ impl ControlSynFlag {
         }
     }
 
-    ///  反復処理がこれから始まることを設定
+    ///  for文の設定とループ変数の更新
     pub fn now_loop(
         &mut self,
         runtime: &mut run::Runtime,

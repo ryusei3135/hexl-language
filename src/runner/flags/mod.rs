@@ -5,3 +5,9 @@ pub mod handle_flag;
 pub mod flag_switch;
 
 use crate::runner::*;
+
+#[derive(Debug)]
+pub struct BlockFlag {
+    pub execute: usize,
+    pub now: usize,
+}

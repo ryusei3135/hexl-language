@@ -22,7 +22,7 @@ macro_rules! branch_if_cond_flag {
                 $cond_status.del();
             }
         }
-        $block[0] = $block[1];
+        $block.execute = $block.now;
         continue;
     };
 }
@@ -36,7 +36,7 @@ macro_rules! update_array_index {
         match $cond_flags.now_loop($runtime, None, None) {
             Ok(cond_location) => {
                 // ブロックをfor文の最初に戻す
-                $block[0] = $cond_flags.get_me_block().unwrap() + 1;
+                $block.execute = $cond_flags.get_me_block().unwrap() + 1;
                 $index = cond_location + 1;
                 continue;
             }

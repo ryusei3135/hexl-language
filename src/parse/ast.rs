@@ -54,7 +54,7 @@ impl<'a> Parser<'a> {
                 //     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
                 // }
                 token::TokenKind::TokenName => {
-                    let node = expr::parse_assign::parse_assign(token.clone(), &mut index).0;
+                    let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenLessThan => {
@@ -66,7 +66,9 @@ impl<'a> Parser<'a> {
                     let node = semantic::ret::make_ret_node(token.clone(), &mut index);
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
-                token::TokenKind::TokenLBrace => self.brace_depth += 1,
+                token::TokenKind::TokenLBrace => {
+                    self.brace_depth += 1;
+                }
                 token::TokenKind::TokenRBrace => {
                     self.brace_depth -= 1;
                     index += 1;

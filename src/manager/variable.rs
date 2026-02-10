@@ -214,7 +214,7 @@ mod tests {
     ) {
         for v in RANGE {
             variables.add_var(
-                (v.to_owned() + i.to_string().as_str()).to_string(),
+                &(v.to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
                 VarRegion::Stack
             );
@@ -246,7 +246,7 @@ mod tests {
             variables.make_new_stack();
             make_test_stack_var(&mut variables, i);
             variables.add_var(
-                ("k".to_owned() + i.to_string().as_str()).to_string(),
+                &("k".to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
                 VarRegion::Static
             );

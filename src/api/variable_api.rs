@@ -56,6 +56,7 @@ pub fn update_var_value(
     return Err(define_msg::VarErrorOrLog::VarIsNotDefined);
 }
 
+/// for文の繰り返す条件を設定
 fn setting_iter_status(
         loop_range: type_info::VarValue,
         bind_value: Option<String>
@@ -124,15 +125,19 @@ pub fn is_for_iterable(
         loop_cond: Option<node::CalculNode>,
         now_for_status: Option<IterStatus>,
 ) -> Result<IterStatus, ControlSynErr> {
+    // for文の条件のノードが来たら、初期化をする
+    // 違うならfor文のループ変数をアップデート
     if let Some(ref cond) = loop_cond {
         match cond.node_type {
             node::NodeKind::NodeIn => {
+                // for文の情報があるなら、ループ変数を更新
                 return match now_for_status {
                     Some(mut status) => {
                         update_loop_var(&mut status)?;
                         Ok(status)
                     }
                     None => {
+                        // for文の情報がないので、for文の情報を設定
                         setting_iter_status(
                             eval::node_run(runtime, *cond.left_node.clone().unwrap()),
                             Some(cond.value.clone())
@@ -157,6 +162,7 @@ pub fn is_for_iterable(
             _ => return Err(ControlSynErr::ValueIsOfInvalidType),
         }
     } else {
+        // ループ変数をアップデート
         return match now_for_status {
             Some(mut status) => {
                 update_loop_var(&mut status)?;

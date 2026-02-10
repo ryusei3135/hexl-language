@@ -41,6 +41,7 @@ pub fn make_for_node(
             token::TokenKind::TokenNum => {
                 first_token = (token::TokenKind::TokenNum, &tokens[*index].lexeme);
                 for_loop_node = expr::parse_expr::parse_expr(tokens.clone(), index);
+                continue;
             }
             token::TokenKind::TokenLBrace => {
                 break;
@@ -109,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn check_for_node() {
+    fn check_range_for_node() {
         let for_token = make_tokens("for a in 10 {");
         let mut index: usize = 0;
         assert_eq!(

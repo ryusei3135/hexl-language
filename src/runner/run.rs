@@ -10,15 +10,15 @@ mod cond_branch_flag {
             cond_flags: &mut flags::handle_flag::ControlSynFlag,
             node: &Vec<node::CalculNode>,
             index: &usize,
-            block_status: &mut [usize; 2],
+            block_status: &mut flags::BlockFlag,
     ) -> bool {
         if boolify::node_to_bool(runtime, *node[*index].left_node.clone().unwrap()) {
             //  trueを代入すると、つながっている条件分岐がスキップされる
-            cond_flags.make_new_flag(true, block_status[1], node::NodeKind::NodeIf);
-            block_status[0] = node[1 + *index].block.unwrap();
+            cond_flags.make_new_flag(true, block_status.now, node::NodeKind::NodeIf);
+            block_status.execute = node[1 + *index].block.unwrap();
             false
         } else {
-            cond_flags.make_new_flag(false, block_status[1], node::NodeKind::NodeIf);
+            cond_flags.make_new_flag(false, block_status.now, node::NodeKind::NodeIf);
             true
         }
     }
@@ -28,12 +28,12 @@ mod cond_branch_flag {
             cond_flags: &mut flags::handle_flag::ControlSynFlag,
             node: &Vec<node::CalculNode>,
             index: &usize,
-            block_status: &mut [usize; 2],
+            block_status: &mut flags::BlockFlag,
     ) -> bool {
         if boolify::node_to_bool(runtime, *node[*index].left_node.clone().unwrap()) {
-            return if cond_flags.judge_cond(block_status[1]) {
+            return if cond_flags.judge_cond(block_status.now.clone()) {
                 cond_flags.cond_status_true();
-                block_status[0] = node[1 + *index].block.unwrap();
+                block_status.execute = node[1 + *index].block.unwrap();
                 false
             } else {
                 true
@@ -43,14 +43,15 @@ mod cond_branch_flag {
     }
 }
 
+/// for文のフラグを立て、for文の情報を初期化
 unsafe fn node_for(
         runtime: &mut Runtime,
         cond_flags: &mut flags::handle_flag::ControlSynFlag,
         node: &Vec<node::CalculNode>,
         index: &usize,
-        block_status: &mut [usize; 2],
+        block_status: &mut flags::BlockFlag,
 ) {
-    cond_flags.make_new_flag(true, block_status[1], node::NodeKind::NodeFor);
+    cond_flags.make_new_flag(true, block_status.now.clone(), node::NodeKind::NodeFor);
     // for文の設定をする
     runtime.all_info.var_info.make_new_stack();
     match cond_flags.now_loop(
@@ -63,7 +64,7 @@ unsafe fn node_for(
             if log != control_syn::ControlSynErr::SETTING {
                 log::output_log_l0(log);
             } else {
-                block_status[0] = node[1 + *index].block.unwrap();
+                block_status.execute = node[1 + *index].block.unwrap();
             }
         }
     }
@@ -100,10 +101,13 @@ impl Runtime {
         if let Some(args) = args_value {
             arg_api::make_args_var(self, &func_process.args, args);
         }
-        let mut cond_status = handle_flag::ControlSynFlag::new();
+
         let mut index: usize = 0;
         // 0は実行可能なブロック、1は現在のブロック
-        let mut block_status: [usize; 2] = [1, 0];
+        let mut block_status = flags::BlockFlag {
+            execute: 1,
+            now: 0,
+        };
         let mut del_stack: bool = false;
 
         while func_process.nodes.len() >= index {
@@ -117,14 +121,12 @@ impl Runtime {
                             continue;
                         }
                         node::NodeKind::NodeFor => {
-                            unsafe {
-                                crate::update_array_index!(
-                                    index,
-                                    block_status,
-                                    self,
-                                    cond_flags
-                                );
-                            }
+                            crate::update_array_index!(
+                                index,
+                                block_status,
+                                self,
+                                cond_flags
+                            );
                         }
                         _ => panic!("[err: run func run]"),
                     }
@@ -132,10 +134,11 @@ impl Runtime {
                 break;
             }
 
-            block_status[1] = func_process.nodes[index].block.unwrap();
+            block_status.now = func_process.nodes[index].block.unwrap();
 
-            if block_status[1] == block_status[0] {
+            if block_status.now == block_status.execute {
                 let result = eval::node_run(self, func_process.nodes[index].clone());
+
                 if del_stack {
                     del_stack = flag_switch::handle_del_stack_flag(&result, &mut cond_flags);
                 }
@@ -166,8 +169,8 @@ impl Runtime {
                                 }
                             }
                             node::NodeKind::NodeElse => {
-                                if cond_flags.judge_cond(block_status[1]) {
-                                    block_status[0] = func_process.nodes[1 + index].block.unwrap();
+                                if cond_flags.judge_cond(block_status.now) {
+                                    block_status.execute = func_process.nodes[1 + index].block.unwrap();
                                 } else {
                                     del_stack = true;
                                 }
@@ -211,7 +214,7 @@ impl Runtime {
                         });
                     }
                 }
-            } else if block_status[1] < block_status[0] {
+            } else if block_status.now < block_status.execute {
                 if let Some(flag) = cond_flags.get_now_flag() {
                     match flag {
                         node::NodeKind::NodeIf => {
@@ -222,16 +225,14 @@ impl Runtime {
                             );
                         }
                         node::NodeKind::NodeFor => {
-                            unsafe {
-                                crate::update_array_index!(
-                                    index,
-                                    block_status,
-                                    self,
-                                    cond_flags
-                                );
-                            }
+                            crate::update_array_index!(
+                                index,
+                                block_status,
+                                self,
+                                cond_flags
+                            );
 
-                            block_status[0] = block_status[1];
+                            block_status.execute = block_status.now;
                             continue;
                         }
                         _ => panic!("[err: run func run]"),

@@ -64,17 +64,15 @@ pub fn node_run(
             panic!("[system err] This sequence cannot be classified into any category");
         }
         node::NodeKind::NodeRangeOp => {
-            unsafe {
-                match (get_left_value(runtime, &node), get_right_value(runtime, &node)) {
-                    (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
-                        let mut arr = Vec::<Box<type_info::VarValue>>::new();
-                        for v in l..r {
-                            arr.push(Box::new(type_info::VarValue::Int32(v)));
-                        }
-                        type_info::VarValue::Array(arr)
+            match (get_left_value(runtime, &node), get_right_value(runtime, &node)) {
+                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
+                    let mut arr = Vec::<Box<type_info::VarValue>>::new();
+                    for v in l..r {
+                        arr.push(Box::new(type_info::VarValue::Int32(v)));
                     }
-                    _ => panic!("node range err"),
+                    type_info::VarValue::Array(arr)
                 }
+                _ => panic!("node range err"),
             }
         }
         node::NodeKind::NodeArray => {

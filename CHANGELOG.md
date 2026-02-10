@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.7.9] - 2026-02-10
+
+### Compiler / Interpreter
+- ソースコード src/manager/global_state.rsを削除
+- 不要なunsafeを削除
+
+### Bug Fixes
+- for文がうまく動作しないバグを修正
+- 変数を宣言するコードを書いても、変数の値を上書きする処理になってしまうバグを修正
+- for文で、例"for 10 {.."のように書くとpanicするバグを修正
+
 ## [0.7.8] - 2026-02-10
 
 ### Compiler / Interpreter
