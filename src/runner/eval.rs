@@ -3,39 +3,49 @@
 use super::*;
 
 fn call_method(
+        runtime: &mut run::Runtime,
         receiver_name: String,
         method: variable::MethodInfo,
         call_value: node::CalculNode
 ) -> Option<type_info::VarValue> {
     return match method.node.node_type {
         node::NodeKind::NodeNativeFunc => {
-            manage::run_native_func(receiver_name, method.name, *call_value.left_node.clone().unwrap())
+            manage::run_native_func(runtime, receiver_name, method.name, *call_value.left_node.clone().unwrap())
         }
         _ => None,
     };
 }
 
 fn call_module(
+        runtime: &mut run::Runtime,
         module_name: String,
         call_value: node::CalculNode
 ) -> Option<type_info::VarValue> {
     manage::run_native_func(
+        runtime,
         module_name,
         call_value.value.clone(),
         *call_value.left_node.clone().unwrap()
     )
 }
 
-fn get_left_value(node: &node::CalculNode) -> type_info::VarValue {
-    node_run(*node.left_node.clone().unwrap())
+fn get_left_value(
+        runtime: &mut run::Runtime,
+        node: &node::CalculNode
+) -> type_info::VarValue {
+    node_run(runtime, *node.left_node.clone().unwrap())
 }
 
-fn get_right_value(node: &node::CalculNode) -> type_info::VarValue {
-    node_run(*node.right_node.clone().unwrap())
+fn get_right_value(
+        runtime: &mut run::Runtime,
+        node: &node::CalculNode
+) -> type_info::VarValue {
+    node_run(runtime, *node.right_node.clone().unwrap())
 }
 
 
 pub fn node_run(
+        runtime: &mut run::Runtime,
         node: node::CalculNode
 ) -> type_info::VarValue {
     match node.node_type {
@@ -54,24 +64,26 @@ pub fn node_run(
             panic!("[system err] This sequence cannot be classified into any category");
         }
         node::NodeKind::NodeRangeOp => {
-            match (get_left_value(&node), get_right_value(&node)) {
-                (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
-                    let mut arr = Vec::<Box<type_info::VarValue>>::new();
-                    for v in l..r {
-                        arr.push(Box::new(type_info::VarValue::Int32(v)));
+            unsafe {
+                match (get_left_value(runtime, &node), get_right_value(runtime, &node)) {
+                    (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
+                        let mut arr = Vec::<Box<type_info::VarValue>>::new();
+                        for v in l..r {
+                            arr.push(Box::new(type_info::VarValue::Int32(v)));
+                        }
+                        type_info::VarValue::Array(arr)
                     }
-                    type_info::VarValue::Array(arr)
+                    _ => panic!("node range err"),
                 }
-                _ => panic!("node range err"),
             }
         }
         node::NodeKind::NodeArray => {
             //  配列を展開
-            let array_value = expand::expand_array_node(node);
+            let array_value = expand::expand_array_node(runtime, node);
             return type_info::VarValue::Array(array_value.to_vec());
         }
         node::NodeKind::NodeNot => {
-            match get_left_value(&node) {
+            match get_left_value(runtime, &node) {
                 type_info::VarValue::Int32(v) => type_info::VarValue::Bool(!(v != 0)),
                 type_info::VarValue::Float32(v) => type_info::VarValue::Bool(!(v != 0.0)),
                 type_info::VarValue::Bool(v) => type_info::VarValue::Bool(!v),
@@ -82,6 +94,7 @@ pub fn node_run(
         node::NodeKind::NodeAdd => {
             crate::calcul_by_type!(
                 +,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -90,6 +103,7 @@ pub fn node_run(
         node::NodeKind::NodeSub => {
             crate::calcul_by_type!(
                 -,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -98,6 +112,7 @@ pub fn node_run(
         node::NodeKind::NodeMul => {
             crate::calcul_by_type!(
                 *,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -106,6 +121,7 @@ pub fn node_run(
         node::NodeKind::NodeDiv => {
             crate::calcul_by_type!(
                 /,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -114,6 +130,7 @@ pub fn node_run(
         node::NodeKind::NodeModulo => {
             crate::calcul_by_type!(
                 %,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -122,6 +139,7 @@ pub fn node_run(
         node::NodeKind::NodeEqTo => {
             crate::comper_op_type!(
                 ==,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -130,6 +148,7 @@ pub fn node_run(
         node::NodeKind::NodeNotEqTo => {
             crate::comper_op_type!(
                 !=,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -138,6 +157,7 @@ pub fn node_run(
         node::NodeKind::NodeLessThanOrEqualTo => {
             crate::comper_op_type!(
                 <=,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -146,6 +166,7 @@ pub fn node_run(
         node::NodeKind::NodeGreaterThanOrEqualTo => {
             crate::comper_op_type!(
                 >=,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -154,6 +175,7 @@ pub fn node_run(
         node::NodeKind::NodeLessThan => {
             crate::comper_op_type!(
                 <,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
@@ -162,31 +184,34 @@ pub fn node_run(
         node::NodeKind::NodeGreaterThan => {
             crate::comper_op_type!(
                 >,
+                runtime,
                 node,
                 type_info::VarValue::Int32,
                 type_info::VarValue::Float32
             )
         }
         node::NodeKind::NodeAssignVar => {
-            match variable_api::update_var_value(node.clone()) {
+            match variable_api::update_var_value(runtime, node.clone()) {
                 Ok(v) => v,
                 Err(_) => type_info::VarValue::Null(false),
             }
         }
-        node::NodeKind::NodeCallVar => variable_api::call_var_value(node.value),
-        node::NodeKind::NodeDefVar => variable_api::define_var(node.clone()),
+        node::NodeKind::NodeCallVar => variable_api::call_var_value(runtime, &node.value),
+        node::NodeKind::NodeDefVar => {
+            variable_api::define_var(runtime, &node)
+        }
         node::NodeKind::NodeCallFunc => {
-            let func_data = func_manager().get_func(&node.value);
-            run::run_func(func_data, &Some(*node.left_node.unwrap()))
+            let func_data = runtime.all_info.func_info.get_func(&node.value);
+            runtime.run_func(func_data, &Some(*node.left_node.unwrap()))
         }
         node::NodeKind::NodeReceiver => {
             let receiver_name = node.value.clone();
             //  引数や、メゾットの名前
             let method = *node.left_node.clone().unwrap();
 
-            let method_data = var_manager().get_method(receiver_name.clone(), method.value.clone());
+            let method_data = runtime.all_info.var_info.get_method(receiver_name.clone(), method.value.clone());
             if method_data.name == method.value.clone() {
-                if let Some(result) = call_method(receiver_name, method_data, method) {
+                if let Some(result) = call_method(runtime, receiver_name, method_data, method) {
                     return result;
                 }
             }
@@ -197,7 +222,7 @@ pub fn node_run(
             //  引数や、メゾットの名前
             let name = *node.left_node.clone().unwrap();
 
-            if let Some(result) = call_module(module_name, name) {
+            if let Some(result) = call_module(runtime, module_name, name) {
                 return result;
             }
             type_info::VarValue::Null(false)

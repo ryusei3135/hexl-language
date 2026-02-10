@@ -56,7 +56,7 @@ impl FuncManager {
     pub fn add_func_calcul_node(&mut self, mut node: node::CalculNode, brace_depth: i32) {
         if let Some(func) = self.func_datas.last_mut() {
             node.block = Some(brace_depth as usize);
-            func.nodes.push(node);
+            func.nodes.push(node.clone());
         } else {
             eprintln!("[syntax err]");
             eprintln!("You can't write code outside of a function");

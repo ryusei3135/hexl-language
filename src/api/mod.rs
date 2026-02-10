@@ -13,6 +13,7 @@ use crate::create_type_api;
 use crate::error::control_syn::ControlSynErr;
 use crate::runner::control_info::ControlSemantics;
 use crate::runner::eval;
+use crate::runner::run;
 
 // type_api.rs
 #[macro_export]

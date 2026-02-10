@@ -1,3 +1,4 @@
+use crate::manager::*;
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,4 +61,20 @@ pub struct CalculNode {
     pub right_node: Option<Box<CalculNode>>,
     //  どこのブロックの中か
     pub block: Option<usize>
+}
+
+
+#[derive(Clone)]
+pub struct AllInfo {
+    pub var_info: variable::VariableManager,
+    pub func_info: func::FuncManager,
+}
+
+impl AllInfo {
+    pub fn new() -> Self {
+        Self {
+            var_info: variable::VariableManager::new(),
+            func_info: func::FuncManager::new(),
+        }
+    }
 }

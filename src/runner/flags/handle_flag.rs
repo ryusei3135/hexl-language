@@ -114,15 +114,16 @@ impl ControlSynFlag {
 /// - Err
 ///     for文の情報を更新する際に起こったエラーの情報
 fn running_for_loop(
+        runtime: &mut run::Runtime,
         for_loop_status: Option<IterStatus>,
         loop_cond: Option<node::CalculNode>,
 ) -> Result<IterStatus, control_syn::ControlSynErr> {
-    let status = is_for_iterable(loop_cond, for_loop_status)?;
+    let status = is_for_iterable(runtime, loop_cond, for_loop_status)?;
 
     if status.executable {
         if let control_info::ControlSemantics::BindsVar(ref var_name) = status.var_setting {
-            var_manager().add_var(
-                var_name.clone(),
+            runtime.all_info.var_info.add_var(
+                &var_name,
                 status.loop_var.clone(),
                 VarRegion::Stack,
             );
@@ -146,11 +147,12 @@ impl ControlSynFlag {
     /// - ふつうはｆｏｒ文の条件がある行を返す
     fn update_loop_var(
             &mut self,
+            runtime: &mut run::Runtime,
             iter_cond_node: Option<node::CalculNode>,
     ) -> Result<usize, control_syn::ControlSynErr> {
         match self.status.last_mut().ok_or(control_syn::ControlSynErr::DataIsNotFound)? {
             SynFlag::For { status, for_start, my_block: _ } => {
-                return match running_for_loop(status.clone(), iter_cond_node.clone()) {
+                return match running_for_loop(runtime, status.clone(), iter_cond_node.clone()) {
                     Ok(result) => {
                         // ループ変数を更新
                         *status = Some(result);
@@ -173,6 +175,7 @@ impl ControlSynFlag {
     ///  反復処理がこれから始まることを設定
     pub fn now_loop(
         &mut self,
+        runtime: &mut run::Runtime,
         cond_location: Option<usize>,
         iter_cond_node: Option<node::CalculNode>,
     ) -> Result<usize, control_syn::ControlSynErr> {
@@ -185,10 +188,10 @@ impl ControlSynFlag {
                 _ => panic!("JJJ for eval"),
             }
 
-            self.update_loop_var(iter_cond_node.clone())
+            self.update_loop_var(runtime, iter_cond_node.clone())
         } else {
             // 実行フェーズ
-            self.update_loop_var(iter_cond_node.clone())
+            self.update_loop_var(runtime, iter_cond_node.clone())
         };
     }
 }

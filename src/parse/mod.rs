@@ -10,5 +10,4 @@ use semantic::cond_branch::make_if_node;
 use semantic::cond_branch::make_if_else_node;
 
 use crate::token::token;
-use crate::manager::global_state::func_manager;
 use crate::package::load;

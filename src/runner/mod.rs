@@ -11,8 +11,7 @@ use crate::manager::{
     func,
     variable,
     type_info,
-    VarRegion,
-    global_state::*,
+    VarRegion
 };
 use crate::package::manage;
 use crate::api::{
@@ -22,5 +21,4 @@ use crate::api::{
 };
 use crate::parse::node;
 use crate::error::*;
-use crate::manager::global_state;
 use flags::*;

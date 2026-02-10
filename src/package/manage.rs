@@ -13,7 +13,11 @@ fn native_func_manager() -> MutexGuard<'static, Vec<abi::NativeFuncData>> {
 }
 
 ///  ネイティブ関数に渡す引数を作成
-fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::VmArgsValue> {
+fn make_vm_args(
+        runtime: &mut run::Runtime,
+        args: node::CalculNode,
+        mut args_type: Vec<String>,
+) -> Vec<lib::VmArgsValue> {
     let mut vm_args = Vec::<lib::VmArgsValue>::new();
     let mut now_node = args.clone();
     while now_node.node_type == node::NodeKind::NodeArgsValue {
@@ -23,7 +27,7 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
             match args_type.remove(0).as_str() {
                 "str" => {
                     let c_value = lib::CValue {
-                        str_value: match eval::node_run(arg_node) {
+                        str_value: match eval::node_run(runtime, arg_node) {
                             type_info::VarValue::Str(r) => CString::new(r).unwrap().into_raw(),
                             _ => panic!("un match type"),
                         }
@@ -35,7 +39,7 @@ fn make_vm_args(args: node::CalculNode, mut args_type: Vec<String>) -> Vec<lib::
                 }
                 "int" => {
                     let c_value = lib::CValue {
-                        i32_value: match eval::node_run(arg_node) {
+                        i32_value: match eval::node_run(runtime, arg_node) {
                             type_info::VarValue::Int32(r) => r,
                             _ => panic!("un match type"),
                         }
@@ -81,6 +85,7 @@ fn get_vm_ret_value(ret_value: lib::VmArgsValue) -> Option<type_info::VarValue> 
 }
 
 pub fn run_native_func(
+        runtime: &mut run::Runtime,
         receiver_name: String,
         func_name: String,
         args: node::CalculNode
@@ -97,7 +102,7 @@ pub fn run_native_func(
         .expect("this netive func is false");
     let vm_func = func_call_data.func_ptr;
     let ret_value = unsafe {
-        let vm_args = make_vm_args(args.clone(), func_call_data.args_type.clone());
+        let vm_args = make_vm_args(runtime, args.clone(), func_call_data.args_type.clone());
         let ret = vm_func(vm_args.as_ptr() as *mut lib::VmArgsValue, vm_args.len());
         get_vm_ret_value(ret)
     };

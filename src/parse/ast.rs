@@ -1,14 +1,16 @@
 use super::*;
 
 
-pub struct Parser {
+pub struct Parser<'a> {
     pub brace_depth: i32,
+    pub all_info: &'a mut node::AllInfo,
 }
 
-impl Parser {
-    pub fn new() -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(all_info: &'a mut node::AllInfo) -> Self {
         Parser {
             brace_depth: 0,
+            all_info: all_info,
         }
     }
 
@@ -23,24 +25,24 @@ impl Parser {
             match token[index].kind {
                 token::TokenKind::TokenNum => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenBoolTrue => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenBoolFalse => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenFloat => {
                     let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenFuncStart => {
                     let func_node = semantic::func::make_func_header(token.clone(), &mut index);
                     self.brace_depth = 0;
-                    func_manager().add_func(func_node);
+                    self.all_info.func_info.add_func(func_node.clone());
                     continue;
                 }
                 token::TokenKind::TokenUsePackage => {
@@ -50,38 +52,37 @@ impl Parser {
                 }
                 // token::TokenKind::TokenNewVar => {
                 //     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
-                //     func_manager().add_func_calcul_node(node, self.brace_depth.clone());
                 // }
                 token::TokenKind::TokenName => {
                     let node = expr::parse_assign::parse_assign(token.clone(), &mut index).0;
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenLessThan => {
                     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenSpace => {}
                 token::TokenKind::TokenRet => {
                     let node = semantic::ret::make_ret_node(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenLBrace => self.brace_depth += 1,
                 token::TokenKind::TokenRBrace => {
                     self.brace_depth -= 1;
                     index += 1;
                     if let Some(node) = make_if_else_node(token.clone(), &mut index) {
-                        func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                        self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                     }
                     continue;
                 }
                 token::TokenKind::TokenIf => {
                     let node = make_if_node(token.clone(), &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                     continue;
                 }
                 token::TokenKind::TokenFor => {
                     let node = make_for_node(&token, &mut index);
-                    func_manager().add_func_calcul_node(node, self.brace_depth.clone());
+                    self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                     continue;
                 }
                 _ => {

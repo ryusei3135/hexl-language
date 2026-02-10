@@ -1,49 +1,55 @@
 use super::*;
 
-
-pub fn get_variable_info(name: String) -> Result<variable::VariableInfo, define_msg::VarErrorOrLog> {
-    global_state::var_manager().get_var(name)
-}
-
 // pub fn update_variable_value(name: String, new_value: type_info::VarValue) {
 //     if !global_state::var_manager().update_var(name, new_value) {
 //         std::process::exit(1);
 //     }
 // }
 
-pub fn call_var_value(name: String) -> type_info::VarValue {
-    match get_variable_info(name) {
+/// 変数を呼び出す
+/// # 引数
+/// - runtime
+///     インタプリタを実行するのに必要な物がすべて入っている
+/// - name
+///     呼び出す変数の名前
+pub fn call_var_value(
+        runtime: &mut run::Runtime,
+        name: &String,
+) -> type_info::VarValue {
+    match runtime.all_info.var_info.get_var(name) {
         Ok(var_info) => var_info.value,
         Err(_) => panic!("variable is not defined"),
     }
 }
 
-pub fn define_var(node: node::CalculNode) -> type_info::VarValue {
-    let var_name = node.value;
+pub fn define_var(
+        runtime: &mut run::Runtime,
+        node: &node::CalculNode
+) -> type_info::VarValue {
+    let value = eval::node_run(runtime, *node.right_node.clone().unwrap());
 
-    let value = eval::node_run(*node.right_node.clone().unwrap());
-
-    global_state::var_manager().add_var(
-        var_name.clone(),
+    runtime.all_info.var_info.add_var(
+        &node.value,
         value,
         VarRegion::Stack,
     );
-    call_var_value(var_name.clone())
+    call_var_value(runtime, &node.value)
 }
 
 //  変数の値の上書き
 pub fn update_var_value(
+        runtime: &mut run::Runtime,
         node: node::CalculNode
 ) -> Result<type_info::VarValue, define_msg::VarErrorOrLog> {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
         let var_name = node.left_node.unwrap().value.clone();
-        let value = eval::node_run(*node.right_node.unwrap());
+        let value = eval::node_run(runtime, *node.right_node.unwrap());
 
-        global_state::var_manager().update_var(
+        runtime.all_info.var_info.update_var(
             var_name.clone(),
             value,
         );
-        return Ok(call_var_value(var_name.clone()));
+        return Ok(call_var_value(runtime, &var_name));
     } else {
         println!("syntax err: assign var");
     }
@@ -114,6 +120,7 @@ pub fn update_loop_var(
 /// - loop_condはfor文の条件のノード
 /// - now_valueは現在のfor文の状態(ループ変数の値など)
 pub fn is_for_iterable(
+        runtime: &mut run::Runtime,
         loop_cond: Option<node::CalculNode>,
         now_for_status: Option<IterStatus>,
 ) -> Result<IterStatus, ControlSynErr> {
@@ -127,7 +134,7 @@ pub fn is_for_iterable(
                     }
                     None => {
                         setting_iter_status(
-                            eval::node_run(*cond.left_node.clone().unwrap()),
+                            eval::node_run(runtime, *cond.left_node.clone().unwrap()),
                             Some(cond.value.clone())
                         )
                     }
@@ -141,7 +148,7 @@ pub fn is_for_iterable(
                     }
                     None => {
                         setting_iter_status(
-                            eval::node_run(cond.clone()),
+                            eval::node_run(runtime, cond.clone()),
                             None,
                         )
                     }

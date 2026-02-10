@@ -14,6 +14,7 @@ pub struct MethodInfo {
     pub node: node::CalculNode,
 }
 
+#[derive(Clone)]
 pub struct VariableManager {
     // 変数のデータを保持する動的配列
     pub variables_info_vec: Vec<VariableInfo>,
@@ -89,8 +90,8 @@ impl VariableManager {
         self.local_scope.pop();
     }
     ///  変数のデータを返す
-    pub fn get_var(&self, name: String) -> Result<VariableInfo, define_msg::VarErrorOrLog> {
-        if let Some(index) = self.search_var(&name) {
+    pub fn get_var(&self, name: &String) -> Result<VariableInfo, define_msg::VarErrorOrLog> {
+        if let Some(index) = self.search_var(name) {
             Ok(self.variables_info_vec[index].clone())
         } else {
             eprintln!("[err] this variable is not defined -> {}", name);
@@ -100,11 +101,11 @@ impl VariableManager {
     //  変数を追加
     pub fn add_var(
             &mut self,
-            name: String,
+            name: &String,
             value: type_info::VarValue,
             region: VarRegion,
     ) {
-        if self.variables_info_vec.iter().find(|var| var.name == name).is_some() {
+        if self.variables_info_vec.iter().find(|var| var.name == *name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
             panic!("");
         } else {
@@ -125,7 +126,7 @@ impl VariableManager {
 
             self.variables_info_vec.push(
                 VariableInfo {
-                    name: name,
+                    name: name.clone(),
                     value: value,
                     method: Some(Vec::<MethodInfo>::new()),
                 }
@@ -166,8 +167,12 @@ impl VariableManager {
         }
     }
     //  メゾットのデータを取得
-    pub fn get_method(&self, receiver_name: String, method_name: String) -> MethodInfo {
-        match self.get_var(receiver_name) {
+    pub fn get_method(
+            &self,
+            receiver_name: String,
+            method_name: String
+    ) -> MethodInfo {
+        match self.get_var(&receiver_name) {
             Ok(info) => {
                 info.method
                     .unwrap_or_else(|| {

@@ -1,6 +1,5 @@
 pub mod func;
 pub mod variable;
-pub mod global_state;
 pub mod type_info;
 
 
@@ -8,6 +7,7 @@ use std::sync::{OnceLock, Mutex, MutexGuard};
 use crate::parse::*;
 use crate::error::define_msg;
 use crate::create_var_type_data;
+use crate::runner::run;
 
 
 ///  変数の型の情報を持つ列挙型を作成する
