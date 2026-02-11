@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.7.11] - 2026-02-11
+
+### Language
+- エラーログを出力する際にどこの行かを追加
+- parse全体を例外処理に対応
+
+### Compiler / Interpreter
+- ソースコード src/error/err_handling.rsを削除
+
 ## [0.7.10] - 2026-02-11
 
 ### Language

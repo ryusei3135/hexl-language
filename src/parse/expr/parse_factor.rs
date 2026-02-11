@@ -1,10 +1,10 @@
-use crate::token::token;
-use crate::parse::node;
-use crate::parse::resp;
-use crate::parse::expr::parse_comper::parse_comper_op;
+use super::*;
 
 //  関数に渡す引数の値
-fn parse_func_arg(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+fn parse_func_arg(
+        tokens: Vec<token::Token>,
+        index: &mut usize
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     *index += 1;
     let mut args_node = resp::handler::make_null_node();
     let mut args_list = Vec::<node::CalculNode>::new();
@@ -22,11 +22,11 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculN
             }
             _ => {
                 if allow_arg {
-                    args_list.push(parse_comper_op(tokens.clone(), index));
+                    args_list.push(parse_comper_op(tokens.clone(), index)?);
                     allow_arg = false;
                     continue;
                 } else {
-                    println!("[syntax err]: args");
+                    Err(parse_err::ParseErrs::MissingCommaBetweenArguments)?;
                 }
             }
         }
@@ -41,11 +41,14 @@ fn parse_func_arg(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculN
         );
     }
 
-    args_node
+    Ok(args_node)
 }
 
 /// 配列のノードを作成、実行時に配列に展開
-fn make_array_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+fn make_array_node(
+        tokens: Vec<token::Token>,
+        index: &mut usize
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     let mut array_node = resp::handler::make_null_node();
     let mut can_next_be_value: bool = true;
 
@@ -63,7 +66,7 @@ fn make_array_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcul
                 if can_next_be_value {
                     *index += 1;
                     array_node = resp::handler::make_operator_node(
-                        make_array_node(tokens.clone(), index),
+                        make_array_node(tokens.clone(), index)?,
                         array_node,
                         node::NodeKind::NodeArray,
                     );
@@ -74,7 +77,7 @@ fn make_array_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcul
             _ => {
                 if can_next_be_value {
                     array_node = resp::handler::make_operator_node(
-                        parse_factor(tokens.clone(), index),
+                        parse_factor(tokens.clone(), index)?,
                         array_node,
                         node::NodeKind::NodeArray,
                     );
@@ -86,7 +89,7 @@ fn make_array_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcul
         *index += 1;
     }
 
-    array_node
+    Ok(array_node)
 }
 
 fn make_range_node(
@@ -120,12 +123,12 @@ pub fn call_value_node(
         tokens: Vec<token::Token>,
         current_token: token::Token,
         index: &mut usize
-) -> node::CalculNode {
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     if tokens.len() > 1 + *index {
         *index += 1;
         match tokens[*index].kind {
             token::TokenKind::TokenLParen => {
-                let args_node = parse_func_arg(tokens.clone(), index);
+                let args_node = parse_func_arg(tokens.clone(), index)?;
                 let func_head_data = node::CalculNode {
                     value: current_token.lexeme.clone(),
                     node_type: node::NodeKind::NodeCallFunc,
@@ -133,44 +136,44 @@ pub fn call_value_node(
                     right_node: None,
                     block: None
                 };
-                return func_head_data;
+                return Ok(func_head_data);
             }
             token::TokenKind::TokenRBracket => {
                 //  TokenNameの次にLParenでもTokenDotでもないかつRBracketならそれは変数
                 if tokens[(*index) - 1].kind == token::TokenKind::TokenName {
-                    return resp::handler::make_value_node(
+                    return Ok(resp::handler::make_value_node(
                         &current_token,
                         node::NodeKind::NodeCallVar,
-                    );
+                    ));
                 }
             }
             token::TokenKind::TokenDot => {
                 *index += 1;
                 let current_token_dot = tokens[*index].clone();
-                let method_node = call_value_node(tokens, current_token_dot, index);
+                let method_node = call_value_node(tokens, current_token_dot, index)?;
 
-                return resp::handler::make_receiver_node(
+                return Ok(resp::handler::make_receiver_node(
                     current_token.lexeme.clone(),
                     method_node.clone(),
-                );
+                ));
             }
             token::TokenKind::TokenScope => {
                 *index += 1;
                 let current_token_dot = tokens[*index].clone();
-                let module_node = call_value_node(tokens, current_token_dot, index);
+                let module_node = call_value_node(tokens, current_token_dot, index)?;
 
-                return resp::handler::make_call_module(
+                return Ok(resp::handler::make_call_module(
                     current_token.lexeme.clone(),
                     module_node.clone(),
-                );
+                ));
             }
             token::TokenKind::TokenSpace | token::TokenKind::TokenRParen => {
                 //  TokenNameの次に空白が来たらそれは変数
                 if tokens[(*index) - 1].kind == token::TokenKind::TokenName {
-                    return resp::handler::make_value_node(
+                    return Ok(resp::handler::make_value_node(
                         &current_token,
                         node::NodeKind::NodeCallVar,
-                    );
+                    ));
                 }
             }
             _ => println!("what is token -> {:?}", tokens[*index].kind),
@@ -178,49 +181,52 @@ pub fn call_value_node(
     } else {
         //  変数
         *index += 1;
-        return resp::handler::make_value_node(
+        return Ok(resp::handler::make_value_node(
             &current_token,
             node::NodeKind::NodeCallVar,
-        );
+        ));
     }
 
-    resp::handler::make_null_node()
+    Ok(resp::handler::make_null_node())
 }
 
-pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+pub fn parse_factor(
+        tokens: Vec<token::Token>,
+        index: &mut usize
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     let current_token = &tokens.clone()[*index];
 
     match current_token.kind {
         token::TokenKind::TokenNum => {
             if tokens.len() > *index + 1 {
                 if tokens[*index + 1].kind == token::TokenKind::TokenRangeOp {
-                    return make_range_node(&tokens, index);
+                    return Ok(make_range_node(&tokens, index));
                 }
             }
             *index += 1;
-            return resp::handler::make_value_node(
+            return Ok(resp::handler::make_value_node(
                 current_token,
                 node::NodeKind::NodeNum,
-            );
+            ));
         }
         token::TokenKind::TokenBoolTrue => {
-            return resp::handler::convert_value_to_node(
+            return Ok(resp::handler::convert_value_to_node(
                 current_token.lexeme.clone(),
                 node::NodeKind::NodeBoolTrue
-            );
+            ));
         }
         token::TokenKind::TokenBoolFalse => {
-            return resp::handler::convert_value_to_node(
+            return Ok(resp::handler::convert_value_to_node(
                 current_token.lexeme.clone(),
                 node::NodeKind::NodeBoolFalse
-            );
+            ));
         }
         token::TokenKind::TokenFloat => {
             *index += 1;
-            return resp::handler::make_value_node(
+            return Ok(resp::handler::make_value_node(
                 current_token,
                 node::NodeKind::NodeFloat,
-            );
+            ));
         }
         token::TokenKind::TokenLBracket => {
             *index += 1;
@@ -229,11 +235,11 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcu
         token::TokenKind::TokenNot => {
             if tokens.len() > 1 + *index {
                 *index += 1;
-                return resp::handler::make_operator_node(
-                    parse_factor(tokens, index),
+                return Ok(resp::handler::make_operator_node(
+                    parse_factor(tokens, index)?,
                     resp::handler::make_null_node(),
                     node::NodeKind::NodeNot
-                );
+                ));
             } else {
                 println!("[syntax err]: line {}", tokens[*index].line);
                 panic!("");
@@ -242,10 +248,10 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcu
         token::TokenKind::TokenName => return call_value_node(tokens, current_token.clone(), index),
         token::TokenKind::TokenString => {
             *index += 1;
-            return resp::handler::convert_value_to_node(
+            return Ok(resp::handler::convert_value_to_node(
                 current_token.lexeme.clone(),
                 node::NodeKind::NodeStr,
-            );
+            ));
         }
         token::TokenKind::TokenLParen => {
             *index += 1; // '('をスキップ
@@ -263,7 +269,7 @@ pub fn parse_factor(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcu
         }
         _ => {
             println!("Error: Unexpected token {:?}", current_token);
-            return resp::handler::make_null_node();
+            return Ok(resp::handler::make_null_node());
         }
     }
 }

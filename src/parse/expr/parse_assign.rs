@@ -19,7 +19,7 @@ pub fn parse_assign(
             token::TokenKind::TokenAssign => {
                 return if first_var_name {
                     *index += 1;
-                    let right = parse_comper::parse_comper_op(tokens.clone(), index);
+                    let right = parse_comper::parse_comper_op(tokens.clone(), index)?;
                     Ok(
                         (resp::handler::make_operator_node(
                             node,
@@ -35,7 +35,7 @@ pub fn parse_assign(
                 return if first_var_name {
                     defined_var = true;
                     *index += 1;
-                    let right = parse_comper::parse_comper_op(tokens.clone(), index);
+                    let right = parse_comper::parse_comper_op(tokens.clone(), index)?;
                     node.node_type = node::NodeKind::NodeDefVar;
                     Ok(
                         (resp::handler::make_operator_node(
@@ -58,7 +58,7 @@ pub fn parse_assign(
                         tokens.clone(),
                         current_token,
                         index
-                    );
+                    )?;
                     // 変数に値を代入するノードに設定
                     first_var_name = true;
                 } else {

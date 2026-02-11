@@ -6,7 +6,6 @@ use crate::parse::ast;
 use crate::parse::node;
 use crate::token::tokenizer;
 use crate::runner::run;
-use crate::error;
 
 
 pub fn load_file(file_path: &str) -> Result<(), Error> {
@@ -19,12 +18,11 @@ pub fn load_file(file_path: &str) -> Result<(), Error> {
 
     for (number, line) in reader.lines().enumerate() {
         let line = line?;
-        error::err_handling::add_line(line.clone());
         let token_data = tokenizer.make_token(line, number);
         tokenizer.init();
 
         if let Err(e) = parser.make_node(token_data) {
-            e.print_log();
+            e.print_log(&number);
         }
     }
 

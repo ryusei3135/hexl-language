@@ -24,19 +24,19 @@ impl<'a> Parser<'a> {
         while token.len() > index {
             match token[index].kind {
                 token::TokenKind::TokenNum => {
-                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenBoolTrue => {
-                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenBoolFalse => {
-                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenFloat => {
-                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index);
+                    let node = expr::parse_expr::parse_expr(token.clone(), &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenFuncStart => {
@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
                 }
                 token::TokenKind::TokenSpace => {}
                 token::TokenKind::TokenRet => {
-                    let node = semantic::ret::make_ret_node(token.clone(), &mut index);
+                    let node = semantic::ret::make_ret_node(token.clone(), &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenLBrace => {
@@ -72,18 +72,18 @@ impl<'a> Parser<'a> {
                 token::TokenKind::TokenRBrace => {
                     self.brace_depth -= 1;
                     index += 1;
-                    if let Some(node) = make_if_else_node(token.clone(), &mut index) {
+                    if let Some(node) = make_if_else_node(token.clone(), &mut index)? {
                         self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                     }
                     continue;
                 }
                 token::TokenKind::TokenIf => {
-                    let node = make_if_node(token.clone(), &mut index);
+                    let node = make_if_node(token.clone(), &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                     continue;
                 }
                 token::TokenKind::TokenFor => {
-                    let node = make_for_node(&token, &mut index);
+                    let node = make_for_node(&token, &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                     continue;
                 }

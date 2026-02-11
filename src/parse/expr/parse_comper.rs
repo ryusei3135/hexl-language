@@ -1,18 +1,18 @@
-use crate::token::token;
-use crate::parse::node;
-use crate::parse::expr::parse_expr;
-use crate::parse::resp;
+use super::*;
 
 
 
-pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
-    let mut node = parse_expr::parse_expr(tokens.clone(), index);
+pub fn parse_comper_op(
+        tokens: Vec<token::Token>,
+        index: &mut usize
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
+    let mut node = parse_expr::parse_expr(tokens.clone(), index)?;
 
     while tokens.len() > *index {
         match tokens[*index].kind {
             token::TokenKind::TokenEqTo => {
                 *index += 1;
-                let right = parse_expr::parse_expr(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index)?;
                 node = resp::handler::make_operator_node(
                     node,
                     right,
@@ -21,7 +21,7 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::Ca
             },
             token::TokenKind::TokenNotEqTo => {
                 *index += 1;
-                let right = parse_expr::parse_expr(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index)?;
                 node = resp::handler::make_operator_node(
                     node,
                     right,
@@ -30,7 +30,7 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::Ca
             },
             token::TokenKind::TokenLessThanOrEqualTo => {
                 *index += 1;
-                let right = parse_expr::parse_expr(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index)?;
                 node = resp::handler::make_operator_node(
                     node,
                     right,
@@ -39,7 +39,7 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::Ca
             }
             token::TokenKind::TokenGreaterThanOrEqualTo => {
                 *index += 1;
-                let right = parse_expr::parse_expr(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index)?;
                 node = resp::handler::make_operator_node(
                     node,
                     right,
@@ -48,7 +48,7 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::Ca
             }
             token::TokenKind::TokenLessThan => {
                 *index += 1;
-                let right = parse_expr::parse_expr(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index)?;
                 node = resp::handler::make_operator_node(
                     node,
                     right,
@@ -57,7 +57,7 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::Ca
             }
             token::TokenKind::TokenGreaterThan => {
                 *index += 1;
-                let right = parse_expr::parse_expr(tokens.clone(), index);
+                let right = parse_expr::parse_expr(tokens.clone(), index)?;
                 node = resp::handler::make_operator_node(
                     node,
                     right,
@@ -73,5 +73,5 @@ pub fn parse_comper_op(tokens: Vec<token::Token>, index: &mut usize) -> node::Ca
         }
     }
 
-    node
+    Ok(node)
 }

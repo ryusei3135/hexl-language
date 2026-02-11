@@ -1,10 +1,7 @@
-use crate::token::token;
-use crate::parse::node;
-use crate::parse::expr::parse_comper;
-use crate::parse::resp;
+use super::*;
 
 
-pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> Result<node::CalculNode, parse_err::ParseErrs> {
     let mut ret_node = resp::handler::make_null_node();
     let mut ret_token: bool = false;
     ret_node.node_type = node::NodeKind::NodeRet;
@@ -20,7 +17,7 @@ pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calc
                             parse_comper::parse_comper_op(
                                 tokens.clone(),
                                 index
-                            )
+                            )?
                         )
                     );
                 }
@@ -29,5 +26,5 @@ pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calc
         *index += 1;
     }
 
-    ret_node
+    Ok(ret_node)
 }

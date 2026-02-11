@@ -9,7 +9,7 @@ fn make_token_in_node(
         first_token: &(token::TokenKind, &String),
         tokens: &Vec<token::Token>,
         index: &mut usize,
-) -> Result<node::CalculNode, ()> {
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     // 最初に変数のトークンが来ていたかつ現在のトークンが"in"
     // なら変数に代入しながら値を更新するノードを作成
     if first_token.0 == token::TokenKind::TokenName {
@@ -18,20 +18,21 @@ fn make_token_in_node(
             node::CalculNode {
                 value: first_token.1.clone(),
                 node_type: node::NodeKind::NodeIn,
-                left_node: Some(Box::new(expr::parse_expr::parse_expr(tokens.clone(), index))),
+                left_node: Some(Box::new(expr::parse_expr::parse_expr(tokens.clone(), index)?)),
                 right_node: None,
                 block: Some(tokens[0].line),
             }
         );
+    } else {
+        panic!("for node");
     }
-    Err(())
 }
 
 /// for文のノードを作成
 pub fn make_for_node(
         tokens: &Vec<token::Token>,
         index: &mut usize
-) -> node::CalculNode {
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     *index += 1;
     let mut for_loop_node = resp::handler::make_null_node();
     let mut first_token: (token::TokenKind, &String) = (token::TokenKind::TokenEOF, &String::new());
@@ -40,7 +41,7 @@ pub fn make_for_node(
         match tokens[*index].kind {
             token::TokenKind::TokenNum => {
                 first_token = (token::TokenKind::TokenNum, &tokens[*index].lexeme);
-                for_loop_node = expr::parse_expr::parse_expr(tokens.clone(), index);
+                for_loop_node = expr::parse_expr::parse_expr(tokens.clone(), index)?;
                 continue;
             }
             token::TokenKind::TokenLBrace => {
@@ -64,13 +65,13 @@ pub fn make_for_node(
         *index += 1;
     }
 
-    node::CalculNode {
+    Ok(node::CalculNode {
         value: String::new(),
         node_type: node::NodeKind::NodeFor,
         left_node: Some(Box::new(for_loop_node)),
         right_node: None,
         block: Some(tokens[0].line),
-    }
+    })
 }
 
 
@@ -114,7 +115,7 @@ mod tests {
         let for_token = make_tokens("for a in 10 {");
         let mut index: usize = 0;
         assert_eq!(
-            make_for_node(&for_token, &mut index),
+            make_for_node(&for_token, &mut index).unwrap(),
             node::CalculNode {
                 value: String::new(),
                 node_type: node::NodeKind::NodeFor,

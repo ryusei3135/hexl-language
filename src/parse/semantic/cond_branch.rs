@@ -1,10 +1,10 @@
-use crate::token::token;
-use crate::parse::node;
-use crate::parse::resp;
-use crate::parse::expr::parse_comper::parse_comper_op;
+use super::*;
 
 
-pub fn make_if_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {
+pub fn make_if_node(
+        tokens: Vec<token::Token>,
+        index: &mut usize
+) -> Result<node::CalculNode, parse_err::ParseErrs> {
     let mut if_node = resp::handler::make_null_node();
 
     while tokens.len() > *index {
@@ -15,17 +15,20 @@ pub fn make_if_node(tokens: Vec<token::Token>, index: &mut usize) -> node::Calcu
                 break;
             }
             _ => {
-                if_node.left_node = Some(Box::new(parse_comper_op(tokens.clone(), index)));
+                if_node.left_node = Some(Box::new(parse_comper_op(tokens.clone(), index)?));
                 continue;
             }
         }
         *index += 1;
     }
 
-    if_node
+    Ok(if_node)
 }
 
-pub fn make_if_else_node(tokens: Vec<token::Token>, index: &mut usize) -> Option<node::CalculNode> {
+pub fn make_if_else_node(
+        tokens: Vec<token::Token>,
+        index: &mut usize
+) -> Result<Option<node::CalculNode>, parse_err::ParseErrs> {
     let mut if_else_node = resp::handler::make_null_node();
     if_else_node.node_type = node::NodeKind::NodeIfElse;
 
@@ -33,13 +36,13 @@ pub fn make_if_else_node(tokens: Vec<token::Token>, index: &mut usize) -> Option
         match tokens[*index].kind {
             token::TokenKind::TokenSpace => {},
             token::TokenKind::TokenElse => {
-                return Some(make_else_node(tokens.clone(), index))
+                return Ok(Some(make_else_node(tokens.clone(), index)));
             },
             token::TokenKind::TokenLBrace => {
                 break;
             }
             _ => {
-                if_else_node.left_node = Some(Box::new(parse_comper_op(tokens.clone(), index)));
+                if_else_node.left_node = Some(Box::new(parse_comper_op(tokens.clone(), index)?));
                 continue;
             }
         }
@@ -47,10 +50,10 @@ pub fn make_if_else_node(tokens: Vec<token::Token>, index: &mut usize) -> Option
     }
 
     if let None = if_else_node.left_node {
-        return None;
+        return Ok(None);
     }
 
-    Some(if_else_node)
+    Ok(Some(if_else_node))
 }
 
 pub fn make_else_node(tokens: Vec<token::Token>, index: &mut usize) -> node::CalculNode {

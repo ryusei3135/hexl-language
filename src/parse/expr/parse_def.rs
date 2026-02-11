@@ -49,11 +49,11 @@ pub fn parse_var_def(
             _ => {
                 if existe_var_name {
                     Err(parse_err::ParseErrs::VarMissingVarNameAfterType)?
+                } else {
+                    panic!("{:?} parse def", tokens[*index].kind);
                 }
-                panic!("{:?} parse def", tokens[*index].kind);
             },
         }
-        *index += 1;
     }
 
     Ok(node)
