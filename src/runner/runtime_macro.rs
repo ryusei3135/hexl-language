@@ -54,32 +54,32 @@ macro_rules! update_array_index {
 
 #[macro_export]
 macro_rules! calcul_by_type {
-    (+, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (+, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => $type(l + r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (-, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (-, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => $type(l - r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (*, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (*, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => $type(l * r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (/, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (/, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => $type(l / r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (%, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (%, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => $type(l % r),)*
             _ => panic!("node run 2 add"),
         }
@@ -88,38 +88,38 @@ macro_rules! calcul_by_type {
 
 #[macro_export]
 macro_rules! comper_op_type {
-    (==, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (==, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => type_info::VarValue::Bool(l == r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (!=, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (!=, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => type_info::VarValue::Bool(l != r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (<=, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (<=, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => type_info::VarValue::Bool(l <= r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (>=, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (>=, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => type_info::VarValue::Bool(l >= r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (<, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (<, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => type_info::VarValue::Bool(l < r),)*
             _ => panic!("node run 2 add"),
         }
     };
-    (>, $runtime:ident, $node:path, $($type:path),*) => {
-        match (get_left_value($runtime, &$node), get_right_value($runtime, &$node)) {
+    (>, $bind:expr, $runtime:ident, $node:path, $($type:path),*) => {
+        match (get_left_value($runtime, $bind, &$node), get_right_value($runtime, $bind, &$node)) {
             $(($type(l), $type(r)) => type_info::VarValue::Bool(l > r),)*
             _ => panic!("node run 2 add"),
         }

@@ -5,6 +5,7 @@ use super::*;
 pub struct VariableInfo {
     pub name: String,
     pub value: type_info::VarValue,
+    pub var_type_name: Option<String>,
     pub method: Option<Vec<MethodInfo>>,
 }
 
@@ -103,6 +104,7 @@ impl VariableManager {
             &mut self,
             name: &String,
             value: type_info::VarValue,
+            var_type_name: &Option<String>,
             region: VarRegion,
     ) {
         if self.variables_info_vec.iter().find(|var| var.name == *name).is_some() {
@@ -124,10 +126,26 @@ impl VariableManager {
                 },
             }
 
+            // 型の情報を字列に変換
+            let type_name: String = if let Some(name) = var_type_name {
+                if !type_api::match_txt_to_value_type(name, &value) {
+                    panic!("JJ");
+                }
+
+                name.to_string()
+            } else {
+                if let Ok(txt) = type_api::change_var_value_to_txt(&value) {
+                    txt.to_string()
+                } else {
+                    panic!("ll");
+                }
+            };
+
             self.variables_info_vec.push(
                 VariableInfo {
                     name: name.clone(),
-                    value: value,
+                    value: value.clone(),
+                    var_type_name: Some(type_name.clone()),
                     method: Some(Vec::<MethodInfo>::new()),
                 }
             );

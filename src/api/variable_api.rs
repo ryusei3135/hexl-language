@@ -26,11 +26,19 @@ pub fn define_var(
         runtime: &mut run::Runtime,
         node: &node::CalculNode
 ) -> type_info::VarValue {
-    let value = eval::node_run(runtime, *node.right_node.clone().unwrap());
+    // もし変数定義に型があるなら、束縛する変数の名前をゲット
+    let bind_type: Option<String> = if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeType {
+        Some(node.left_node.clone().unwrap().value.clone())
+    } else {
+        None
+    };
+
+    let value = eval::node_run(runtime, &bind_type, *node.right_node.clone().unwrap());
 
     runtime.all_info.var_info.add_var(
         &node.value,
         value,
+        &bind_type,
         VarRegion::Stack,
     );
     call_var_value(runtime, &node.value)
@@ -43,7 +51,7 @@ pub fn update_var_value(
 ) -> Result<type_info::VarValue, define_msg::VarErrorOrLog> {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeCallVar {
         let var_name = node.left_node.unwrap().value.clone();
-        let value = eval::node_run(runtime, *node.right_node.unwrap());
+        let value = eval::node_run(runtime, &None, *node.right_node.unwrap());
 
         runtime.all_info.var_info.update_var(
             var_name.clone(),
@@ -139,7 +147,7 @@ pub fn is_for_iterable(
                     None => {
                         // for文の情報がないので、for文の情報を設定
                         setting_iter_status(
-                            eval::node_run(runtime, *cond.left_node.clone().unwrap()),
+                            eval::node_run(runtime, &None, *cond.left_node.clone().unwrap()),
                             Some(cond.value.clone())
                         )
                     }
@@ -153,7 +161,7 @@ pub fn is_for_iterable(
                     }
                     None => {
                         setting_iter_status(
-                            eval::node_run(runtime, cond.clone()),
+                            eval::node_run(runtime, &None, cond.clone()),
                             None,
                         )
                     }

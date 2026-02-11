@@ -19,12 +19,28 @@ use crate::runner::run;
 #[macro_export]
 macro_rules! create_type_api {
     ($($member:ident : $type:ty : $txt:expr,)*) => {
-        pub fn change_txt_type_to_type(txt_type: String) -> type_info::VarType {
+        /// 文字列の型を型の情報に変換
+        pub fn change_txt_type_to_type(txt_type: &String) -> type_info::VarType {
             match txt_type.as_str() {
                 $($txt => type_info::VarType::$member,)*
-                _ => panic!("not found txt type"),
+                _ => panic!("not found txt type -> {}", txt_type),
             }
         }
+        /// 文字列の型と、値としての型を比較し同じ型に分類されるならtrueを返す
+        pub fn match_txt_to_value_type(txt: &str, value: &type_info::VarValue) -> bool {
+            match (txt, value) {
+                $(($txt, type_info::VarValue::$member(_)) => true,)*
+                _ => false,
+            }
+        }
+        /// 値としての型を文字列に変換
+        pub fn change_var_value_to_txt(value: &type_info::VarValue) -> Result<String, ()> {
+            match *value {
+                $(type_info::VarValue::$member(_) => Ok($txt.to_string()),)*
+                _ => Err(())
+            }
+        }
+
         pub fn match_type_kind(
                 type_name: &type_info::VarType,
                 ret_value: &type_info::VarValue,

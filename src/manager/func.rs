@@ -9,7 +9,7 @@ pub struct FuncManager {
 #[derive(Clone)]
 pub struct FuncArgsNode {
     pub name: String,
-    pub type_name: Option<node::CalculNode>,
+    pub type_name: Option<String>,
     pub next: Option<Box<FuncArgsNode>>,
 }
 

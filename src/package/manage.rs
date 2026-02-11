@@ -15,7 +15,7 @@ fn make_vm_args(
             match args_type.remove(0).as_str() {
                 "str" => {
                     let c_value = lib::CValue {
-                        str_value: match eval::node_run(runtime, arg_node) {
+                        str_value: match eval::node_run(runtime, &Some("str".to_string()), arg_node) {
                             type_info::VarValue::Str(r) => CString::new(r).unwrap().into_raw(),
                             _ => panic!("un match type"),
                         }
@@ -27,7 +27,7 @@ fn make_vm_args(
                 }
                 "int" => {
                     let c_value = lib::CValue {
-                        i32_value: match eval::node_run(runtime, arg_node) {
+                        i32_value: match eval::node_run(runtime, &Some("i32".to_string()), arg_node) {
                             type_info::VarValue::Int32(r) => r,
                             _ => panic!("un match type"),
                         }
@@ -39,7 +39,7 @@ fn make_vm_args(
                 }
                 "f32" => {
                     let c_value = lib::CValue {
-                        f32_value: match eval::node_run(runtime, arg_node) {
+                        f32_value: match eval::node_run(runtime, &Some("f32".to_string()), arg_node) {
                             type_info::VarValue::Float32(r) => r,
                             _ => panic!("un match type"),
                         }

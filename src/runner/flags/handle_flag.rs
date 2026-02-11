@@ -125,6 +125,7 @@ fn running_for_loop(
             runtime.all_info.var_info.add_var(
                 &var_name,
                 status.loop_var.clone(),
+                &None,
                 VarRegion::Stack,
             );
         }

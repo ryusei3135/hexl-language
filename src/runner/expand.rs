@@ -11,7 +11,7 @@ pub fn expand_array_node(
     if node.node_type == node::NodeKind::NodeArray {
         // right_nodeに次のリストの値が入っている
         array_value = expand_array_node(runtime, *node.right_node.clone().unwrap());
-        array_value.push(Box::new(eval::node_run(runtime, *node.left_node.clone().unwrap())));
+        array_value.push(Box::new(eval::node_run(runtime, &None, *node.left_node.clone().unwrap())));
     }
 
     array_value

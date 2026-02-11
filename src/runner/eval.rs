@@ -31,40 +31,81 @@ fn call_module(
 
 fn get_left_value(
         runtime: &mut run::Runtime,
+        bind_type: &Option<String>,
         node: &node::CalculNode
 ) -> type_info::VarValue {
-    node_run(runtime, *node.left_node.clone().unwrap())
+    node_run(runtime, bind_type, *node.left_node.clone().unwrap())
 }
 
 fn get_right_value(
         runtime: &mut run::Runtime,
+        bind_type: &Option<String>,
         node: &node::CalculNode
 ) -> type_info::VarValue {
-    node_run(runtime, *node.right_node.clone().unwrap())
+    node_run(runtime, bind_type, *node.right_node.clone().unwrap())
 }
 
 
 pub fn node_run(
         runtime: &mut run::Runtime,
+        bind_type: &Option<String>,
         node: node::CalculNode
 ) -> type_info::VarValue {
     match node.node_type {
         node::NodeKind::NodeNum => {
-            if node.value.clone().parse::<i32>().is_ok() {
-                return type_info::VarValue::Int32(node.value.clone().parse::<i32>().unwrap());
+            if let Some(type_name) = bind_type {
+                match type_api::change_txt_type_to_type(type_name) {
+                    type_info::VarType::Int32 => {
+                        if node.value.clone().parse::<i32>().is_ok() {
+                            return type_info::VarValue::Int32(node.value.clone().parse::<i32>().unwrap());
+                        }
+                    }
+                    _ => panic!("unmatch var type"),
+                }
+            } else {
+                if node.value.clone().parse::<i32>().is_ok() {
+                    return type_info::VarValue::Int32(node.value.clone().parse::<i32>().unwrap());
+                }
             }
             panic!("[system err] This sequence cannot be classified into any category");
         }
-        node::NodeKind::NodeBoolTrue => return type_info::VarValue::Bool(true),
-        node::NodeKind::NodeBoolFalse => return type_info::VarValue::Bool(false),
-        node::NodeKind::NodeFloat => {
-            if node.value.clone().parse::<f32>().is_ok() {
-                return type_info::VarValue::Float32(node.value.clone().parse::<f32>().unwrap());
+        node::NodeKind::NodeBoolTrue => {
+            if let Some(type_name) = bind_type {
+                if type_api::change_txt_type_to_type(type_name) == type_info::VarType::Bool {
+                    return type_info::VarValue::Bool(true);
+                }
+                panic!("[system err] This sequence cannot be classified into any category");
+            } else {
+                return type_info::VarValue::Bool(true);
             }
-            panic!("[system err] This sequence cannot be classified into any category");
+        }
+        node::NodeKind::NodeBoolFalse => {
+            if let Some(type_name) = bind_type {
+                if type_api::change_txt_type_to_type(type_name) == type_info::VarType::Bool {
+                    return type_info::VarValue::Bool(false);
+                }
+                panic!("[system err] This sequence cannot be classified into any category");
+            } else {
+                return type_info::VarValue::Bool(false);
+            }
+        }
+        node::NodeKind::NodeFloat => {
+            if let Some(type_name) = bind_type {
+                if type_api::change_txt_type_to_type(type_name) == type_info::VarType::Float32 {
+                    if node.value.clone().parse::<f32>().is_ok() {
+                        return type_info::VarValue::Float32(node.value.clone().parse::<f32>().unwrap());
+                    }
+                }
+                panic!("[system err] This sequence cannot be classified into any category");
+            } else {
+                if node.value.clone().parse::<f32>().is_ok() {
+                    return type_info::VarValue::Float32(node.value.clone().parse::<f32>().unwrap());
+                }
+                panic!("[system err] This sequence cannot be classified into any category");
+            }
         }
         node::NodeKind::NodeRangeOp => {
-            match (get_left_value(runtime, &node), get_right_value(runtime, &node)) {
+            match (get_left_value(runtime, bind_type, &node), get_right_value(runtime, bind_type, &node)) {
                 (type_info::VarValue::Int32(l), type_info::VarValue::Int32(r)) => {
                     let mut arr = Vec::<Box<type_info::VarValue>>::new();
                     for v in l..r {
@@ -81,17 +122,27 @@ pub fn node_run(
             return type_info::VarValue::Array(array_value.to_vec());
         }
         node::NodeKind::NodeNot => {
-            match get_left_value(runtime, &node) {
+            match get_left_value(runtime, bind_type, &node) {
                 type_info::VarValue::Int32(v) => type_info::VarValue::Bool(!(v != 0)),
                 type_info::VarValue::Float32(v) => type_info::VarValue::Bool(!(v != 0.0)),
                 type_info::VarValue::Bool(v) => type_info::VarValue::Bool(!v),
                 _ => panic!("err not node"),
             }
         }
-        node::NodeKind::NodeStr => type_info::VarValue::Str(node.value.clone()),
+        node::NodeKind::NodeStr => {
+            if let Some(type_name) = bind_type {
+                if type_api::change_txt_type_to_type(type_name) == type_info::VarType::Str {
+                    return type_info::VarValue::Str(node.value.clone());
+                }
+                panic!("[system err] This sequence cannot be classified into any category");
+            } else {
+                return type_info::VarValue::Str(node.value.clone());
+            }
+        }
         node::NodeKind::NodeAdd => {
             crate::calcul_by_type!(
                 +,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -101,6 +152,7 @@ pub fn node_run(
         node::NodeKind::NodeSub => {
             crate::calcul_by_type!(
                 -,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -110,6 +162,7 @@ pub fn node_run(
         node::NodeKind::NodeMul => {
             crate::calcul_by_type!(
                 *,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -119,6 +172,7 @@ pub fn node_run(
         node::NodeKind::NodeDiv => {
             crate::calcul_by_type!(
                 /,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -128,6 +182,7 @@ pub fn node_run(
         node::NodeKind::NodeModulo => {
             crate::calcul_by_type!(
                 %,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -137,6 +192,7 @@ pub fn node_run(
         node::NodeKind::NodeEqTo => {
             crate::comper_op_type!(
                 ==,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -146,6 +202,7 @@ pub fn node_run(
         node::NodeKind::NodeNotEqTo => {
             crate::comper_op_type!(
                 !=,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -155,6 +212,7 @@ pub fn node_run(
         node::NodeKind::NodeLessThanOrEqualTo => {
             crate::comper_op_type!(
                 <=,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -164,6 +222,7 @@ pub fn node_run(
         node::NodeKind::NodeGreaterThanOrEqualTo => {
             crate::comper_op_type!(
                 >=,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -173,6 +232,7 @@ pub fn node_run(
         node::NodeKind::NodeLessThan => {
             crate::comper_op_type!(
                 <,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,
@@ -182,6 +242,7 @@ pub fn node_run(
         node::NodeKind::NodeGreaterThan => {
             crate::comper_op_type!(
                 >,
+                bind_type,
                 runtime,
                 node,
                 type_info::VarValue::Int32,

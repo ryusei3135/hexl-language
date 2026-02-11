@@ -137,7 +137,7 @@ impl Runtime {
             block_status.now = func_process.nodes[index].block.unwrap();
 
             if block_status.now == block_status.execute {
-                let result = eval::node_run(self, func_process.nodes[index].clone());
+                let result = eval::node_run(self, &None, func_process.nodes[index].clone());
 
                 if del_stack {
                     del_stack = flag_switch::handle_del_stack_flag(&result, &mut cond_flags);
@@ -187,7 +187,7 @@ impl Runtime {
                                 }
                             }
                             node::NodeKind::NodeRet => {
-                                let r = eval::node_run(self, *func_process.nodes[index].left_node.clone().unwrap());
+                                let r = eval::node_run(self, &None, *func_process.nodes[index].left_node.clone().unwrap());
                                 if type_api::match_type_kind(&func_process.ret_type, &r) {
                                     return {
                                         self.all_info.var_info.remove_stack();

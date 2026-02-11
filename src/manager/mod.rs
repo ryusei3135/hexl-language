@@ -6,6 +6,7 @@ pub mod type_info;
 use crate::parse::*;
 use crate::error::define_msg;
 use crate::create_var_type_data;
+use crate::api::type_api;
 
 ///  変数の型の情報を持つ列挙型を作成する
 #[macro_export]
@@ -18,7 +19,7 @@ macro_rules! create_var_type_data {
             $($member($type)),*
         }
         ///  この列挙型は、変数の型情報のみを表す。
-        #[derive(Clone)]
+        #[derive(Clone, PartialEq)]
         pub enum VarType {
             $($member),*
         }
