@@ -1,8 +1,4 @@
-use std::path::PathBuf;
-use crate::package::native;
-use crate::parse::node;
-use crate::package::yaml;
-use crate::package::manage;
+use super::*;
 
 
 fn judge_file_extension(filename: &str, extension: &str) -> PathBuf {
@@ -23,7 +19,10 @@ fn is_yaml_extension(filename: &str) -> Option<PathBuf> {
 }
 
 ///  ライブラリを使う処理をするノードを実行
-pub fn load_native_lib(package_node: node::CalculNode) {
+pub fn load_native_lib(
+        all_info: &mut node::AllInfo,
+        package_node: &node::CalculNode
+) {
     if package_node.node_type != node::NodeKind::NodeUsePackage {
         eprintln!("[system err]: [file]: package/load.rs");
         panic!("[start node type is not NodeUsePackage]");
@@ -46,7 +45,7 @@ pub fn load_native_lib(package_node: node::CalculNode) {
             let module_name = library_filename.split("/").last().unwrap().to_string();
             module.module_name = module_name.clone();
 
-            manage::add_module(module);
+            manage::add_module(&mut all_info.native_info, &module);
         } else {
             println!("failure lib");
         }

@@ -10,13 +10,15 @@
 
 typedef enum ArgType {
   Int32,
-  Str,
+  Float32,
   Bool,
   Void,
+  Str,
 } ArgType;
 
 typedef union CValue {
   int32_t i32_value;
+  float f32_value;
   char *str_value;
   bool bool_value;
   uint8_t void_value;

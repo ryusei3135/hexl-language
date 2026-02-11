@@ -1,17 +1,5 @@
 use super::*;
 
-
-static NATIVE_FUNC_DATA: OnceLock<Mutex<Vec<abi::NativeFuncData>>> = OnceLock::new();
-
-
-//  関数のデータにアクセス
-fn native_func_manager() -> MutexGuard<'static, Vec<abi::NativeFuncData>> {
-    NATIVE_FUNC_DATA
-        .get_or_init(|| Mutex::new(Vec::<abi::NativeFuncData>::new()))
-        .lock()
-        .unwrap()
-}
-
 ///  ネイティブ関数に渡す引数を作成
 fn make_vm_args(
         runtime: &mut run::Runtime,
@@ -49,6 +37,18 @@ fn make_vm_args(
                         value: c_value,
                     }
                 }
+                "f32" => {
+                    let c_value = lib::CValue {
+                        f32_value: match eval::node_run(runtime, arg_node) {
+                            type_info::VarValue::Float32(r) => r,
+                            _ => panic!("un match type"),
+                        }
+                    };
+                    lib::VmArgsValue {
+                        arg_type: lib::ArgType::Float32,
+                        value: c_value,
+                    }
+                }
                 "bool" => {
                     let c_value = lib::CValue {
                         bool_value: if let Ok(boolean) = arg_node.value.clone().parse::<bool>() {
@@ -62,7 +62,15 @@ fn make_vm_args(
                         value: c_value,
                     }
                 }
-                "void" => return vm_args,
+                "void" => {
+                    let c_value = lib::CValue {
+                        void_value: 0,
+                    };
+                    lib::VmArgsValue {
+                        arg_type: lib::ArgType::Void,
+                        value: c_value,
+                    }
+                }
                 _ => panic!("what is arg type"),
             }
         );
@@ -78,6 +86,7 @@ fn get_vm_ret_value(ret_value: lib::VmArgsValue) -> Option<type_info::VarValue> 
                 Some(type_info::VarValue::Str(CStr::from_ptr(ret_value.value.str_value).to_string_lossy().into_owned()))
             }
             lib::ArgType::Int32 => Some(type_info::VarValue::Int32(ret_value.value.i32_value)),
+            lib::ArgType::Float32 => Some(type_info::VarValue::Float32(ret_value.value.f32_value)),
             lib::ArgType::Bool => Some(type_info::VarValue::Bool(ret_value.value.bool_value)),
             lib::ArgType::Void => None,
         };
@@ -86,19 +95,19 @@ fn get_vm_ret_value(ret_value: lib::VmArgsValue) -> Option<type_info::VarValue> 
 
 pub fn run_native_func(
         runtime: &mut run::Runtime,
-        receiver_name: String,
-        func_name: String,
-        args: node::CalculNode
+        receiver_name: &String,
+        func_name: &String,
+        args: &node::CalculNode
 ) -> Option<type_info::VarValue> {
-    let func = native_func_manager()
+    let func = runtime.all_info.native_info
         .iter()
-        .find(|n| n.module_name == receiver_name)
+        .find(|n| n.module_name == *receiver_name)
         .map(|n| n.clone())
         .unwrap_or_else(|| {
             panic!("this func is not found(lib)");
         });
     let func_call_data = func.func
-        .get(&func_name)
+        .get(func_name)
         .expect("this netive func is false");
     let vm_func = func_call_data.func_ptr;
     let ret_value = unsafe {
@@ -109,16 +118,21 @@ pub fn run_native_func(
     ret_value
 }
 
-pub fn add_module(module: abi::NativeFuncData) -> bool {
-    let mut manager = native_func_manager(); // &mut Vec<NativeFuncData> など
-
+/// コンパイル済みの関数を追加
+/// # 引数
+/// - native_info = コンパイル済みの関数の情報が入っている
+/// - module = 新しく追加する
+pub fn add_module(
+        native_info: &mut Vec<abi::NativeFuncData>,
+        module: &abi::NativeFuncData
+) -> bool {
     // 既にあるか検索
-    if manager.iter().any(|f| f.module_name == module.module_name) {
+    if native_info.iter().find(|f| f.module_name == module.module_name).is_some() {
         println!("already have this module.");
         return false;
     }
 
     // なければ追加
-    manager.push(module);
+    native_info.push(module.clone());
     true
 }

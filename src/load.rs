@@ -18,11 +18,11 @@ pub fn load_file(file_path: &str) -> Result<(), Error> {
 
     for (number, line) in reader.lines().enumerate() {
         let line = line?;
-        let token_data = tokenizer.make_token(line, number);
+        let token_data = tokenizer.make_token(&line, number);
         tokenizer.init();
 
         if let Err(e) = parser.make_node(token_data) {
-            e.print_log(&number);
+            e.print_log(&number, &line);
         }
     }
 

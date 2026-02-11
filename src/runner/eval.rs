@@ -10,7 +10,7 @@ fn call_method(
 ) -> Option<type_info::VarValue> {
     return match method.node.node_type {
         node::NodeKind::NodeNativeFunc => {
-            manage::run_native_func(runtime, receiver_name, method.name, *call_value.left_node.clone().unwrap())
+            manage::run_native_func(runtime, &receiver_name, &method.name, &*call_value.left_node.clone().unwrap())
         }
         _ => None,
     };
@@ -18,14 +18,14 @@ fn call_method(
 
 fn call_module(
         runtime: &mut run::Runtime,
-        module_name: String,
-        call_value: node::CalculNode
+        module_name: &String,
+        call_value: &node::CalculNode
 ) -> Option<type_info::VarValue> {
     manage::run_native_func(
         runtime,
         module_name,
-        call_value.value.clone(),
-        *call_value.left_node.clone().unwrap()
+        &call_value.value,
+        &*call_value.left_node.clone().unwrap()
     )
 }
 
@@ -220,7 +220,7 @@ pub fn node_run(
             //  引数や、メゾットの名前
             let name = *node.left_node.clone().unwrap();
 
-            if let Some(result) = call_module(runtime, module_name, name) {
+            if let Some(result) = call_module(runtime, &module_name, &name) {
                 return result;
             }
             type_info::VarValue::Null(false)

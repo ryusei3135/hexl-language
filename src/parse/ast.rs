@@ -47,7 +47,10 @@ impl<'a> Parser<'a> {
                 }
                 token::TokenKind::TokenUsePackage => {
                     let package_node = semantic::package_node::make_use_package_node(token.clone(), &mut index);
-                    load::load_native_lib(package_node);
+                    load::load_native_lib(
+                        self.all_info,
+                        &package_node
+                    );
                     break;
                 }
                 // token::TokenKind::TokenNewVar => {

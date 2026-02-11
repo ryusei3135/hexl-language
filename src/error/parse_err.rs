@@ -11,8 +11,8 @@ pub enum ParseErrs {
 }
 
 impl ParseErrs {
-    pub fn print_log(&self, line: &usize) {
-        println!("line -> {}", line);
+    pub fn print_log(&self, line: &usize, txt: &String) {
+        println!("`{}`: line -> {}", txt, line);
         match self {
             ParseErrs::TypeSpecUnspecified => println!("[parse err]: \"type\" of \"<type>\" is not specified when defining the variable type"),
             ParseErrs::TypeSpecAngleBracketForbid => println!("[parse err]: cannot use the tokens \"<\" or \">\" within \"<>\" in a variable definition \"<type>\""),

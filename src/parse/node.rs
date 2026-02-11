@@ -1,4 +1,5 @@
 use crate::manager::*;
+use crate::package::abi;
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,6 +67,7 @@ pub struct CalculNode {
 
 #[derive(Clone)]
 pub struct AllInfo {
+    pub native_info: Vec<abi::NativeFuncData>,
     pub var_info: variable::VariableManager,
     pub func_info: func::FuncManager,
 }
@@ -73,6 +75,7 @@ pub struct AllInfo {
 impl AllInfo {
     pub fn new() -> Self {
         Self {
+            native_info: Vec::<abi::NativeFuncData>::new(),
             var_info: variable::VariableManager::new(),
             func_info: func::FuncManager::new(),
         }

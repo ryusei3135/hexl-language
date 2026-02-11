@@ -18,7 +18,6 @@ pub union CValue {
     pub bool_value: bool,
     pub void_value: u8,
 }
-
 #[repr(C)]
 pub struct VmArgsValue {
     pub arg_type: ArgType,

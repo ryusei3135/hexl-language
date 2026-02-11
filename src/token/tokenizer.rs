@@ -39,7 +39,7 @@ impl Tokenizer {
         };
     }
 
-    pub fn make_token(&mut self, line: String, line_number: usize) -> Vec<token::Token> {
+    pub fn make_token(&mut self, line: &String, line_number: usize) -> Vec<token::Token> {
         self.lexer_state.line_number = line_number;
 
         for chr in line.chars() {
