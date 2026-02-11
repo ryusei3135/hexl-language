@@ -9,3 +9,4 @@ pub mod control_syn;
 pub mod define_msg;
 pub mod err_handling;
 pub mod log;
+pub mod parse_err;

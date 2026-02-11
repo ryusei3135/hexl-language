@@ -23,7 +23,9 @@ pub fn load_file(file_path: &str) -> Result<(), Error> {
         let token_data = tokenizer.make_token(line, number);
         tokenizer.init();
 
-        parser.make_node(token_data);
+        if let Err(e) = parser.make_node(token_data) {
+            e.print_log();
+        }
     }
 
     let mut runtime = run::Runtime::new(all_info);

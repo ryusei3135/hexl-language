@@ -28,9 +28,9 @@ fn make_args_node(tokens: Vec<token::Token>, index: &mut usize) -> manager::func
                 args_node.type_name = {
                     Some(
                         parse_type::parse_type_node(
-                            tokens.clone(),
+                            &tokens,
                             index
-                        )
+                        ).unwrap()
                     )
                 };
                 continue;
@@ -75,7 +75,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut usize) -> manager
                 continue;
             },
             token::TokenKind::TokenLessThan => {
-                func_ret_value_node = Some(parse_type::parse_type_node(tokens.clone(), index));
+                func_ret_value_node = Some(parse_type::parse_type_node(&tokens, index).unwrap());
             }
             token::TokenKind::TokenFuncStart => {
                 func_start_keyword = true;

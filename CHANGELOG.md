@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.7.10] - 2026-02-11
+
+### Language
+- parseの変数宣言や型を指定した際に出るエラーログを実装
+
 ## [0.7.9] - 2026-02-10
 
 ### Compiler / Interpreter

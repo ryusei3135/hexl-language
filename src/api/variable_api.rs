@@ -41,7 +41,7 @@ pub fn update_var_value(
         runtime: &mut run::Runtime,
         node: node::CalculNode
 ) -> Result<type_info::VarValue, define_msg::VarErrorOrLog> {
-    if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeVarName {
+    if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeCallVar {
         let var_name = node.left_node.unwrap().value.clone();
         let value = eval::node_run(runtime, *node.right_node.unwrap());
 
@@ -51,7 +51,7 @@ pub fn update_var_value(
         );
         return Ok(call_var_value(runtime, &var_name));
     } else {
-        println!("syntax err: assign var");
+        println!("syntax err: assign var {:?}", node.left_node.clone().unwrap().node_type);
     }
     return Err(define_msg::VarErrorOrLog::VarIsNotDefined);
 }

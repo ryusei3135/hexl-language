@@ -57,7 +57,7 @@ mod tests {
             assert_eq!(status.range, range);
             dbg!(status.range);
             return Some(
-                if let ControlSemantics::BindsVar(name) = status.var_setting {
+                if let ControlSemantics::BindsVar(_) = status.var_setting {
                     true
                 } else {
                     false
@@ -70,21 +70,21 @@ mod tests {
 
     #[test]
     fn check_init_iter_status() {
-        const range: [type_info::VarValue; 2]
+        const RANGE: [type_info::VarValue; 2]
             = [type_info::VarValue::Int32(0), type_info::VarValue::Int32(5)];
         // 変数に代入あり
         assert_eq!(
             check_init_data(
-                init_iter_status(range,Some("test".to_string())),
-                range
+                init_iter_status(RANGE,Some("test".to_string())),
+                RANGE
             ).unwrap(),
             true
         );
         // 変数に代入なし
         assert_eq!(
             check_init_data(
-                init_iter_status(range, None),
-                range,
+                init_iter_status(RANGE, None),
+                RANGE,
             ).unwrap(),
             false
         );

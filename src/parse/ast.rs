@@ -17,7 +17,7 @@ impl<'a> Parser<'a> {
     pub fn make_node(
             &mut self,
             token: Vec<token::Token>
-    ) {
+    ) -> Result<(), parse_err::ParseErrs>{
         let mut index: usize = 0;
         // 式などのノードを作成する関数を呼び出すときは、indexを何もせずに
         // そのままで渡すこと
@@ -54,11 +54,11 @@ impl<'a> Parser<'a> {
                 //     let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
                 // }
                 token::TokenKind::TokenName => {
-                    let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
+                    let node = expr::parse_def::parse_var_def(&token, &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenLessThan => {
-                    let node = expr::parse_def::parse_var_def(token.clone(), &mut index);
+                    let node = expr::parse_def::parse_var_def(&token, &mut index)?;
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenSpace => {}
@@ -94,5 +94,6 @@ impl<'a> Parser<'a> {
 
             index += 1;
         }
+        Ok(())
     }
 }
