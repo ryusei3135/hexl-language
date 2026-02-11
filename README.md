@@ -25,12 +25,12 @@ Hexlはrustで実装されたプログラミング言語であり
 
 Linux / macOS（bash / zsh）
 ```bash
-docker build -t my-project .
+docker build -t hexl .
 docker run -it --rm -v $(pwd)/:/workspace -w /workspace hexl
 ```
 Windows（PowerShell）
 ```PowerShell
-docker build -t my-project .
+docker build -t hexl .
 docker run -it --rm -v ${PWD}:/workspace -w /workspace hexl
 ```
 
