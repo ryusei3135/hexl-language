@@ -1,0 +1,12 @@
+metadata:
+  filename: "string.so"
+functions:
+  - name: "int_to_str"
+    args_types: ["int"]
+    return_type: "str"
+  - name: "float_to_str"
+    args_types: ["f32"]
+    return_type: "str"
+  - name: "str_len"
+    args_types: ["str"]
+    return_type: "int"

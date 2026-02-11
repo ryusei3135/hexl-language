@@ -1,0 +1,6 @@
+metadata:
+  filename: "io.so"
+functions:
+  - name: "print"
+    args_types: ["str"]
+    return_type: "void"

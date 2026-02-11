@@ -1,0 +1,6 @@
+count.py
+Cargo.lock
+target/
+.idea/
+std/
+template.md

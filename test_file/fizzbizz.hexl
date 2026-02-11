@@ -1,0 +1,16 @@
+use std::io
+use std::string
+
+def start() {
+    for i in 0..10 {
+        if i % 15 == 0 {
+            io::print("fizzbizz")
+        } i % 5 == 0 {
+            io::print("bizz")
+        } i % 3 == 0 {
+            io::print("fizz")
+        } else {
+            io::print(string::int_to_str(i))
+        }
+    }
+}

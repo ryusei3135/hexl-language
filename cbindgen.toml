@@ -1,0 +1,10 @@
+language = "C"
+include_guard = "VM_STRUCT_H"
+include_version = true
+
+[parse]
+parse_deps = false
+clean = true
+
+[export]
+include = ["ArgType", "CValue", "VmArgsValue"]
