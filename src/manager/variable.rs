@@ -266,7 +266,8 @@ mod tests {
                 &(v.to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
                 &None,
-                VarRegion::Stack
+                VarRegion::Stack,
+                None
             );
         }
     }
@@ -299,7 +300,8 @@ mod tests {
                 &("k".to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
                 &None,
-                VarRegion::Static
+                VarRegion::Static,
+                None,
             );
         }
         assert_eq!(variables.variables_info_vec.len(), 18);

@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.9.2] beta 2026-02-13
+
+### Compiler / Interpreter
+- token/categorize.rsの必要ない、モジュールを削除
+- manager/variable.rsの中にあるテストコードを変更
+- parse/parse_def.rsの必要ないモジュールのインポートを削除
+
 ## [0.9.1] beta 2026-02-13
 
 ### Bug Fixes

@@ -125,7 +125,6 @@ pub fn parse_var_def(
 #[cfg(test)]
 mod tests {
     use crate::token::tokenizer;
-    use crate::token::token::Token;
     use super::*;
 
     fn make_mut_token(

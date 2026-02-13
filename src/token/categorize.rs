@@ -1,5 +1,4 @@
 use crate::token::token;
-use crate::token::resp;
 
 
 //  文字を種類ごとに分ける関数
