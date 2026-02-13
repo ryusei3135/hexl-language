@@ -12,6 +12,8 @@ def mut_var() {
 
 def start() {
     mut <bool>boolean := true
+    imm test_1 = 0
+    test_1 = 10
     kkk := 0
     kkk = 10
     <i32>a100 := add(10, 2)

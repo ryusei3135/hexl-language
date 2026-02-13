@@ -87,8 +87,8 @@ pub fn update_var_value(
         return Ok(call_var_value(runtime, &var_name));
     } else {
         println!("syntax err: assign var {:?}", node.left_node.clone().unwrap().node_type);
+        return Err(err_kind::ErrorsKind::UndefinedVariable);
     }
-    return Err(err_kind::ErrorsKind::UndefinedVariable);
 }
 
 /// for文の繰り返す条件を設定

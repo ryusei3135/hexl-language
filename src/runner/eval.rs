@@ -252,7 +252,10 @@ pub fn node_run(
         node::NodeKind::NodeAssignVar => {
             match variable_api::update_var_value(runtime, node.clone()) {
                 Ok(v) => v,
-                Err(_) => type_info::VarValue::Null(false),
+                Err(e) => {
+                    e.print_log(&0, &"test".to_string());
+                    panic!("");
+                }
             }
         }
         node::NodeKind::NodeCallVar => variable_api::call_var_value(runtime, &node.value),
