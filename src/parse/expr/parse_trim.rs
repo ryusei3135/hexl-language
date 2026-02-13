@@ -4,7 +4,7 @@ use super::*;
 pub fn parse_trim(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut node = parse_factor(tokens.clone(), index)?;
 
     while tokens.len() > *index {

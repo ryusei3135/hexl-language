@@ -35,6 +35,8 @@ pub enum NodeKind {
     NodeArray,
     //  型
     NodeType,
+    NodeMut,
+    NodeImm,
     //  関数
     NodeCallFunc,
     NodeArgsValue,

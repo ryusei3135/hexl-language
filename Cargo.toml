@@ -1,6 +1,6 @@
 [package]
 name = "hexl"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 build = "build.rs"
 
@@ -14,5 +14,5 @@ cbindgen = "0.26"
 cc = "1.0"   # C/C++コンパイル用
 
 [lib]
-name = "banana_lang"
+name = "hexl_lib"
 crate-type = ["cdylib"]      # Cから利用できるライブラリ形式

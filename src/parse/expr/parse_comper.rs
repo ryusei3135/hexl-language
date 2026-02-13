@@ -5,7 +5,7 @@ use super::*;
 pub fn parse_comper_op(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut node = parse_expr::parse_expr(tokens.clone(), index)?;
 
     while tokens.len() > *index {

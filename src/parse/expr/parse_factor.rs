@@ -4,7 +4,7 @@ use super::*;
 fn parse_func_arg(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     *index += 1;
     let mut args_node = resp::handler::make_null_node();
     let mut args_list = Vec::<node::CalculNode>::new();
@@ -26,7 +26,7 @@ fn parse_func_arg(
                     allow_arg = false;
                     continue;
                 } else {
-                    Err(parse_err::ParseErrs::MissingCommaBetweenArguments)?;
+                    Err(err_kind::ErrorsKind::MissingCommaBetweenArguments)?;
                 }
             }
         }
@@ -48,7 +48,7 @@ fn parse_func_arg(
 fn make_array_node(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut array_node = resp::handler::make_null_node();
     let mut can_next_be_value: bool = true;
 
@@ -123,7 +123,7 @@ pub fn call_value_node(
         tokens: Vec<token::Token>,
         current_token: token::Token,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     if tokens.len() > 1 + *index {
         *index += 1;
         match tokens[*index].kind {
@@ -193,7 +193,7 @@ pub fn call_value_node(
 pub fn parse_factor(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let current_token = &tokens.clone()[*index];
 
     match current_token.kind {

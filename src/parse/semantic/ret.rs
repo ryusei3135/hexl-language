@@ -1,7 +1,7 @@
 use super::*;
 
 
-pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> Result<node::CalculNode, parse_err::ParseErrs> {
+pub fn make_ret_node(tokens: Vec<token::Token>, index: &mut usize) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut ret_node = resp::handler::make_null_node();
     let mut ret_token: bool = false;
     ret_node.node_type = node::NodeKind::NodeRet;

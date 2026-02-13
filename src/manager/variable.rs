@@ -7,6 +7,13 @@ pub struct VariableInfo {
     pub value: type_info::VarValue,
     pub var_type_name: Option<String>,
     pub method: Option<Vec<MethodInfo>>,
+    pub multiple: Option<MultipleVar>,
+}
+
+#[derive(Clone)]
+pub enum MultipleVar {
+    IsMut,
+    IsImm,
 }
 
 #[derive(Clone)]
@@ -91,12 +98,12 @@ impl VariableManager {
         self.local_scope.pop();
     }
     ///  変数のデータを返す
-    pub fn get_var(&self, name: &String) -> Result<VariableInfo, define_msg::VarErrorOrLog> {
+    pub fn get_var(&self, name: &String) -> Result<VariableInfo, err_kind::ErrorsKind> {
         if let Some(index) = self.search_var(name) {
             Ok(self.variables_info_vec[index].clone())
         } else {
             eprintln!("[err] this variable is not defined -> {}", name);
-            Err(define_msg::VarErrorOrLog::VarIsNotDefined)
+            Err(err_kind::ErrorsKind::UndefinedVariable)
         }
     }
     //  変数を追加
@@ -106,6 +113,7 @@ impl VariableManager {
             value: type_info::VarValue,
             var_type_name: &Option<String>,
             region: VarRegion,
+            multiple: Option<MultipleVar>,
     ) {
         if self.variables_info_vec.iter().find(|var| var.name == *name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
@@ -147,21 +155,43 @@ impl VariableManager {
                     value: value.clone(),
                     var_type_name: Some(type_name.clone()),
                     method: Some(Vec::<MethodInfo>::new()),
+                    multiple: multiple,
                 }
             );
         }
     }
-    //  変数の値を上書き
-    pub fn update_var(&mut self, name: String, value: type_info::VarValue) -> bool {
-        if let Some(index) = self.search_var(&name) {
-            let var = &mut self.variables_info_vec[index];
-            var.value = value;
-            return true;
-        } else {
-            eprintln!("[name err]: undefined variable `{}`", name);
-        }
 
-        false
+    /// # 引数
+    /// - name 変数の名前
+    /// - value 変数に再代入する値
+    ///
+    /// 渡されたnameに対応した変数があるかつその変数
+    /// が可変の場合のみOkを返す
+    pub fn update_var(
+            &mut self,
+            name: &String,
+            value: &type_info::VarValue
+    ) -> Result<(), err_kind::ErrorsKind> {
+        if let Some(index) = self.search_var(name) {
+            // 変数が可変かを調べる
+            match self.variables_info_vec[index].multiple {
+                Some(MultipleVar::IsMut) => {
+                    let var = &mut self.variables_info_vec[index];
+                    var.value = value.clone();
+                    Ok(())
+                }
+                // 変数が不変
+                Some(MultipleVar::IsImm) => {
+                    Err(err_kind::ErrorsKind::AssignmentToImmutableVariable)
+                }
+                None => {
+                    Err(err_kind::ErrorsKind::AssignmentToImmutableVariable)
+                }
+            }
+        } else {
+            // 変数が存在しない
+            Err(err_kind::ErrorsKind::UndefinedVariable)
+        }
     }
     //  変数にメゾットを追加
     pub fn add_method(&mut self, node: node::CalculNode, name: String) {
@@ -205,9 +235,10 @@ impl VariableManager {
             }
             Err(e) => {
                 match e {
-                    define_msg::VarErrorOrLog::VarIsNotDefined => {
+                    err_kind::ErrorsKind::UndefinedVariable => {
                         panic!("this var is not found");
                     }
+                    _ => panic!("err variable struct"),
                 }
             },
         }
@@ -234,6 +265,7 @@ mod tests {
             variables.add_var(
                 &(v.to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
+                &None,
                 VarRegion::Stack
             );
         }
@@ -266,6 +298,7 @@ mod tests {
             variables.add_var(
                 &("k".to_owned() + i.to_string().as_str()).to_string(),
                 type_info::VarValue::Int32(10),
+                &None,
                 VarRegion::Static
             );
         }

@@ -5,7 +5,7 @@ use super::*;
 pub fn parse_assign(
         tokens: &Vec<token::Token>,
         index: &mut usize
-) -> Result<(node::CalculNode, bool), parse_err::ParseErrs> {
+) -> Result<(node::CalculNode, bool), err_kind::ErrorsKind> {
     let mut first_var_name: bool = false;
     let mut defined_var: bool = false;
     // 変数の名前を設定
@@ -28,7 +28,7 @@ pub fn parse_assign(
                         defined_var,)
                     )
                 } else {
-                    Err(parse_err::ParseErrs::VarMissingAssignmentTarget)
+                    Err(err_kind::ErrorsKind::VarMissingAssignmentTarget)
                 };
             },
             token::TokenKind::TokenVarDefine => {
@@ -45,7 +45,7 @@ pub fn parse_assign(
                         defined_var,)
                     )
                 } else {
-                    Err(parse_err::ParseErrs::VarMissingAssignmentTarget)
+                    Err(err_kind::ErrorsKind::VarMissingAssignmentTarget)
                 };
             }
             token::TokenKind::TokenSpace => {
@@ -62,7 +62,7 @@ pub fn parse_assign(
                     // 変数に値を代入するノードに設定
                     first_var_name = true;
                 } else {
-                    Err(parse_err::ParseErrs::VarMultipleVariableNames)?
+                    Err(err_kind::ErrorsKind::VarMultipleVariableNames)?
                 }
             }
             _ => {
@@ -83,7 +83,7 @@ mod tests {
 
     fn make_token(txt: String) -> Vec<Token> {
         let mut lexer = tokenizer::Tokenizer::new();
-        lexer.make_token(txt, 0)
+        lexer.make_token(&txt, 0)
     }
 
     #[test]
@@ -91,7 +91,7 @@ mod tests {
         let token = make_token("a = 10".to_string());
 
         let node = resp::handler::make_operator_node(
-            resp::handler::convert_value_to_node("a".to_string(), node::NodeKind::NodeVarName),
+            resp::handler::convert_value_to_node("a".to_string(), node::NodeKind::NodeCallVar),
             resp::handler::convert_value_to_node("10".to_string(), node::NodeKind::NodeNum),
             node::NodeKind::NodeAssignVar);
 
@@ -106,7 +106,7 @@ mod tests {
         let token = make_token("a a = 10".to_string());
         assert_eq!(
             parse_assign(&token, &mut 0),
-            Err(parse_err::ParseErrs::VarMultipleVariableNames)
+            Err(err_kind::ErrorsKind::VarMultipleVariableNames)
         );
     }
 
@@ -115,7 +115,7 @@ mod tests {
         let token = make_token("= 10".to_string());
         assert_eq!(
             parse_assign(&token, &mut 0),
-            Err(parse_err::ParseErrs::VarMissingAssignmentTarget)
+            Err(err_kind::ErrorsKind::VarMissingAssignmentTarget)
         );
     }
 }

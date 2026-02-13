@@ -73,8 +73,9 @@ impl Tokenizer {
 
         self.lexer_role.processor.emit_token(&mut self.lexer_state);
 
-        let results = self.lexer_state.tokens.clone();
+        let mut results = self.lexer_state.tokens.clone();
         self.lexer_state.tokens.clear();
+        resp::keyword::change_txt_for_token(&mut results);
         return results;
     }
 }
@@ -87,7 +88,7 @@ mod tests {
     #[test]
     fn check_float_token() {
         let mut lexer = tokenizer::Tokenizer::new();
-        let float_token = lexer.make_token("1.1".to_string(), 0);
+        let float_token = lexer.make_token(&"1.1".to_string(), 0);
 
         assert_eq!(float_token[0].kind, token::TokenKind::TokenFloat);
     }

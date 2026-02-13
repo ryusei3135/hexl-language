@@ -22,15 +22,41 @@ pub fn call_var_value(
     }
 }
 
+fn search_var_type_node(node: &Option<Box<node::CalculNode>>) -> Option<String> {
+    match node {
+        Some(n) => {
+            if n.node_type == node::NodeKind::NodeType {
+                Some(n.value.clone())
+            } else {
+                None
+            }
+        }
+        None => None,
+    }
+}
+
 pub fn define_var(
         runtime: &mut run::Runtime,
         node: &node::CalculNode
 ) -> type_info::VarValue {
+    let mut is_multiple: Option<variable::MultipleVar> = None;
     // もし変数定義に型があるなら、束縛する変数の名前をゲット
-    let bind_type: Option<String> = if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeType {
-        Some(node.left_node.clone().unwrap().value.clone())
-    } else {
-        None
+    let bind_type: Option<String> = match &node.left_node {
+        Some(left) => {
+            match left.node_type {
+                node::NodeKind::NodeType => Some(left.value.clone()),
+                node::NodeKind::NodeMut => {
+                    is_multiple = Some(variable::MultipleVar::IsMut);
+                    search_var_type_node(&left.left_node)
+                }
+                node::NodeKind::NodeImm => {
+                    is_multiple = Some(variable::MultipleVar::IsImm);
+                    search_var_type_node(&left.left_node)
+                }
+                _ => None,
+            }
+        }
+        None => None,
     };
 
     let value = eval::node_run(runtime, &bind_type, *node.right_node.clone().unwrap());
@@ -40,6 +66,7 @@ pub fn define_var(
         value,
         &bind_type,
         VarRegion::Stack,
+        is_multiple,
     );
     call_var_value(runtime, &node.value)
 }
@@ -48,20 +75,20 @@ pub fn define_var(
 pub fn update_var_value(
         runtime: &mut run::Runtime,
         node: node::CalculNode
-) -> Result<type_info::VarValue, define_msg::VarErrorOrLog> {
+) -> Result<type_info::VarValue, err_kind::ErrorsKind> {
     if node.left_node.clone().unwrap().node_type == node::NodeKind::NodeCallVar {
         let var_name = node.left_node.unwrap().value.clone();
         let value = eval::node_run(runtime, &None, *node.right_node.unwrap());
 
         runtime.all_info.var_info.update_var(
-            var_name.clone(),
-            value,
-        );
+            &var_name,
+            &value,
+        )?;
         return Ok(call_var_value(runtime, &var_name));
     } else {
         println!("syntax err: assign var {:?}", node.left_node.clone().unwrap().node_type);
     }
-    return Err(define_msg::VarErrorOrLog::VarIsNotDefined);
+    return Err(err_kind::ErrorsKind::UndefinedVariable);
 }
 
 /// for文の繰り返す条件を設定

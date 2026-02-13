@@ -11,4 +11,4 @@ use semantic::cond_branch::make_if_else_node;
 
 use crate::token::token;
 use crate::package::load;
-use crate::error::parse_err;
+use crate::error::err_kind;

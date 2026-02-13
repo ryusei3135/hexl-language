@@ -6,6 +6,6 @@
 /// 制御構文関連のログ
 pub mod control_syn;
 /// 変数や関数などの定義に関するログ
-pub mod define_msg;
 pub mod log;
-pub mod parse_err;
+/// エラーログ
+pub mod err_kind;

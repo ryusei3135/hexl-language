@@ -9,7 +9,7 @@ fn make_token_in_node(
         first_token: &(token::TokenKind, &String),
         tokens: &Vec<token::Token>,
         index: &mut usize,
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     // 最初に変数のトークンが来ていたかつ現在のトークンが"in"
     // なら変数に代入しながら値を更新するノードを作成
     if first_token.0 == token::TokenKind::TokenName {
@@ -32,7 +32,7 @@ fn make_token_in_node(
 pub fn make_for_node(
         tokens: &Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     *index += 1;
     let mut for_loop_node = resp::handler::make_null_node();
     let mut first_token: (token::TokenKind, &String) = (token::TokenKind::TokenEOF, &String::new());
@@ -82,14 +82,14 @@ mod tests {
 
     fn make_tokens(token_txt: &str) -> Vec<token::token::Token> {
         let mut tokenizer = token::tokenizer::Tokenizer::new();
-        tokenizer.make_token(token_txt.to_string(), 0)
+        tokenizer.make_token(&token_txt.to_string(), 0)
     }
 
     fn in_token_node(for_token: &Vec<token::token::Token>, index: &mut usize) -> node::CalculNode {
         node::CalculNode {
             value: "a".to_string(),
             node_type: node::NodeKind::NodeIn,
-            left_node: Some(Box::new(expr::parse_expr::parse_expr(for_token.clone(), index))),
+            left_node: Some(Box::new(expr::parse_expr::parse_expr(for_token.clone(), index).unwrap())),
             right_node: None,
             block: Some(0),
         }

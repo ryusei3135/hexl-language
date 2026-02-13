@@ -9,7 +9,7 @@ use super::*;
 pub fn parse_type_node(
         tokens: &Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut starts_with_less_than: bool = false;
     let mut ident_seen_name: bool = false;
     let mut node = resp::handler::make_null_node();
@@ -21,7 +21,7 @@ pub fn parse_type_node(
                     if !ident_seen_name {
                         eprintln!("banana [syntax err]: line {}", tokens[0].line);
                         eprintln!("expected type after variable name");
-                        return Err(parse_err::ParseErrs::TypeSpecUnspecified);
+                        return Err(err_kind::ErrorsKind::TypeSpecUnspecified);
                     }
                     *index += 1;
                     break;
@@ -31,7 +31,7 @@ pub fn parse_type_node(
                     //  このブロックが実行されているため、もし <がまた来た場合構文エラー
                     eprintln!("banana [syntax err]: line {}", tokens[0].line);
                     eprintln!("unexpected symbol `<`");
-                    return Err(parse_err::ParseErrs::TypeSpecAngleBracketForbid);
+                    return Err(err_kind::ErrorsKind::TypeSpecAngleBracketForbid);
                 },
                 token::TokenKind::TokenName => {
                     //  変数の名前が来た
@@ -64,7 +64,7 @@ mod tests {
 
     fn make_token(txt: String) -> Vec<Token> {
         let mut lexer = tokenizer::Tokenizer::new();
-        lexer.make_token(txt, 0)
+        lexer.make_token(&txt, 0)
     }
 
     /// 正常な型のトークンが正しいか
@@ -91,7 +91,7 @@ mod tests {
 
         assert_eq!(
             parse_type_node(&token_data, &mut 0),
-            Err(parse_err::ParseErrs::TypeSpecUnspecified),
+            Err(err_kind::ErrorsKind::TypeSpecUnspecified),
         );
     }
 }

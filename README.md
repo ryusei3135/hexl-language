@@ -27,15 +27,17 @@ Linux / macOS（bash / zsh）
 ```bash
 docker build -t hexl .
 docker run -it --rm -v $(pwd)/:/workspace -w /workspace hexl
+cargo run -- sample/fizzbizz.hexl
 ```
 Windows（PowerShell）
 ```PowerShell
 docker build -t hexl .
 docker run -it --rm -v ${PWD}:/workspace -w /workspace hexl
+cargo run -- sample/fizzbizz.hexl
 ```
 
 ## 使い方
-- サンプルコードは、プロジェクトの"test_file/"にあります
+- サンプルコードは、プロジェクトの"sample/"にあります
 - 処理はstart関数の中に書く
   start関数から実行される
 ### 文字列の出力の仕方

@@ -127,6 +127,7 @@ fn running_for_loop(
                 status.loop_var.clone(),
                 &None,
                 VarRegion::Stack,
+                None,
             );
         }
         Ok(status)

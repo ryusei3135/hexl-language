@@ -4,7 +4,7 @@ use super::*;
 pub fn make_if_node(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<node::CalculNode, parse_err::ParseErrs> {
+) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut if_node = resp::handler::make_null_node();
 
     while tokens.len() > *index {
@@ -28,7 +28,7 @@ pub fn make_if_node(
 pub fn make_if_else_node(
         tokens: Vec<token::Token>,
         index: &mut usize
-) -> Result<Option<node::CalculNode>, parse_err::ParseErrs> {
+) -> Result<Option<node::CalculNode>, err_kind::ErrorsKind> {
     let mut if_else_node = resp::handler::make_null_node();
     if_else_node.node_type = node::NodeKind::NodeIfElse;
 

@@ -6,13 +6,18 @@ def float()<f32> {
     ret 0.5
 }
 
+def mut_var() {
+    <i32>j = 0
+}
+
 def start() {
-    <bool>boolean := true
+    mut <bool>boolean := true
     kkk := 0
+    kkk = 10
     <i32>a100 := add(10, 2)
     <f32>tt := float() + 0.6
     a100 = a100 + 1 + add(20, 10)
-    <char>j_l := "hello world!!"
+    <str>j_l := "hello world!!"
     <i32>hello_world := 1
     <i32>hoge := 1
 }

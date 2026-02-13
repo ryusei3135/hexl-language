@@ -4,7 +4,7 @@ pub mod type_info;
 
 
 use crate::parse::*;
-use crate::error::define_msg;
+use crate::error::*;
 use crate::create_var_type_data;
 use crate::api::type_api;
 

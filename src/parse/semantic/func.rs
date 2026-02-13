@@ -83,7 +83,7 @@ pub fn make_func_header(tokens: Vec<token::Token>, index: &mut usize) -> manager
                 func_start_keyword = true;
             }
             _ => {
-                println!("{:?}", tokens[*index].kind);
+                println!("{:?} func header", tokens[*index].kind);
             }
         }
         *index += 1;

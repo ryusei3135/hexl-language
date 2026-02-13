@@ -12,6 +12,6 @@ use crate::token::token;
 use crate::api::type_api;
 use crate::manager;
 use crate::parse::expr::parse_type;
-use crate::error::parse_err;
+use crate::error::err_kind;
 use crate::parse::expr::parse_comper::parse_comper_op;
 use crate::parse::expr::parse_comper;

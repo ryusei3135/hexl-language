@@ -54,7 +54,7 @@ pub fn categorize_token(token: &str, kind: token::CharKind) -> token::TokenKind 
         token::CharKind::CharNum => token::TokenKind::TokenNum,
         token::CharKind::CharAlpha => {
             //  もしキーワードならキーワードとして分類する
-            return resp::keyword::categorize_keyword(token);
+            return token::TokenKind::TokenName;
         },
         //  文字の種類が記号の場合は、記号ごとに分類する
         token::CharKind::CharSymbol  => categorize_symbol(token),

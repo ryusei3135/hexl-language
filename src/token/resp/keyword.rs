@@ -1,7 +1,7 @@
 use crate::token::token;
 
 
-pub fn categorize_keyword(text: &str) -> token::TokenKind {
+fn categorize_keyword(text: &str) -> token::TokenKind {
     match text {
         "def" => token::TokenKind::TokenFuncStart,
         "use" => token::TokenKind::TokenUsePackage,
@@ -11,8 +11,18 @@ pub fn categorize_keyword(text: &str) -> token::TokenKind {
         "for" => token::TokenKind::TokenFor,
         "ret" => token::TokenKind::TokenRet,
         "in" => token::TokenKind::TokenIn,
+        "mut" => token::TokenKind::TokenVarMut,
+        "imm" => token::TokenKind::TokenVarImm,
         "true" => token::TokenKind::TokenBoolTrue,
         "false" => token::TokenKind::TokenBoolFalse,
         _     => token::TokenKind::TokenName,
+    }
+}
+
+pub fn change_txt_for_token(tokens: &mut Vec<token::Token>) {
+    for t in tokens {
+        if t.kind == token::TokenKind::TokenName {
+            t.kind = categorize_keyword(t.lexeme.as_str());
+        }
     }
 }
