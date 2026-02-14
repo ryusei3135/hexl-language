@@ -13,6 +13,7 @@ pub enum ErrorsKind {
     // 不変変数が変更されようとしている
     AssignmentToImmutableVariable,
     UndefinedVariable,
+    VariableAlreadyDefined,
 }
 
 impl ErrorsKind {
@@ -28,6 +29,7 @@ impl ErrorsKind {
             ErrorsKind::MultipleMutabilitySpecifiers => println!("[syntax]: There are multiple ways to specify mutability when declaring variables."),
             ErrorsKind::AssignmentToImmutableVariable => println!("[syntax]: An immutable variable is about to be modified"),
             ErrorsKind::UndefinedVariable => println!("[name err]: undefined variable"),
+            ErrorsKind::VariableAlreadyDefined => println!("[err]: variable already defined"),
         }
     }
 }

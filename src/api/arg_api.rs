@@ -10,11 +10,11 @@ pub fn make_args_var(
         args_node: &func::FuncArgsNode,
         call_node: &node::CalculNode
 ) {
-    if args_node.name.len() == 0 {
-        runtime.all_info.var_info.make_scope();
-        runtime.all_info.var_info.make_new_stack();
-        return;
-    }
+    // if args_node.name.len() == 0 {
+    //     runtime.all_info.var_info.make_scope();
+    //     runtime.all_info.var_info.make_new_stack();
+    //     return;
+    // }
     // #1
     let arg_value = eval::node_run(runtime, &args_node.type_name, *call_node.left_node.clone().unwrap());
     // #2
@@ -39,5 +39,5 @@ pub fn make_args_var(
         &args_node.type_name,
         VarRegion::Stack,
         args_node.multiple.clone(),
-    );
+    ).unwrap();
 }

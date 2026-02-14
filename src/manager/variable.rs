@@ -81,10 +81,10 @@ impl VariableManager {
             var_type_name: &Option<String>,
             region: VarRegion,
             multiple: Option<MultipleVar>,
-    ) {
-        if self.variables_info_vec.iter().find(|var| var.name == *name).is_some() {
+    ) -> Result<(), err_kind::ErrorsKind> {
+        if self.search_var(name).is_some() {
             eprintln!("[name err]: variable `{}` is already defined", name);
-            panic!("");
+            Err(err_kind::ErrorsKind::VariableAlreadyDefined)
         } else {
             //  新しく作る変数の領域を設定
             match region {
@@ -125,6 +125,7 @@ impl VariableManager {
                     multiple: multiple,
                 }
             );
+            Ok(())
         }
     }
 

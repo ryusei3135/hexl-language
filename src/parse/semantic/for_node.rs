@@ -7,6 +7,7 @@ use super::*;
 /// - index トークン"in"の次の場所を可変参照
 fn make_token_in_node(
         first_token: &(token::TokenKind, &String),
+        var_status: &node::NodeKind,
         tokens: &Vec<token::Token>,
         index: &mut usize,
 ) -> Result<node::CalculNode, err_kind::ErrorsKind> {
@@ -19,7 +20,18 @@ fn make_token_in_node(
                 value: first_token.1.clone(),
                 node_type: node::NodeKind::NodeIn,
                 left_node: Some(Box::new(expr::parse_expr::parse_expr(tokens.clone(), index)?)),
-                right_node: None,
+                right_node:
+                    if *var_status != node::NodeKind::NodeNull {
+                        Some(Box::new(node::CalculNode {
+                            value: String::new(),
+                            node_type: var_status.clone(),
+                            left_node: None,
+                            right_node: None,
+                            block: Some(tokens[0].line.clone()),
+                        }))
+                    } else {
+                        None
+                    },
                 block: Some(tokens[0].line),
             }
         );
@@ -36,6 +48,7 @@ pub fn make_for_node(
     *index += 1;
     let mut for_loop_node = resp::handler::make_null_node();
     let mut first_token: (token::TokenKind, &String) = (token::TokenKind::TokenEOF, &String::new());
+    let mut var_status: node::NodeKind = node::NodeKind::NodeNull;
 
     while tokens.len() > *index {
         match tokens[*index].kind {
@@ -47,6 +60,20 @@ pub fn make_for_node(
             token::TokenKind::TokenLBrace => {
                 break;
             }
+            token::TokenKind::TokenVarMut => {
+                if var_status == node::NodeKind::NodeNull {
+                    var_status = node::NodeKind::NodeMut;
+                } else {
+                    Err(err_kind::ErrorsKind::MultipleMutabilitySpecifiers)?;
+                }
+            }
+            token::TokenKind::TokenVarImm => {
+                if var_status == node::NodeKind::NodeNull {
+                    var_status = node::NodeKind::NodeImm;
+                } else {
+                    Err(err_kind::ErrorsKind::MultipleMutabilitySpecifiers)?;
+                }
+            }
             token::TokenKind::TokenName => {
                 if first_token.0 == token::TokenKind::TokenEOF {
                     first_token = (token::TokenKind::TokenName, &tokens[*index].lexeme);
@@ -56,7 +83,7 @@ pub fn make_for_node(
                 }
             }
             token::TokenKind::TokenIn => {
-                for_loop_node = make_token_in_node(&first_token, tokens, index).unwrap();
+                for_loop_node = make_token_in_node(&first_token, &var_status, tokens, index).unwrap();
                 break;
             }
             token::TokenKind::TokenSpace => {}

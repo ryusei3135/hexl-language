@@ -57,7 +57,7 @@ unsafe fn node_for(
     match cond_flags.now_loop(
         runtime,
         Some(*index),
-        Some(*node[*index].left_node.clone().unwrap())
+        Some(*node[*index].left_node.clone().unwrap()),
     ) {
         Ok(_) => {/* そもそもここで、Okが帰ってくることはない */},
         Err(log) => {
@@ -97,7 +97,12 @@ impl Runtime {
         let mut cond_flags = handle_flag::ControlSynFlag::new();
 
         if let Some(args) = args_value {
-            arg_api::make_args_var(self, &func_process.args, args);
+            if args.node_type == node::NodeKind::NodeNull {
+                self.all_info.var_info.make_scope();
+                self.all_info.var_info.make_new_stack();
+            } else {
+                arg_api::make_args_var(self, &func_process.args, args);
+            }
         } else {
             self.all_info.var_info.make_scope();
             self.all_info.var_info.make_new_stack();

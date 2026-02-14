@@ -23,7 +23,7 @@ mod var {
             &None,
             VarRegion::Stack,
             None
-        );
+        ).unwrap();
     }
 
     fn make_test_stack_var(

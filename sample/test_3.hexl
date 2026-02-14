@@ -1,18 +1,21 @@
 use std::io
 
-def add(arg1)<i32> {
-    if arg1 == 1 {
-        ret arg1 * 2
-    } else {
-        ret arg1 * 3
-    }
-}
-
 def func1()<i32> {
     ret 10
 }
 
+def func2()<i32> {
+    ret 20
+}
+
+def test_for() {
+    for mut i in 0..5 {
+        i = i + 0
+    }
+}
+
 def start() {
     mut o := 0
-    i := add(o) + func1()
+    i := func2() + func1()
+    test_for()
 }

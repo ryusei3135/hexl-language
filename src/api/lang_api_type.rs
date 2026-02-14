@@ -8,6 +8,7 @@ pub struct IterStatus {
     pub executable: bool,// 反復処理が実行可能か
     pub loop_var: type_info::VarValue,// 反復処理(for)のループ変数に代入する値
     pub var_setting: ControlSemantics,// loop変数に値を代入するかしないかの設定
+    pub multiple: Option<variable::MultipleVar>,
     pub range: [type_info::VarValue; 2],
 }
 
@@ -20,6 +21,7 @@ pub struct IterStatus {
 pub fn init_iter_status(
         mut range: [type_info::VarValue; 2],
         bind_var_name: Option<String>,
+        multiple: Option<variable::MultipleVar>,
 ) -> Result<IterStatus, ControlSynErr> {
     Ok(
         IterStatus {
@@ -37,6 +39,7 @@ pub fn init_iter_status(
             } else {
                 ControlSemantics::NotBinds
             },
+            multiple: multiple.clone(),
             range: range.into(),
         }
     )

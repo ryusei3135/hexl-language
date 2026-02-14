@@ -70,7 +70,7 @@ pub fn define_var(
         &bind_type,
         VarRegion::Stack,
         is_multiple,
-    );
+    ).unwrap();
     call_var_value(runtime, &node.value)
 }
 
@@ -94,9 +94,26 @@ pub fn update_var_value(
     }
 }
 
+fn format_node_mut_for_enum(
+        multiple: Option<Box<node::CalculNode>>,
+) -> Option<variable::MultipleVar> {
+    if let Some(m) = multiple {
+        if m.node_type == node::NodeKind::NodeMut {
+            Some(variable::MultipleVar::IsMut)
+        } else if m.node_type == node::NodeKind::NodeImm {
+            Some(variable::MultipleVar::IsImm)
+        } else {
+            panic!("format");
+        }
+    } else {
+        None
+    }
+}
+
 /// for文の繰り返す条件を設定
 fn setting_iter_status(
         loop_range: type_info::VarValue,
+        multiple: Option<Box<node::CalculNode>>,
         bind_value: Option<String>
 ) -> Result<IterStatus, ControlSynErr> {
     return match loop_range {
@@ -107,6 +124,7 @@ fn setting_iter_status(
                     type_info::VarValue::Int32(end),
                 ],
                 bind_value,
+                format_node_mut_for_enum(multiple)
             )
         }
         type_info::VarValue::Array(value) => {
@@ -116,6 +134,7 @@ fn setting_iter_status(
                     type_info::VarValue::Int32(0),
                 ],
                 bind_value,
+                format_node_mut_for_enum(multiple)
             )
         }
         _ => {
@@ -178,6 +197,7 @@ pub fn is_for_iterable(
                         // for文の情報がないので、for文の情報を設定
                         setting_iter_status(
                             eval::node_run(runtime, &None, *cond.left_node.clone().unwrap()),
+                            cond.right_node.clone(),
                             Some(cond.value.clone())
                         )
                     }
@@ -192,6 +212,7 @@ pub fn is_for_iterable(
                     None => {
                         setting_iter_status(
                             eval::node_run(runtime, &None, cond.clone()),
+                            cond.right_node.clone(),
                             None,
                         )
                     }
