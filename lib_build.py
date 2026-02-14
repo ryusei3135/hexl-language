@@ -53,7 +53,7 @@ def main(path: str):
                 print("コンパイル成功")
 
                 src_setting = f'{path}/{obj["setting_file"]}'
-                dst_setting = out_dir / obj["setting_file"]
+                dst_setting = f'{out_dir}/{obj["setting_file"]}'
 
                 print(src_setting, dst_setting)
                 copy_setting_file(src_setting, dst_setting)
