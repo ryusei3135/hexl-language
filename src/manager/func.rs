@@ -6,7 +6,7 @@ pub struct FuncManager {
     pub func_datas: Vec<FuncNode>,
 }
 
-#[derive(Clone)]
+#[derive(Clone,PartialEq)]
 pub struct FuncArgsNode {
     pub name: String,
     pub type_name: Option<String>,
@@ -14,7 +14,7 @@ pub struct FuncArgsNode {
     pub multiple: Option<variable::MultipleVar>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct FuncNode {
     //  関数の名前
     pub name: String,

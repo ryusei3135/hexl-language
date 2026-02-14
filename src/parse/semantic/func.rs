@@ -5,7 +5,7 @@ fn make_init_args_node(
         last_node: &Option<manager::func::FuncArgsNode>
 ) -> manager::func::FuncArgsNode {
     manager::func::FuncArgsNode {
-        name: "[*null*]".to_string(),
+        name: String::new(),
         type_name: None,
         next: match last_node {
             Some(node) => Some(Box::new(node.clone())),
@@ -39,7 +39,10 @@ fn make_args_node(
                     Err(err_kind::ErrorsKind::MultipleMutabilitySpecifiers)?;
                 }
             }
-            token::TokenKind::TokenName => args_node.name = tokens[*index].lexeme.clone(),
+            token::TokenKind::TokenName => {
+                args_node.name = tokens[*index].lexeme.clone();
+                args_node.multiple = var_status.clone();
+            }
             token::TokenKind::TokenSpace => {},
             token::TokenKind::TokenRParen => {
                 *index += 1;
@@ -54,7 +57,6 @@ fn make_args_node(
                         ).unwrap().value.clone()
                     )
                 };
-                args_node.multiple = var_status.clone();
                 continue;
             }
             token::TokenKind::TokenComma => {

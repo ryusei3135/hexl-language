@@ -96,10 +96,11 @@ impl Runtime {
     ) -> type_info::VarValue {
         let mut cond_flags = handle_flag::ControlSynFlag::new();
 
-        self.all_info.var_info.make_scope();
-        self.all_info.var_info.make_new_stack();
         if let Some(args) = args_value {
             arg_api::make_args_var(self, &func_process.args, args);
+        } else {
+            self.all_info.var_info.make_scope();
+            self.all_info.var_info.make_new_stack();
         }
 
         let mut index: usize = 0;

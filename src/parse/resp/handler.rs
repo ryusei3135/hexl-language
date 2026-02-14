@@ -19,14 +19,15 @@ pub fn make_value_node(
 pub fn make_operator_node(
         left: node::CalculNode,
         right: node::CalculNode,
-        node_type: node::NodeKind
+        node_type: node::NodeKind,
+        block: &usize
 ) -> node::CalculNode {
     node::CalculNode {
         value: String::new(),
         node_type: node_type,
         left_node: Some(Box::new(left)),
         right_node: Some(Box::new(right)),
-        block: None
+        block: Some(block.clone()),
     }
 }
 

@@ -2,7 +2,7 @@ use super::*;
 
 //  関数に渡す引数の値
 fn parse_func_arg(
-        tokens: Vec<token::Token>,
+        tokens: &Vec<token::Token>,
         index: &mut usize
 ) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     *index += 1;
@@ -38,6 +38,7 @@ fn parse_func_arg(
             args_list.pop().unwrap(),
             args_node,
             node::NodeKind::NodeArgsValue,
+            &tokens[0].line
         );
     }
 
@@ -46,7 +47,7 @@ fn parse_func_arg(
 
 /// 配列のノードを作成、実行時に配列に展開
 fn make_array_node(
-        tokens: Vec<token::Token>,
+        tokens: &Vec<token::Token>,
         index: &mut usize
 ) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let mut array_node = resp::handler::make_null_node();
@@ -66,9 +67,10 @@ fn make_array_node(
                 if can_next_be_value {
                     *index += 1;
                     array_node = resp::handler::make_operator_node(
-                        make_array_node(tokens.clone(), index)?,
+                        make_array_node(tokens, index)?,
                         array_node,
                         node::NodeKind::NodeArray,
+                        &tokens[0].line
                     );
                     can_next_be_value = false;
                     continue;
@@ -77,9 +79,10 @@ fn make_array_node(
             _ => {
                 if can_next_be_value {
                     array_node = resp::handler::make_operator_node(
-                        parse_factor(tokens.clone(), index)?,
+                        parse_factor(tokens, index)?,
                         array_node,
                         node::NodeKind::NodeArray,
+                        &tokens[0].line
                     );
                     can_next_be_value = false;
                     continue;
@@ -120,7 +123,7 @@ fn make_range_node(
 
 ///  呼び出す値が関数か変数かを調べる
 pub fn call_value_node(
-        tokens: Vec<token::Token>,
+        tokens: &Vec<token::Token>,
         current_token: token::Token,
         index: &mut usize
 ) -> Result<node::CalculNode, err_kind::ErrorsKind> {
@@ -128,7 +131,7 @@ pub fn call_value_node(
         *index += 1;
         match tokens[*index].kind {
             token::TokenKind::TokenLParen => {
-                let args_node = parse_func_arg(tokens.clone(), index)?;
+                let args_node = parse_func_arg(tokens, index)?;
                 let func_head_data = node::CalculNode {
                     value: current_token.lexeme.clone(),
                     node_type: node::NodeKind::NodeCallFunc,
@@ -191,7 +194,7 @@ pub fn call_value_node(
 }
 
 pub fn parse_factor(
-        tokens: Vec<token::Token>,
+        tokens: &Vec<token::Token>,
         index: &mut usize
 ) -> Result<node::CalculNode, err_kind::ErrorsKind> {
     let current_token = &tokens.clone()[*index];
@@ -230,7 +233,7 @@ pub fn parse_factor(
         }
         token::TokenKind::TokenLBracket => {
             *index += 1;
-            return make_array_node(tokens.clone(), index);
+            return make_array_node(tokens, index);
         }
         token::TokenKind::TokenNot => {
             if tokens.len() > 1 + *index {
@@ -238,7 +241,8 @@ pub fn parse_factor(
                 return Ok(resp::handler::make_operator_node(
                     parse_factor(tokens, index)?,
                     resp::handler::make_null_node(),
-                    node::NodeKind::NodeNot
+                    node::NodeKind::NodeNot,
+                    &tokens[0].line
                 ));
             } else {
                 println!("[syntax err]: line {}", tokens[*index].line);

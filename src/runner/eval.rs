@@ -253,7 +253,7 @@ pub fn node_run(
             match variable_api::update_var_value(runtime, node.clone()) {
                 Ok(v) => v,
                 Err(e) => {
-                    e.print_log(&0, &"test".to_string());
+                    e.print_log(&node.block.unwrap(), &"test".to_string());
                     panic!("");
                 }
             }

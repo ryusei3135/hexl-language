@@ -16,6 +16,7 @@ pub fn parse_expr(
                     node,
                     right,
                     node::NodeKind::NodeAdd,
+                    &tokens[0].line
                 );
             }
             token::TokenKind::TokenSub => {
@@ -25,6 +26,7 @@ pub fn parse_expr(
                     node,
                     right,
                     node::NodeKind::NodeSub,
+                    &tokens[0].line
                 );
             }
             token::TokenKind::TokenSpace => {

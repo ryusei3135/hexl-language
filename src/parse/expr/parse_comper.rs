@@ -17,6 +17,7 @@ pub fn parse_comper_op(
                     node,
                     right,
                     node::NodeKind::NodeEqTo,
+                    &tokens[0].line
                 );
             },
             token::TokenKind::TokenNotEqTo => {
@@ -26,6 +27,7 @@ pub fn parse_comper_op(
                     node,
                     right,
                     node::NodeKind::NodeNotEqTo,
+                    &tokens[0].line
                 );
             },
             token::TokenKind::TokenLessThanOrEqualTo => {
@@ -35,6 +37,7 @@ pub fn parse_comper_op(
                     node,
                     right,
                     node::NodeKind::NodeLessThanOrEqualTo,
+                    &tokens[0].line
                 );
             }
             token::TokenKind::TokenGreaterThanOrEqualTo => {
@@ -44,6 +47,7 @@ pub fn parse_comper_op(
                     node,
                     right,
                     node::NodeKind::NodeGreaterThanOrEqualTo,
+                    &tokens[0].line
                 );
             }
             token::TokenKind::TokenLessThan => {
@@ -53,6 +57,7 @@ pub fn parse_comper_op(
                     node,
                     right,
                     node::NodeKind::NodeLessThan,
+                    &tokens[0].line
                 );
             }
             token::TokenKind::TokenGreaterThan => {
@@ -62,6 +67,7 @@ pub fn parse_comper_op(
                     node,
                     right,
                     node::NodeKind::NodeGreaterThan,
+                    &tokens[0].line
                 );
             }
             token::TokenKind::TokenSpace => {

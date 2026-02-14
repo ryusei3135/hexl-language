@@ -33,7 +33,8 @@ impl PackageState {
                 right_node: None,
                 block: None,
             },
-            node::NodeKind::NodeUsePackage
+            node::NodeKind::NodeUsePackage,
+            &0
         )
     }
 }

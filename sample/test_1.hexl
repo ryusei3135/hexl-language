@@ -1,6 +1,6 @@
-def int(mut i)<i32> {
-    i = 20
-    ret i + i
+def int(mut k)<i32> {
+    k = 20
+    ret k + k
 }
 
 def start() {

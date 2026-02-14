@@ -24,7 +24,9 @@ pub fn parse_assign(
                         (resp::handler::make_operator_node(
                             node,
                             right,
-                            node::NodeKind::NodeAssignVar),
+                            node::NodeKind::NodeAssignVar,
+                            &tokens[0].line
+                        ),
                         defined_var,)
                     )
                 } else {
@@ -41,7 +43,9 @@ pub fn parse_assign(
                         (resp::handler::make_operator_node(
                             node,
                             right,
-                            node::NodeKind::NodeAssignVar),
+                            node::NodeKind::NodeAssignVar,
+                            &tokens[0].line
+                        ),
                         defined_var,)
                     )
                 } else {
@@ -55,7 +59,7 @@ pub fn parse_assign(
                 if !first_var_name {
                     let current_token = tokens[*index].clone();
                     node = parse_factor::call_value_node(
-                        tokens.clone(),
+                        tokens,
                         current_token,
                         index
                     )?;
@@ -93,7 +97,9 @@ mod tests {
         let node = resp::handler::make_operator_node(
             resp::handler::convert_value_to_node("a".to_string(), node::NodeKind::NodeCallVar),
             resp::handler::convert_value_to_node("10".to_string(), node::NodeKind::NodeNum),
-            node::NodeKind::NodeAssignVar);
+            node::NodeKind::NodeAssignVar,
+            &tokens[0].line
+        );
 
         assert_eq!(
             parse_assign(&token, &mut 0),
