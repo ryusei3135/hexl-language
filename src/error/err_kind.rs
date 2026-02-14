@@ -14,6 +14,10 @@ pub enum ErrorsKind {
     AssignmentToImmutableVariable,
     UndefinedVariable,
     VariableAlreadyDefined,
+    UndefinedFunction,
+    FunctionAlreadyDefined,
+    AssignmentTypeMismatch,
+    ReturnTypeMismatch,
 }
 
 impl ErrorsKind {
@@ -30,6 +34,10 @@ impl ErrorsKind {
             ErrorsKind::AssignmentToImmutableVariable => println!("[syntax]: An immutable variable is about to be modified"),
             ErrorsKind::UndefinedVariable => println!("[name err]: undefined variable"),
             ErrorsKind::VariableAlreadyDefined => println!("[err]: variable already defined"),
+            ErrorsKind::UndefinedFunction => println!("[name err]: undefined function"),
+            ErrorsKind::FunctionAlreadyDefined => println!("[name err]: function already defined"),
+            ErrorsKind::AssignmentTypeMismatch => println!("[type err]: The type is different"),
+            ErrorsKind::ReturnTypeMismatch => println!("[type err]: The return type is different")
         }
     }
 }

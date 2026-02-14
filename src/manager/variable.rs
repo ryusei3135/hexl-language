@@ -88,7 +88,6 @@ impl VariableManager {
         } else {
             //  新しく作る変数の領域を設定
             match region {
-                VarRegion::Heap => {},
                 VarRegion::Static => {
                     self.region_static_index
                         .push(self.variables_info_vec.len() as usize);
@@ -104,7 +103,7 @@ impl VariableManager {
             // 型の情報を字列に変換
             let type_name: String = if let Some(name) = var_type_name {
                 if !type_api::match_txt_to_value_type(name, &value) {
-                    panic!("var jjjj");
+                    return Err(err_kind::ErrorsKind::AssignmentTypeMismatch);
                 }
 
                 name.to_string()
@@ -112,7 +111,7 @@ impl VariableManager {
                 if let Ok(txt) = type_api::change_var_value_to_txt(&value) {
                     txt.to_string()
                 } else {
-                    panic!("ll");
+                    return Err(err_kind::ErrorsKind::AssignmentTypeMismatch);
                 }
             };
 

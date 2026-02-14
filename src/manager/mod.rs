@@ -31,6 +31,5 @@ macro_rules! create_var_type_data {
 #[derive(Clone, PartialEq)]
 pub enum VarRegion {
     Stack,
-    Heap,
     Static,
 }

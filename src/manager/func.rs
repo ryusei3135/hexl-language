@@ -38,19 +38,20 @@ impl FuncManager {
         None
     }
 
-    pub fn get_func(&self, name: &str) -> FuncNode {
+    pub fn get_func(&self, name: &str) -> Result<FuncNode, err_kind::ErrorsKind> {
         if let Some(index) = self.search_func(name) {
-            return self.func_datas[index].clone();
+            Ok(self.func_datas[index].clone())
         } else {
-            panic!("this function is not found");
+            Err(err_kind::ErrorsKind::UndefinedFunction)
         }
     }
 
-    pub fn add_func(&mut self, new_func_node: FuncNode) {
+    pub fn add_func(&mut self, new_func_node: FuncNode) -> Result<(), err_kind::ErrorsKind> {
         if let Some(_) = self.search_func(new_func_node.name.as_str()) {
-            panic!("function already defined");
+            Err(err_kind::ErrorsKind::FunctionAlreadyDefined)
         } else {
             self.func_datas.push(new_func_node);
+            Ok(())
         }
     }
 

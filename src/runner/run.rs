@@ -83,9 +83,9 @@ impl Runtime {
     }
     /// エントリーポイントを呼び出す
     pub fn start_process(&mut self) {
-        let start_process = self.all_info.func_info.get_func("start");
+        let start_process = self.all_info.func_info.get_func("start").unwrap();
 
-        self.run_func(start_process, &None);
+        let _ = self.run_func(start_process, &None);
     }
 
     /// インタプリを実行するパイプライン
@@ -93,7 +93,7 @@ impl Runtime {
             &mut self,
             func_process: func::FuncNode,
             args_value: &Option<node::CalculNode>
-    ) -> type_info::VarValue {
+    ) -> Result<type_info::VarValue, err_kind::ErrorsKind> {
         let mut cond_flags = handle_flag::ControlSynFlag::new();
 
         if let Some(args) = args_value {
@@ -198,10 +198,10 @@ impl Runtime {
                                     return {
                                         self.all_info.var_info.remove_stack();
                                         self.all_info.var_info.remove_scope();
-                                        r
+                                        Ok(r)
                                     };
                                 } else {
-                                    panic!("Return type mismatch");
+                                    return Err(err_kind::ErrorsKind::ReturnTypeMismatch);
                                 }
                             }
                             _ => panic!("panic syntax flag"),
@@ -251,6 +251,6 @@ impl Runtime {
         }
         self.all_info.var_info.remove_stack();
         self.all_info.var_info.remove_scope();
-        type_info::VarValue::Null(false)
+        Ok(type_info::VarValue::Null(false))
     }
 }

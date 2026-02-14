@@ -258,13 +258,28 @@ pub fn node_run(
                 }
             }
         }
-        node::NodeKind::NodeCallVar => variable_api::call_var_value(runtime, &node.value),
+        node::NodeKind::NodeCallVar => {
+            variable_api::call_var_value(runtime, &node.value)
+        }
         node::NodeKind::NodeDefVar => {
             variable_api::define_var(runtime, &node)
         }
         node::NodeKind::NodeCallFunc => {
-            let func_data = runtime.all_info.func_info.get_func(&node.value);
-            runtime.run_func(func_data, &Some(*node.left_node.unwrap()))
+            match runtime.all_info.func_info.get_func(&node.value) {
+                Ok(func_data) => {
+                    match runtime.run_func(func_data, &Some(*node.left_node.unwrap())) {
+                        Ok(v) => return v,
+                        Err(e) => {
+                            e.print_log(&node.block.unwrap(), &"rr".to_string());
+                            panic!("JJJ");
+                        }
+                    }
+                }
+                Err(e) => {
+                    e.print_log(&node.block.unwrap(), &"".to_string());
+                    panic!("KK");
+                }
+            }
         }
         node::NodeKind::NodeReceiver => {
             let receiver_name = node.value.clone();

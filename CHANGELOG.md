@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.9.7] beta 2026-02-14
+
+### Language (仕様)
+- 関数に関するエラーログを実装
+  - UndefinedFunction 関数未定義
+  - FunctionAlreadyDefined 関数再定義
+- 変数に関するエラーログを実装
+  - AssignmentTypeMismatch
+  - ReturnTypeMismatch
+
 ## [0.9.6] beta 2026-02-14
 
 ### Language (仕様)
