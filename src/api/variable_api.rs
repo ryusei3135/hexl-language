@@ -18,7 +18,10 @@ pub fn call_var_value(
 ) -> type_info::VarValue {
     match runtime.all_info.var_info.get_var(name) {
         Ok(var_info) => var_info.value,
-        Err(_) => panic!("variable is not defined"),
+        Err(e) => {
+            e.print_log(&0, &"call var value".to_string());
+            panic!("``");
+        }
     }
 }
 

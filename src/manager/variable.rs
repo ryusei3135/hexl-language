@@ -1,7 +1,7 @@
 use super::*;
 
 ///  一つの変数のデータ
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct VariableInfo {
     pub name: String,
     pub value: type_info::VarValue,
@@ -10,13 +10,13 @@ pub struct VariableInfo {
     pub multiple: Option<MultipleVar>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum MultipleVar {
     IsMut,
     IsImm,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct MethodInfo {
     pub name: String,
     pub node: node::CalculNode,
@@ -63,39 +63,6 @@ impl VariableManager {
         }
 
         None
-    }
-    /// 新しくスタック領域を作成
-    pub fn make_new_stack(&mut self) {
-        if self.local_scope.is_empty() {
-            panic!("[system err] scope is not found");
-        } else {
-            self.local_scope.last_mut().unwrap().push(self.region_stack_index.len());
-            self.region_stack_index.push(Vec::<usize>::new());
-        }
-    }
-    /// スタック領域を削除
-    pub fn remove_stack(&mut self) {
-        if self.local_scope.last().unwrap().len() > 0 {
-            if let Some(index_vec) = self.region_stack_index.pop() {
-                for index in index_vec.iter().rev() {
-                    self.variables_info_vec.remove(*index);
-                }
-            }
-            self.local_scope.last_mut().unwrap().pop();
-        } else {
-            panic!("[system err] No stack space in scope");
-        }
-    }
-    /// 新しくスコープを作成
-    pub fn make_scope(&mut self) {
-        self.local_scope.push(Vec::<usize>::new());
-    }
-    /// スコープ内にあるすべてのスタック領域を削除し自身を削除する
-    pub fn remove_scope(&mut self) {
-        for _ in self.local_scope.last().unwrap().clone() {
-            self.remove_stack();
-        }
-        self.local_scope.pop();
     }
     ///  変数のデータを返す
     pub fn get_var(&self, name: &String) -> Result<VariableInfo, err_kind::ErrorsKind> {
@@ -242,91 +209,5 @@ impl VariableManager {
                 }
             },
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const RANGE: [&str; 5] = [
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-    ];
-
-    fn make_test_stack_var(
-            variables: &mut VariableManager,
-            i: usize,
-    ) {
-        for v in RANGE {
-            variables.add_var(
-                &(v.to_owned() + i.to_string().as_str()).to_string(),
-                type_info::VarValue::Int32(10),
-                &None,
-                VarRegion::Stack,
-                None
-            );
-        }
-    }
-
-    /// スタック領域だけ確認
-    #[test]
-    fn check_remove_stack() {
-        let mut variables = VariableManager::new();
-        variables.make_scope();
-
-        for i in 0..3 {
-            variables.make_new_stack();
-            make_test_stack_var(&mut variables, i);
-        }
-        assert_eq!(variables.variables_info_vec.len(), 15);
-        assert_eq!(variables.region_stack_index.len(), 3);
-        variables.remove_stack();
-        assert_eq!(variables.variables_info_vec.len(), 10);
-    }
-
-    #[test]
-    fn check_stack_and_static() {
-        let mut variables = VariableManager::new();
-        variables.make_scope();
-
-        for i in 0..3 {
-            variables.make_new_stack();
-            make_test_stack_var(&mut variables, i);
-            variables.add_var(
-                &("k".to_owned() + i.to_string().as_str()).to_string(),
-                type_info::VarValue::Int32(10),
-                &None,
-                VarRegion::Static,
-                None,
-            );
-        }
-        assert_eq!(variables.variables_info_vec.len(), 18);
-        assert_eq!(variables.region_stack_index.len(), 3);
-        variables.remove_stack();
-        assert_eq!(variables.variables_info_vec.len(), 13);
-    }
-
-    #[test]
-    fn check_move_scope() {
-        let mut variables = VariableManager::new();
-        variables.make_scope();
-
-        for i in 0..3 {
-            variables.make_new_stack();
-            make_test_stack_var(&mut variables, i);
-        }
-        variables.make_scope();
-        for i in 3..6 {
-            variables.make_new_stack();
-            make_test_stack_var(&mut variables, i);
-        }
-        assert_eq!(variables.local_scope.last().unwrap().len(), 3);
-        variables.remove_scope();
-        assert_eq!(variables.local_scope.last().unwrap().len(), 3);
-        assert_eq!(variables.region_stack_index.len(), 3);
     }
 }

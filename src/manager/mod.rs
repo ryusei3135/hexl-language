@@ -1,7 +1,8 @@
 pub mod func;
 pub mod variable;
 pub mod type_info;
-
+mod tests;
+mod var_stack;
 
 use crate::parse::*;
 use crate::error::*;

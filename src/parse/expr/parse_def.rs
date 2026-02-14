@@ -28,7 +28,8 @@ fn format_assign_var_node(
 ///     - "mut"や"imm"などの情報
 /// - node
 ///     - 変数の型
-fn make_var_type(
+/// # semantic/funcで使用
+pub fn fotmat_multiple_type(
         var_status: &Option<node::NodeKind>,
         node: &Option<Box<node::CalculNode>>,
         token: &token::Token,
@@ -88,7 +89,7 @@ pub fn parse_var_def(
                 // 変数の型
                 node = Some(Box::new(parse_type::parse_type_node(tokens, index)?));
                 continue;
-            },
+            }
             token::TokenKind::TokenName => {
                 let var_node = parse_assign::parse_assign(&tokens, index)?;
 
@@ -96,7 +97,7 @@ pub fn parse_var_def(
                     if var_node.1 {
                         format_assign_var_node(
                             var_node.0,
-                            make_var_type(
+                            fotmat_multiple_type(
                                 &var_status,
                                 &node,
                                 &tokens[0],

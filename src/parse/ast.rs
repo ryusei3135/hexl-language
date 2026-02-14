@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
                     self.all_info.func_info.add_func_calcul_node(node.clone(), self.brace_depth.clone());
                 }
                 token::TokenKind::TokenFuncStart => {
-                    let func_node = semantic::func::make_func_header(token.clone(), &mut index);
+                    let func_node = semantic::func::make_func_header(token.clone(), &mut index)?;
                     self.brace_depth = 0;
                     self.all_info.func_info.add_func(func_node.clone());
                     continue;

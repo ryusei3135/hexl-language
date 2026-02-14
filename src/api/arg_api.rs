@@ -16,7 +16,7 @@ pub fn make_args_var(
         arg_value,
         &args_node.type_name,
         VarRegion::Stack,
-        Some(variable::MultipleVar::IsImm),
+        args_node.multiple.clone(),
     );
     if let Some(arg) = args_node.next.clone() {
         if let Some(value) = &call_node.right_node {

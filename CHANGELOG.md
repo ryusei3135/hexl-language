@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [0.9.3] beta 2026-02-14
+
+### Language (仕様)
+- 引数の型の前に,"mut"や"imm"を置くことで可変か不変を指定できる、
+- 変数や引数に"mut”や"imm"を指定しないとデフォルトで、不変
+
+### Syntax
+- 引数にも不変と可変を使用可能
+
+### Compiler / Interpreter
+- manager/variable.rsのテストコードをmanager/tests.rsに移動
+- 変数を管理する構造体を分離
+  - スタックやスコープをvar_stackに分離
+
 ## [0.9.2] beta 2026-02-13
 
 ### Compiler / Interpreter

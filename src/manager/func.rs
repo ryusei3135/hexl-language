@@ -11,6 +11,7 @@ pub struct FuncArgsNode {
     pub name: String,
     pub type_name: Option<String>,
     pub next: Option<Box<FuncArgsNode>>,
+    pub multiple: Option<variable::MultipleVar>,
 }
 
 #[derive(Clone)]

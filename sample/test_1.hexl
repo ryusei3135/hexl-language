@@ -1,25 +1,10 @@
-def add(<i32>arg_1, <i32>arg_2)<i32> {
-    ret arg_1 + 1 * arg_2
-}
-
-def float()<f32> {
-    ret 0.5
-}
-
-def mut_var() {
-    <i32>j = 0
+def int(mut i)<i32> {
+    i = 20
+    ret i + i
 }
 
 def start() {
-    mut <bool>boolean := true
-    imm test_1 = 0
-    test_1 = 10
-    kkk := 0
-    kkk = 10
-    <i32>a100 := add(10, 2)
-    <f32>tt := float() + 0.6
-    a100 = a100 + 1 + add(20, 10)
-    <str>j_l := "hello world!!"
-    <i32>hello_world := 1
-    <i32>hoge := 1
+    mut i := 0
+    i = 10
+    u := int(i)
 }
