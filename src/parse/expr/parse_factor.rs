@@ -5,6 +5,7 @@ fn parse_func_arg(
         tokens: &Vec<token::Token>,
         index: &mut usize
 ) -> Result<node::CalculNode, err_kind::ErrorsKind> {
+    // "("をスキップする
     *index += 1;
     let mut args_node = resp::handler::make_null_node();
     let mut args_list = Vec::<node::CalculNode>::new();
@@ -148,6 +149,8 @@ pub fn call_value_node(
                         &current_token,
                         node::NodeKind::NodeCallVar,
                     ));
+                } else {
+                    panic!("{:?} factor 150", tokens[*index - 1].kind);
                 }
             }
             token::TokenKind::TokenDot => {
@@ -177,9 +180,11 @@ pub fn call_value_node(
                         &current_token,
                         node::NodeKind::NodeCallVar,
                     ));
+                } else {
+                    panic!("{:?} factor 180", tokens[*index - 1].kind);
                 }
             }
-            _ => println!("what is token -> {:?}", tokens[*index].kind),
+            _ => panic!("what is token -> {:?}", tokens[*index].kind),
         }
     } else {
         //  変数
@@ -189,8 +194,6 @@ pub fn call_value_node(
             node::NodeKind::NodeCallVar,
         ));
     }
-
-    Ok(resp::handler::make_null_node())
 }
 
 pub fn parse_factor(
@@ -261,7 +264,7 @@ pub fn parse_factor(
             *index += 1; // '('をスキップ
             let node = parse_comper_op(tokens.clone(), index);
             if tokens[*index].kind == token::TokenKind::TokenRParen {
-                *index += 1; // ')'をスキップ
+                return node;
             } else {
                 println!("Error: Expected ')'");
             }

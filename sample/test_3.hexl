@@ -1,6 +1,6 @@
 use std::io
 
-def add(<i32>arg1)<i32> {
+def add(arg1)<i32> {
     if arg1 == 1 {
         ret arg1 * 2
     } else {
@@ -12,22 +12,7 @@ def func1()<i32> {
     ret 10
 }
 
-def func2()<i32> {
-    for 0..5 {
-        io::print("hello world")
-    }
-    ret 10 + func1()
-}
-
 def start() {
-    i := add(10) + func2()
-    for h in 0..10 {
-        if h == 3 {
-            i = 10
-            io::print("h is 3")
-        } h == 8 {
-            io::print("h is 8")
-        }
-        h = h + 0
-    }
+    mut o := 0
+    i := add(o) + func1()
 }

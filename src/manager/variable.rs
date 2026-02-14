@@ -104,7 +104,7 @@ impl VariableManager {
             // 型の情報を字列に変換
             let type_name: String = if let Some(name) = var_type_name {
                 if !type_api::match_txt_to_value_type(name, &value) {
-                    panic!("JJ");
+                    panic!("var jjjj");
                 }
 
                 name.to_string()
