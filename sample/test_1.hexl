@@ -1,3 +1,5 @@
+use std::io
+
 def int(mut k)<i32> {
     k = 20
     ret k + k
@@ -7,4 +9,5 @@ def start() {
     mut i := 0
     i = 10
     u := int(i)
+    io::print(io::file_open("README.md"))
 }

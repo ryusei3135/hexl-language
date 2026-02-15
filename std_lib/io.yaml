@@ -4,3 +4,12 @@ functions:
   - name: "print"
     args_types: ["str"]
     return_type: "void"
+  - name: "file_open"
+    args_types: ["str"]
+    return_type: "str"
+  - name: "file_line"
+    args_types: ["str"]
+    return_type: "int"
+  - name: "file_write"
+    args_types: ["str", "str"]
+    return_type: "void"

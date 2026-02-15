@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.9.10] beta 2026-02-15
+
+### Language (仕様)
+- 文字列トークン"string"のダブルクオーテーションを削除
+
+### Tooling
+- 標準ライブラリを追加 
+  - file_open
+  - file_line
+  - file_write
+
 ## [0.9.9] beta 2026-02-15
 
 ### Breaking Changes

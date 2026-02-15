@@ -60,15 +60,13 @@ fn create_type_data() {
 
 
 fn main() {
-    {
-        let status = Command::new("python3")
-            .args(&["make_c_value.py"])
-            .status()
-            .expect("failed to run python");
+    let status = Command::new("python3")
+        .args(&["make_c_value.py"])
+        .status()
+        .expect("failed to run python");
 
-        if !status.success() {
-            eprintln!("python script failed");
-        }
+    if !status.success() {
+        eprintln!("python script failed");
     }
 
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();

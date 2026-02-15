@@ -23,6 +23,17 @@ pub fn change_txt_for_token(tokens: &mut Vec<token::Token>) {
     for t in tokens {
         if t.kind == token::TokenKind::TokenName {
             t.kind = categorize_keyword(t.lexeme.as_str());
+        } else if t.kind == token::TokenKind::TokenString {
+            if t.lexeme.chars().count() < 2 {
+                t.lexeme.clear();
+                return;
+            }
+
+            let start = t.lexeme.char_indices().nth(1).unwrap().0;
+            let end = t.lexeme.char_indices().rev().nth(1).unwrap().0 + 1;
+
+            t.lexeme.drain(..start); // 先頭削除
+            t.lexeme.drain(end - start..); // 末尾削除（位置調整）
         }
     }
 }
