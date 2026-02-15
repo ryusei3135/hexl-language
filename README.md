@@ -68,7 +68,7 @@ def start() {
   これをつけることで、明示的に不変であることを示すことができる
 - 何もつけない場合
   デフォルトで不変
-- for文や引数などでも有効
+- loop文や引数などでも有効
 ```hexl
 def start() {
   mut var := 0
@@ -105,21 +105,21 @@ def start() {
 }
 ```
 
-### for文
-- for文は、変数に代入する処理を書かずに動かせます、
-- for文に5だけ入れた場合は 0~5まで、
+### loop文
+- loop文は、変数に代入する処理を書かずに動かせます、
+- loop文に5だけ入れた場合は 0~5まで、
 - a..bは今のところ、aにマイナスの値を入れることができます
 ```hexl
 use std::io
 
 def start() {
-  for 5 {
+  loop 5 {
     io::print("a")
   }
-  for 0..5 {
+  loop 0..5 {
     io::print("a")
   }
-  for a in 0..5 {
+  loop a in 0..5 {
     io::print("b")
   }
 }

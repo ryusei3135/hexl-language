@@ -8,7 +8,7 @@ fn categorize_keyword(text: &str) -> token::TokenKind {
         // "let" => token::TokenKind::TokenNewVar,
         "if" => token::TokenKind::TokenIf,
         "else" => token::TokenKind::TokenElse,
-        "for" => token::TokenKind::TokenFor,
+        "loop" => token::TokenKind::TokenFor,
         "ret" => token::TokenKind::TokenRet,
         "in" => token::TokenKind::TokenIn,
         "mut" => token::TokenKind::TokenVarMut,

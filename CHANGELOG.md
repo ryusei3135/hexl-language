@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.9.9] beta 2026-02-15
+
+### Breaking Changes
+- 反復処理のfor文のキーワードを"loop"に変更
+
 ## [0.9.8] beta 2026-02-14
 
 ### Tooling

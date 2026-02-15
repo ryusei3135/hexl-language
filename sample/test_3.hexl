@@ -9,7 +9,7 @@ def func2()<i32> {
 }
 
 def test_for() {
-    for mut i in 0..5 {
+    loop mut i in 0..5 {
         i = i + 0
     }
 }
