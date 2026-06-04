@@ -127,7 +127,7 @@ impl Lexer {
                     (CharKind::Op | CharKind::Space, CharKind::Name) => {
                         self.over_write_flag::<true, STACKABLE>(GenFlag::Name);
                     }
-                    (CharKind::Op, CharKind::Num) => {
+                    (CharKind::Op | CharKind::Other | CharKind::Space, CharKind::Num) => {
                         self.over_write_flag::<true, STACKABLE>(GenFlag::Number);
                     }
                     (_, _) => {},
@@ -137,6 +137,7 @@ impl Lexer {
             self.chr_stk.push(chr);
             self.last_kind = Some(*curr_kind);
         }
+        self.check_stkable_chr(&CharKind::Other, &'\0');
 
         if self.gen_flag.is_some() {
             self.gen_tkns.push(self.gen_tkn()?);
@@ -321,6 +322,14 @@ mod tests {
 
     fn lexer() -> Lexer {
         Lexer::new()
+    }
+
+    #[test]
+    fn check_sib_tkn() {
+        assert_eq!(
+            lexer().analy(&"[eax + 8]".to_string()).unwrap(),
+            &vec![Tkn::AddrStart, Tkn::Name("eax".to_string()), Tkn::Add, Tkn::Number("8".to_string()), Tkn::AddrEnd],
+        );
     }
 
     #[test]

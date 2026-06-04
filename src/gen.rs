@@ -193,6 +193,9 @@ impl Generater {
                     self.code_data.push_data(imm);
                 }
             }
+            Operand::Reg(dst) => {
+                self.code_data.push_data(op.opcode(&size, Some(&dst), None, None));
+            }
             _ => panic!(),
         }
     }

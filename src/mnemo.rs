@@ -223,11 +223,11 @@ impl Mnemonic {
             Self::Cmp => vec![0x38],
 
             Self::Push => vec![0x50],
+            Self::Pop => vec![0x58],
 
             Self::Syscall => vec![0x0F, 0x05,],
             Self::Mov => vec![0x88],
             Self::Call => vec![0xE8],
-            Self::Pop => vec![0x58],
             Self::Ret => vec![0xC3],
 
             Self::Jo => vec![0x70],
@@ -301,10 +301,10 @@ impl Mnemonic {
         }
         if let Some(sib_info) = sib.clone() {
             code.extend(sib_info.code);
-        } else if src_reg.is_some() || dst_reg.is_some() {
+        } else if src_reg.is_some() && dst_reg.is_some() {
             code.push(self.gen_modrm(&dst_reg.unwrap(), &src_reg.unwrap()));
-        } else {
-            panic!();
+        } else if let Some(dst) = dst_reg {
+            *code.last_mut().unwrap() |= dst.get_reg_number();
         }
         code
     }

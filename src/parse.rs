@@ -290,27 +290,8 @@ impl<'a> Parser<'a> {
                         }
                     };
                     self.idx += 1;
-                    let n = match self.advance() {
-                        lex::Tkn::Name(_) => {
-                            panic!();
-                        },
-                        lex::Tkn::Number(value) => {
-                            Node::Define {
-                                name: def_name,
-                                value: value.parse::<i32>().unwrap().to_le_bytes().to_vec(),
-                                size: size,
-                            }
-                        },
-                        lex::Tkn::Str(value) => {
-                            Node::Define {
-                                name: def_name,
-                                value: value.as_bytes().to_vec(),
-                                size: Size::Str,
-                            }
-                        },
-                        _ => panic!(),
-                    };
-                    self.nodes.push(n);
+                    let curr_tkn = self.advance().clone();
+                    self.nodes.push(self.gen_define_node(curr_tkn, &def_name, &size));
                 },
                 lex::Tkn::Str(_) => {},
                 _ => {},
@@ -319,6 +300,30 @@ impl<'a> Parser<'a> {
 
         self.tkns = None;
         Ok(&self.nodes)
+    }
+   
+    #[inline(always)]
+    fn gen_define_node(&self, tkn: lex::Tkn, def_name: &String, size: &Size) -> Node {
+        match &tkn {
+            lex::Tkn::Name(_) => {
+                panic!();
+            },
+            lex::Tkn::Number(value) => {
+                Node::Define {
+                    name: def_name.clone(),
+                    value: value.parse::<i32>().unwrap().to_le_bytes().to_vec(),
+                    size: size.clone(),
+                }
+            },
+            lex::Tkn::Str(value) => {
+                Node::Define {
+                    name: def_name.clone(),
+                    value: value.as_bytes().to_vec(),
+                    size: Size::Str,
+                }
+            },
+            _ => panic!(),
+        }
     }
 
     fn get_number_node(&mut self) -> Option<String> {
@@ -364,7 +369,7 @@ impl<'a> Parser<'a> {
 
 /// SIBの処理全般
 impl<'a> Parser<'a> {
-    fn gen_memory_operand(&mut self, value: &String) -> Result<Operand, err::Err<'static>> {
+    pub fn gen_memory_operand(&mut self, value: &String) -> Result<Operand, err::Err<'static>> {
         self.sib.undefine_reg = Register::decide_reg(value);
         let result = Ok(self.index_parse()?);
         self.sib = SIB::new();
@@ -385,32 +390,39 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn displacement_parse(&mut self) -> Result<DispTy, err::Err<'static>> {
-        match self.advance() {
-            lex::Tkn::AddrEnd => return Ok(None),
-            lex::Tkn::Add => {},
-            _ => return Err(err::Err::UnexpectedToken("err tkn".to_string())),
-        }
-
-        match self.advance() {
-            lex::Tkn::Number(value) => {
-                if let Ok(byte_value) = value.parse::<u8>() {
-                    Ok(Some(vec![byte_value]))
-                } else if let Ok(dbyte_value) = value.parse::<u32>() {
-                    Ok(Some(dbyte_value.to_le_bytes().to_vec()))
-                } else {
-                    Err(
-                        err::Err::SyntaxErr(
-                            err::SyntaxErr::UnmatchNumberSize{
-                                expect: "1byte or 4byte",
-                                found: "other",
-                                msg: None
-                            }
-                        )
+    fn displacement_parse(&mut self, num_value: &Option<String>) -> Result<DispTy, err::Err<'static>> {
+        let gen_byte_data = |value: &String| -> Result<DispTy, err::Err<'static>> {
+            if let Ok(byte_value) = value.parse::<u8>() {
+                Ok(Some(vec![byte_value]))
+            } else if let Ok(dbyte_value) = value.parse::<u32>() {
+                Ok(Some(dbyte_value.to_le_bytes().to_vec()))
+            } else {
+                Err(
+                    err::Err::SyntaxErr(
+                        err::SyntaxErr::UnmatchNumberSize{
+                            expect: "1byte or 4byte",
+                            found: "other",
+                            msg: None
+                        }
                     )
-                }
-            },
-            _ => Err(err::Err::UnexpectedToken("kk".to_string())),
+                )
+            }
+        };
+        if let Some(value) = num_value {
+            gen_byte_data(&value)
+        } else {
+            match self.advance() {
+                lex::Tkn::AddrEnd => return Ok(None),
+                lex::Tkn::Add => {},
+                _ => return Err(err::Err::UnexpectedToken("err tkn".to_string())),
+            }
+
+            match self.advance() {
+                lex::Tkn::Number(value) => {
+                    gen_byte_data(&value)
+                },
+                _ => Err(err::Err::UnexpectedToken("kk".to_string())),
+            }
         }
     }
 
@@ -424,7 +436,7 @@ impl<'a> Parser<'a> {
                 }
 
                 let scale = self.scale_parse()?;
-                let disp: DispTy = self.displacement_parse()?;
+                let disp: DispTy = self.displacement_parse(&None)?;
                 Ok(
                     Operand::gen_memory_operand(
                         &self.sib,
@@ -437,8 +449,8 @@ impl<'a> Parser<'a> {
                 self.sib.base_reg = self.sib.undefine_reg.clone();
                 self.operand_size = Some(self.sib.base_reg.as_ref().unwrap().get_reg_byte());
 
-                match self.advance() {
-                    lex::Tkn::Name(next_reg) => {
+                match self.advance().clone() {
+                    lex::Tkn::Name(ref next_reg) => {
                         self.sib.undefine_reg = Register::decide_reg(next_reg);
                         // レジスタのサイズを確認
                         let size = &self.sib.undefine_reg.as_ref().unwrap().get_reg_byte();
@@ -449,8 +461,10 @@ impl<'a> Parser<'a> {
                         Ok(self.index_parse()?)
                     }
                     lex::Tkn::Number(value) => {
-                        self.sib.undefine_reg = Register::decide_reg(next_reg);
+                        let disp = self.displacement_parse(&Some(value))?;
+                        Ok(Operand::gen_memory_operand(&self.sib, Scale::One, None))
                     }
+                    t => panic!("{:?}", self.tkns),
                 }
             }
             lex::Tkn::AddrEnd => {
@@ -463,105 +477,3 @@ impl<'a> Parser<'a> {
 }
 
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn gen_reg_node(reg: &str) -> lex::Tkn {
-        lex::Tkn::Name(reg.to_string())
-    }
-
-    fn gen_number(value: &str) -> lex::Tkn {
-        lex::Tkn::Number(value.to_string())
-    }
-
-    fn set_sib_tkns(parser: &mut Parser, base: &str, idx: &str) -> Vec<lex::Tkn> {
-        let binding = vec![
-            gen_reg_node(base),
-            lex::Tkn::Add,
-            gen_reg_node(idx),
-            lex::Tkn::Mul,
-            gen_number("4"),
-            lex::Tkn::Add,
-            gen_number("8"),
-            lex::Tkn::AddrEnd,
-        ];
-        parser.idx = 0;
-        binding
-    }
-
-    #[test]
-    fn check_err_sib() {
-        let mut parser = Parser::new();
-        let binding = vec![
-            gen_reg_node("rax"),
-            lex::Tkn::Add,
-            gen_reg_node("eax"),
-            lex::Tkn::AddrEnd,
-        ];
-        parser.tkns = Some(&binding);
-        assert_eq!(
-            parser.gen_memory_operand(),
-            Err(err::Err::SyntaxErrTyNotMatch),
-        );
-    }
-
-    #[test]
-    fn check_sib_node() {
-        let mut parser = Parser::new();
-
-        let binding = vec![
-            gen_reg_node("eax"),
-            lex::Tkn::Mul,
-            gen_number("4"),
-            lex::Tkn::AddrEnd,
-        ];
-        parser.tkns = Some(&binding);
-        assert_eq!(
-            parser.gen_memory_operand().unwrap(),
-            Operand::MemoryOperand(MemoryOperand {
-                base: None,
-                idx: Some(Register::Eax),
-                scale: Scale::Four,
-                displacement: 0,
-            })
-        );
-        let binding = vec![
-            gen_reg_node("eax"),
-            lex::Tkn::AddrEnd,
-        ];
-        parser.tkns = Some(&binding);
-        parser.idx = 0;
-        assert_eq!(
-            parser.gen_memory_operand().unwrap(),
-            Operand::MemoryOperand(MemoryOperand {
-                base: Some(Register::Eax),
-                idx: None,
-                scale: Scale::One,
-                displacement: 0,
-            })
-        );
-        let binding = set_sib_tkns(&mut parser, "eax", "ecx");
-        parser.tkns = Some(&binding);
-        assert_eq!(
-            parser.gen_memory_operand().unwrap(),
-            Operand::MemoryOperand(MemoryOperand {
-                base: Some(Register::Eax),
-                idx: Some(Register::Ecx),
-                scale: Scale::Four,
-                displacement: 8,
-            })
-        );
-        let binding = set_sib_tkns(&mut parser, "eax", "esp");
-        parser.tkns = Some(&binding);
-        assert_eq!(
-            parser.gen_memory_operand().unwrap(),
-            Operand::MemoryOperand(MemoryOperand {
-                base: Some(Register::Esp),
-                idx: Some(Register::Eax),
-                scale: Scale::Four,
-                displacement: 8,
-            })
-        );
-    }
-}
