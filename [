@@ -10,6 +10,39 @@ use crate::{
 };
 
 
+trait OpcodeApi {
+    fn gen_opcode(&self, op: &mnemo::Mnemonic);
+}
+
+impl OpcodeApi for String {
+    fn gen_opcode(
+        &self,
+        op: &mnemo::Mnemonic
+    ) -> fn(
+        &Size,
+        &Register,
+        Option<&String>,
+        Option<mnemo::IsSib>
+    ) -> Vec<u8> {
+        op.imm_opcode
+    }
+}
+
+impl OpcodeApi for reg::Register {
+    fn gen_opcode(
+        &self,
+        op: &mnemo::Mnemonic
+    ) -> fn(
+        &Size,
+        Option<Register>,
+        Option<Register>,
+        Option<mnemo::IsSib>,
+    ) -> Vec<u8> {
+        op.opcode
+    }
+}
+
+
 enum SectionFlag {
     Text,
     Data,
@@ -239,67 +272,57 @@ impl Generater {
                 }
             }
             (Operand::MemoryOperand(memory), Operand::Reg(src)) => {
-                self.consume_info_to_gen_sib::<false>(&op, &size, &memory, &src)?;
+                let mut byte_code = self.gen_sib_byte_code(&memory)?;
+                self.code_data.push_data(
+                    op.opcode(
+                        &size,
+                        None,
+                        Some(&src),
+                        Some(
+                            mnemo::IsSib {
+                                code: byte_code,
+                                src: false,
+                            }
+                        )
+                    )
+                );
             }
             (Operand::MemoryOperand(memory), Operand::Value(src)) => {
-                self.consume_info_to_gen_imm_sib(&op, &size, &memory, &src)?;
-            }
-            (Operand::Reg(dst), Operand::MemoryOperand(memory)) => {
-                self.consume_info_to_gen_sib::<true>(&op, &size, &memory, &dst)?;
+                let mut byte_code = self.gen_sib_byte_code(&memory)?;
+                self.code_data.push_data(
+                    op.imm_opcode(
+                        &size,
+                        &Register::Eax,
+                        Some(&src),
+                        Some(
+                            mnemo::IsSib {
+                                code: byte_code,
+                                src: false,
+                            }
+                        )
+                    )
+                );
             }
             (_, _) => panic!("{:?}::{:?}", dst, src),
         }
         Ok(())
     }
 
-    fn consume_info_to_gen_imm_sib(
-        &mut self,
-        op: &mnemo::Mnemonic,
-        size: &Size,
-        memory: &parse::MemoryOperand,
-        src: &String
-    ) -> Result<(), err::Err<'static>> {
+    fn consume_info_to_gen_sib_code<T>(&self, Vec<u8>, src: &T) {
         let mut byte_code = self.gen_sib_byte_code(&memory)?;
-        let sib_info = Some(
-            mnemo::IsSib {
-                code: byte_code,
-                src: false,
-            }
-        );
         self.code_data.push_data(
             op.imm_opcode(
                 &size,
-                &reg::Register::Eax,
-                Some(src),
-                sib_info
+                &Register::Eax,
+                Some(&src),
+                Some(
+                    mnemo::IsSib {
+                        code: byte_code,
+                        src: false,
+                    }
+                )
             )
         );
-        Ok(())
-    }
-
-    fn consume_info_to_gen_sib<const M: bool>(
-        &mut self,
-        op: &mnemo::Mnemonic,
-        size: &Size,
-        memory: &parse::MemoryOperand,
-        src: &reg::Register
-    ) -> Result<(), err::Err<'static>> {
-        let mut byte_code = self.gen_sib_byte_code(&memory)?;
-        let sib_info = Some(
-            mnemo::IsSib {
-                code: byte_code,
-                src: M,
-            }
-        );
-        self.code_data.push_data(
-            op.opcode(
-                &size,
-                None,
-                Some(src),
-                sib_info
-            )
-        );
-        Ok(())
     }
 
     fn gen_sib_byte_code(&self, memory: &MemoryOperand) -> Result<Vec<u8>, err::Err<'static>> {

@@ -76,7 +76,7 @@ pub enum Tkn {
 }
 
 impl Tkn {
-    pub fn wrap(self) -> Result<Self, err::Err> {
+    pub fn wrap(self) -> Result<Self, err::Err<'static>> {
         Ok(self)
     }
 }
@@ -102,7 +102,7 @@ impl Lexer {
         }
     }
 
-    pub fn analy(&mut self, content: &String) -> Result<&Vec<Tkn>, err::Err> {
+    pub fn analy(&mut self, content: &String) -> Result<&Vec<Tkn>, err::Err<'static>> {
         const GEN_TKN: bool = false;
         let char_table: [CharKind; 256] = make_char_table();
 
@@ -146,7 +146,7 @@ impl Lexer {
     }
 
     /// トークンを生成しOptionで返す
-    fn gen_tkn(&self) -> Result<Tkn, err::Err> {
+    fn gen_tkn(&self) -> Result<Tkn, err::Err<'static>> {
         if let Some(ref flag) = self.gen_flag {
             match flag {
                 GenFlag::AddrStart => Tkn::AddrStart,

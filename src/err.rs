@@ -5,10 +5,20 @@ pub enum SystemErr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Err {
+pub enum SyntaxErr<'a> {
+    UnmatchNumberSize {
+        expect: &'a str,
+        found: &'a str,
+        msg: Option<&'a str>,
+    },
+    NotFoundNode(&'a str)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Err<'a> {
     SystemErr(SystemErr),
     UnexpectedToken(String),
-    SyntaxErr(String),
+    SyntaxErr(SyntaxErr<'a>),
     SyntaxErrTyNotMatch,
     SyntaxErrNotFoundTkn,
 }

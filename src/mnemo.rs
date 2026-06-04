@@ -2,6 +2,12 @@ use crate::parse::Size;
 use crate::reg::Register;
 
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct IsSib {
+    pub code: Vec<u8>,
+    pub src: bool,
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mnemonic {
     Add, Or, Adc, Sbb,
@@ -23,54 +29,97 @@ pub enum Mnemonic {
     Syscall,
     Ret,
     Mov,
+    Pop,
 }
 
 impl Mnemonic {
-    fn group_5_opcode(&self, size: &Size, dst_reg: &Register) -> Option<Vec<u8>> {
-        let code = match &self {
-            Self::Inc => 0xC0,
-            Self::Dec => 0xC8,
-           // Self::Call => 0xD0,
-           // Self::Jmp => 0xE0,
-            Self::Push => 0xF0,
-            _ => return None,
+    fn group_5_opcode(&self, size: &Size, dst_reg: &Register, sib_info: &Option<IsSib>) -> Option<Vec<u8>> {
+        let code = if let Some(mut sib) = sib_info.clone() {
+            let mut code = match &self {
+                Self::Inc => 0x00,
+                Self::Dec => 0x01,
+               // Self::Call => 0xD0,
+               // Self::Jmp => 0xE0,
+                Self::Push => 0x6,
+                _ => return None,
+            };
+            sib.code[0] |= (if sib.src {code + 2} else {code} << 3);
+            sib.code.clone()
+        } else {
+            let mut code = match &self {
+                Self::Inc => 0xC0,
+                Self::Dec => 0xC8,
+               // Self::Call => 0xD0,
+               // Self::Jmp => 0xE0,
+                Self::Push => 0xF0,
+                _ => return None,
+            };
+            code |= dst_reg.get_reg_number();
+            vec![code]
         };
 
-        Some(match size {
-            Size::DB => vec![0xFE, code | dst_reg.get_reg_number()],
-            Size::DW => vec![0x66, 0xFF, code | dst_reg.get_reg_number()],
-            Size::DD => vec![0xFF, code],
-            Size::DQ => vec![0x48, 0xFF, code | dst_reg.get_reg_number()],
+        let mut c = match size {
+            Size::DB => vec![0xFE],
+            Size::DW => vec![0x66, 0xFF],
+            Size::DD => vec![0xFF],
+            Size::DQ => vec![0x48, 0xFF],
             _ => panic!(),
-        })
+        };
+        c.extend(code);
+        Some(c)
     }
 
-    fn imm_group_2_opcode(&self, size: &Size, dst_reg: &Register, value: &String) -> Option<Vec<u8>> {
-        let code = match &self {
-            Self::Rol => 0xC0,
-            Self::Ror => 0xC8,
-            Self::Rcl => 0xD0,
-            Self::Rcr => 0xD8,
-            Self::Shl => 0xE0,
-            Self::Shr => 0xE8,
-            Self::Sar => 0xF8,
-            _ => return None,
+    fn imm_group_2_opcode(&self, size: &Size, dst_reg: &Register, value: &String, sib_info: &Option<IsSib>) -> Option<Vec<u8>> {
+        let code = if let Some(mut sib) = sib_info.clone() {
+            let code = match &self {
+                Self::Rol => 0,
+                Self::Ror => 1,
+                Self::Rcl => 2,
+                Self::Rcr => 3,
+                Self::Shl => 4,
+                Self::Shr => 5,
+                Self::Sar => 7,
+                _ => return None,
+            };
+            sib.code[0] |= if sib.src {code + 2} else {code} << 3;
+            sib.code.clone()
+        } else {
+            let mut code = match &self {
+                Self::Rol => 0xC0,
+                Self::Ror => 0xC8,
+                Self::Rcl => 0xD0,
+                Self::Rcr => 0xD8,
+                Self::Shl => 0xE0,
+                Self::Shr => 0xE8,
+                Self::Sar => 0xF8,
+                _ => return None,
+            };
+            code |= dst_reg.get_reg_number();
+            vec![code]
         };
         let opcode = if value.as_str() == "1" {
             0xD0
         } else {
             0xC0
         };
-        Some(match size {
-            Size::DB => vec![opcode, code | dst_reg.get_reg_number()],
-            Size::DW => vec![0x66, opcode + 1, code | dst_reg.get_reg_number()],
-            Size::DD => vec![opcode + 1, code],
-            Size::DQ => vec![0x48, opcode + 1, code | dst_reg.get_reg_number()],
+        let mut c = match size {
+            Size::DB => vec![opcode],
+            Size::DW => vec![0x66, opcode + 1],
+            Size::DD => vec![opcode + 1],
+            Size::DQ => vec![0x48, opcode + 1],
             _ => panic!(),
-        })
+        };
+        c.extend(code);
+        Some(c)
     }
 
-    pub fn imm_opcode(&self, size: &Size, dst_reg: &Register, value: Option<&String>) -> Vec<u8> {
+    pub fn imm_opcode(
+        &self,
+        size: &Size,
+        dst_reg: &Register,
+        value: Option<&String>,
+        sib: Option<IsSib>,
+    ) -> Vec<u8> {
 
         let code = match self {
             Self::Add => vec![0x00],
@@ -107,9 +156,9 @@ impl Mnemonic {
                 // LLLLL
                 Self::Lea => vec![0x8D, 0x05 | (dst_reg.get_reg_number() << 3)],
                 _ => {
-                    let mut opcode = if let Some(opcode) = self.imm_group_2_opcode(&size, &dst_reg, &value.unwrap()) {
+                    let mut opcode = if let Some(opcode) = self.imm_group_2_opcode(&size, &dst_reg, &value.unwrap(), &sib) {
                         opcode
-                    } else if let Some(opcode) = self.group_5_opcode(&size, &dst_reg) {
+                    } else if let Some(opcode) = self.group_5_opcode(&size, &dst_reg, &sib) {
                         opcode
                     } else {
                         panic!();
@@ -134,7 +183,12 @@ impl Mnemonic {
                     _ => panic!(),
                 }
             };
-            rex.extend(vec![0b11000000 | (code[0] << 3) | dst_reg.get_reg_number()]);
+            if let Some(mut sib_info) = sib.clone() {
+                sib_info.code[0] |= code[0] << 3;
+                rex.extend(sib_info.code);
+            } else {
+                rex.extend(vec![0b11000000 | (code[0] << 3) | dst_reg.get_reg_number()]);
+            }
 
             if let Some(src) = value {
                 let mut imm = src.parse::<usize>().unwrap().to_le_bytes().to_vec();
@@ -149,7 +203,8 @@ impl Mnemonic {
         &self,
         size: &Size,
         dst_reg: Option<&Register>,
-        src_reg: Option<&Register>
+        src_reg: Option<&Register>,
+        sib: Option<IsSib>,
     ) -> Vec<u8> {
         let bit = 
             if size == &Size::DB {
@@ -172,6 +227,7 @@ impl Mnemonic {
             Self::Syscall => vec![0x0F, 0x05,],
             Self::Mov => vec![0x88],
             Self::Call => vec![0xE8],
+            Self::Pop => vec![0x58],
             Self::Ret => vec![0xC3],
 
             Self::Jo => vec![0x70],
@@ -223,6 +279,9 @@ impl Mnemonic {
                 return opcode;
             }
         };
+        if code[0] >= 0x70 && code[0] <= 0x7F {
+            return code;
+        }
         if code.len() == 1 {
             *code.last_mut().unwrap() += bit;
             let mut opcode = Vec::new();
@@ -240,8 +299,12 @@ impl Mnemonic {
                 _ => {},
             }
         }
-        if src_reg.is_some() || dst_reg.is_some() {
+        if let Some(sib_info) = sib.clone() {
+            code.extend(sib_info.code);
+        } else if src_reg.is_some() || dst_reg.is_some() {
             code.push(self.gen_modrm(&dst_reg.unwrap(), &src_reg.unwrap()));
+        } else {
+            panic!();
         }
         code
     }
@@ -259,7 +322,7 @@ impl Mnemonic {
 
             Self::Rol | Self::Ror | Self::Rcl | Self::Rcr |
             Self::Shl | Self::Shr | Self::Sar => 2,
-
+            // jcc
             Self::Jo | Self::Jno | Self::Jc | Self::Jnc |
             Self::Jz | Self::Jnz | Self::Jna | Self::Ja |
             Self::Js | Self::Jns | Self::Jp | Self::Jnp |
@@ -274,6 +337,7 @@ impl Mnemonic {
 
             Self::Syscall => 0,
             Self::Mov => 2,
+            Self::Pop => 1,
         }
     }
 
@@ -325,6 +389,7 @@ impl Mnemonic {
 
             "syscall" => Mnemonic::Syscall,
             "mov" => Mnemonic::Mov,
+            "pop" => Self::Pop,
             _ => return None,
         };
 
