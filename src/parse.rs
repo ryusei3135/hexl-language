@@ -210,7 +210,7 @@ impl<'a> Parser<'a> {
                         let op_len = mnemonic.get_operand_len();
 
                         if op_len != 0 {
-                            operands.push(self.gen_operand_node()?);
+                            operands.push(self.gen_operand_node().unwrap());
                             if op_len >= 2 && self.advance() == &lex::Tkn::Comma {
                                 operands.push(self.gen_operand_node()?);
                                 if self.advance() == &lex::Tkn::Comma {

@@ -173,7 +173,7 @@ impl Generater {
         size: &parse::Size,
         op: &mnemo::Mnemonic,
         src: &Operand,
-    ) {
+    ) -> Result<(), err::Err<'static>> {
         match src {
             Operand::Ref(name) => {
                 let codes = op.opcode(&size, None, None, None);
@@ -196,8 +196,19 @@ impl Generater {
             Operand::Reg(dst) => {
                 self.code_data.push_data(op.opcode(&size, Some(&dst), None, None));
             }
-            _ => panic!(),
+            Operand::MemoryOperand(memory) => {
+                let mut byte_code = self.gen_sib_byte_code(&memory)?;
+                let sib_info = Some(
+                    mnemo::IsSib {
+                        code: byte_code,
+                        src: false,
+                    }
+                );
+                self.code_data.push_data(op.opcode(&size, None, None, sib_info));
+            }
+            t => panic!("{:?}", t),
         }
+        Ok(())
     }
 
     fn gen_opcodes(
