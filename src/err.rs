@@ -11,7 +11,8 @@ pub enum SyntaxErr<'a> {
         found: &'a str,
         msg: Option<&'a str>,
     },
-    NotFoundNode(&'a str)
+    NotFoundNode(&'a str),
+    UndefineMnemonic(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]

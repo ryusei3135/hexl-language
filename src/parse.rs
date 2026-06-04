@@ -185,6 +185,9 @@ impl<'a> Parser<'a> {
         self.tkns = Some(tkns);
 
         while self.tkns.unwrap().len() > self.idx {
+            // 処理するデータサイズを初期化
+            self.operand_size = None;
+
             match self.advance() {
                 lex::Tkn::Extern => {
                     if let lex::Tkn::Name(value) = self.advance().clone() {
@@ -202,43 +205,13 @@ impl<'a> Parser<'a> {
                 }
                 lex::Tkn::Name(value) => {
                     if let Some(mnemonic) = Mnemonic::gen_tkn_if_valid_str(value) {
-                        // 処理するデータサイズを初期化
-                        self.operand_size = None;
-
                         let mut operands: Vec<Operand> = Vec::new();
 
                         let op_len = mnemonic.get_operand_len();
 
                         if op_len != 0 {
                             operands.push(self.gen_operand_node().unwrap());
-                            if op_len >= 2 && self.advance() == &lex::Tkn::Comma {
-                                operands.push(self.gen_operand_node()?);
-                                if self.advance() == &lex::Tkn::Comma {
-                                    let value = self.get_number_node().unwrap();
-                                    self.nodes.push(
-                                        Node::Instruct {
-                                            instruct: Instruction::ThreeOperand {
-                                                op: mnemonic.clone(),
-                                                dst: operands[0].clone(),
-                                                src: operands[1].clone(),
-                                                value: value,
-                                            },
-                                            size: self.operand_size.clone(),
-                                        }
-                                    )
-                                } else {
-                                    self.nodes.push(
-                                        Node::Instruct {
-                                            instruct: Instruction::TwoOperand {
-                                                op: mnemonic.clone(),
-                                                dst: operands[0].clone(),
-                                                src: operands[1].clone(),
-                                            },
-                                            size: self.operand_size.clone(),
-                                        }
-                                    )
-                                }
-                            } else {
+                            if op_len == 1 {
                                 self.nodes.push(
                                     Node::Instruct {
                                         instruct: Instruction::OneOperand {
@@ -248,6 +221,8 @@ impl<'a> Parser<'a> {
                                         size: self.operand_size.clone(),
                                     }
                                 );
+                            } else if op_len >= 2 && self.curr_tkn() == &lex::Tkn::Comma {
+                                self.three_operand_node(mnemonic, operands)?;
                             }
                         } else {
                             self.nodes.push(
@@ -301,7 +276,43 @@ impl<'a> Parser<'a> {
         self.tkns = None;
         Ok(&self.nodes)
     }
-   
+
+    /// オペランドが二つ以上ある場合の処理
+    #[inline(always)]
+    fn three_operand_node(
+        &mut self,
+        mnemonic: mnemo::Mnemonic,
+        mut operands: Vec<Operand>
+    ) -> Result<(), err::Err<'static>> {
+        operands.push(self.gen_operand_node()?);
+        if self.curr_tkn() == &lex::Tkn::Comma {
+            let value = self.make_number_node().unwrap();
+            self.nodes.push(
+                Node::Instruct {
+                    instruct: Instruction::ThreeOperand {
+                        op: mnemonic,
+                        dst: operands[0].clone(),
+                        src: operands[1].clone(),
+                        value: value,
+                    },
+                    size: self.operand_size.clone(),
+                }
+            )
+        } else {
+            self.nodes.push(
+                Node::Instruct {
+                    instruct: Instruction::TwoOperand {
+                        op: mnemonic.clone(),
+                        dst: operands[0].clone(),
+                        src: operands[1].clone(),
+                    },
+                    size: self.operand_size.clone(),
+                }
+            )
+        }
+        Ok(())
+    }
+    /// データの定義をするノードの作成
     #[inline(always)]
     fn gen_define_node(&self, tkn: lex::Tkn, def_name: &String, size: &Size) -> Node {
         match &tkn {
@@ -326,7 +337,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn get_number_node(&mut self) -> Option<String> {
+    fn make_number_node(&mut self) -> Option<String> {
         if let lex::Tkn::Number(value) = self.advance() {
             Some(value.clone())
         } else {
@@ -364,6 +375,10 @@ impl<'a> Parser<'a> {
     pub fn advance(&mut self) -> &lex::Tkn {
         self.idx += 1;
         &self.tkns.unwrap()[self.idx - 1]
+    }
+    
+    fn curr_tkn(&self) -> &lex::Tkn {
+        &self.tkns.unwrap()[self.idx]
     }
 }
 
