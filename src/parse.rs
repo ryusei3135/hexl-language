@@ -411,6 +411,10 @@ impl<'a> Parser<'a> {
                 Ok(Some(vec![byte_value]))
             } else if let Ok(dbyte_value) = value.parse::<u32>() {
                 Ok(Some(dbyte_value.to_le_bytes().to_vec()))
+            } else if let Ok(byte_value) = value.parse::<i8>() {
+                Ok(Some(vec![byte_value as u8]))
+            } else if let Ok(dbyte_value) = value.parse::<i32>() {
+                Ok(Some(dbyte_value.to_le_bytes().to_vec()))
             } else {
                 Err(
                     err::Err::SyntaxErr(
@@ -477,9 +481,22 @@ impl<'a> Parser<'a> {
                     }
                     lex::Tkn::Number(value) => {
                         let disp = self.displacement_parse(&Some(value))?;
-                        Ok(Operand::gen_memory_operand(&self.sib, Scale::One, None))
+                        Ok(Operand::gen_memory_operand(&self.sib, Scale::One, disp))
                     }
                     t => panic!("{:?}", self.tkns),
+                }
+            }
+            lex::Tkn::Sub => {
+                self.sib.base_reg = self.sib.undefine_reg.clone();
+                self.operand_size = Some(self.sib.base_reg.as_ref().unwrap().get_reg_byte());
+
+                if let lex::Tkn::Number(value) = self.advance().clone() {
+                    let mut num = '-'.to_string();
+                    num.push_str(&value);
+                    let disp = self.displacement_parse(&Some(num))?;
+                    Ok(Operand::gen_memory_operand(&self.sib, Scale::One, disp))
+                } else {
+                    panic!();
                 }
             }
             lex::Tkn::AddrEnd => {

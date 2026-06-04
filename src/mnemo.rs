@@ -138,20 +138,33 @@ impl Mnemonic {
         if code.is_empty() {
             match self {
                 Self::Mov => {
-                    let mut opcode = match &size {
-                        Size::DB => vec![0xB0],
-                        Size::DW => vec![0x66, 0xB8],
-                        Size::DD => vec![0xB8],
-                        Size::DQ => vec![0x48, 0xB8],
-                        _ => panic!(),
+                    let mut byte_codes = if let Some(sib_info) = sib {
+                        let mut opcode = match &size {
+                            Size::DB => vec![0xC6],
+                            Size::DW => vec![0x66, 0xC7],
+                            Size::DD => vec![0xC7],
+                            Size::DQ => vec![0x48, 0xC7],
+                            _ => panic!(),
+                        };
+                        opcode.extend(sib_info.code);
+                        opcode
+                    } else {
+                        let mut opcode = match &size {
+                            Size::DB => vec![0xB0],
+                            Size::DW => vec![0x66, 0xB8],
+                            Size::DD => vec![0xB8],
+                            Size::DQ => vec![0x48, 0xB8],
+                            _ => panic!(),
+                        };
+                        *opcode.last_mut().unwrap() += dst_reg.get_reg_number();
+                        opcode
                     };
-                    *opcode.last_mut().unwrap() += dst_reg.get_reg_number();
                     if let Some(src) = value {
                         let mut imm = src.parse::<usize>().unwrap().to_le_bytes().to_vec();
                         imm.resize(size.get_byte(), 0);
-                        opcode.extend(imm);
+                        byte_codes.extend(imm);
                     }
-                    opcode
+                    byte_codes
                 }
                 // LLLLL
                 Self::Lea => vec![0x8D, 0x05 | (dst_reg.get_reg_number() << 3)],
@@ -206,12 +219,22 @@ impl Mnemonic {
         src_reg: Option<&Register>,
         sib: Option<IsSib>,
     ) -> Vec<u8> {
-        let bit = 
-            if size == &Size::DB {
+        let bit = { 
+            let c = if let Some(sib_info) = &sib {
+                if sib_info.src {
+                    2
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+            (if size == &Size::DB {
                 0
             } else {
                 1
-            };
+            }) + c
+        };
         let mut code = match self {
             Self::Add => vec![0x00],
             Self::Or => vec![0x08],

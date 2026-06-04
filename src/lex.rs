@@ -45,6 +45,7 @@ mod local {
         AddrEnd,
         Comma,
         Add,
+        Sub,
         Mul,
         Number,
         Name,
@@ -64,6 +65,7 @@ pub enum Tkn {
     AddrStart,
     AddrEnd,
     Add,
+    Sub,
     Mul,
     Comma,
     Block(String),
@@ -153,6 +155,7 @@ impl Lexer {
                 GenFlag::AddrStart => Tkn::AddrStart,
                 GenFlag::AddrEnd => Tkn::AddrEnd,
                 GenFlag::Add => Tkn::Add,
+                GenFlag::Sub => Tkn::Sub,
                 GenFlag::Mul => Tkn::Mul,
                 GenFlag::Block => Tkn::Block(self.chr_stk.clone()),
                 GenFlag::Number => Tkn::Number(self.chr_stk.clone()),
@@ -215,6 +218,7 @@ impl Lexer {
                                     Some(',') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Comma),
                                     Some('+') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Add),
                                     Some('*') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Mul),
+                                    Some('-') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Sub),
                                     _ => self.get_value_by_flag_ty(&chr, UNSTACKABLE),
                                 };
                             }
@@ -248,6 +252,7 @@ impl Lexer {
                             Some(',') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Comma),
                             Some('+') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Add),
                             Some('*') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Mul),
+                            Some('-') => self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Sub),
                             _ => self.get_value_by_flag_ty(&chr, STACKABLE),
                         }
                     }
