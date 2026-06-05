@@ -250,6 +250,8 @@ impl Generater {
                         -4,
                     ));
                     self.code_data.push_data(vec![0, 0, 0, 0]);
+                } else {
+                    panic!();
                 }
             }
             (Operand::MemoryOperand(memory), Operand::Reg(src)) => {
@@ -326,19 +328,35 @@ impl Generater {
                 byte_code.push(
                     self.gen_sib_code(
                         &memory.scale, // scale
-                        &idx,          // index
+                        &memory.idx,          // index
                         &memory.base   // base
                     )
                 );
             } else {
-                byte_code[0] |= base.get_reg_number();
+                if base == &reg::Register::Rsp || base == &reg::Register::Rbp {
+                    // sibあり
+                    byte_code[0] |= 4;
+                    byte_code.push(
+                        self.gen_sib_code(
+                            &parse::Scale::One, // scale
+                            &None,          // index
+                            &memory.base   // base
+                        )
+                    );
+                    if base == &reg::Register::Rbp {
+                        byte_code[0] |= 0b0100_0000;
+                        byte_code.push(0x00);
+                    }
+                } else {
+                    byte_code[0] |= base.get_reg_number();
+                }
             }
-        } else if let Some(idx) = &memory.idx {
+        } else if let Some(_) = &memory.idx {
             byte_code[0] |= 4;//sibあり
             byte_code.push(
                 self.gen_sib_code(
-                    &memory.scale, // scale
-                    &idx,          // index
+                    &memory.scale,  // scale
+                    &memory.idx,    // index
                     &None,          // base
                 )
             );
@@ -353,7 +371,7 @@ impl Generater {
     fn gen_sib_code(
         &self,
         scale: &parse::Scale, 
-        idx: &reg::Register, 
+        idx: &Option<reg::Register>, 
         base: &Option<reg::Register>
     ) -> u8 {
         let base_num = if let Some(b) = base {
@@ -361,7 +379,13 @@ impl Generater {
         } else {
             5
         };
-        scale.get_num() | (idx.get_reg_number() << 3) | base_num
+        scale.get_num() | (
+            idx
+                .as_ref()
+                .unwrap_or(&reg::Register::Rsp)
+                .get_reg_number()
+            << 3
+        ) | base_num
     }
 
     #[inline(always)]

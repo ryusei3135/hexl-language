@@ -122,14 +122,14 @@ impl Mnemonic {
     ) -> Vec<u8> {
 
         let code = match self {
-            Self::Add => vec![0x00],
-            Self::Or => vec![0x08],
-            Self::Adc => vec![0x10],
-            Self::Sbb => vec![0x18],
-            Self::And => vec![0x20],
-            Self::Sub => vec![0x28],
-            Self::Xor => vec![0x30],
-            Self::Cmp => vec![0x38],
+            Self::Add => vec![0],
+            Self::Or => vec![1],
+            Self::Adc => vec![2],
+            Self::Sbb => vec![3],
+            Self::And => vec![4],
+            Self::Sub => vec![5],
+            Self::Xor => vec![6],
+            Self::Cmp => vec![7],
 
 
             _=> Vec::new(),
@@ -305,7 +305,7 @@ impl Mnemonic {
         if code[0] >= 0x70 && code[0] <= 0x7F {
             return code;
         }
-        if code.len() == 1 {
+        if code.len() == 1 && code[0] != 0x50 && code[0] != 0x58 {
             *code.last_mut().unwrap() += bit;
             let mut opcode = Vec::new();
             match &size {

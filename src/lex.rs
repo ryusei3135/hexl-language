@@ -158,7 +158,14 @@ impl Lexer {
                 GenFlag::Sub => Tkn::Sub,
                 GenFlag::Mul => Tkn::Mul,
                 GenFlag::Block => Tkn::Block(self.chr_stk.clone()),
-                GenFlag::Number => Tkn::Number(self.chr_stk.clone()),
+                GenFlag::Number => {
+                    if self.chr_stk.starts_with("0x") {
+                        let num = u32::from_str_radix(self.chr_stk.clone().trim_start_matches("0x"), 16).unwrap();
+                        Tkn::Number(num.to_string())
+                    } else {
+                        Tkn::Number(self.chr_stk.clone())
+                    }
+                }
                 GenFlag::Name => {
                     match self.chr_stk.as_str() {
                         "section" => Tkn::Section,

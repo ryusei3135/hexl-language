@@ -355,11 +355,23 @@ impl<'a> Parser<'a> {
                 }
             }
             lex::Tkn::Name(value) => {
-                if let Some(reg) = Register::decide_reg(&value) {
-                    self.operand_size = Some(reg.get_reg_byte());
-                    Ok(Operand::Reg(reg))
-                } else {
-                    Ok(Operand::Ref(value.clone()))
+                match value.as_str() {
+                    "dword" => {
+                        self.operand_size = Some(Size::DD);
+                        self.gen_operand_node()
+                    }
+                    "qword" => {
+                        self.operand_size = Some(Size::DQ);
+                        self.gen_operand_node()
+                    }
+                    _ => {
+                        if let Some(reg) = Register::decide_reg(&value) {
+                            self.operand_size = Some(reg.get_reg_byte());
+                            Ok(Operand::Reg(reg))
+                        } else {
+                            Ok(Operand::Ref(value.clone()))
+                        }
+                    }
                 }
             }
             lex::Tkn::Number(value) => {
@@ -501,6 +513,7 @@ impl<'a> Parser<'a> {
             }
             lex::Tkn::AddrEnd => {
                 self.sib.base_reg = self.sib.undefine_reg.clone();
+                self.sib.index_reg = None;
                 Ok(Operand::gen_memory_operand(&self.sib, Scale::One, None))
             }
             _ => Err(err::Err::UnexpectedToken("not register token".to_string())),

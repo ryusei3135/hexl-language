@@ -19,11 +19,12 @@ fn main() -> Result<(), std::io::Error> {
 
     let tkns = lexer.analy(&content).unwrap();
     let nodes = parser.parser(&tkns).unwrap();
+    generate.gen_codes(&nodes).unwrap();
+    generate.update_label();
+
     for node in nodes {
         println!("{:?}", node);
     }
-    generate.gen_codes(&nodes).unwrap();
-    generate.update_label();
 
     let mut gen_bin = sections::GenerateBin::new();
 
