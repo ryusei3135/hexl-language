@@ -278,6 +278,7 @@ impl Mnemonic {
             Self::Jge => vec![0x7D],
             Self::Jle => vec![0x7E],
             Self::Jg => vec![0x7F],
+            Self::Jmp => vec![0xE0],
             _ => {
                 if src_reg.is_none() || dst_reg.is_none() {
                     panic!();

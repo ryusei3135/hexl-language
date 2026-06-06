@@ -152,7 +152,7 @@ impl Generater {
             if let Some(value) = self.code_data.find_name(&data.name) {
                 let start: isize = data.pos as isize;
                 let end: isize = value.pos as isize;
-                self.code_data.codes[data.pos] = (end - start) as u8;
+                self.code_data.codes[data.pos] = (end - start - 1) as u8;
             }
         }
     }
