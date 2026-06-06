@@ -506,7 +506,7 @@ impl<'a> Parser<'a> {
     /// SIGNEDは、dispが負の数の場合trueになる
     fn make_disp_or_idx<const SIGNED: bool>(&mut self) -> Result<Operand, err::Err<'static>> {
         self.sib.base_reg = self.sib.undefine_reg.clone();
-        self.operand_size = Some(self.sib.base_reg.as_ref().unwrap().get_reg_byte());
+        //self.operand_size = Some(self.sib.base_reg.as_ref().unwrap().get_reg_byte());
         // === [1] ===
         match self.advance() {
             lex::Tkn::Name(next_reg) => {

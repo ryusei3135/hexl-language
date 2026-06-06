@@ -301,6 +301,11 @@ impl Generater {
         src: &reg::Register
     ) -> Result<(), err::Err<'static>> {
         let mut byte_code = self.gen_sib_byte_code(&memory)?;
+        if M {
+            if byte_code.len() == 2 {
+                byte_code[0] |= src.get_reg_number() << 3;
+            }
+        }
         let sib_info = Some(
             mnemo::IsSib {
                 code: byte_code,
@@ -320,11 +325,11 @@ impl Generater {
 
     fn gen_sib_byte_code(&self, memory: &MemoryOperand) -> Result<Vec<u8>, err::Err<'static>> {
         let mut byte_code = vec![0x00];
+        // sibあり
+        byte_code[0] |= 4;//sibあり
 
         if let Some(base) = &memory.base {
             if let Some(idx) = &memory.idx {
-                // sibあり
-                byte_code[0] |= 4;
                 byte_code.push(
                     self.gen_sib_code(
                         &memory.scale, // scale
@@ -333,9 +338,7 @@ impl Generater {
                     )
                 );
             } else {
-                if base == &reg::Register::Rsp || base == &reg::Register::Rbp {
-                    // sibあり
-                    byte_code[0] |= 4;
+                if base == &reg::Register::Rsp {
                     byte_code.push(
                         self.gen_sib_code(
                             &parse::Scale::One, // scale
@@ -343,15 +346,15 @@ impl Generater {
                             &memory.base   // base
                         )
                     );
+                } else {
+                    // もし、baseがrbpならmodをdisp8に設定
                     if base == &reg::Register::Rbp {
                         byte_code[0] |= 0b0100_0000;
                     }
-                } else {
                     byte_code[0] |= base.get_reg_number();
                 }
             }
         } else if let Some(_) = &memory.idx {
-            byte_code[0] |= 4;//sibあり
             byte_code.push(
                 self.gen_sib_code(
                     &memory.scale,  // scale

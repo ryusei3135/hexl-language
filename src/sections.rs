@@ -164,7 +164,10 @@ impl GenerateBin {
         self.bin[0..as_bytes(&hdr).len()].copy_from_slice(as_bytes(&hdr));
     }
 
-    pub fn setting_text(&mut self, text: Vec<u8>) {
+    pub fn setting_text(&mut self, mut text: Vec<u8>) {
+        let new_len = (text.len() + 15) & !15;
+        let padding_len = new_len - text.len();
+        text.extend(vec![0x00; padding_len]);
         let text_off: u64 = self.base_off;
         self.base_off += text.len() as u64;
         self.text = Some((text, text_off));
