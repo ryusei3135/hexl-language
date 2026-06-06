@@ -345,7 +345,6 @@ impl Generater {
                     );
                     if base == &reg::Register::Rbp {
                         byte_code[0] |= 0b0100_0000;
-                        byte_code.push(0x00);
                     }
                 } else {
                     byte_code[0] |= base.get_reg_number();

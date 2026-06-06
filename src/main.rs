@@ -22,10 +22,6 @@ fn main() -> Result<(), std::io::Error> {
     generate.gen_codes(&nodes).unwrap();
     generate.update_label();
 
-    for node in nodes {
-        println!("{:?}", node);
-    }
-
     let mut gen_bin = sections::GenerateBin::new();
 
     gen_bin.setting_text(generate.code_data.get_code());

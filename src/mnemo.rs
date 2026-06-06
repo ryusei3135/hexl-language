@@ -147,7 +147,16 @@ impl Mnemonic {
                             _ => panic!(),
                         };
                         opcode.extend(sib_info.code);
-                        opcode
+                        if let Some(src) = value {
+                            let mut imm = src.parse::<usize>().unwrap().to_le_bytes().to_vec();
+                            let mut byte_len = size.get_byte();
+                            if byte_len == 8 {
+                                byte_len = 4;
+                            }
+                            imm.resize(byte_len, 0);
+                            opcode.extend(imm);
+                        }
+                        return opcode;
                     } else {
                         let mut opcode = match &size {
                             Size::DB => vec![0xB0],
@@ -306,18 +315,13 @@ impl Mnemonic {
             return code;
         }
         if code.len() == 1 && code[0] != 0x50 && code[0] != 0x58 {
-            *code.last_mut().unwrap() += bit;
-            let mut opcode = Vec::new();
+            code[0] += bit;
             match &size {
                 Size::DW => {
-                    opcode.push(0x66);
-                    opcode.extend(code);
-                    code = opcode;
+                    code.insert(0, 0x66);
                 }
                 Size::DQ => {
-                    opcode.push(0x48);
-                    opcode.extend(code);
-                    code = opcode;
+                    code.insert(0, 0x48);
                 }
                 _ => {},
             }
@@ -325,9 +329,17 @@ impl Mnemonic {
         if let Some(sib_info) = sib.clone() {
             code.extend(sib_info.code);
         } else if src_reg.is_some() && dst_reg.is_some() {
-            code.push(self.gen_modrm(&dst_reg.unwrap(), &src_reg.unwrap()));
+            if code.last().unwrap() % 2 == 1 {
+                code.push(self.gen_modrm(&src_reg.unwrap(), &dst_reg.unwrap()));
+            } else {
+                code.push(self.gen_modrm(&dst_reg.unwrap(), &src_reg.unwrap()));
+            }
         } else if let Some(dst) = dst_reg {
-            *code.last_mut().unwrap() |= dst.get_reg_number();
+            if src_reg.is_none() {
+                *code.last_mut().unwrap() |= dst.get_reg_number();
+            } else {
+                panic!();
+            }
         }
         code
     }

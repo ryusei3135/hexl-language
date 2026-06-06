@@ -1,3 +1,5 @@
+use crate::lex;
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SystemErr {
@@ -19,6 +21,7 @@ pub enum SyntaxErr<'a> {
 pub enum Err<'a> {
     SystemErr(SystemErr),
     UnexpectedToken(String),
+    MissingToken(lex::Tkn),
     SyntaxErr(SyntaxErr<'a>),
     SyntaxErrTyNotMatch,
     SyntaxErrNotFoundTkn,
