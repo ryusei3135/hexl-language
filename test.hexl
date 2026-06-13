@@ -1,0 +1,3 @@
+main(a: a, b: b): void {
+  ret 0
+}
