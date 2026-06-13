@@ -4,9 +4,11 @@ use super::{Parser, *};
 
 /// 関数を定義するノードの生成
 impl Parser {
-    pub(super) fn func_node(&mut self, func_name: &String) -> Result<node::Group1Node, err::ErrKind> {
-        let tkn = self.next_tkn()?;
-        let arg = match tkn {
+    pub(super) fn func_node(
+        &mut self,
+        func_name: &String
+    ) -> Result<node::Group1Node, err::ErrKind> {
+        let arg = match self.next_tkn()? {
             lex::Tkn::LParen => {
                 self.define_arg_node()?
             }
@@ -18,8 +20,7 @@ impl Parser {
             lex::Tkn::Colon => {
                 let ret_ty = self.define_ty_node()?;
 
-                if self.next_tkn().is_ok_and(|v| v == lex::Tkn::LBrace) {
-                    self.next_tkn().unwrap();
+                if self.current_tkn() == &lex::Tkn::LBrace {
                     Ok(
                         node::FuncDefine::new(
                             func_name.clone(),
@@ -39,6 +40,8 @@ impl Parser {
     }
 
     /// 引数の定義をするノードを作成する
+    /// この関数では、型のあとまでトークンを進めているので、呼び出し元では
+    /// current_tknでトークンを判定する
     fn define_arg_node(&mut self) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
             return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LParen));
@@ -53,6 +56,7 @@ impl Parser {
             }
             match self.next_tkn()? {
                 lex::Tkn::Name(name) => {
+                    self.next_tkn()?;
                     let ty = self.define_ty_node()?;
                     args_params.push(node::ArgsNode {
                         name: name.clone(),
@@ -68,6 +72,10 @@ impl Parser {
                         _ => panic!(),
                     }
                 }
+                lex::Tkn::RParen => {
+                    self.next_tkn()?;
+                    break;
+                },
                 t => {panic!("{:?}", t)},
             }
         }
@@ -75,8 +83,8 @@ impl Parser {
         Ok(args_params)
     }
 
-    fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
-        if self.next_tkn().is_ok_and(|v| v != lex::Tkn::Colon) {
+    pub(super) fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
+        if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
 

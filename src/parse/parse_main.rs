@@ -26,6 +26,7 @@ pub struct Parser {
     gen_nodes: Vec<node::Group1Node>,
     tkns: Option<Vec<lex::LocatedTkn>>,
     idx: usize,
+    scope_counter: usize,
     pub(super) gen_flag: GenFlag,
     pub(super) other_stk: Vec<(String, StkInfo)>, // 処理中の一時データを保存
 }
@@ -36,6 +37,7 @@ impl Parser {
             gen_nodes: Vec::new(),
             tkns: None,
             idx: 0,
+            scope_counter: 0,
             gen_flag: GenFlag::Group1,
             other_stk: Vec::new(),
         }
@@ -48,7 +50,7 @@ impl Parser {
     ) -> Result<&Vec<node::Group1Node>, err::Errs> {
         self.tkns = Some(tkns);
 
-        while self.idx < self.tkns.as_ref().unwrap().len() {
+        loop {
             match self.gen_flag {
                 GenFlag::Group1 => {
                     match self.current_tkn().clone() {
@@ -58,39 +60,60 @@ impl Parser {
                             self.gen_nodes.push(node);
 
                             self.gen_flag = GenFlag::Group2;
+                            self.scope_counter += 1;
                         }
                         t => panic!("{:?}", t),
                     };
                 },
                 GenFlag::Group2 => {
                     let node = match self.current_tkn().clone() {
+                        lex::Tkn::Name(name) => {
+                            node::Group2Node::Expr(
+                                self.expr_define_var(name)
+                                    .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
+                            )
+                        }
                         lex::Tkn::KeyWord_Ret => {
                             node::StmtNode::Return(
                                 self.expr_add()
-                                .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
+                                    .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
                             ).wrap()
+                        }
+                        lex::Tkn::RBrace => {
+                            self.scope_counter -= 1;
+
+                            if self.next_tkn().is_err() {
+                                return Ok(&self.gen_nodes);
+                            }
+
+                            if self.scope_counter == 0 {
+                                self.gen_flag = GenFlag::Group1;
+                            }
+
+                            continue;
                         }
                         t => panic!("{:?}", t),
                     };
-                    if let Some(now_func) = self.gen_nodes.last_mut() {
-                        match now_func {
-                            node::Group1Node::FuncDefine(func) => {
-                                func.add(node);
-                            }
-                            _ => panic!(),
+
+                    match self.gen_nodes.last_mut().unwrap() {
+                        node::Group1Node::FuncDefine(func) => {
+                            func.add(node);
                         }
-                    } else {
-                        panic!();
+                        _ => panic!(),
                     }
+                    continue;
                 },
             }
+            if self.next_tkn().is_err() && self.scope_counter == 0 {
+                return Ok(&self.gen_nodes);
+            } 
         }
         Ok(&self.gen_nodes)
     }
 
     pub(super) fn next_tkn(&mut self) -> Result<lex::Tkn, err::ErrKind> {
         self.idx += 1;
-        if let Some(value) = self.tkns.as_deref().unwrap().get(self.idx) {
+        if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx) {
             Ok(value.tkn.clone())
         } else {
             Err(err::ErrKind::EndTkn)
@@ -111,6 +134,14 @@ impl Parser {
         }
     }
 
+    pub(super) fn next_tkn_ref(&self) -> Result<&lex::Tkn, err::ErrKind> {
+        if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx + 1) {
+            Ok(&value.tkn)
+        } else {
+            Err(err::ErrKind::EndTkn)
+        }
+    }
+
     #[inline(always)]
     pub(super) fn current_tkn(&self) -> &lex::Tkn {
         &self.tkns.as_ref().unwrap()[self.idx].tkn
@@ -118,6 +149,6 @@ impl Parser {
 
     #[inline(always)]
     pub(super) fn tkn_chr_pos(&self) -> &usize {
-        &self.tkns.as_ref().unwrap()[self.idx].pos
+        &self.tkns.as_ref().unwrap()[self.idx - 1].pos
     }
 }

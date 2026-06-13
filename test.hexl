@@ -1,3 +1,11 @@
+add(): void {
+	ret 1
+}
+
+
 main(a: a, b: b): void {
+  a: i32 = 10 + (1 - 2) * 7
+  b: i32 = 100 / 2
+  c: i32 = add() + add(10)
   ret 0
 }

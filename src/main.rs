@@ -16,6 +16,9 @@ fn main() -> io::Result<()> {
 
     lexer.analy(&content).map_err(|v| v.print_log(&content)); 
 
-    parser.parser(lexer.gen_tkns.clone(), &count).map_err(|v| v.print_log(&content)); 
+    let nodes = parser.parser(lexer.gen_tkns.clone(), &count)
+        .map_err(|v| v.print_log(&content))
+        .unwrap();
+    println!("{:?}", nodes);
     Ok(())
 }

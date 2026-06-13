@@ -43,9 +43,9 @@ pub struct Errs {
 
 impl Errs {
     pub fn print_log(&self, contents: &String) {
-        let line = contents.lines().nth(self.line);
+        let line = contents.lines().nth(self.line - 1).unwrap();
 
         println!("[err] line {}, pos: {}", self.line, self.pos);
-        println!("{:?}", line);
+        println!("{:?}: {:?}", self.kind, line);
     }
 }

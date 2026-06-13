@@ -175,7 +175,7 @@ impl Lexer {
         if self.gen_flag.is_some() {
             self.gen_tkns.push(
                 self.gen_tkn(&tkn_start, &line_counter)
-                    .map_err(|v| v.gen(&line_counter, &tkn_start))
+                    .map_err(|v| v.gen(&line_counter, &tkn_start))?
             );
         }
 
@@ -299,16 +299,18 @@ impl Lexer {
                     if self.gen_flag == Some(GenFlag::Str) {
                         self.get_value_by_flag_ty(&chr, UNSTACKABLE)
                     } else {
-                        if k == &CharKind::Op {
-                            self.over_write_flag::<true, UNSTACKABLE>(GenFlag::Name);
-                            return UNSTACKABLE;
-                        }
                         let flag = match last_kind {
                             CharKind::Name => GenFlag::Name,
                             CharKind::Num => GenFlag::Number,
                             _ => return STACKABLE,
                         };
-                        self.over_write_flag::<true, UNSTACKABLE>(flag)
+
+                        if k == &CharKind::Op {
+                            self.over_write_flag::<true, UNSTACKABLE>(flag);
+                            UNSTACKABLE
+                        } else {
+                            self.over_write_flag::<true, UNSTACKABLE>(flag)
+                        }
                     }
                 }
                 (CharKind::Op, r) => {

@@ -1,6 +1,7 @@
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyNode {
+    Auto,
     Ty(String),
     Generics((String, Box<TyNode>)),
     RefTy(String),
@@ -24,7 +25,7 @@ pub struct FuncDefine {
     name: String,
     params: Vec<ArgsNode>,
     ret_ty: TyNode,
-    body: Vec<Group2Node>
+    pub body: Vec<Group2Node>
 }
 
 
@@ -64,16 +65,22 @@ impl StmtNode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefineVar {
-    name: String,
-    value: Box<Expr>,
-    generics: TyNode,
-    ty: TyNode,
+    pub name: String,
+    pub value: Box<Expr>,
+    pub ty: TyNode,
+}
+
+impl DefineVar {
+    pub fn wrap(self) -> Expr {
+        Expr::DefVar(self)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Number(String),
     Var(String),
+    CallFunc(CallInfo),
     Add((Box<Expr>, Box<Expr>)),
     Sub((Box<Expr>, Box<Expr>)),
     Mul((Box<Expr>, Box<Expr>)),
@@ -86,6 +93,14 @@ impl Expr {
     pub fn wrap(left: Expr, right: Expr) -> (Box<Expr>, Box<Expr>) {
         (Box::new(left), Box::new(right))
     }
+}
+
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallInfo {
+    pub name: String,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
