@@ -22,9 +22,9 @@ pub struct DefGenerics {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncDefine {
-    name: String,
-    params: Vec<ArgsNode>,
-    ret_ty: TyNode,
+    pub name: String,
+    pub params: Vec<ArgsNode>,
+    pub ret_ty: TyNode,
     pub body: Vec<Group2Node>
 }
 

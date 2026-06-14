@@ -1,11 +1,10 @@
-add(): void {
+add(): b1 {
 	ret 1
 }
 
 
-main(a: a, b: b): void {
-  a: i32 = 10 + (1 - 2) * 7
-  b: i32 = 100 / 2
-  c: i32 = add() + add(10)
+main(a: a, b: b): b1 {
+  a: b4 = 10 + (1 - 2)
+  c: b4 = add() + add()
   ret 0
 }
