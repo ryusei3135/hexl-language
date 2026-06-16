@@ -1,5 +1,5 @@
 mod builder;
-mod inst;
+pub mod inst;
 
 use builder::Size;
 use crate::{
@@ -7,4 +7,9 @@ use crate::{
     node,
 };
 
-pub use builder::IR;
+pub use builder::{
+    IR,
+    VarTree,
+    FuncTree,
+    FuncDefInfo,
+};

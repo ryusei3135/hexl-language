@@ -1,0 +1,57 @@
+{
+  "reg": {
+    "db": [
+	"al", "cl", "dl", "bl"
+    ],
+    "dw": [
+      "ax", "cx", "dx", "bx",
+      "sp", "bp", "si", "di"
+    ],
+    "dd": [
+	"eax", "ecx", "edx", "ebx",
+    	"esp", "ebp", "esi", "edi"
+    ],
+    "dq": [
+	"rax", "rcx", "rdx", "rbx",
+    	"rsp", "rbp", "rsi", "rdi",
+    	"r8", "r9", "r10", "r11",
+    	"r12", "r13", "r14", "r15"
+    ]
+  },
+  "op": {
+    "add": {
+	"len": 2,
+	"template": [
+	  "mov {dst}, {src1}",
+	  "add {dst}, {src2}"
+	]
+    },
+    "sub": {
+	"len": 2,
+	"template": [
+	  "mov {dst}, {src1}",
+	  "sub {dst}, {src2}"
+	]
+    },
+    "mul": {
+	"len": 2,
+	"template": [
+	  "mov {dst}, {src1}",
+	  "mul {dst}, {src2}"
+	]
+    },
+    "div": {
+	"len": 2,
+	"template": [
+	  "mov {dst}, {src1}",
+	  "div {dst}, {src2}"
+	]
+    },
+    "mov": {
+	"len": 2,
+	"template": [
+	  "mov {dst}, {src1}"
+	]
+    }
+  }
+}

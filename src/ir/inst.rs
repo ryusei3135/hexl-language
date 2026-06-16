@@ -37,7 +37,8 @@ pub enum Inst {
     },
     Num{
         dst: ValueId,
-        value: Vec<u8>,
+        value: String,
+        size: Size,
     },
     CallFunc {
         name: String,
@@ -48,16 +49,24 @@ pub enum Inst {
 
 impl Inst {
     pub fn gen_num(value: &String, size: &Size, dst: usize) -> Self {
-        let bytes = if let Ok(num) = value.parse::<usize>() {
-            let mut bytes = num.to_le_bytes().to_vec();
-            bytes.resize(size.size(), 0);
-            bytes
-        } else {
-            panic!();
-        };
+        match size {
+            Size::DB => {
+                value.parse::<u8>().unwrap();
+            }
+            Size::DW => {
+                value.parse::<u16>().unwrap();
+            }
+            Size::DD => {
+                value.parse::<u32>().unwrap();
+            }
+            Size::DQ => {
+                value.parse::<u64>().unwrap();
+            }
+        }
         Self::Num{
             dst,
-            value: bytes
+            value: value.clone(),
+            size: size.clone(),
         }
     }
 }

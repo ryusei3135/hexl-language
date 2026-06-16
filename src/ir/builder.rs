@@ -66,8 +66,8 @@ pub struct FuncDefInfo {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FuncTree {
-    func: HashMap<String, FuncDefInfo>,
+pub struct FuncTree{
+    func: HashMap<String, FuncDefInfo>
 }
 
 impl FuncTree {
@@ -79,6 +79,10 @@ impl FuncTree {
 
     pub fn get(&self, name: &String) -> &FuncDefInfo {
         self.func.get(&String::from(name)).unwrap()
+    }
+
+    pub fn gen_vec(&self) -> Vec<(String, FuncDefInfo)> {
+        self.func.clone().into_iter().collect()
     }
     
     pub fn add(
@@ -136,7 +140,6 @@ impl IR {
                 _ => panic!(),
             }
         }
-        println!("{:?}", self.func_tree.get(&"main".to_string()).tree);
         Ok(())
     }
 

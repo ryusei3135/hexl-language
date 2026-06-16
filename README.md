@@ -22,3 +22,10 @@ Hexlはrustで実装されたプログラミング言語であり
 
 ## Changelog
 - [CHANGELOG.md](./CHANGELOG.md)
+
+## 📄 ライセンス
+このプロジェクトは **[MIT License](./LICENSE.txt)** のもとで公開されています。
+個人・商用問わず、自由に使用・改変・配布が可能です。
+
+---
+© 2026 Ryuusei/Organization.
