@@ -6,11 +6,12 @@ type ExprResult = Result<node::Expr, err::ErrKind>;
 
 impl Parser {
     pub(super) fn expr_define_var(&mut self, name: String) -> ExprResult {
+        println!("{:?}", self.current_tkn());
         let node = if let Ok(tkn) = self.next_tkn() {
             let ty_node = if self.current_tkn() == &lex::Tkn::Colon {
                 self.define_ty_node()?
             } else {
-                node::TyNode::Auto
+                panic!("{:?}", self.current_tkn());
             };
 
             if self.current_tkn() == &lex::Tkn::Equal {
@@ -71,6 +72,9 @@ impl Parser {
             lex::Tkn::Number(value) => {
                 node::Expr::Number(value)
             }
+            lex::Tkn::Str(value) => {
+                node::Expr::Str(value)
+            }
             lex::Tkn::Name(name) => {
                 if self.next_tkn_ref()? == &lex::Tkn::LParen {
                     self.next_tkn().unwrap();
@@ -112,7 +116,7 @@ impl Parser {
         };
 
         match self.current_tkn() {
-            lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::RParen => {
+            lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::Str(_) | lex::Tkn::RParen => {
                 self.next_tkn()?;
             }
             _ => {},

@@ -1,4 +1,4 @@
-use crate::err::{self, *};
+use crate::err;
 
 
 mod local {
@@ -64,6 +64,25 @@ mod local {
         Name,
         Str,
     }
+
+    /// `check_stkable_chr` の戻り値。
+    ///
+    /// 元のコードは `bool`(STACKABLE/UNSTACKABLE) だけだったため、
+    /// 「現在の文字をすでに消費済みなので `chr_stk` に積んではいけない」
+    /// というケース（文字列の閉じクォートなど）を表現できなかった。
+    /// これが「文字列トークンの後ろが壊れる」バグの直接原因だったため、
+    /// 第三の状態 `Consumed` を追加して区別できるようにする。
+    #[derive(Clone, Debug, PartialEq, Copy)]
+    pub enum StkResult {
+        /// 現在の文字をスタックに積んでよい
+        Stackable,
+        /// スタックを不可とし、トークンを生成してから現在の文字を積む
+        GenTkn,
+        /// 現在の文字は処理済み（閉じクォートなど）。トークンを生成し、
+        /// かつ現在の文字は `chr_stk` に積まない。`last_kind` も
+        /// （ひとつのトークンが完結した区切りとして）None にリセットする。
+        Consumed,
+    }
 }
 
 use local::*;
@@ -101,9 +120,6 @@ pub struct LocatedTkn {
 }
 
 
-const STACKABLE: bool = true;
-const UNSTACKABLE: bool = false;
-
 pub struct Lexer {
     last_kind: Option<CharKind>,
     gen_flag: Option<GenFlag>,
@@ -126,7 +142,6 @@ impl Lexer {
         self.chr_stk = String::new();
         self.last_kind = None;
         self.gen_flag = None;
-        const GEN_TKN: bool = false;
         let char_table: [CharKind; 256] = make_char_table();
 
         let mut chr_counter: usize = 1;
@@ -135,39 +150,54 @@ impl Lexer {
 
         for chr in content.chars() {
             let curr_kind = &char_table[chr as usize];
-            
+
             // もし*`last_kind`*がNoneなら、現在の種類同士を比較し、条件をfalseにする
             // もし文字の種類が記号の場合必ず実行する
+            let mut consumed = false;
             if self.last_kind.as_ref().unwrap_or(curr_kind) != curr_kind || curr_kind == &CharKind::Op {
-                // スタック可能か調べ不可能ならトークンを生成
-                if self.check_stkable_chr(&curr_kind, &chr) == GEN_TKN {
-                    if let Ok(tkn) = self.gen_tkn(&tkn_start, &line_counter) {
-                        tkn_start = chr_counter.clone();
-                        self.gen_tkns.push(tkn);
+                // スタック可能か調べ、不可能ならトークンを生成
+                let stk_result = self.check_stkable_chr(curr_kind, &chr);
+                if stk_result != StkResult::Stackable {
+                    match self.gen_tkn(&tkn_start, &line_counter) {
+                        Ok(tkn) => {
+                            tkn_start = chr_counter.clone();
+                            self.gen_tkns.push(tkn);
+                        }
+                        Err(_e) => {
+                            //
+                        }
                     }
                     self.chr_stk.clear();
                     self.gen_flag = None;
                 }
-            }
-
-            if self.gen_flag.is_none() {
-                match (self.last_kind.unwrap_or(CharKind::Other), curr_kind) {
-                    (CharKind::Op | CharKind::Space, CharKind::Name) => {
-                        self.over_write_flag::<true, STACKABLE>(GenFlag::Name);
-                    }
-                    (CharKind::Op | CharKind::Other | CharKind::Space, CharKind::Num) => {
-                        self.over_write_flag::<true, STACKABLE>(GenFlag::Number);
-                    }
-                    (_, _) => {},
+                // 現在の文字（例: 文字列の閉じクォート）はすでに消費済みなので、
+                // chr_stk には積まない。
+                if stk_result == StkResult::Consumed {
+                    consumed = true;
+                    self.last_kind = None;
                 }
             }
-            // 改行が来たので、lineをインクリメント
-            if curr_kind == &CharKind::Ln {
-                line_counter += 1;
-            }
 
-            self.chr_stk.push(chr);
-            self.last_kind = Some(*curr_kind);
+            if !consumed {
+                if self.gen_flag.is_none() {
+                    match (self.last_kind.unwrap_or(CharKind::Other), curr_kind) {
+                        (CharKind::Op | CharKind::Space, CharKind::Name) => {
+                            self.over_write_flag::<true>(GenFlag::Name);
+                        }
+                        (CharKind::Op | CharKind::Other | CharKind::Space, CharKind::Num) => {
+                            self.over_write_flag::<true>(GenFlag::Number);
+                        }
+                        (_, _) => {},
+                    }
+                }
+                // 改行が来たので、lineをインクリメント
+                if curr_kind == &CharKind::Ln {
+                    line_counter += 1;
+                }
+
+                self.chr_stk.push(chr);
+                self.last_kind = Some(*curr_kind);
+            }
             chr_counter += 1;
         }
         self.check_stkable_chr(&CharKind::Other, &'\0');
@@ -206,7 +236,16 @@ impl Lexer {
 
                 GenFlag::Number => {
                     if self.chr_stk.starts_with("0x") {
-                        let num = u32::from_str_radix(self.chr_stk.clone().trim_start_matches("0x"), 16).unwrap();
+                        // 元のコードは .unwrap() で不正な16進数（例: "0x" だけ、
+                        // "0xZZ" など）のときにパニックしていた。
+                        // gen_tkn は Result を返すので、ここはちゃんと
+                        // エラーとして伝播させる。
+                        let num = u32::from_str_radix(
+                            self.chr_stk.trim_start_matches("0x"),
+                            16,
+                        ).map_err(|_| {
+                            err::ErrKind::SystemErr(err::SystemErr::FlagNotFound)
+                        })?;
                         Tkn::Number(num.to_string())
                     } else {
                         Tkn::Number(self.chr_stk.clone())
@@ -241,7 +280,7 @@ impl Lexer {
         })
     }
 
-    fn sort_symbol_tkn(&mut self, chr: &char) -> bool {
+    fn sort_symbol_tkn(&mut self, chr: &char) -> StkResult {
         let sym_flag = match self.chr_stk.chars().last() {
             Some(',') => GenFlag::Comma,
             Some('+') => GenFlag::Add,
@@ -256,9 +295,10 @@ impl Lexer {
             Some(':') => GenFlag::Colon,
             Some('<') => GenFlag::LAngleBracket,
             Some('>') => GenFlag::RAngleBracket,
-            _ => return self.get_value_by_flag_ty(&chr, UNSTACKABLE),
+            _ => return self.get_value_by_flag_ty(chr, StkResult::GenTkn),
         };
-        self.over_write_flag::<true, UNSTACKABLE>(sym_flag)
+        self.over_write_flag::<true>(sym_flag);
+        StkResult::GenTkn
     }
 
     /// 現在の文字がスタック可能か調べる関数
@@ -269,93 +309,143 @@ impl Lexer {
     /// 現在の文字
     ///
     /// ## 戻り値
-    /// スタック可能ならtrueを返す
-    /// falseを返すとトークンを生成する処理がされる
+    /// `StkResult::Stackable`  -> 現在の文字をスタックに積んでよい
+    /// `StkResult::GenTkn`     -> トークンを生成し、現在の文字は通常通り積む
+    /// `StkResult::Consumed`   -> トークンを生成し、現在の文字は消費済み（積まない）
     fn check_stkable_chr(
         &mut self,
         curr_kind: &CharKind,
         chr: &char
-    ) -> bool {
+    ) -> StkResult {
         if let Some(ref last_kind) = self.last_kind {
             match (last_kind, curr_kind) {
                 // 文字と数字は一緒にスタック可能
-                (CharKind::Num | CharKind::Name, CharKind::Name | CharKind::Num) =>
-                    self.over_write_flag::<false, STACKABLE>(last_kind.flag().unwrap()),
+                (CharKind::Num | CharKind::Name, CharKind::Name | CharKind::Num) => {
+                    // 元コードは over_write_flag::<false, STACKABLE> だったが、
+                    // STACKABLE は定数なので RV は常に Stackable で固定してよい。
+                    if self.gen_flag.is_none() {
+                        self.gen_flag = last_kind.flag();
+                    }
+                    StkResult::Stackable
+                }
                 (_, CharKind::Space) | (CharKind::Space, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
-                        STACKABLE
+                        StkResult::Stackable
                     } else { // ここはエラーになる可能性あり
                         if let Some(flag) = self.redict_kind_using_flag() {
-                            return self.over_write_flag::<false, UNSTACKABLE>(flag);
+                            if self.gen_flag.is_none() {
+                                self.gen_flag = Some(flag);
+                            }
+                            return StkResult::GenTkn;
                         } else {
+                            // 元のコードは `.unwrap()` していたため、
+                            // chr_stk が空のとき（直前の文字を Consumed で
+                            // 消費済みのときなど）にパニックする欠陥があった。
+                            // 空なら単にトークン生成のみ行う。
                             if last_kind == &CharKind::Op {
-                                return self.sort_symbol_tkn(&self.chr_stk.chars().last().unwrap());
+                                if let Some(last_chr) = self.chr_stk.chars().last() {
+                                    return self.sort_symbol_tkn(&last_chr);
+                                }
                             }
                         }
-                        UNSTACKABLE
+                        StkResult::GenTkn
                     }
                 }
                 (CharKind::Name | CharKind::Num, k) => {
                     if self.gen_flag == Some(GenFlag::Str) {
-                        self.get_value_by_flag_ty(&chr, UNSTACKABLE)
+                        self.get_value_by_flag_ty(chr, StkResult::GenTkn)
                     } else {
-                        let flag = match last_kind {
-                            CharKind::Name => GenFlag::Name,
-                            CharKind::Num => GenFlag::Number,
-                            _ => return STACKABLE,
-                        };
-
-                        if k == &CharKind::Op {
-                            self.over_write_flag::<true, UNSTACKABLE>(flag);
-                            UNSTACKABLE
-                        } else {
-                            self.over_write_flag::<true, UNSTACKABLE>(flag)
+                        // 元のコードはここで無条件に gen_flag を
+                        // last_kind 由来の値で上書きしていたため、
+                        // 0x1F のように Num で始まり Name 種別の文字
+                        // (a-f, x) を含む16進数リテラルが、末尾の文字種
+                        // だけで判定されて Number ではなく Name に
+                        // 化けてしまう不具合があった。
+                        // すでに gen_flag が確定している場合はそれを
+                        // 優先し、未確定の場合のみ last_kind から補う。
+                        if self.gen_flag.is_none() {
+                            let flag = match last_kind {
+                                CharKind::Name => GenFlag::Name,
+                                CharKind::Num => GenFlag::Number,
+                                _ => return StkResult::Stackable,
+                            };
+                            self.gen_flag = Some(flag);
                         }
+                        StkResult::GenTkn
                     }
                 }
                 (CharKind::Op, r) => {
                     if self.chr_stk.chars().last() == Some('"') {
+                        // 直前にスタックされた文字が開きクォートだったケース。
+                        // 開きクォートを取り除いて文字列モードへ入る。
                         self.chr_stk.pop();
                         if self.gen_flag == Some(GenFlag::Str) {
-                            UNSTACKABLE
+                            StkResult::GenTkn
                         } else {
-                            self.over_write_flag::<true, STACKABLE>(GenFlag::Str)
+                            self.gen_flag = Some(GenFlag::Str);
+                            StkResult::Stackable
                         }
+                    } else if self.gen_flag == Some(GenFlag::Str) && *chr == '"' {
+                        // ===== 文字列直後トークン消失バグの本体 =====
+                        // 文字列モード中に閉じクォート `"` が来たケース。
+                        // 元のコードはここで GenTkn 相当の bool (UNSTACKABLE) を
+                        // 返すだけだったため、トークン生成後に呼び出し元の
+                        // analy() が無条件に `chr_stk.push(chr)` を実行し、
+                        // 消費したはずの閉じクォートが再度 chr_stk に
+                        // 積まれてしまっていた。その結果、文字列トークンの
+                        // 直後の数文字ぶん gen_tkn が FlagNotFound で
+                        // 失敗し続け、トークンが欠落する原因になっていた。
+                        //
+                        // Consumed を返すことで、analy() 側に
+                        // 「この文字は積むな」と明示的に伝える。
+                        StkResult::Consumed
+                    } else if self.gen_flag == Some(GenFlag::Str) {
+                        // ===== 文字列内の演算子記号バグ =====
+                        // 文字列モード中で、かつ今の文字が閉じクォートでも
+                        // ないなら（例: "a+b" の '+'）、それは単なる文字列の
+                        // 中身であり、記号として解釈してはいけない。
+                        // 元のコードはこのケースをチェックせず else に
+                        // 落としていたため、文字列内の演算子記号が
+                        // sort_symbol_tkn に渡ってトークンが分断され、
+                        // 文字列の中身が壊れていた。
+                        StkResult::Stackable
                     } else {
                         if r == &CharKind::Op {
-                            let mut stk = self.chr_stk.clone();
-                            stk.push(*chr);
-                            let flag = match stk.as_str() {
-                                _ => return self.sort_symbol_tkn(&chr),
-                            };
-                            self.over_write_flag::<true, STACKABLE>(flag)
+                            // 元のコードは2文字演算子（==, <=, >= など）を
+                            // 先読みしようとして `stk` を組み立てていたが、
+                            // match の腕が `_ => return ...` だけだったため
+                            // 実質的にデッドコードで、常に1文字ずつ
+                            // sort_symbol_tkn に流れていた。
+                            // 複数文字演算子は未実装のため、ここでは
+                            // 単純に1文字ずつ処理する元の実質動作を維持する。
+                            self.sort_symbol_tkn(chr)
                         } else {
-                            self.sort_symbol_tkn(&chr)
+                            self.sort_symbol_tkn(chr)
                         }
                     }
                 }
-                (_, CharKind::Op) => self.get_value_by_flag_ty(&chr, UNSTACKABLE),
+                (_, CharKind::Op) => self.get_value_by_flag_ty(chr, StkResult::GenTkn),
                 (_, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
-                        STACKABLE
+                        StkResult::Stackable
                     } else {
-                        UNSTACKABLE
+                        StkResult::GenTkn
                     }
                 }
             }
         } else { // 前回の文字の種類がないので、スタック可能
-            STACKABLE
+            StkResult::Stackable
         }
     }
 
     /// 現在のトークンが文字列のトークンかつ今処理中の文字が'"'なら
     /// 文字のスタックを止める関数
-    fn get_value_by_flag_ty(&self, chr: &char, other_flag_value: bool) -> bool {
+    fn get_value_by_flag_ty(&self, chr: &char, other_flag_value: StkResult) -> StkResult {
         if self.gen_flag == Some(GenFlag::Str) {
             if *chr == '"' {
-                UNSTACKABLE
+                StkResult::Consumed
             } else {
-                STACKABLE
+                StkResult::Stackable
             }
         } else {
             other_flag_value
@@ -366,9 +456,8 @@ impl Lexer {
     /// OW(over write)
     /// がtrueの場合必ず上書きする
     /// OW = "over write"
-    /// RV = "return value"
     #[inline(always)]
-    fn over_write_flag<const OW: bool, const RV: bool>(&mut self, flag: GenFlag) -> bool {
+    fn over_write_flag<const OW: bool>(&mut self, flag: GenFlag) {
         if OW { // 上書きモード
             self.gen_flag = Some(flag);
         } else {
@@ -376,7 +465,6 @@ impl Lexer {
                 self.gen_flag = Some(flag);
             }
         }
-        RV
     }
 }
 
@@ -391,9 +479,145 @@ mod tests {
 
     #[test]
     fn check_str_tkn() {
+        let mut lex = lexer();
+        lex.analy(&"\"hello world!!\" name".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
         assert_eq!(
-            lexer().analy(&"\"hello world!!\" name".to_string()).unwrap(),
-            &vec![Tkn::Str("hello world!!".to_string()), Tkn::Name("name".to_string())]
+            tkns,
+            vec![Tkn::Str("hello world!!".to_string()), Tkn::Name("name".to_string())]
+        );
+    }
+
+    #[test]
+    fn check_str_followed_by_symbol() {
+        // 文字列の直後に space を挟まず記号が来るケース。
+        // 修正前はここで後続が消える/壊れるバグがあった。
+        let mut lex = lexer();
+        lex.analy(&"\"abc\"+1".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::Str("abc".to_string()),
+                Tkn::Add,
+                Tkn::Number("1".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_hex_number() {
+        let mut lex = lexer();
+        lex.analy(&"0x1F".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(tkns, vec![Tkn::Number("31".to_string())]);
+    }
+
+    #[test]
+    fn check_invalid_hex_number_errors_instead_of_panicking() {
+        let mut lex = lexer();
+        let result = lex.analy(&"0xZZ".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn check_two_strings_back_to_back() {
+        let mut lex = lexer();
+        lex.analy(&"\"abc\"\"def\"".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![Tkn::Str("abc".to_string()), Tkn::Str("def".to_string())]
+        );
+    }
+
+    #[test]
+    fn check_empty_string_literal() {
+        let mut lex = lexer();
+        lex.analy(&"\"\"".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(tkns, vec![Tkn::Str("".to_string())]);
+    }
+
+    #[test]
+    fn check_operators_inside_string_are_not_split() {
+        // 文字列リテラル内の演算子記号がトークンとして分断されないこと。
+        // 修正前は "a+b-c" が Add, Name("b"), Sub, Name("c"), Str("") に
+        // 壊れていた。
+        let mut lex = lexer();
+        lex.analy(&"\"a+b-c\"".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(tkns, vec![Tkn::Str("a+b-c".to_string())]);
+    }
+
+    #[test]
+    fn check_string_in_middle_of_expression() {
+        let mut lex = lexer();
+        lex.analy(&"1+\"mid\"+2".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::Number("1".to_string()),
+                Tkn::Add,
+                Tkn::Str("mid".to_string()),
+                Tkn::Add,
+                Tkn::Number("2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_name_immediately_followed_by_string() {
+        let mut lex = lexer();
+        lex.analy(&"name\"abc\"".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![Tkn::Name("name".to_string()), Tkn::Str("abc".to_string())]
+        );
+    }
+
+    #[test]
+    fn check_basic_expression_unaffected() {
+        let mut lex = lexer();
+        lex.analy(&"x = 1 + 2".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::Name("x".to_string()),
+                Tkn::Equal,
+                Tkn::Number("1".to_string()),
+                Tkn::Add,
+                Tkn::Number("2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_ret_keyword() {
+        let mut lex = lexer();
+        lex.analy(&"ret 5".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(tkns, vec![Tkn::KeyWord_Ret, Tkn::Number("5".to_string())]);
+    }
+
+    #[test]
+    fn check_call_with_args() {
+        let mut lex = lexer();
+        lex.analy(&"f(1,2)".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::Name("f".to_string()),
+                Tkn::LParen,
+                Tkn::Number("1".to_string()),
+                Tkn::Comma,
+                Tkn::Number("2".to_string()),
+                Tkn::RParen,
+            ]
         );
     }
 }

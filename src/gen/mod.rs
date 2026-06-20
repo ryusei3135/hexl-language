@@ -1,12 +1,12 @@
-mod write_asm;
+//! このモジュールは、IRで生成したものを
+//! 渡されたフォーマットのアセンブリ言語に変換するApiを提供する
+
+mod asm_emitter;
 
 
-use std::collections::HashMap;
 use crate::ir::{
-    VarTree,
     FuncTree,
-    FuncDefInfo,
 };
+use std::collections::HashMap;
 
-
-pub use write_asm::Writer;
+pub use asm_emitter::AsmEmitter;

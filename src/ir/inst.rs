@@ -32,6 +32,7 @@ impl ExprInst {
 pub enum Inst {
     Expr(ExprInst),
     Mov{
+        name: Option<String>,
         dst: ValueId,
         src: ValueId,
     },
@@ -39,6 +40,10 @@ pub enum Inst {
         dst: ValueId,
         value: String,
         size: Size,
+    },
+    Str {
+        dst: ValueId,
+        value: String,
     },
     CallFunc {
         name: String,

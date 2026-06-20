@@ -21,37 +21,30 @@
   "op": {
     "add": {
 	"len": 2,
-	"template": [
-	  "mov {dst}, {src1}",
-	  "add {dst}, {src2}"
-	]
+	"template": "mov {dst}, {src1}\nadd {dst}, {src2}\n"
     },
     "sub": {
 	"len": 2,
-	"template": [
-	  "mov {dst}, {src1}",
-	  "sub {dst}, {src2}"
-	]
+	"template": "mov {dst}, {src1}\nsub {dst}, {src2}\n"
     },
     "mul": {
 	"len": 2,
-	"template": [
-	  "mov {dst}, {src1}",
-	  "mul {dst}, {src2}"
-	]
+	"template": "mov {dst}, {src1}\nmul {dst}, {src2}\n"
     },
     "div": {
 	"len": 2,
-	"template": [
-	  "mov {dst}, {src1}",
-	  "div {dst}, {src2}"
-	]
+	"template": "mov {dst}, {src1}\ndiv {dst}, {src2}\n"
     },
     "mov": {
 	"len": 2,
-	"template": [
-	  "mov {dst}, {src1}"
-	]
+	"template": "mov {dst}, {src}\n"
+    },
+    "ret": {
+	"len": 1,
+	"template": "ret\n"
     }
+  },
+  "func": {
+  	"ret": 0
   }
 }

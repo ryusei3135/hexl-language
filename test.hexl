@@ -1,10 +1,13 @@
+
 add(): b1 {
-	ret 1
+  a: b4 = 10 * 2
+  b: b4 = 1
+  ret b
 }
 
-
 main(a: a, b: b): b1 {
-  a: b4 = 10 + (1 - 2)
-  c: b4 = add() + add()
-  ret 0
+  c: b1 = "hello world"
+  a: b4 = 10 + 1 - 2
+  b: b4 = a + 10
+  ret a
 }

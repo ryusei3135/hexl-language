@@ -43,7 +43,7 @@ impl Size {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
-    hash: HashMap<String, usize>,
+    pub hash: HashMap<String, usize>,
 }
 
 impl VarTree {
@@ -56,6 +56,10 @@ impl VarTree {
     pub fn add(&mut self, name: &String, index: &usize) {
         self.hash.insert(name.clone(), index.clone());
     }
+
+    pub fn get(&self, name: &String) -> usize {
+        *self.hash.get(name).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,7 +71,7 @@ pub struct FuncDefInfo {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncTree{
-    func: HashMap<String, FuncDefInfo>
+    pub func: HashMap<String, FuncDefInfo>
 }
 
 impl FuncTree {
@@ -77,13 +81,13 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&self, name: &String) -> &FuncDefInfo {
-        self.func.get(&String::from(name)).unwrap()
+    pub fn get(&mut self, name: &String) -> FuncDefInfo {
+        self.func.remove(&String::from(name)).unwrap()
     }
 
-    pub fn gen_vec(&self) -> Vec<(String, FuncDefInfo)> {
-        self.func.clone().into_iter().collect()
-    }
+    //pub fn gen_vec(&self) -> Vec<(String, FuncDefInfo)> {
+      //  self.func.clone().into_iter().collect()
+    //}
     
     pub fn add(
         &mut self,
@@ -136,6 +140,7 @@ impl IR {
                         self.func_ret_ty.clone().unwrap(),
                     );
                     self.ir_tree = Vec::new();
+                    self.id_counter = 0;
                 }
                 _ => panic!(),
             }
@@ -145,86 +150,100 @@ impl IR {
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) {
         for stmt in node {
-            match stmt {
-                node::Group2Node::Expr(expr) => {
-                    let id = self.gen_expr_ir(&expr, &Size::DD);
+            match stmt.clone() {
+                node::Group2Node::Expr(mut expr) => {
+                    let id = self.gen_expr_ir(expr, &Size::DD);
                 }
-                node::Group2Node::Stmt(stmt) => {
-                    let id = self.gen_stmt_ir(&stmt);
+                node::Group2Node::Stmt(mut stmt) => {
+                    let id = self.gen_stmt_ir(stmt);
                 }
                 _ => {},
             }
         } 
     }
 
-
-    fn gen_stmt_ir(&mut self, stmt: &node::StmtNode) -> usize {
-        match stmt {
-            node::StmtNode::Return(expr) => {
+    /// 文のノードを生成
+    fn gen_stmt_ir(&mut self, mut stmt: node::StmtNode) -> usize {
+        let node = match stmt {
+            node::StmtNode::Return(mut expr) => {
                 let func_ret_ty = self.func_ret_ty.clone().unwrap();
-                let idx = self.gen_expr_ir(&expr, &func_ret_ty);
-                inst::Inst::Ret(idx);
+                let idx = self.gen_expr_ir(expr, &func_ret_ty);
+                inst::Inst::Ret(idx)
             }
             _ => panic!(),
-        }
+        };
 
-        self.ir_tree.push(inst::Inst::Ret(self.id_counter));
+        self.ir_tree.push(node);
         self.id_counter += 1;
         self.id_counter
     }
 
-    fn gen_expr_ir(&mut self, expr: &node::Expr, expect_byte: &Size) -> usize {
+    fn left_right_pair(
+        &mut self,
+        mut node: (Box<node::Expr>, Box<node::Expr>),
+        expect_byte: &Size
+    ) -> (usize, usize) {
+        (
+            self.gen_expr_ir(*node.0, &expect_byte),
+            self.gen_expr_ir(*node.1, &expect_byte)
+        )
+    }
+
+    fn gen_expr_ir(&mut self, mut expr: node::Expr, expect_byte: &Size) -> usize {
         let inst = match expr {
             node::Expr::Add(node) => {
-                let left = self.gen_expr_ir(&*node.0, &expect_byte);
-                let right = self.gen_expr_ir(&*node.1, &expect_byte);
+                let pair = self.left_right_pair(node, &expect_byte);
                 inst::ExprInst {
                     dst: self.id_counter,
-                    ls: left,
-                    rs: right,
+                    ls: pair.0,
+                    rs: pair.1,
                     kind: inst::ExprKind::Add,
                 }.new()
             }
             node::Expr::Sub(node) => {
-                let left = self.gen_expr_ir(&*node.0, &expect_byte);
-                let right = self.gen_expr_ir(&*node.1, &expect_byte);
+                let pair = self.left_right_pair(node, &expect_byte);
                 inst::ExprInst {
                     dst: self.id_counter,
-                    ls: left,
-                    rs: right,
-                    kind: inst::ExprKind::Add,
+                    ls: pair.0,
+                    rs: pair.1,
+                    kind: inst::ExprKind::Sub,
                 }.new()
             }
             node::Expr::Mul(node) => {
-                let left = self.gen_expr_ir(&*node.0, &expect_byte);
-                let right = self.gen_expr_ir(&*node.1, &expect_byte);
+                let pair = self.left_right_pair(node, &expect_byte);
                 inst::ExprInst {
                     dst: self.id_counter,
-                    ls: left,
-                    rs: right,
+                    ls: pair.0,
+                    rs: pair.1,
                     kind: inst::ExprKind::Mul,
                 }.new()
             }
             node::Expr::Div(node) => {
-                let left = self.gen_expr_ir(&*node.0, &expect_byte);
-                let right = self.gen_expr_ir(&*node.1, &expect_byte);
+                let pair = self.left_right_pair(node, &expect_byte);
                 inst::ExprInst {
                     dst: self.id_counter,
-                    ls: left,
-                    rs: right,
+                    ls: pair.0,
+                    rs: pair.1,
                     kind: inst::ExprKind::Div,
                 }.new()
             }
             node::Expr::Number(value) => {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
             }
-            node::Expr::DefVar(var) => {
+            node::Expr::Str(value) => {
+                inst::Inst::Str{
+                    dst: self.id_counter,
+                    value,
+                }
+            } 
+            node::Expr::DefVar(mut var) => {
                 let value_idx = self.gen_expr_ir(
-                    &*var.value,
+                    *var.value,
                     &Size::new(&var.ty)
                 );
                 self.var_tree.add(&var.name, &value_idx);
                 inst::Inst::Mov{
+                    name: Some(mem::take(&mut var.name)),
                     dst: self.id_counter,
                     src: value_idx,
                 }
@@ -236,9 +255,9 @@ impl IR {
                 let def_args = info.args.clone();
 
                 while arg_len > 0 {
-                    let expr = func.args.get(arg_len - 1).unwrap();
+                    let mut expr_arg = func.args.get(arg_len - 1).unwrap().clone();
                     let ty = Size::new(&def_args[arg_len - 1].ty).clone();
-                    let idx = self.gen_expr_ir(&expr, &ty);
+                    let idx = self.gen_expr_ir(expr_arg, &ty);
                     params.push(idx);
                     arg_len -= 1;
                 }
@@ -246,6 +265,9 @@ impl IR {
                     name: func.name.clone(),
                     args: params,
                 }
+            }
+            node::Expr::Var(name) => {
+                return self.var_tree.get(&name);
             }
             t => panic!("{:?}", t),
         };

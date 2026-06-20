@@ -7,13 +7,13 @@ mod ir;
 
 use std::fs;
 use std::env;
-use std::io::{self, BufRead, BufReader};
+use std::io;
 use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize};
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Reg {
    db: Vec<String>,
    dw: Vec<String>,
@@ -21,16 +21,22 @@ pub struct Reg {
    dq: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OperandInfo {
     len: usize,
-    template: Vec<String>,
+    template: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Func {
+    ret: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AsmFormat {
     reg: Reg,
     op: HashMap<String, OperandInfo>,
+    func: Func,
 }
 
 
@@ -52,10 +58,10 @@ fn load_setting() -> AsmFormat {
 }
 
 
-fn gen_asm_text(tree: &ir::FuncTree) {
+fn gen_asm_text(mut tree: ir::FuncTree) {
     let format = load_setting();
-    let mut writer = gen::Writer::new();
-    writer.writer(&tree, &format);
+    let mut writer = gen::AsmEmitter::new();
+    writer.to_asm_text(&mut tree, &format);
 }
 
 fn main() -> io::Result<()> {
@@ -70,12 +76,12 @@ fn main() -> io::Result<()> {
     load_setting();
 
 
-    lexer.analy(&content).map_err(|v| v.print_log(&content)); 
+    let _ = lexer.analy(&content).map_err(|v| v.print_log(&content)); 
 
     let nodes = parser.parser(lexer.gen_tkns.clone(), &count)
         .map_err(|v| v.print_log(&content))
         .unwrap();
-    ir_builder.builder(&nodes);
-    gen_asm_text(&ir_builder.func_tree);
+    ir_builder.builder(&nodes).unwrap();
+    gen_asm_text(ir_builder.func_tree);
     Ok(())
 }
