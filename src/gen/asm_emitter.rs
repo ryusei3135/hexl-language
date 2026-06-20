@@ -4,7 +4,6 @@ use crate::{
     ir::inst,
 };
 use std::mem;
-use regex::{Captures, Regex};
 
 
 // struct Reg
@@ -92,7 +91,7 @@ impl AsmEmitter {
                     }
                     inst::Inst::Num{ .. } => {
                     }
-                    inst::Inst::comple{name, nodes} => {
+                    inst::Inst::Comple{name, nodes} => {
                         match name.as_str() {
                             "x64" => {
                                 let mut inline_asm = String::new();
@@ -220,7 +219,7 @@ impl AsmEmitter {
             }
             inst::Inst::Mov { name, src, .. } => {
                 if let Some(var_name) = name {
-                    let reg_num = self.var_hash_map.get(&*var_name).unwrap().clone().reg;
+                    let reg_num = self.var_hash_map.get(&*var_name).unwrap().reg;
                     
                     if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
                         // static領域の変数を返す:

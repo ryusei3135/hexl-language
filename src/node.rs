@@ -101,7 +101,6 @@ pub struct CallInfo {
 pub enum Group2Node {
     Stmt(StmtNode),
     Expr(Expr),
-    DefVar(DefineVar),
     CompleSyntax((String, Vec<String>)),
 }
 

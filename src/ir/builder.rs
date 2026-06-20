@@ -150,14 +150,13 @@ impl IR {
                 }
                 node::Group2Node::CompleSyntax((name, nodes)) => {
                     self.ir_tree.push(
-                        inst::Inst::comple{
+                        inst::Inst::Comple{
                             name,
                             nodes,
                         }
                     );
                     self.id_counter += 1;
                 }
-                _ => {},
             }
         } 
     }
@@ -268,7 +267,6 @@ impl IR {
             node::Expr::Var(name) => {
                 return self.var_tree.get(&name);
             }
-            t => panic!("{:?}", t),
         };
 
         self.ir_tree.push(inst);

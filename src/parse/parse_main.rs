@@ -109,7 +109,7 @@ impl Parser {
                 return Ok(&self.gen_nodes);
             } 
         }
-        Ok(&self.gen_nodes)
+        //Ok(&self.gen_nodes)
     }
 
     fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
