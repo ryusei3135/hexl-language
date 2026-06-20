@@ -70,7 +70,6 @@ fn main() -> io::Result<()> {
 
     let mut lexer = lex::Lexer::new();
     let mut parser = parse::Parser::new();
-    let mut count: usize = 1;
     let mut ir_builder = ir::IR::new();
 
     load_setting();

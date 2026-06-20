@@ -73,7 +73,7 @@ impl Parser {
                                     .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
                             )
                         }
-                        lex::Tkn::KeyWord_Ret => {
+                        lex::Tkn::KeyWordRet => {
                             node::StmtNode::Return(
                                 self.expr_add()
                                     .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
@@ -99,7 +99,6 @@ impl Parser {
                         node::Group1Node::FuncDefine(func) => {
                             func.add(node);
                         }
-                        _ => panic!(),
                     }
                     continue;
                 },
@@ -115,20 +114,6 @@ impl Parser {
         self.idx += 1;
         if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx) {
             Ok(value.tkn.clone())
-        } else {
-            Err(err::ErrKind::EndTkn)
-        }
-    }
-
-    pub(super) fn expect_next_tkn(&mut self, expect_tkn: lex::Tkn) -> Result<bool, err::ErrKind> {
-        self.idx += 1;
-        if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx) {
-            let result = if value.tkn == expect_tkn {
-                true
-            } else {
-                false
-            };
-            Ok(result)
         } else {
             Err(err::ErrKind::EndTkn)
         }

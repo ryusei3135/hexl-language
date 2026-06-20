@@ -7,7 +7,7 @@ type ExprResult = Result<node::Expr, err::ErrKind>;
 impl Parser {
     pub(super) fn expr_define_var(&mut self, name: String) -> ExprResult {
         println!("{:?}", self.current_tkn());
-        let node = if let Ok(tkn) = self.next_tkn() {
+        let node = if self.next_tkn().is_ok() {
             let ty_node = if self.current_tkn() == &lex::Tkn::Colon {
                 self.define_ty_node()?
             } else {

@@ -56,6 +56,9 @@ impl Parser {
             }
             match self.next_tkn()? {
                 lex::Tkn::Name(name) => {
+                    if !can_create_arg {
+                        panic!();
+                    }
                     self.next_tkn()?;
                     let ty = self.define_ty_node()?;
                     args_params.push(node::ArgsNode {

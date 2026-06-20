@@ -109,7 +109,7 @@ pub enum Tkn {
     Number(String),
     Name(String),
     Str(String),
-    KeyWord_Ret,
+    KeyWordRet,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -253,7 +253,7 @@ impl Lexer {
                 }
                 GenFlag::Name => {
                     match self.chr_stk.as_str() {
-                        "ret" => Tkn::KeyWord_Ret,
+                        "ret" => Tkn::KeyWordRet,
                         _ => Tkn::Name(self.chr_stk.clone()),
                     }
                 }

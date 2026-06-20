@@ -29,15 +29,6 @@ impl Size {
             _ => panic!(),
         }
     }
-
-    pub fn size(&self) -> usize {
-        match self {
-            Self::DB => 1,
-            Self::DW => 2,
-            Self::DD => 4,
-            Self::DQ => 8,
-        }
-    }
 }
 
 
@@ -142,7 +133,6 @@ impl IR {
                     self.ir_tree = Vec::new();
                     self.id_counter = 0;
                 }
-                _ => panic!(),
             }
         }
         Ok(())
@@ -151,11 +141,11 @@ impl IR {
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) {
         for stmt in node {
             match stmt.clone() {
-                node::Group2Node::Expr(mut expr) => {
-                    let id = self.gen_expr_ir(expr, &Size::DD);
+                node::Group2Node::Expr(expr) => {
+                    let _ = self.gen_expr_ir(expr, &Size::DD);
                 }
-                node::Group2Node::Stmt(mut stmt) => {
-                    let id = self.gen_stmt_ir(stmt);
+                node::Group2Node::Stmt(stmt) => {
+                    let _ = self.gen_stmt_ir(stmt);
                 }
                 _ => {},
             }
@@ -163,14 +153,13 @@ impl IR {
     }
 
     /// 文のノードを生成
-    fn gen_stmt_ir(&mut self, mut stmt: node::StmtNode) -> usize {
+    fn gen_stmt_ir(&mut self, stmt: node::StmtNode) -> usize {
         let node = match stmt {
-            node::StmtNode::Return(mut expr) => {
+            node::StmtNode::Return(expr) => {
                 let func_ret_ty = self.func_ret_ty.clone().unwrap();
                 let idx = self.gen_expr_ir(expr, &func_ret_ty);
                 inst::Inst::Ret(idx)
             }
-            _ => panic!(),
         };
 
         self.ir_tree.push(node);
@@ -180,7 +169,7 @@ impl IR {
 
     fn left_right_pair(
         &mut self,
-        mut node: (Box<node::Expr>, Box<node::Expr>),
+        node: (Box<node::Expr>, Box<node::Expr>),
         expect_byte: &Size
     ) -> (usize, usize) {
         (
@@ -189,7 +178,7 @@ impl IR {
         )
     }
 
-    fn gen_expr_ir(&mut self, mut expr: node::Expr, expect_byte: &Size) -> usize {
+    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &Size) -> usize {
         let inst = match expr {
             node::Expr::Add(node) => {
                 let pair = self.left_right_pair(node, &expect_byte);
@@ -255,7 +244,7 @@ impl IR {
                 let def_args = info.args.clone();
 
                 while arg_len > 0 {
-                    let mut expr_arg = func.args.get(arg_len - 1).unwrap().clone();
+                    let expr_arg = func.args.get(arg_len - 1).unwrap().clone();
                     let ty = Size::new(&def_args[arg_len - 1].ty).clone();
                     let idx = self.gen_expr_ir(expr_arg, &ty);
                     params.push(idx);

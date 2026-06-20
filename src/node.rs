@@ -3,7 +3,6 @@
 pub enum TyNode {
     Auto,
     Ty(String),
-    Generics((String, Box<TyNode>)),
     RefTy(String),
     TknTy(String),
 }
@@ -12,12 +11,6 @@ pub enum TyNode {
 pub struct ArgsNode {
     pub name: String,
     pub ty: TyNode,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct DefGenerics {
-    name: String,
-    ty: TyNode,
 }
 
 #[derive(Clone, Debug, PartialEq)]

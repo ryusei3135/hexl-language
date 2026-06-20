@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     *,
-    ir::{self, inst},
+    ir::inst,
 };
 use std::mem;
 
@@ -56,8 +56,8 @@ impl AsmEmitter {
 
     pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_format: &AsmFormat) -> String {
         self.asm_text = String::new();
-        self.reg_format.insert(asm_format.reg.clone());
-        self.op_format.insert(asm_format.op.clone());
+        let _ = self.reg_format.insert(asm_format.reg.clone());
+        let _ = self.op_format.insert(asm_format.op.clone());
 
         for func in func_tree.func.iter_mut() {
             self.asm_text.push_str(func.0);
@@ -68,12 +68,10 @@ impl AsmEmitter {
                 println!("{:?}", node);// =============================
                 match &node {
                     inst::Inst::Str { dst, value } => {
-                        let name = "M".to_owned() + &self.data_idx.to_string();
-                        self.data_sec_text.push_str(&name);
-                        self.data_sec_text.push_str(": db ");
-                        self.data_sec_text.push_str(value);
-                        self.data_sec_text.push('\n');
-                        self.data_map.push((*dst, name));
+                        self.data_sec_text.push_str(
+                            &format!("M{}: db {}\n", self.data_idx.to_string(), value)
+                        );
+                        self.data_map.push((*dst, format!("M{}", self.data_idx.to_string())));
                         self.data_idx += 1;
                     }
                     inst::Inst::Expr(expr) => {
@@ -86,7 +84,7 @@ impl AsmEmitter {
                         );
                         self.reg_idx += 1;
                     }
-                    inst::Inst::Num{dst, value, size} => {
+                    inst::Inst::Num{ .. } => {
                     }
                     inst::Inst::Ret(idx) => {
                         self.format_line(
@@ -97,13 +95,13 @@ impl AsmEmitter {
                         );
                         self.asm_text.push_str("ret\n");
                     }
-                    inst::Inst::Mov { name, dst, src } => {
+                    inst::Inst::Mov { name, src, .. } => {
                         let template = &asm_format.op.get("mov").unwrap().template;
                         let formated = template
                             .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
                             .replace("{src}", &self.extract_operand_text(&src));
-                        if let Some(var_name) = name.clone() {
-                            self.var_hash_map.insert(var_name, self.reg_idx);
+                        if let Some(var_name) = name {
+                            self.var_hash_map.insert(var_name.clone(), self.reg_idx);
                         }
                         self.reg_idx += 1;
                         self.asm_text.push_str(&formated);
@@ -175,9 +173,9 @@ impl AsmEmitter {
                     .1
                     .as_str()
             }
-            inst::Inst::Mov { name, dst, src } => {
-                if let Some(var_name) = name.clone() {
-                    let reg_num = self.var_hash_map.get(&var_name).unwrap();
+            inst::Inst::Mov { name, .. } => {
+                if let Some(var_name) = name {
+                    let reg_num = self.var_hash_map.get(&*var_name).unwrap();
                     self.reg_format.as_ref().unwrap().dd[*reg_num].as_str()
                 } else {
                     panic!();
@@ -210,7 +208,6 @@ impl AsmEmitter {
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "mul",
             inst::ExprKind::Div => "div",
-            _ => panic!(),
         };
 
         format.op.get(key)
