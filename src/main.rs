@@ -77,7 +77,7 @@ fn main() -> io::Result<()> {
 
     let _ = lexer.analy(&content).map_err(|v| v.print_log(&content)); 
 
-    let nodes = parser.parser(lexer.gen_tkns.clone(), &count)
+    let nodes = parser.parser(lexer.gen_tkns.clone())
         .map_err(|v| v.print_log(&content))
         .unwrap();
     ir_builder.builder(&nodes).unwrap();

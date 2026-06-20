@@ -140,12 +140,22 @@ impl IR {
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) {
         for stmt in node {
+            println!("{:?}", stmt);
             match stmt.clone() {
                 node::Group2Node::Expr(expr) => {
                     let _ = self.gen_expr_ir(expr, &Size::DD);
                 }
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir(stmt);
+                }
+                node::Group2Node::CompleSyntax((name, nodes)) => {
+                    self.ir_tree.push(
+                        inst::Inst::comple{
+                            name,
+                            nodes,
+                        }
+                    );
+                    self.id_counter += 1;
                 }
                 _ => {},
             }

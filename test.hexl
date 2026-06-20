@@ -1,13 +1,13 @@
 
-add(): b1 {
-  a: b4 = 10 * 2
-  b: b4 = 1
-  ret b
-}
 
-main(a: a, b: b): b1 {
+_start(a: a, b: b): b1 {
   c: b1 = "hello world"
-  a: b4 = 10 + 1 - 2
-  b: b4 = a + 10
-  ret a
+
+  #x64 {
+    "mov eax, 1"
+    "mov edi, 1"
+    "lea esi, ${c}"
+    "mov edx, 10"
+    "syscall"
+  }
 }

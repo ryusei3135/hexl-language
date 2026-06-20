@@ -46,7 +46,6 @@ impl Parser {
     pub fn parser(
         &mut self,
         tkns: Vec<lex::LocatedTkn>,
-        line: &usize
     ) -> Result<&Vec<node::Group1Node>, err::Errs> {
         self.tkns = Some(tkns);
 
@@ -56,7 +55,7 @@ impl Parser {
                     match self.current_tkn().clone() {
                         lex::Tkn::Name(name) => {
                             let node = self.func_node(&name)
-                                .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?;
+                                .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?;
                             self.gen_nodes.push(node);
 
                             self.gen_flag = GenFlag::Group2;
@@ -67,16 +66,19 @@ impl Parser {
                 },
                 GenFlag::Group2 => {
                     let node = match self.current_tkn().clone() {
+                        lex::Tkn::CompleSyn => {
+                            self.comple_syntax().map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?
+                        }
                         lex::Tkn::Name(name) => {
                             node::Group2Node::Expr(
                                 self.expr_define_var(name)
-                                    .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
+                                    .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?
                             )
                         }
                         lex::Tkn::KeyWordRet => {
                             node::StmtNode::Return(
                                 self.expr_add()
-                                    .map_err(|v| v.gen(&line, self.tkn_chr_pos()))?
+                                    .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?
                             ).wrap()
                         }
                         lex::Tkn::RBrace => {
@@ -110,6 +112,36 @@ impl Parser {
         Ok(&self.gen_nodes)
     }
 
+    fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
+        let lex::Tkn::Name(name) = self.next_tkn()? else {
+            panic!();
+        };
+
+        let mut nodes = Vec::<String>::new();
+
+        if let Ok(lex::Tkn::LBrace) = self.next_tkn() {
+            let _ = self.next_tkn()?;
+            loop {
+                match self.current_tkn() {
+                    lex::Tkn::Str(value) => {
+                        nodes.push(value.clone());
+                    }
+                    lex::Tkn::RBrace => {
+                        self.next_tkn()?;
+                        break;
+                    }
+                    t => {
+                        panic!("{:?}", t);
+                    }
+                }
+                self.next_tkn()?;
+            }
+            return Ok(node::Group2Node::CompleSyntax((name, nodes)));
+        }
+
+        Err(err::ErrKind::UnexpectedToken)
+    }
+
     pub(super) fn next_tkn(&mut self) -> Result<lex::Tkn, err::ErrKind> {
         self.idx += 1;
         if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx) {
@@ -130,6 +162,11 @@ impl Parser {
     #[inline(always)]
     pub(super) fn current_tkn(&self) -> &lex::Tkn {
         &self.tkns.as_ref().unwrap()[self.idx].tkn
+    }
+
+    #[inline(always)]
+    fn current_line(&self) -> &usize {
+        &self.tkns.as_ref().unwrap()[self.idx].line
     }
 
     #[inline(always)]

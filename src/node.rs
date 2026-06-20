@@ -102,6 +102,7 @@ pub enum Group2Node {
     Stmt(StmtNode),
     Expr(Expr),
     DefVar(DefineVar),
+    CompleSyntax((String, Vec<String>)),
 }
 
 #[derive(Clone, Debug, PartialEq)]

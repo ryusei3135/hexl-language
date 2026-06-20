@@ -4,6 +4,7 @@ use crate::{
     ir::inst,
 };
 use std::mem;
+use regex::{Captures, Regex};
 
 
 // struct Reg
@@ -21,6 +22,11 @@ use std::mem;
 //    op: HashMap<String, OperandInfo>,
 
 
+struct VarIndexInfo {
+    reg: usize,
+    index: usize,
+}
+
 pub struct AsmEmitter { 
     asm_text: String,
     data_sec_text: String,
@@ -31,9 +37,10 @@ pub struct AsmEmitter {
     op_format: Option<HashMap<String, OperandInfo>>,
 
     curr_inst: Vec<inst::Inst>,
+    // (親のid, 変数の名前)
     data_map: Vec<(usize, String)>,
     last_inst_idx: Vec<(usize, usize)>,
-    var_hash_map: HashMap<String, usize>,
+    var_hash_map: HashMap<String, VarIndexInfo>,
 }
 
 impl AsmEmitter {
@@ -58,13 +65,12 @@ impl AsmEmitter {
         self.asm_text = String::new();
         let _ = self.reg_format.insert(asm_format.reg.clone());
         let _ = self.op_format.insert(asm_format.op.clone());
-
-        for func in func_tree.func.iter_mut() {
+        for func in func_tree.func.clone().iter_mut() {
             self.asm_text.push_str(func.0);
             self.asm_text.push('\n');
             self.curr_inst = mem::take(&mut func.1.tree);
 
-            for node in self.curr_inst.iter() {
+            for node in self.curr_inst.clone().iter() {
                 println!("{:?}", node);// =============================
                 match &node {
                     inst::Inst::Str { dst, value } => {
@@ -86,6 +92,20 @@ impl AsmEmitter {
                     }
                     inst::Inst::Num{ .. } => {
                     }
+                    inst::Inst::comple{name, nodes} => {
+                        match name.as_str() {
+                            "x64" => {
+                                let mut inline_asm = String::new();
+                                for node in nodes.iter() { 
+                                    inline_asm.push_str(
+                                        &format!("{}\n", self.format_inline_asm(&node).as_str())
+                                    );
+                                }
+                                self.asm_text.push_str(&inline_asm)
+                            }
+                            _ => panic!(),
+                        }
+                    }
                     inst::Inst::Ret(idx) => {
                         self.format_line(
                             &"mov".to_string(),
@@ -95,16 +115,24 @@ impl AsmEmitter {
                         );
                         self.asm_text.push_str("ret\n");
                     }
-                    inst::Inst::Mov { name, src, .. } => {
-                        let template = &asm_format.op.get("mov").unwrap().template;
-                        let formated = template
-                            .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
-                            .replace("{src}", &self.extract_operand_text(&src));
-                        if let Some(var_name) = name {
-                            self.var_hash_map.insert(var_name.clone(), self.reg_idx);
+                    inst::Inst::Mov { name, dst, src } => {
+                        if self.data_map.iter().find(|v| &v.0 == src).is_some() {
+                            // 子のノードがstaticりょいきの値なので、変数名だけ登録する
+                            self.insert_var_info(&name.as_ref().unwrap(), &dst);
+                        } else {
+                            // レジスタに置く変数
+                            let formated = asm_format
+                                .op.get("mov")
+                                .unwrap()
+                                .template
+                                .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
+                                .replace("{src}", &self.extract_operand_text(&src));
+                            if let Some(var_name) = name {
+                                self.insert_var_info(&var_name, &dst);
+                            }
+                            self.reg_idx += 1;
+                            self.asm_text.push_str(&formated);
                         }
-                        self.reg_idx += 1;
-                        self.asm_text.push_str(&formated);
                     }
                     t => panic!("{:?}", t),
                 }
@@ -113,14 +141,31 @@ impl AsmEmitter {
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
         }
-        println!("{}\n{}", self.data_sec_text, self.asm_text);
+        println!("{}\nsection text\n{}", self.data_sec_text, self.asm_text);
         mem::take(&mut self.asm_text)
+    }
+
+    #[inline(always)]
+    pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
+        let index = self.var_hash_map.get(name).unwrap().index;
+        self.extract_operand_text(&index).to_string()
+    }
+
+    #[inline(always)]
+    fn insert_var_info(&mut self, name: &String, index: &usize) {
+        self.var_hash_map.insert(
+            name.clone(),
+            VarIndexInfo {
+                reg: self.reg_idx,
+                index: *index,
+            }
+        );
     }
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
     /// 通りに加工する。
     fn format_line(
-        &self,
+        &mut self,
         opcode: &String,
         dst: Option<&usize>,
         src1: &usize,
@@ -158,7 +203,7 @@ impl AsmEmitter {
     }
 
     fn extract_operand_text(
-        &self,
+        &mut self,
         parent_id: &usize,
     ) -> &str {
         match &self.curr_inst[*parent_id] {
@@ -173,10 +218,18 @@ impl AsmEmitter {
                     .1
                     .as_str()
             }
-            inst::Inst::Mov { name, .. } => {
+            inst::Inst::Mov { name, src, .. } => {
                 if let Some(var_name) = name {
-                    let reg_num = self.var_hash_map.get(&*var_name).unwrap();
-                    self.reg_format.as_ref().unwrap().dd[*reg_num].as_str()
+                    let reg_num = self.var_hash_map.get(&*var_name).unwrap().clone().reg;
+                    
+                    if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
+                        // static領域の変数を返す:
+                        //self.var_hash_map.entry(var_name.to_string()).or_insert(0);
+                        &static_var.1
+                    } else {
+                        self.reg_idx = reg_num.clone();
+                        &self.reg_format.as_ref().unwrap().dd[reg_num.clone()]
+                    }
                 } else {
                     panic!();
                 } 
@@ -199,7 +252,7 @@ impl AsmEmitter {
     }
 
     fn format_expr_inst(
-        &self,
+        &mut self,
         format: &AsmFormat,
         expr: &inst::ExprInst,
     ) -> String {

@@ -60,6 +60,8 @@ mod local {
         LAngleBracket,
         RAngleBracket,
 
+        CompleSyn,
+
         Number,
         Name,
         Str,
@@ -105,6 +107,8 @@ pub enum Tkn {
     Colon,
     LAngleBracket,
     RAngleBracket,
+
+    CompleSyn,
 
     Number(String),
     Name(String),
@@ -234,6 +238,7 @@ impl Lexer {
                 GenFlag::LAngleBracket => Tkn::LAngleBracket,
                 GenFlag::RAngleBracket => Tkn::RAngleBracket,
 
+                GenFlag::CompleSyn => Tkn::CompleSyn,
                 GenFlag::Number => {
                     if self.chr_stk.starts_with("0x") {
                         // 元のコードは .unwrap() で不正な16進数（例: "0x" だけ、
@@ -282,6 +287,7 @@ impl Lexer {
 
     fn sort_symbol_tkn(&mut self, chr: &char) -> StkResult {
         let sym_flag = match self.chr_stk.chars().last() {
+            Some('#') => GenFlag::CompleSyn,
             Some(',') => GenFlag::Comma,
             Some('+') => GenFlag::Add,
             Some('*') => GenFlag::Mul,
@@ -351,7 +357,7 @@ impl Lexer {
                         StkResult::GenTkn
                     }
                 }
-                (CharKind::Name | CharKind::Num, k) => {
+                (CharKind::Name | CharKind::Num, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
                         self.get_value_by_flag_ty(chr, StkResult::GenTkn)
                     } else {

@@ -2,7 +2,7 @@
 //! 渡されたフォーマットのアセンブリ言語に変換するApiを提供する
 
 mod asm_emitter;
-
+mod inline_asm;
 
 use crate::ir::{
     FuncTree,

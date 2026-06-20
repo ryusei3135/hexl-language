@@ -49,6 +49,10 @@ pub enum Inst {
         name: String,
         args: Vec<ValueId>,
     },
+    comple {
+        name: String,
+        nodes: Vec<String>,
+    },
     Ret(ValueId),
 }
 
