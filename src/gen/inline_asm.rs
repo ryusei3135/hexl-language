@@ -19,4 +19,25 @@ impl AsmEmitter {
             modified
         }).to_string()
     }
+
+    pub(super) fn deploy_inline_asm(&mut self, name: &String, nodes: &Vec<String>) {
+        if self.asm_setting
+            .as_ref()
+            .unwrap()
+            .get_inline_asm_list()
+            .iter()
+            .find(|v| v.as_str() == name.as_str())
+            .is_some()
+        {
+            let mut inline_asm = String::new();
+            for node in nodes.iter() { 
+                inline_asm.push_str(
+                    &format!("{}\n", self.format_inline_asm(&node).as_str())
+                );
+            }
+            self.asm_text.push_str(&inline_asm)
+        } else {
+            panic!();
+        }
+    }
 }

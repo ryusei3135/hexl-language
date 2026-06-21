@@ -9,5 +9,8 @@ _start(a: a, b: b): b1 {
     "lea esi, ${c}"
     "mov edx, 10"
     "syscall"
+    "mov eax, 60"
+    "xor edi, edi"
+    "syscall"
   }
 }

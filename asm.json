@@ -1,6 +1,9 @@
 {
   "settings": [
-    "x64.json"
+     {
+	"file": "x64.json",
+	"name": "x64"
+     }
   ],
   "default": 0
 }

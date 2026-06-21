@@ -27,13 +27,14 @@ struct VarIndexInfo {
 }
 
 pub struct AsmEmitter { 
-    asm_text: String,
+    pub(super) asm_text: String,
     data_sec_text: String,
     data_idx: usize,
     reg_idx: usize,
     // フォーマット
     reg_format: Option<Reg>,
     op_format: Option<HashMap<String, OperandInfo>>,
+    pub(super) asm_setting: Option<AsmSetting>,
 
     curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
@@ -52,6 +53,7 @@ impl AsmEmitter {
             
             reg_format: None,
             op_format: None,
+            asm_setting: None,
 
             curr_inst: Vec::new(),
             data_map: Vec::new(),
@@ -60,17 +62,22 @@ impl AsmEmitter {
         }
     }
 
-    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_format: &AsmFormat) -> String {
+    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_setting: AsmSetting) -> String {
         self.asm_text = String::new();
-        let _ = self.reg_format.insert(asm_format.reg.clone());
-        let _ = self.op_format.insert(asm_format.op.clone());
+
+        // === アセンブラのフォーマットの設定 ===
+        let _ = self.asm_setting.insert(asm_setting);
+        let default = self.asm_setting.as_ref().unwrap().get_default_format();
+        let _ = self.reg_format.insert(default.reg.clone());
+        let _ = self.op_format.insert(default.op.clone());
+
         for func in func_tree.func.clone().iter_mut() {
+            // 新しく関数の作成、
             self.asm_text.push_str(func.0);
             self.asm_text.push('\n');
             self.curr_inst = mem::take(&mut func.1.tree);
 
             for node in self.curr_inst.clone().iter() {
-                println!("{:?}", node);// =============================
                 match &node {
                     inst::Inst::Str { dst, value } => {
                         self.data_sec_text.push_str(
@@ -80,7 +87,7 @@ impl AsmEmitter {
                         self.data_idx += 1;
                     }
                     inst::Inst::Expr(expr) => {
-                        let asm = self.format_expr_inst(&asm_format, &expr);
+                        let asm = self.format_expr_inst(&default, &expr);
 
                         self.asm_text.push_str(&asm);
 
@@ -92,18 +99,7 @@ impl AsmEmitter {
                     inst::Inst::Num{ .. } => {
                     }
                     inst::Inst::Comple{name, nodes} => {
-                        match name.as_str() {
-                            "x64" => {
-                                let mut inline_asm = String::new();
-                                for node in nodes.iter() { 
-                                    inline_asm.push_str(
-                                        &format!("{}\n", self.format_inline_asm(&node).as_str())
-                                    );
-                                }
-                                self.asm_text.push_str(&inline_asm)
-                            }
-                            _ => panic!(),
-                        }
+                        self.deploy_inline_asm(&name, &nodes);
                     }
                     inst::Inst::Ret(idx) => {
                         self.format_line(
@@ -120,7 +116,7 @@ impl AsmEmitter {
                             self.insert_var_info(&name.as_ref().unwrap(), &dst);
                         } else {
                             // レジスタに置く変数
-                            let formated = asm_format
+                            let formated = default
                                 .op.get("mov")
                                 .unwrap()
                                 .template
@@ -140,8 +136,7 @@ impl AsmEmitter {
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
         }
-        println!("{}\nsection text\n{}", self.data_sec_text, self.asm_text);
-        mem::take(&mut self.asm_text)
+        format!("{}\nsection text\n{}", self.data_sec_text, self.asm_text)
     }
 
     #[inline(always)]

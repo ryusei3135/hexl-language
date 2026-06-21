@@ -13,66 +13,121 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Reg {
-   db: Vec<String>,
-   dw: Vec<String>,
-   dd: Vec<String>,
-   dq: Vec<String>,
+/// アセンブリ言語のフォーマット関係
+mod asm_setting_module {
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct Reg {
+       pub db: Vec<String>,
+       pub dw: Vec<String>,
+       pub dd: Vec<String>,
+       pub dq: Vec<String>,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct OperandInfo {
+        pub len: usize,
+        pub template: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct Func {
+        pub ret: usize,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct AsmFormat {
+        pub reg: Reg,
+        pub op: HashMap<String, OperandInfo>,
+        pub func: Func,
+    }
+
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct AsmInfos {
+        // アセンブリ言語の設定ファイル
+        pub file: String,
+        // inlineアセンブラを使うときの名前
+        pub name: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct AsmSetting {
+        // アセンブリ言語の設定ファイル
+        pub settings: Vec<AsmInfos>,
+        // デフォルトで適応するアセンブリ言語の設定
+        pub default: usize,
+    }
+
+    impl AsmSetting {
+        pub fn get_default_format(&self) -> AsmFormat {
+            serde_json::from_str(
+                &fs::read_to_string(
+                    format!("asm_json/{}", &self.settings[self.default].file)
+                )
+                .unwrap()
+            ).unwrap()
+        }
+
+        pub fn get_inline_asm_list(&self) -> Vec<String> {
+            self.settings
+                .clone()
+                .into_iter()
+                .map(|v| v.name)
+                .collect()
+        }
+    }
+
+    pub fn load_setting() -> AsmSetting {
+        let setting = fs::read_to_string("asm.json")
+            .expect("not found asm setting file 'asm.json'");
+        serde_json::from_str(&setting).unwrap()
+
+        //let default_format = fs::read_to_string(data.get_default_asm_file()).unwrap();
+        //let x64data: AsmFormat = serde_json::from_str(&default_format).unwrap();
+        //x64data
+    }
+
+
+    pub fn gen_asm_text(mut tree: ir::FuncTree) -> String {
+        let asm_settings = load_setting();
+
+        let mut writer = gen::AsmEmitter::new();
+        writer.to_asm_text(&mut tree, asm_settings)
+    }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct OperandInfo {
-    len: usize,
-    template: String,
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Func {
-    ret: usize,
-}
+/// ファイルやオプション管理
+mod cmd_line_args {
+    use super::*;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct AsmFormat {
-    reg: Reg,
-    op: HashMap<String, OperandInfo>,
-    func: Func,
+    pub fn get_comple_file(args: &Vec<String>) -> String {
+        if args.len() > 1 {
+            args[1].clone()
+        } else {
+            panic!("please file name");
+        }
+    }
 }
 
 
-
-#[derive(Serialize, Deserialize, Debug)]
-struct AsmSetting {
-    // アセンブリ言語の設定ファイル
-    settings: Vec<String>,
-    // デフォルトで適応するアセンブリ言語の設定
-    default: usize,
-}
-
-fn load_setting() -> AsmFormat {
-    let setting = fs::read_to_string("asm.json").unwrap();
-    let data: AsmSetting = serde_json::from_str(&setting).unwrap();
-    let x64setting = fs::read_to_string("asm_json/x64.json").unwrap();
-    let x64data: AsmFormat = serde_json::from_str(&x64setting).unwrap();
-    x64data
-}
-
-
-fn gen_asm_text(mut tree: ir::FuncTree) {
-    let format = load_setting();
-    let mut writer = gen::AsmEmitter::new();
-    writer.to_asm_text(&mut tree, &format);
-}
+pub use asm_setting_module::*;
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    let content = fs::read_to_string(args[1].clone())?;
 
     let mut lexer = lex::Lexer::new();
     let mut parser = parse::Parser::new();
     let mut ir_builder = ir::IR::new();
 
+    let file_name = cmd_line_args::get_comple_file(&args);
+
     load_setting();
+
+
+    let content = fs::read_to_string(file_name)?;
 
 
     let _ = lexer.analy(&content).map_err(|v| v.print_log(&content)); 
@@ -81,6 +136,8 @@ fn main() -> io::Result<()> {
         .map_err(|v| v.print_log(&content))
         .unwrap();
     ir_builder.builder(&nodes).unwrap();
-    gen_asm_text(ir_builder.func_tree);
+    let asm_text = gen_asm_text(ir_builder.func_tree);
+
+    fs::write("a.s", asm_text).unwrap();
     Ok(())
 }
