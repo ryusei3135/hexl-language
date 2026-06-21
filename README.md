@@ -6,6 +6,7 @@
 Hexlはrustで実装されたプログラミング言語であり
 字句解析・構文解析・AST・コンパイラを自前で実装しており、
 自分で使うことと学習を目的としています
+- [X64アセンブラ](https://github.com/ryusei3135/hexl-language/tree/HasmX64)
 
 ## 概要（Overview）
 このプロジェクトは私が使うプログラミング言語を作る
