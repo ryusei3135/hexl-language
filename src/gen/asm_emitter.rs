@@ -73,15 +73,14 @@ impl AsmEmitter {
 
         for func in func_tree.func.clone().iter_mut() {
             // 新しく関数の作成、
-            self.asm_text.push_str(func.0);
-            self.asm_text.push('\n');
+            self.asm_text.push_str(&format!("{}:\n", func.0));
             self.curr_inst = mem::take(&mut func.1.tree);
 
             for node in self.curr_inst.clone().iter() {
                 match &node {
                     inst::Inst::Str { dst, value } => {
                         self.data_sec_text.push_str(
-                            &format!("M{}: db {}\n", self.data_idx.to_string(), value)
+                            &format!("M{}: db \"{}\"\n", self.data_idx.to_string(), value)
                         );
                         self.data_map.push((*dst, format!("M{}", self.data_idx.to_string())));
                         self.data_idx += 1;
