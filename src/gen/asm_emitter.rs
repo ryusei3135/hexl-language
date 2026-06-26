@@ -74,7 +74,7 @@ impl AsmEmitter {
         for func in func_tree.func.clone().iter_mut() {
             // 新しく関数の作成、
             self.asm_text.push_str(&format!("{}:\n", func.0));
-            self.curr_inst = mem::take(&mut func.1.tree);
+            self.curr_inst = mem::take(&mut func.1.body);
 
             for node in self.curr_inst.clone().iter() {
                 match &node {
@@ -97,8 +97,14 @@ impl AsmEmitter {
                     }
                     inst::Inst::Num{ .. } => {
                     }
+                    inst::Inst::Block(name) => {
+                        self.asm_text.push_str(&format!("{}:\n", name));
+                    }
                     inst::Inst::Comple{name, nodes} => {
                         self.deploy_inline_asm(&name, &nodes);
+                    }
+                    inst::Inst::Jmp(name) => {
+                        self.asm_text.push_str(&format!("jmp {}\n", name));
                     }
                     inst::Inst::Ret(idx) => {
                         self.format_line(
@@ -108,6 +114,9 @@ impl AsmEmitter {
                             None
                         );
                         self.asm_text.push_str("ret\n");
+                    }
+                    inst::Inst::ExpectJmp(name) => {
+                        self.asm_text = self.asm_text.replace("{label}", name);
                     }
                     inst::Inst::Mov { name, dst, src } => {
                         if self.data_map.iter().find(|v| &v.0 == src).is_some() {
@@ -213,7 +222,11 @@ impl AsmEmitter {
             }
             inst::Inst::Mov { name, src, .. } => {
                 if let Some(var_name) = name {
-                    let reg_num = self.var_hash_map.get(&*var_name).unwrap().reg;
+                    let reg_num = if let Some(var) = self.var_hash_map.get(&*var_name) {
+                        var.reg
+                    } else {
+                        panic!("this var is not found -> {}", name.as_ref().unwrap());
+                    };
                     
                     if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
                         // static領域の変数を返す:
@@ -226,6 +239,9 @@ impl AsmEmitter {
                 } else {
                     panic!();
                 } 
+            }
+            inst::Inst::Block(name) => {
+                name
             }
             t => {
                 if let Some(result) = self.last_inst_idx
@@ -254,6 +270,8 @@ impl AsmEmitter {
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "mul",
             inst::ExprKind::Div => "div",
+            inst::ExprKind::LessThen => "cmp_l",
+            inst::ExprKind::GreaterThen => "cmp_g",
         };
 
         format.op.get(key)
@@ -262,5 +280,17 @@ impl AsmEmitter {
             .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
             .replace("{src1}", &self.extract_operand_text(&expr.ls))
             .replace("{src2}", &self.extract_operand_text(&expr.rs))
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_emit_match_expr() {
+        //
     }
 }

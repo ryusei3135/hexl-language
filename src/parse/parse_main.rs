@@ -65,42 +65,17 @@ impl Parser {
                     };
                 },
                 GenFlag::Group2 => {
-                    let node = match self.current_tkn().clone() {
-                        lex::Tkn::CompleSyn => {
-                            self.comple_syntax().map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?
-                        }
-                        lex::Tkn::Name(name) => {
-                            node::Group2Node::Expr(
-                                self.expr_define_var(name)
-                                    .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?
-                            )
-                        }
-                        lex::Tkn::KeyWordRet => {
-                            node::StmtNode::Return(
-                                self.expr_add()
-                                    .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?
-                            ).wrap()
-                        }
-                        lex::Tkn::RBrace => {
-                            self.scope_counter -= 1;
-
-                            if self.next_tkn().is_err() {
-                                return Ok(&self.gen_nodes);
-                            }
-
-                            if self.scope_counter == 0 {
-                                self.gen_flag = GenFlag::Group1;
-                            }
-
-                            continue;
-                        }
-                        t => panic!("{:?}", t),
-                    };
+                    let node = self.one_line_node()
+                        .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?;
 
                     match self.gen_nodes.last_mut().unwrap() {
                         node::Group1Node::FuncDefine(func) => {
                             func.add(node);
                         }
+                    }
+
+                    if self.current_tkn() == &lex::Tkn::RBrace {
+                        return Ok(&self.gen_nodes);
                     }
                     continue;
                 },
@@ -112,7 +87,54 @@ impl Parser {
         //Ok(&self.gen_nodes)
     }
 
-    fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
+    fn one_line_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
+        let node = match self.current_tkn().clone() {
+            lex::Tkn::CompleSyn => {
+                self.comple_syntax()?
+            }
+            lex::Tkn::Name(name) => {
+                node::Group2Node::Expr(
+                    self.expr_define_var(name)?
+                )
+            }
+            lex::Tkn::KeyWordRet => {
+                node::StmtNode::Return(
+                    self.expr_add()?
+                ).wrap()
+            }
+            lex::Tkn::KeyWordMatch => {
+                self.next_tkn()?;
+                let n = self.expr_match()?;
+                node::Group2Node::Expr(n)
+            }
+            lex::Tkn::RBrace => {
+                self.scope_counter -= 1;
+
+                if self.scope_counter == 0 {
+                    self.gen_flag = GenFlag::Group1;
+                }
+                panic!();
+            }
+            t => panic!("{:?}", t),
+        };
+        Ok(node)
+    }
+
+    /// 同じスコープ内のノードを生成
+    pub(super) fn gen_block_node(&mut self) -> Result<Vec<node::Group2Node>, err::ErrKind> {
+        let mut block = Vec::<node::Group2Node>::new();
+
+        loop {
+            let node = self.one_line_node()?;
+            block.push(node);
+            if self.current_tkn() == &lex::Tkn::RBrace {
+                return Ok(block);
+            }
+        }
+        Ok(block)
+    }
+
+    pub(super) fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn()? else {
             panic!();
         };
@@ -165,7 +187,7 @@ impl Parser {
     }
 
     #[inline(always)]
-    fn current_line(&self) -> &usize {
+    pub(super) fn current_line(&self) -> &usize {
         &self.tkns.as_ref().unwrap()[self.idx].line
     }
 

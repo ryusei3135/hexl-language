@@ -39,6 +39,14 @@
 	"len": 2,
 	"template": "mov {dst}, {src}\n"
     },
+    "cmp_l": {
+	    "len": 2,
+	    "template": "mov {dst}, {src1}\ncmp {dst}, {src2}\njl {label}\n"
+    },
+    "cmp_g": {
+	    "len": 2,
+	    "template": "mov {dst}, {src1}\ncmp {dst}, {src2}\njg {label}\n"
+    },
     "ret": {
 	"len": 1,
 	"template": "ret\n"

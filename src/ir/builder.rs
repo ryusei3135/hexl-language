@@ -6,6 +6,9 @@ use std::collections::HashMap;
 use std::mem;
 use super::*;
 
+
+
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Size {
     DB,
@@ -56,7 +59,7 @@ impl VarTree {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncDefInfo {
     pub args: Vec<node::ArgsNode>,
-    pub tree: Vec<inst::Inst>,
+    pub body: Vec<inst::Inst>,
     pub ret_ty: Option<Size>,
 }
 
@@ -82,7 +85,7 @@ impl FuncTree {
     
     pub fn add(
         &mut self,
-        ir_tree: Vec<inst::Inst>,
+        body: Vec<inst::Inst>,
         name: &String,
         args: Vec<node::ArgsNode>,
         ret_ty: Size
@@ -91,7 +94,7 @@ impl FuncTree {
             name.clone(),
             FuncDefInfo {
                 args,
-                tree: ir_tree,
+                body,
                 ret_ty: Some(ret_ty),
             }
         );
@@ -102,8 +105,10 @@ pub struct IR {
     pub var_tree: VarTree,
     pub func_tree: FuncTree,
     id_counter: usize,
+    jmp_label_counter: usize,
     func_ret_ty: Option<Size>,
     ir_tree: Vec<inst::Inst>,
+    branch_top: usize,
 }
 
 
@@ -113,8 +118,10 @@ impl IR {
             var_tree: VarTree::new(),
             func_tree: FuncTree::new(),
             id_counter: 0,
+            jmp_label_counter: 0,
             func_ret_ty: None,
             ir_tree: Vec::new(),
+            branch_top: 0,
         }
     }
 
@@ -140,7 +147,6 @@ impl IR {
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) {
         for stmt in node {
-            println!("{:?}", stmt);
             match stmt.clone() {
                 node::Group2Node::Expr(expr) => {
                     let _ = self.gen_expr_ir(expr, &Size::DD);
@@ -176,6 +182,7 @@ impl IR {
         self.id_counter
     }
 
+    #[inline(always)]
     fn left_right_pair(
         &mut self,
         node: (Box<node::Expr>, Box<node::Expr>),
@@ -187,43 +194,42 @@ impl IR {
         )
     }
 
+    /// 指定した種類の式のノードを作成する
+    #[inline(always)]
+    fn build_expr_inst(
+        &mut self,
+        node: (Box<node::Expr>, Box<node::Expr>),
+        expect_byte: &Size,
+        kind: inst::ExprKind,
+    ) -> inst::Inst {
+        let pair = self.left_right_pair(node, &expect_byte);
+        inst::ExprInst {
+            dst: self.id_counter,
+            ls: pair.0,
+            rs: pair.1,
+            kind,
+        }.new()
+    }
+
     fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &Size) -> usize {
         let inst = match expr {
             node::Expr::Add(node) => {
-                let pair = self.left_right_pair(node, &expect_byte);
-                inst::ExprInst {
-                    dst: self.id_counter,
-                    ls: pair.0,
-                    rs: pair.1,
-                    kind: inst::ExprKind::Add,
-                }.new()
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Add)
             }
             node::Expr::Sub(node) => {
-                let pair = self.left_right_pair(node, &expect_byte);
-                inst::ExprInst {
-                    dst: self.id_counter,
-                    ls: pair.0,
-                    rs: pair.1,
-                    kind: inst::ExprKind::Sub,
-                }.new()
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)
             }
             node::Expr::Mul(node) => {
-                let pair = self.left_right_pair(node, &expect_byte);
-                inst::ExprInst {
-                    dst: self.id_counter,
-                    ls: pair.0,
-                    rs: pair.1,
-                    kind: inst::ExprKind::Mul,
-                }.new()
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Mul)
             }
             node::Expr::Div(node) => {
-                let pair = self.left_right_pair(node, &expect_byte);
-                inst::ExprInst {
-                    dst: self.id_counter,
-                    ls: pair.0,
-                    rs: pair.1,
-                    kind: inst::ExprKind::Div,
-                }.new()
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Div)
+            }
+            node::Expr::LessThen(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::LessThen)
+            }
+            node::Expr::GreaterThen(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::GreaterThen)
             }
             node::Expr::Number(value) => {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
@@ -267,11 +273,119 @@ impl IR {
             node::Expr::Var(name) => {
                 return self.var_tree.get(&name);
             }
+            node::Expr::Match{pattern, arms, arm_else} => {
+                let mut pattern_labels = 0;
+                let mut jmp_labels = 0;
+
+                // 条件の式を生成
+                if arms.len() == 1 {
+                    // 条件が一つだけの場合
+                    self.gen_expr_ir(*arms[0].pattern.clone(), &Size::DD);
+                    pattern_labels += 1;
+                    self.ir_tree.push(inst::Inst::ExpectJmp(format!("L{}", pattern_labels)));
+                    self.id_counter += 1;
+                } else {
+                    // 条件が複数の場合
+                    for arm in arms.clone() {
+                        self.gen_expr_ir(*arm.pattern, &Size::DD);
+                        self.ir_tree.push(inst::Inst::Jmp(format!("L{}", pattern_labels)));
+                        self.id_counter += 1;
+                        pattern_labels += 1;
+                    }
+                }
+
+                // elseの処理を作成
+                pattern_labels += 1;
+                if let Some(arm) = arm_else.clone() {
+                    self.gen_inst(&arm);
+                    self.ir_tree.push(inst::Inst::Jmp(format!("L{}", pattern_labels)));
+                    self.id_counter += 1;
+                    jmp_labels += 1;
+                }
+                // 処理内容の作成
+                for arm in arms {
+                    // 自分のラベルを作成
+                    self.ir_tree.push(inst::Inst::Block(format!("L{}", jmp_labels)));
+                    jmp_labels += 1;
+                    self.id_counter += 1;
+                    self.gen_inst(&arm.body);
+                    // 自分の処理が終了したときに処理の最後の場所のラベルまでｊｍｐする
+                    self.ir_tree.push(inst::Inst::Jmp(format!("L{}", pattern_labels)));
+                    self.id_counter += 1;
+                }
+                // 条件が終了したときにジャンプする場所を指定
+                self.ir_tree.push(inst::Inst::Block(format!("L{}", pattern_labels)));
+                self.id_counter += 1;
+                return self.id_counter - 1;
+            }
         };
 
         self.ir_tree.push(inst);
 
         self.id_counter += 1;
         self.id_counter - 1
+    }
+} 
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{lex, parse, ir};
+    use super::*;
+
+    struct InstCheckList {
+        lex: lex::Lexer,
+        par: parse::Parser,
+        pub ir: ir::IR,
+    }
+
+    impl InstCheckList {
+        pub fn new() -> Self {
+            Self {
+                lex: lex::Lexer::new(),
+                par: parse::Parser::new(),
+                ir: ir::IR::new(),
+            }
+        }
+
+        pub fn gen(&mut self, contents: &str) {
+            self.lex.analy(&contents.to_string());
+            let nodes = self.par
+                .parser(self.lex.gen_tkns.clone())
+                .map_err(|v| v.print_log(&contents.to_string()))
+                .unwrap();
+            self.ir.builder(&nodes).unwrap();
+        }
+    }
+
+    /// match式の後に処理が続いているか確認
+    #[test]
+    pub fn check_match_inst() {
+        let mut list = InstCheckList::new();
+        list.gen(
+            "
+                main(): b1 {
+                    a: b1 = 0
+                    match {
+                        a < 10 {
+                            b: b1 = 5
+                        }
+                        | {
+                            b: b1 = 10
+                        }
+                    }
+                    c: b1 = 20
+                }
+            "
+        );
+        let body = list.ir.func_tree.get(&"main".to_string()).body;
+        assert_eq!(
+            body.last().unwrap(),
+            &ir::inst::Inst::Mov {
+                name: Some("c".to_string()),
+                dst: body.len() - 1,
+                src: body.len() - 2,
+            }
+        );
     }
 } 

@@ -3,12 +3,22 @@
 _start(a: a, b: b): b1 {
   c: b1 = "hello world"
 
+  a: b4 = 100
+  match {
+    a > 1 {
+    b: b4 = 100
+    }
+    | {
+	  #x64 {
+	    "mov eax, 1"
+	    "mov edi, 1"
+	    "lea esi, ${c}"
+	    "mov edx, 10"
+	    "syscall"
+	  }
+	}
+  }
   #x64 {
-    "mov eax, 1"
-    "mov edi, 1"
-    "lea esi, ${c}"
-    "mov edx, 10"
-    "syscall"
     "mov eax, 60"
     "xor edi, edi"
     "syscall"

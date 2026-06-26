@@ -7,6 +7,8 @@ pub enum ExprKind {
     Sub,
     Mul,
     Div,
+    LessThen,
+    GreaterThen,
 }
 
 pub type ValueId = usize;
@@ -31,6 +33,9 @@ impl ExprInst {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
     Expr(ExprInst),
+    Block(String),
+    Jmp(String),
+    ExpectJmp(String),// ジャンプする場所
     Mov{
         name: Option<String>,
         dst: ValueId,

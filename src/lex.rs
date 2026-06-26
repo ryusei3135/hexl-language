@@ -57,6 +57,7 @@ mod local {
         RBrace,
         Comma,
         Colon,
+        Or,
         LAngleBracket,
         RAngleBracket,
 
@@ -105,6 +106,7 @@ pub enum Tkn {
     RBrace,
     Comma,
     Colon,
+    Or,
     LAngleBracket,
     RAngleBracket,
 
@@ -114,6 +116,7 @@ pub enum Tkn {
     Name(String),
     Str(String),
     KeyWordRet,
+    KeyWordMatch,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -235,6 +238,7 @@ impl Lexer {
                 GenFlag::RBrace => Tkn::RBrace,
                 GenFlag::Comma => Tkn::Comma,
                 GenFlag::Colon => Tkn::Colon,
+                GenFlag::Or => Tkn::Or,
                 GenFlag::LAngleBracket => Tkn::LAngleBracket,
                 GenFlag::RAngleBracket => Tkn::RAngleBracket,
 
@@ -259,6 +263,7 @@ impl Lexer {
                 GenFlag::Name => {
                     match self.chr_stk.as_str() {
                         "ret" => Tkn::KeyWordRet,
+                        "match" => Tkn::KeyWordMatch,
                         _ => Tkn::Name(self.chr_stk.clone()),
                     }
                 }
@@ -301,6 +306,7 @@ impl Lexer {
             Some(':') => GenFlag::Colon,
             Some('<') => GenFlag::LAngleBracket,
             Some('>') => GenFlag::RAngleBracket,
+            Some('|') => GenFlag::Or,
             _ => return self.get_value_by_flag_ty(chr, StkResult::GenTkn),
         };
         self.over_write_flag::<true>(sym_flag);
@@ -606,7 +612,7 @@ mod tests {
         let mut lex = lexer();
         lex.analy(&"ret 5".to_string()).unwrap();
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
-        assert_eq!(tkns, vec![Tkn::KeyWord_Ret, Tkn::Number("5".to_string())]);
+        assert_eq!(tkns, vec![Tkn::KeyWordRet, Tkn::Number("5".to_string())]);
     }
 
     #[test]
