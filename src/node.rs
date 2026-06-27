@@ -82,6 +82,10 @@ pub enum Expr {
     Str(String),
     Var(String),
     CallFunc(CallInfo),
+    Assign{
+        name: String,
+        value: Box<Expr>,
+    },
     Add((Box<Expr>, Box<Expr>)),
     Sub((Box<Expr>, Box<Expr>)),
     Mul((Box<Expr>, Box<Expr>)),

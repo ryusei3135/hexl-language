@@ -20,10 +20,10 @@ use std::mem;
 //    reg: Reg,
 //    op: HashMap<String, OperandInfo>,
 
-
+#[derive(Debug)]
 struct VarIndexInfo {
-    reg: usize,
-    index: usize,
+    pub reg: usize,
+    pub index: usize,
 }
 
 pub struct AsmEmitter { 
@@ -31,10 +31,12 @@ pub struct AsmEmitter {
     data_sec_text: String,
     data_idx: usize,
     reg_idx: usize,
+    expr_vars: Vec<String>,
     // フォーマット
     reg_format: Option<Reg>,
     op_format: Option<HashMap<String, OperandInfo>>,
     pub(super) asm_setting: Option<AsmSetting>,
+    default: Option<AsmFormat>,
 
     curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
@@ -50,10 +52,12 @@ impl AsmEmitter {
             data_sec_text: String::from("section data\n"),
             data_idx: 0,
             reg_idx: 0,
+            expr_vars: Vec::new(),
             
             reg_format: None,
             op_format: None,
             asm_setting: None,
+            default: None,
 
             curr_inst: Vec::new(),
             data_map: Vec::new(),
@@ -67,9 +71,13 @@ impl AsmEmitter {
 
         // === アセンブラのフォーマットの設定 ===
         let _ = self.asm_setting.insert(asm_setting);
-        let default = self.asm_setting.as_ref().unwrap().get_default_format();
+        let default = self.asm_setting
+            .as_ref()
+            .unwrap()
+            .get_default_format();
         let _ = self.reg_format.insert(default.reg.clone());
         let _ = self.op_format.insert(default.op.clone());
+        let _ = self.default.insert(default.clone());
 
         for func in func_tree.func.clone().iter_mut() {
             // 新しく関数の作成、
@@ -106,6 +114,16 @@ impl AsmEmitter {
                     inst::Inst::Jmp(name) => {
                         self.asm_text.push_str(&format!("jmp {}\n", name));
                     }
+                    inst::Inst::AssignVar { name, value } => {
+                        self.update_value_info(&name, &value);
+
+                        let current_reg = self.reg_idx;
+
+                        if self.expr_vars.iter().find(|v| v.as_str() == name.as_str()).is_some() {
+                            self.update_value_reg(&name, &current_reg);
+                            println!("{:?}", self.var_hash_map);
+                        }
+                    }
                     inst::Inst::Ret(idx) => {
                         self.format_line(
                             &"mov".to_string(),
@@ -121,7 +139,7 @@ impl AsmEmitter {
                     inst::Inst::Mov { name, dst, src } => {
                         if self.data_map.iter().find(|v| &v.0 == src).is_some() {
                             // 子のノードがstaticりょいきの値なので、変数名だけ登録する
-                            self.insert_var_info(&name.as_ref().unwrap(), &dst);
+                            self.insert_var_info(&name.as_ref().unwrap(), &dst, self.reg_idx);
                         } else {
                             // レジスタに置く変数
                             let formated = default
@@ -130,12 +148,28 @@ impl AsmEmitter {
                                 .template
                                 .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
                                 .replace("{src}", &self.extract_operand_text(&src));
-                            if let Some(var_name) = name {
-                                self.insert_var_info(&var_name, &dst);
-                            }
                             self.reg_idx += 1;
                             self.asm_text.push_str(&formated);
+
+                            if let Some(var_name) = name {
+                                self.insert_var_info(&var_name, &dst, self.reg_idx);
+                                let current_reg = self.reg_idx;
+
+                                if self.expr_vars.iter().find(|v| v.as_str() == var_name.as_str()).is_some() {
+                                    self.update_value_reg(&var_name, &current_reg);
+                                }
+                            }
                         }
+                    }
+                    inst::Inst::Param(param) => {
+                        let reg_num = self.default
+                            .as_ref()
+                            .unwrap()
+                            .args
+                            .linux[param.num];
+                        self.insert_var_info(
+                            &param.name, &param.dst, reg_num
+                        );
                     }
                     t => panic!("{:?}", t),
                 }
@@ -154,14 +188,25 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn insert_var_info(&mut self, name: &String, index: &usize) {
+    fn insert_var_info(&mut self, name: &String, index: &usize, reg_idx: usize) {
+        self.expr_vars.push(name.clone());
         self.var_hash_map.insert(
             name.clone(),
             VarIndexInfo {
-                reg: self.reg_idx,
+                reg: reg_idx,
                 index: *index,
             }
         );
+    }
+
+    #[inline(always)]
+    fn update_value_info(&mut self, name: &String, index: &usize) {
+        self.var_hash_map.get_mut(name).unwrap().index = *index;
+    }
+
+    #[inline(always)]
+    fn update_value_reg(&mut self, name: &String, reg: &usize) {
+        self.var_hash_map.get_mut(name).unwrap().reg = *reg;
     }
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
@@ -212,6 +257,14 @@ impl AsmEmitter {
             inst::Inst::Num {  value, .. } => {
                 value
             }
+            inst::Inst::Param(param) => {
+                let num = self.var_hash_map.get(&param.name).unwrap().reg;
+
+                &self.reg_format
+                    .as_ref()
+                    .unwrap()
+                    .dd[num]
+            }
             inst::Inst::Str { .. } => {
                 self.data_map
                     .iter()
@@ -222,6 +275,7 @@ impl AsmEmitter {
             }
             inst::Inst::Mov { name, src, .. } => {
                 if let Some(var_name) = name {
+
                     let reg_num = if let Some(var) = self.var_hash_map.get(&*var_name) {
                         var.reg
                     } else {
@@ -290,7 +344,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn check_emit_match_expr() {
+    fn check_func_args() {
         //
     }
 }

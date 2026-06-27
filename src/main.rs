@@ -36,9 +36,16 @@ mod asm_setting_module {
         pub ret: usize,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct FuncArgsReg {
+        pub linux: Vec<usize>,
+        pub win: Vec<usize>
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct AsmFormat {
         pub reg: Reg,
+        pub args: FuncArgsReg,
         pub op: HashMap<String, OperandInfo>,
         pub func: Func,
     }

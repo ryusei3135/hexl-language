@@ -10,7 +10,11 @@ impl Parser {
             let ty_node = if self.current_tkn() == &lex::Tkn::Colon {
                 self.define_ty_node()?
             } else {
-                panic!("{:?}", self.current_tkn());
+                // define assign var node
+                return Ok(node::Expr::Assign {
+                    name,
+                    value: Box::new(self.expr_branch()?),
+                });
             };
 
             if self.current_tkn() == &lex::Tkn::Equal {

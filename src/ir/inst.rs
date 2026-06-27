@@ -31,6 +31,28 @@ impl ExprInst {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ParamMetaData {
+    pub name: String,
+    pub num: usize,  // 何番目の引数か？
+    pub dst: usize,
+}
+
+impl ParamMetaData {
+    pub fn new(name: String, num: usize, dst: usize) -> Self {
+        Self {
+            name,
+            num,
+            dst
+        }
+    }
+
+    pub fn get_param_reg(&self, param_regs: &Vec<usize>) -> usize {
+        param_regs[self.num].clone()
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
     Expr(ExprInst),
     Block(String),
@@ -58,6 +80,11 @@ pub enum Inst {
         name: String,
         nodes: Vec<String>,
     },
+    AssignVar{
+        name: String,
+        value: usize,
+    },
+    Param(ParamMetaData),
     Ret(ValueId),
 }
 

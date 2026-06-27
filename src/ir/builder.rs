@@ -3,7 +3,10 @@ use crate::{
     node
 };
 use std::collections::HashMap;
-use std::mem;
+use std::{
+    mem,
+    any::TypeId,
+};
 use super::*;
 
 
@@ -36,8 +39,14 @@ impl Size {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum VarType {
+    Local(usize),// 変数の値や式のidx
+    Param(usize),//これは、左から何番目の引数かを保存
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
-    pub hash: HashMap<String, usize>,
+    pub hash: HashMap<String, VarType>,
 }
 
 impl VarTree {
@@ -47,12 +56,25 @@ impl VarTree {
         }
     }
     
-    pub fn add(&mut self, name: &String, index: &usize) {
-        self.hash.insert(name.clone(), index.clone());
+    /// ## K
+    /// - `usize`の場合 local変数
+    /// - 'l' = local
+    /// - 'p' = param
+    pub fn push<const K: char>(&mut self, name: &String, index: &usize) {
+        let var = match K {
+            'l' => {
+                VarType::Local(*index)
+            }
+            'p' => {
+                VarType::Param(*index)
+            }
+            _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
+        };
+        self.hash.insert(name.clone(), var);
     }
 
-    pub fn get(&self, name: &String) -> usize {
-        *self.hash.get(name).unwrap()
+    pub fn get(&self, name: &String) -> &VarType {
+        self.hash.get(name).expect(name)
     }
 }
 
@@ -130,6 +152,7 @@ impl IR {
             match node {
                 node::Group1Node::FuncDefine(info) => {
                     self.func_ret_ty = Some(Size::new(&info.ret_ty));
+                    self.register_argument(&info.params);
                     self.gen_inst(&info.body.clone());
                     self.func_tree.add(
                         mem::take(&mut self.ir_tree),
@@ -234,6 +257,14 @@ impl IR {
             node::Expr::Number(value) => {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
             }
+            node::Expr::Assign { name, value } => {
+                let right_expr_idx = self.gen_expr_ir(*value, &expect_byte);
+
+                inst::Inst::AssignVar {
+                    name,
+                    value: right_expr_idx,
+                }
+            }
             node::Expr::Str(value) => {
                 inst::Inst::Str{
                     dst: self.id_counter,
@@ -245,7 +276,7 @@ impl IR {
                     *var.value,
                     &Size::new(&var.ty)
                 );
-                self.var_tree.add(&var.name, &value_idx);
+                self.var_tree.push::<'l'>(&var.name, &value_idx);
                 inst::Inst::Mov{
                     name: Some(mem::take(&mut var.name)),
                     dst: self.id_counter,
@@ -271,7 +302,15 @@ impl IR {
                 }
             }
             node::Expr::Var(name) => {
-                return self.var_tree.get(&name);
+                return match self.var_tree.get(&name) {
+                    VarType::Local(index) => {
+                        *index
+                    }
+                    VarType::Param(param) => {
+                        // 引数のノード
+                        *param
+                    }
+                };
             }
             node::Expr::Match{pattern, arms, arm_else} => {
                 let mut pattern_labels = 0;
@@ -325,6 +364,26 @@ impl IR {
         self.id_counter += 1;
         self.id_counter - 1
     }
+
+    /// 関数のノードを生成するときに、引数を登録
+    fn register_argument(&mut self, params: &Vec<node::ArgsNode>) {
+        for param_count in 0..params.len() {
+            self.var_tree.push::<'p'>(
+                &params[param_count].name,
+                &param_count,
+            );
+            self.ir_tree.push(
+                inst::Inst::Param(
+                    inst::ParamMetaData::new(
+                        params[param_count].name.to_string(),
+                        param_count,
+                        self.ir_tree.len()
+                    )
+                )
+            );
+            self.id_counter += 1;
+        }
+    }
 } 
 
 
@@ -356,6 +415,31 @@ mod tests {
                 .unwrap();
             self.ir.builder(&nodes).unwrap();
         }
+    }
+
+    #[test]
+    fn check_argument() {
+        let mut list = InstCheckList::new();
+        list.gen(
+            "
+            add(a: b1): b1 {
+                a = 10
+                ret a
+            }
+            "
+        );
+        let body = list.ir.func_tree.get(&"add".to_string()).body;
+        assert_eq!(
+            body,
+            vec![
+                ir::inst::Inst::Param(
+                    ir::inst::ParamMetaData::new("a".to_string(), 0, 0)
+                ),
+                ir::inst::Inst::Num { dst: 1, value: "10".to_string(), size: Size::DD },
+                ir::inst::Inst::AssignVar { name: "a".to_string(), value: 1 },
+                ir::inst::Inst::Ret(0),
+            ]
+        );
     }
 
     /// match式の後に処理が続いているか確認

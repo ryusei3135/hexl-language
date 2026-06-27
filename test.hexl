@@ -1,11 +1,20 @@
 
 
+
+add(a: b4, b: b4): b4 {
+  a = a + 100
+  b = b + 1
+  c: b4 = b
+  c = a + 2
+  ret a * 2 + c
+}
+
 _start(a: a, b: b): b1 {
   c: b1 = "hello world"
 
   a: b4 = 100
   match {
-    a > 1 {
+    a < 1 {
     b: b4 = 100
     }
     | {
