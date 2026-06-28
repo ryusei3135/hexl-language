@@ -53,6 +53,26 @@ impl ParamMetaData {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct CallFuncMetaData {
+    name: String,
+    params: Vec<ValueId>,
+}
+
+impl CallFuncMetaData {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            params: Vec::new(),
+        }
+    }
+
+    pub fn insert_param(&mut self, value_id: ValueId) {
+        self.params.push(value_id);
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
     Expr(ExprInst),
     Block(String),
@@ -72,10 +92,7 @@ pub enum Inst {
         dst: ValueId,
         value: String,
     },
-    CallFunc {
-        name: String,
-        args: Vec<ValueId>,
-    },
+    CallFunc(CallFuncMetaData),
     Comple {
         name: String,
         nodes: Vec<String>,

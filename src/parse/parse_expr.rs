@@ -7,6 +7,11 @@ type ExprResult = Result<node::Expr, err::ErrKind>;
 impl Parser {
     pub(super) fn expr_define_var(&mut self, name: String) -> ExprResult {
         let node = if self.next_tkn().is_ok() {
+            // 関数の呼び出しノードを生成
+            if self.current_tkn() == &lex::Tkn::LParen {
+                return self.call_func_expr(&name);
+            }
+
             let ty_node = if self.current_tkn() == &lex::Tkn::Colon {
                 self.define_ty_node()?
             } else {
@@ -179,6 +184,13 @@ impl Parser {
     fn expr_value(&mut self) -> ExprResult {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
+        if let lex::Tkn::Name(name) = self.current_tkn().clone() {
+            if !self.next_tkn().is_ok_and(|v| &v == &lex::Tkn::LParen) {
+                panic!();
+            }
+            return self.call_func_expr(&name);
+        }
+
         let v = match self.next_tkn()? {
             lex::Tkn::Number(value) => {
                 node::Expr::Number(value)
@@ -188,27 +200,7 @@ impl Parser {
             }
             lex::Tkn::Name(name) => {
                 if self.next_tkn_ref()? == &lex::Tkn::LParen {
-                    self.next_tkn().unwrap();
-                    let mut args = Vec::<node::Expr>::new();
-                    if self.next_tkn_ref()? != &lex::Tkn::RParen {
-                        loop {
-                            args.push(self.expr_add()?);
-                            match self.current_tkn() {
-                                lex::Tkn::Comma => continue,
-                                lex::Tkn::RParen => {},
-                                t => panic!("{:?}", t),
-                            } 
-                            break;
-                        }
-                    } else {
-                        self.next_tkn()?;
-                    }
-                    node::Expr::CallFunc(
-                        node::CallInfo {
-                            name,
-                            args
-                        }
-                    )
+                    self.call_func_expr(&name)?
                 } else {
                     node::Expr::Var(name)
                 }
@@ -235,8 +227,48 @@ impl Parser {
 
         Ok(v)
     }
-}
 
+    /// 関数を呼び出すノードを作成
+    ///
+    /// ## Panics
+    /// 現在のトークンが`lex::Tkn::LParen`でないならpanicする
+    ///
+    /// ## Safety
+    /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
+    /// である必要がある
+    fn call_func_expr(&mut self, name: &String) -> ExprResult {
+        if self.current_tkn() != &lex::Tkn::LParen {
+            panic!("call_func_exprを呼び出す際にLParenではない");
+        }
+        // 引数
+        let mut args = Vec::<node::Expr>::new();
+
+        // 関数を呼び出す式に引数がない場合は実行されない
+        if self.next_tkn_ref()? != &lex::Tkn::RParen {
+            loop {
+                // 引数の式を取得
+                args.push(self.expr_cmp()?);
+
+                match self.current_tkn() {
+                    lex::Tkn::Comma => continue,
+                    lex::Tkn::RParen => {
+                        // 関数の最後の部分に来たので、ループを終了する
+                        break;
+                    },
+                    t => panic!("{:?}", t),
+                } 
+            }
+        } 
+        // ')'をスキップ
+        self.next_tkn()?;
+        Ok(node::Expr::CallFunc(
+            node::CallInfo {
+                name: name.clone(),
+                args
+            }
+        ))
+    }
+}
 
 
 #[cfg(test)]
@@ -252,6 +284,31 @@ mod expr_tests {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         lexer.gen_tkns.clone()
+    }
+
+    #[test]
+    fn check_call_func_node() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes(
+            "main(): b1 { a(10, a) }"
+        );
+        let node::Group1Node::FuncDefine(ref node)
+            = p.parser(tkns).expect("node is err")[0]
+                else {
+                    panic!("not func");
+                };
+        assert_eq!(
+            &node.body[0],
+            &node::Expr::CallFunc(
+                node::CallInfo {
+                    name: "a".to_string(),
+                    args: vec![
+                        node::Expr::Number("10".to_string()),
+                        node::Expr::Var("a".to_string()),
+                    ]
+                }
+            ).wrap_group2()
+        );
     }
 
     #[test]

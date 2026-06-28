@@ -9,12 +9,6 @@ pub(super) enum GenFlag {
     Group2,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum ExpectTknKind {
-    Expected(lex::Tkn),
-    Free,
-}
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum StkInfo {
@@ -127,8 +121,9 @@ impl Parser {
         loop {
             let node = self.one_line_node()?;
             block.push(node);
+
             if self.current_tkn() == &lex::Tkn::RBrace {
-                return Ok(block);
+                break;
             }
         }
         Ok(block)

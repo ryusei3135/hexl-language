@@ -21,10 +21,8 @@ impl AsmEmitter {
     }
 
     pub(super) fn deploy_inline_asm(&mut self, name: &String, nodes: &Vec<String>) {
-        if self.asm_setting
-            .as_ref()
-            .unwrap()
-            .get_inline_asm_list()
+        if self.asm_fmt
+            .inline_asm_list()
             .iter()
             .find(|v| v.as_str() == name.as_str())
             .is_some()

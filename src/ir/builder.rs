@@ -5,7 +5,6 @@ use crate::{
 use std::collections::HashMap;
 use std::{
     mem,
-    any::TypeId,
 };
 use super::*;
 
@@ -168,7 +167,7 @@ impl IR {
         Ok(())
     }
 
-    fn gen_inst(&mut self, node: &Vec<node::Group2Node>) {
+    fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
         for stmt in node {
             match stmt.clone() {
                 node::Group2Node::Expr(expr) => {
@@ -188,6 +187,7 @@ impl IR {
                 }
             }
         } 
+        self.id_counter
     }
 
     /// 文のノードを生成
@@ -283,23 +283,23 @@ impl IR {
                     src: value_idx,
                 }
             }
-            node::Expr::CallFunc(func) => {
-                let info = self.func_tree.get(&func.name);
+            node::Expr::CallFunc(meta_data) => {
+                // 関数の定義を取得
+                let info = self.func_tree.get(&meta_data.name);
                 let mut arg_len = info.args.len();
-                let mut params = Vec::<usize>::new();
                 let def_args = info.args.clone();
+                // 関数のノードを作成
+                let mut func_meta_data 
+                    = inst::CallFuncMetaData::new(meta_data.name);
 
                 while arg_len > 0 {
-                    let expr_arg = func.args.get(arg_len - 1).unwrap().clone();
+                    let expr_arg = meta_data.args.get(arg_len - 1).unwrap().clone();
                     let ty = Size::new(&def_args[arg_len - 1].ty).clone();
                     let idx = self.gen_expr_ir(expr_arg, &ty);
-                    params.push(idx);
+                    func_meta_data.insert_param(idx);
                     arg_len -= 1;
                 }
-                inst::Inst::CallFunc {
-                    name: func.name.clone(),
-                    args: params,
-                }
+                inst::Inst::CallFunc(func_meta_data)
             }
             node::Expr::Var(name) => {
                 return match self.var_tree.get(&name) {
@@ -312,7 +312,7 @@ impl IR {
                     }
                 };
             }
-            node::Expr::Match{pattern, arms, arm_else} => {
+            node::Expr::Match{pattern: _, arms, arm_else} => {
                 let mut pattern_labels = 0;
                 let mut jmp_labels = 0;
 

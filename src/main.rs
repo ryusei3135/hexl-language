@@ -59,7 +59,7 @@ mod asm_setting_module {
         pub name: String,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct AsmSetting {
         // アセンブリ言語の設定ファイル
         pub settings: Vec<AsmInfos>,
@@ -96,20 +96,18 @@ mod asm_setting_module {
         //x64data
     }
 
-
+    /// アセンブリ言語のフォーマットを取得し、生成する
     pub fn gen_asm_text(mut tree: ir::FuncTree) -> String {
         let asm_settings = load_setting();
 
-        let mut writer = gen::AsmEmitter::new();
-        writer.to_asm_text(&mut tree, asm_settings)
+        let mut writer = gen::AsmEmitter::new(asm_settings);
+        writer.to_asm_text(&mut tree)
     }
 }
 
 
 /// ファイルやオプション管理
 mod cmd_line_args {
-    use super::*;
-
     pub fn get_comple_file(args: &Vec<String>) -> String {
         if args.len() > 1 {
             args[1].clone()

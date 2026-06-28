@@ -1,9 +1,4 @@
 use super::*;
-use crate::{
-    *,
-    ir::inst,
-};
-use std::mem;
 
 
 // struct Reg
@@ -32,11 +27,8 @@ pub struct AsmEmitter {
     data_idx: usize,
     reg_idx: usize,
     expr_vars: Vec<String>,
-    // フォーマット
-    reg_format: Option<Reg>,
-    op_format: Option<HashMap<String, OperandInfo>>,
-    pub(super) asm_setting: Option<AsmSetting>,
-    default: Option<AsmFormat>,
+
+    pub(super) asm_fmt: mng_fmt::MngAsmFmt, 
 
     curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
@@ -46,19 +38,15 @@ pub struct AsmEmitter {
 }
 
 impl AsmEmitter {
-    pub fn new() -> Self {
+    pub fn new(asm_setting: AsmSetting) -> Self {
         Self {
             asm_text: String::new(),
             data_sec_text: String::from("section data\n"),
             data_idx: 0,
             reg_idx: 0,
             expr_vars: Vec::new(),
-            
-            reg_format: None,
-            op_format: None,
-            asm_setting: None,
-            default: None,
 
+            asm_fmt: mng_fmt::MngAsmFmt::new(asm_setting), 
             curr_inst: Vec::new(),
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
@@ -66,18 +54,8 @@ impl AsmEmitter {
         }
     }
 
-    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_setting: AsmSetting) -> String {
+    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree) -> String {
         self.asm_text = String::new();
-
-        // === アセンブラのフォーマットの設定 ===
-        let _ = self.asm_setting.insert(asm_setting);
-        let default = self.asm_setting
-            .as_ref()
-            .unwrap()
-            .get_default_format();
-        let _ = self.reg_format.insert(default.reg.clone());
-        let _ = self.op_format.insert(default.op.clone());
-        let _ = self.default.insert(default.clone());
 
         for func in func_tree.func.clone().iter_mut() {
             // 新しく関数の作成、
@@ -94,7 +72,7 @@ impl AsmEmitter {
                         self.data_idx += 1;
                     }
                     inst::Inst::Expr(expr) => {
-                        let asm = self.format_expr_inst(&default, &expr);
+                        let asm = self.format_expr_inst(&expr);
 
                         self.asm_text.push_str(&asm);
 
@@ -126,7 +104,7 @@ impl AsmEmitter {
                     }
                     inst::Inst::Ret(idx) => {
                         self.format_line(
-                            &"mov".to_string(),
+                            "mov",
                             Some(&0),
                             &idx,
                             None
@@ -142,12 +120,11 @@ impl AsmEmitter {
                             self.insert_var_info(&name.as_ref().unwrap(), &dst, self.reg_idx);
                         } else {
                             // レジスタに置く変数
-                            let formated = default
-                                .op.get("mov")
-                                .unwrap()
-                                .template
-                                .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
+                            let formated = self.asm_fmt
+                                .get_opcode_tmpl("mov")
+                                .replace("{dst}", &self.get_reg(Some(dst)))
                                 .replace("{src}", &self.extract_operand_text(&src));
+
                             self.reg_idx += 1;
                             self.asm_text.push_str(&formated);
 
@@ -161,17 +138,15 @@ impl AsmEmitter {
                             }
                         }
                     }
+                    inst::Inst::CallFunc(meta_data) => {
+                        self.emit_call_func(&meta_data);
+                    }
                     inst::Inst::Param(param) => {
-                        let reg_num = self.default
-                            .as_ref()
-                            .unwrap()
-                            .args
-                            .linux[param.num];
+                        let reg_num = self.asm_fmt.get_fmt_param::<usize>(&param.num);
                         self.insert_var_info(
                             &param.name, &param.dst, reg_num
                         );
                     }
-                    t => panic!("{:?}", t),
                 }
             }
 
@@ -213,17 +188,13 @@ impl AsmEmitter {
     /// 通りに加工する。
     fn format_line(
         &mut self,
-        opcode: &String,
+        opcode: &str,
         dst: Option<&usize>,
         src1: &usize,
         src2: Option<&usize>
     ) -> String {
-        let formated = self.op_format
-            .as_ref()
-            .unwrap()
-            .get(opcode)
-            .unwrap()
-            .template
+        let formated = self.asm_fmt
+            .get_opcode_tmpl(opcode)
             .replace("{dst}", self.get_reg(dst))
             .replace("{src1}", self.extract_operand_text(src1));
 
@@ -236,17 +207,14 @@ impl AsmEmitter {
 
     /// ## 引数
     /// - reg_idx これは必ずusizeで無ければいけない、
-    fn get_reg(&self, reg_idx: Option<&usize>) -> &String {
-        &self.reg_format
-            .as_ref()
-            .unwrap()
-            .dd[
-                if reg_idx.is_none() {
-                    self.reg_idx
-                } else {
-                    *reg_idx.unwrap()
-                }
-            ]
+    fn get_reg(&self, reg_idx: Option<&usize>) -> &str {
+        let num = 
+            if reg_idx.is_none() {
+                self.reg_idx
+            } else {
+                *reg_idx.unwrap()
+            };
+        self.asm_fmt.get_fmt_reg(&num, &Size::DD)
     }
 
     fn extract_operand_text(
@@ -260,10 +228,7 @@ impl AsmEmitter {
             inst::Inst::Param(param) => {
                 let num = self.var_hash_map.get(&param.name).unwrap().reg;
 
-                &self.reg_format
-                    .as_ref()
-                    .unwrap()
-                    .dd[num]
+                self.asm_fmt.get_fmt_reg(&num, &Size::DD)
             }
             inst::Inst::Str { .. } => {
                 self.data_map
@@ -288,7 +253,7 @@ impl AsmEmitter {
                         &static_var.1
                     } else {
                         self.reg_idx = reg_num.clone();
-                        &self.reg_format.as_ref().unwrap().dd[reg_num.clone()]
+                        self.asm_fmt.get_fmt_reg(&reg_num, &Size::DD)
                     }
                 } else {
                     panic!();
@@ -302,11 +267,8 @@ impl AsmEmitter {
                     .iter()
                     .find(|i| &i.0 == parent_id)
                 {
-                    self.reg_format
-                        .as_ref()
-                        .unwrap()
-                        .dd[result.1]
-                        .as_str()
+                    // レジスタの文字列を取得
+                    self.asm_fmt.get_fmt_reg(&result.1, &Size::DD)
                 } else {
                     panic!("{:?}", t);
                 }
@@ -316,7 +278,6 @@ impl AsmEmitter {
 
     fn format_expr_inst(
         &mut self,
-        format: &AsmFormat,
         expr: &inst::ExprInst,
     ) -> String {
         let key = match expr.kind {
@@ -328,12 +289,12 @@ impl AsmEmitter {
             inst::ExprKind::GreaterThen => "cmp_g",
         };
 
-        format.op.get(key)
-            .unwrap()
-            .template
-            .replace("{dst}", &self.reg_format.as_ref().unwrap().dd[self.reg_idx])
+        self.asm_fmt
+            .get_opcode_tmpl(key)
+            .replace("{dst}", &self.get_reg(Some(&self.reg_idx)))
             .replace("{src1}", &self.extract_operand_text(&expr.ls))
             .replace("{src2}", &self.extract_operand_text(&expr.rs))
+            .to_string()
     }
 }
 

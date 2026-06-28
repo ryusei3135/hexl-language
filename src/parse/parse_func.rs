@@ -48,15 +48,16 @@ impl Parser {
         }
 
         let mut args_params = Vec::<node::ArgsNode>::new();
-        let mut can_create_arg = true;
+        // 引数の定義を作成可能か
+        let mut can_create_param = true;
 
         loop {
-            if !can_create_arg {
+            if !can_create_param {
                 panic!();
             }
             match self.next_tkn()? {
                 lex::Tkn::Name(name) => {
-                    if !can_create_arg {
+                    if !can_create_param {
                         panic!();
                     }
                     self.next_tkn()?;
@@ -65,21 +66,28 @@ impl Parser {
                         name: name.clone(),
                         ty,
                     });
-                    can_create_arg = false;
-                    match self.current_tkn() {
-                        lex::Tkn::RParen => {
-                            self.next_tkn()?;
-                            break;
-                        }
-                        lex::Tkn::Comma => can_create_arg = true,
-                        _ => panic!(),
-                    }
+                    can_create_param = false;
                 }
                 lex::Tkn::RParen => {
                     self.next_tkn()?;
                     break;
                 },
                 t => {panic!("{:?}", t)},
+            }
+
+            match self.current_tkn() {
+                lex::Tkn::RParen => {
+                    self.next_tkn()?;
+                    break;
+                }
+                lex::Tkn::Comma => {
+                    if !can_create_param {
+                        can_create_param = true;
+                    } else {
+                        panic!();
+                    } 
+                }
+                _ => panic!(),
             }
         }
 
