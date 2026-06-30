@@ -9,5 +9,6 @@
 	"name": "gcc_x64"
      }
   ],
-  "default": 1
+  "default": 1,
+  "entry": "_start"
 }

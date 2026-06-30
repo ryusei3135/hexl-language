@@ -72,6 +72,7 @@ mod asm_setting_module {
         pub settings: Vec<AsmInfos>,
         // デフォルトで適応するアセンブリ言語の設定
         pub default: usize,
+        pub entry: String,
     }
 
     impl AsmSetting {

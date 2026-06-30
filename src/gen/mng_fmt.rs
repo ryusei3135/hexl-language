@@ -43,6 +43,10 @@ impl MngAsmFmt {
         }
     }
 
+    pub fn get_section_fmt(&self, section: &str) -> String {
+        self.default.section.replace("{}", section)
+    }
+
     pub fn get_opcode_tmpl(&self, key: &str) -> String {
         self.opcode_fmt.get(key).unwrap().template.clone()
     }

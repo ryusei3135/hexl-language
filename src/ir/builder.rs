@@ -97,7 +97,7 @@ impl FuncTree {
     }
 
     pub fn get(&mut self, name: &String) -> FuncDefInfo {
-        self.func.remove(&String::from(name)).unwrap()
+        self.func.get(name).unwrap().clone()
     }
 
     //pub fn gen_vec(&self) -> Vec<(String, FuncDefInfo)> {

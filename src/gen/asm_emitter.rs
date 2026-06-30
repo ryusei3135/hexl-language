@@ -39,9 +39,9 @@ pub struct AsmEmitter {
 
 impl AsmEmitter {
     pub fn new(asm_setting: AsmSetting) -> Self {
-        Self {
+        let mut me = Self {
             asm_text: String::new(),
-            data_sec_text: String::from("section data\n"),
+            data_sec_text: String::new(),
             data_idx: 0,
             reg_idx: 0,
             expr_vars: Vec::new(),
@@ -51,7 +51,9 @@ impl AsmEmitter {
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
             var_hash_map: HashMap::new(),
-        }
+        };
+        me.data_sec_text.push_str(&me.asm_fmt.get_section_fmt("data"));
+        me
     }
 
     pub fn to_asm_text(&mut self, func_tree: &mut FuncTree) -> String {
@@ -120,10 +122,7 @@ impl AsmEmitter {
                             self.insert_var_info(&name.as_ref().unwrap(), &dst, self.reg_idx);
                         } else {
                             // レジスタに置く変数
-                            let formated = self.asm_fmt
-                                .get_opcode_tmpl("mov")
-                                .replace("{dst}", &self.get_reg(Some(dst)))
-                                .replace("{src}", &self.extract_operand_text(&src));
+                            let formated = self.format_line("mov", Some(dst), src, None);
 
                             self.reg_idx += 1;
                             self.asm_text.push_str(&formated);
@@ -153,7 +152,12 @@ impl AsmEmitter {
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
         }
-        format!("{}\nsection text\n{}", self.data_sec_text, self.asm_text)
+        format!(
+            "{}\n{}\n{}",
+            self.data_sec_text,
+            self.asm_fmt.get_section_fmt("text"),
+            self.asm_text
+        )
     }
 
     #[inline(always)]

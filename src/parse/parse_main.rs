@@ -69,7 +69,10 @@ impl Parser {
                     }
 
                     if self.current_tkn() == &lex::Tkn::RBrace {
-                        return Ok(&self.gen_nodes);
+                        if self.next_tkn().is_err() {
+                            return Ok(&self.gen_nodes);
+                        }
+                        self.gen_flag = GenFlag::Group1;
                     }
                     continue;
                 },
