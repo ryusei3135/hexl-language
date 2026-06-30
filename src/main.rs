@@ -38,14 +38,21 @@ mod asm_setting_module {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct FuncArgsReg {
-        pub linux: Vec<usize>,
-        pub win: Vec<usize>
+        pub fmt: HashMap<String, Vec<usize>>
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct ValueFmt {
+        pub reg: String,
+        pub num: String,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct AsmFormat {
         pub reg: Reg,
         pub args: FuncArgsReg,
+        pub section: String,
+        pub fmt: ValueFmt,
         pub op: HashMap<String, OperandInfo>,
         pub func: Func,
     }

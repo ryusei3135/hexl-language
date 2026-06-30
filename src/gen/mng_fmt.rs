@@ -19,7 +19,7 @@ impl MngAsmFmt {
         let default = asm_setting
             .get_default_format();
         Self {
-            param_fmt: default.args.linux.clone(),
+            param_fmt: default.args.fmt.get("linux").unwrap().clone(),
             reg_fmt: default.reg.clone(),
             opcode_fmt: default.op.clone(),
             asm_setting: Some(asm_setting),
@@ -47,7 +47,11 @@ impl MngAsmFmt {
         self.opcode_fmt.get(key).unwrap().template.clone()
     }
 
-    pub fn get_fmt_reg(&self, reg_num: &usize, size: &Size) -> &str {
+    pub fn get_fmt_num(&self, value: &String) -> String {
+        self.default.fmt.num.replace("{}", value).to_string()
+    }
+
+    pub fn get_fmt_reg(&self, reg_num: &usize, size: &Size) -> String {
         let reg = match size {
             Size::DB => {
                 &self.reg_fmt.db
@@ -62,7 +66,7 @@ impl MngAsmFmt {
                 &self.reg_fmt.dq
             }
         };
-        reg[*reg_num].as_str()
+        self.default.fmt.reg.replace("{}", reg[*reg_num].as_str()).to_string()
     }
 
     pub fn inline_asm_list(&self) -> Vec<String> {

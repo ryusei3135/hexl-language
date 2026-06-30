@@ -195,11 +195,11 @@ impl AsmEmitter {
     ) -> String {
         let formated = self.asm_fmt
             .get_opcode_tmpl(opcode)
-            .replace("{dst}", self.get_reg(dst))
-            .replace("{src1}", self.extract_operand_text(src1));
+            .replace("{dst}", &self.get_reg(dst))
+            .replace("{src1}", &self.extract_operand_text(src1));
 
         if let Some(src2_id) = src2 {
-            formated.replace("{src2}", self.extract_operand_text(src2_id))
+            formated.replace("{src2}", &self.extract_operand_text(src2_id))
         } else {
             formated
         }
@@ -207,7 +207,7 @@ impl AsmEmitter {
 
     /// ## 引数
     /// - reg_idx これは必ずusizeで無ければいけない、
-    fn get_reg(&self, reg_idx: Option<&usize>) -> &str {
+    fn get_reg(&self, reg_idx: Option<&usize>) -> String {
         let num = 
             if reg_idx.is_none() {
                 self.reg_idx
@@ -220,10 +220,10 @@ impl AsmEmitter {
     fn extract_operand_text(
         &mut self,
         parent_id: &usize,
-    ) -> &str {
+    ) -> String {
         match &self.curr_inst[*parent_id] {
             inst::Inst::Num {  value, .. } => {
-                value
+                self.asm_fmt.get_fmt_num(&value)
             }
             inst::Inst::Param(param) => {
                 let num = self.var_hash_map.get(&param.name).unwrap().reg;
@@ -236,7 +236,7 @@ impl AsmEmitter {
                     .find(|v| &v.0 == parent_id)
                     .unwrap()
                     .1
-                    .as_str()
+                    .clone()
             }
             inst::Inst::Mov { name, src, .. } => {
                 if let Some(var_name) = name {
@@ -250,7 +250,7 @@ impl AsmEmitter {
                     if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
                         // static領域の変数を返す:
                         //self.var_hash_map.entry(var_name.to_string()).or_insert(0);
-                        &static_var.1
+                        static_var.1.clone()
                     } else {
                         self.reg_idx = reg_num.clone();
                         self.asm_fmt.get_fmt_reg(&reg_num, &Size::DD)
@@ -260,7 +260,7 @@ impl AsmEmitter {
                 } 
             }
             inst::Inst::Block(name) => {
-                name
+                name.to_string()
             }
             t => {
                 if let Some(result) = self.last_inst_idx

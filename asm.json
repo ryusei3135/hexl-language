@@ -3,7 +3,11 @@
      {
 	"file": "x64.json",
 	"name": "x64"
+     },
+     {
+	"file": "gcc_x64.json",
+	"name": "gcc_x64"
      }
   ],
-  "default": 0
+  "default": 1
 }
