@@ -4,6 +4,20 @@
 ## [Unreleased]
 
 
+## [0.4.12] - 2026-07-02
+
+### Changed
+- ファイルの構成を変更
+#### 変更ファイル
+- src/parse/mod.rs -> src/parse.rs
+- src/ir/mod.rs -> src/ir.rs
+- src/gen/mod.rs -> src/gen.rs
+- src/parse/parse_main -> src/parse/stmt.rs
+- src/parse/parse_expr -> src/parse/expr.rs
+- src/parse/parse_func -> src/parse/func.rs
+
+
+
 ## [0.4.11] - 2026-06-30
 ### Fixed
 - 関数を二個以上定義すると出力が必ず関数一個になるバグを修正
