@@ -54,8 +54,8 @@ impl ParamMetaData {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallFuncMetaData {
-    name: String,
-    params: Vec<ValueId>,
+    pub name: String,
+    pub params: Vec<ValueId>,
 }
 
 impl CallFuncMetaData {
@@ -66,7 +66,7 @@ impl CallFuncMetaData {
         }
     }
 
-    pub fn insert_param(&mut self, value_id: ValueId) {
+    pub fn insert_param_parent_id(&mut self, value_id: ValueId) {
         self.params.push(value_id);
     }
 }

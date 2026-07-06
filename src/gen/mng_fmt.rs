@@ -28,6 +28,11 @@ impl MngAsmFmt {
     }
 
     /// 設定された、関数の引数のレジスタを返す
+    /// ## Rについて
+    /// - Stringの場合はレジスタが返される
+    /// - usizeの場合はレジスタの番号が返される
+    /// ## 引数
+    /// - param_idx = 引数の場所
     pub fn get_fmt_param<R: 'static>(&self, param_idx: &usize) -> R {
         if TypeId::of::<R>() == TypeId::of::<String>() {
             let result: Box<dyn Any> = Box::new(
@@ -53,6 +58,10 @@ impl MngAsmFmt {
 
     pub fn get_fmt_num(&self, value: &String) -> String {
         self.default.fmt.num.replace("{}", value).to_string()
+    }
+
+    pub fn get_call_func_fmt(&self, func_name: &String) -> String {
+        self.default.func.call.replace("{name}", func_name)
     }
 
     pub fn get_fmt_reg(&self, reg_num: &usize, size: &Size) -> String {

@@ -99,6 +99,9 @@ impl Parser {
                     self.expr_add()?
                 ).wrap()
             }
+            lex::Tkn::KeyWordLoop => {
+                self.make_loop_node()?
+            }
             lex::Tkn::KeyWordMatch => {
                 self.next_tkn()?;
                 let n = self.expr_match()?;
@@ -114,6 +117,37 @@ impl Parser {
             }
             t => panic!("{:?}", t),
         };
+        Ok(node)
+    }
+
+    /// 反復処理のノードを作成する関数
+    fn make_loop_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
+        // 反復処理の条件式
+        let pattern = match self.next_tkn_ref()? {
+            // "{"の場合は条件無し
+            lex::Tkn::LBrace => {
+                None
+            }
+            // 条件式あり
+            _ => {
+                Some(Box::new(self.expr_cmp()?))
+            }
+        };
+        // "{"をスキップ
+        if self.current_tkn() != &lex::Tkn::LBrace {
+            panic!();
+        }
+        self.next_tkn()?;
+
+        let body = self.gen_block_node()?;
+        self.next_tkn()?;
+
+        let node = node::Group2Node::Expr(
+            node::Expr::Loop {
+                pattern,
+                body
+            }
+        );
         Ok(node)
     }
 

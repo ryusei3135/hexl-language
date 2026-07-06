@@ -117,6 +117,7 @@ pub enum Tkn {
     Str(String),
     KeyWordRet,
     KeyWordMatch,
+    KeyWordLoop,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -264,6 +265,7 @@ impl Lexer {
                     match self.chr_stk.as_str() {
                         "ret" => Tkn::KeyWordRet,
                         "match" => Tkn::KeyWordMatch,
+                        "loop" => Tkn::KeyWordLoop,
                         _ => Tkn::Name(self.chr_stk.clone()),
                     }
                 }

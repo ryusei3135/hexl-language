@@ -97,6 +97,10 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         arm_else: Option<Vec<Group2Node>>,
     },
+    Loop {
+        pattern: Option<Box<Expr>>,
+        body: Vec<Group2Node>
+    },
 
     DefVar(DefineVar),
 }

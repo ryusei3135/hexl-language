@@ -1,0 +1,9 @@
+
+func(a: b4, b: b4): b4 {
+	ret a + b
+}
+
+_start(): b1 {
+	a = func(1, 2)
+	ret a
+}

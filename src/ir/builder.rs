@@ -130,6 +130,8 @@ pub struct IR {
     func_ret_ty: Option<Size>,
     ir_tree: Vec<inst::Inst>,
     branch_top: usize,
+    pattern_labels: usize,
+    jmp_labels: usize,
 }
 
 
@@ -143,6 +145,8 @@ impl IR {
             func_ret_ty: None,
             ir_tree: Vec::new(),
             branch_top: 0,
+            pattern_labels: 0,
+            jmp_labels: 0,
         }
     }
 
@@ -285,9 +289,9 @@ impl IR {
             }
             node::Expr::CallFunc(meta_data) => {
                 // 関数の定義を取得
-                let info = self.func_tree.get(&meta_data.name);
-                let mut arg_len = info.args.len();
-                let def_args = info.args.clone();
+                let defined_func_data = self.func_tree.get(&meta_data.name);
+                let mut arg_len = defined_func_data.args.len();
+                let def_args = defined_func_data.args.clone();
                 // 関数のノードを作成
                 let mut func_meta_data 
                     = inst::CallFuncMetaData::new(meta_data.name);
@@ -295,10 +299,11 @@ impl IR {
                 while arg_len > 0 {
                     let expr_arg = meta_data.args.get(arg_len - 1).unwrap().clone();
                     let ty = Size::new(&def_args[arg_len - 1].ty).clone();
-                    let idx = self.gen_expr_ir(expr_arg, &ty);
-                    func_meta_data.insert_param(idx);
+                    let idx = self.gen_expr_ir(expr_arg, &ty) - 1;
+                    func_meta_data.insert_param_parent_id(idx);
                     arg_len -= 1;
                 }
+                self.id_counter += 1;
                 inst::Inst::CallFunc(func_meta_data)
             }
             node::Expr::Var(name) => {
@@ -312,50 +317,11 @@ impl IR {
                     }
                 };
             }
-            node::Expr::Match{pattern: _, arms, arm_else} => {
-                let mut pattern_labels = 0;
-                let mut jmp_labels = 0;
-
-                // 条件の式を生成
-                if arms.len() == 1 {
-                    // 条件が一つだけの場合
-                    self.gen_expr_ir(*arms[0].pattern.clone(), &Size::DD);
-                    pattern_labels += 1;
-                    self.ir_tree.push(inst::Inst::ExpectJmp(format!("L{}", pattern_labels)));
-                    self.id_counter += 1;
-                } else {
-                    // 条件が複数の場合
-                    for arm in arms.clone() {
-                        self.gen_expr_ir(*arm.pattern, &Size::DD);
-                        self.ir_tree.push(inst::Inst::Jmp(format!("L{}", pattern_labels)));
-                        self.id_counter += 1;
-                        pattern_labels += 1;
-                    }
-                }
-
-                // elseの処理を作成
-                pattern_labels += 1;
-                if let Some(arm) = arm_else.clone() {
-                    self.gen_inst(&arm);
-                    self.ir_tree.push(inst::Inst::Jmp(format!("L{}", pattern_labels)));
-                    self.id_counter += 1;
-                    jmp_labels += 1;
-                }
-                // 処理内容の作成
-                for arm in arms {
-                    // 自分のラベルを作成
-                    self.ir_tree.push(inst::Inst::Block(format!("L{}", jmp_labels)));
-                    jmp_labels += 1;
-                    self.id_counter += 1;
-                    self.gen_inst(&arm.body);
-                    // 自分の処理が終了したときに処理の最後の場所のラベルまでｊｍｐする
-                    self.ir_tree.push(inst::Inst::Jmp(format!("L{}", pattern_labels)));
-                    self.id_counter += 1;
-                }
-                // 条件が終了したときにジャンプする場所を指定
-                self.ir_tree.push(inst::Inst::Block(format!("L{}", pattern_labels)));
-                self.id_counter += 1;
-                return self.id_counter - 1;
+            node::Expr::Match{pattern, arms, arm_else} => {
+                return self.gen_match_expr_ir(&pattern, &arms, &arm_else);
+            }
+            node::Expr::Loop { pattern, body } => {
+                panic!();
             }
         };
 
@@ -363,6 +329,50 @@ impl IR {
 
         self.id_counter += 1;
         self.id_counter - 1
+    }
+
+    #[inline(always)]
+    fn gen_match_expr_ir(
+        &mut self,
+        pattern: &Option<Box<node::Expr>>,
+        arms: &Vec<node::MatchArm>,
+        arm_else: &Option<Vec<node::Group2Node>>
+    ) -> usize {
+        if let Some(pattern) = pattern {
+            //
+        }
+
+        // 条件分岐の塊を作成
+        if arms.len() == 1 {
+            crate::push_jmp_code!(self, ExpectJmp, format!("L{}", self.pattern_labels));
+            // 条件が一つだけの場合]
+            // 条件式の生成
+            self.gen_expr_ir(*arms[0].pattern.clone(), &Size::DD);
+            self.pattern_labels += 1;
+            //self.push_jmp_code(self.pattern_labels);
+        } else {
+            // 条件が複数の場合
+            for arm in arms.clone() {
+                crate::push_jmp_code!(self, ExpectJmp, format!("L{}", self.pattern_labels));
+                self.gen_expr_ir(*arm.pattern, &Size::DD);
+            }
+        }
+
+        // elseの処理を作成
+        self.pattern_labels += 1;
+        if let Some(arm) = arm_else.clone() {
+            self.gen_inst(&arm);
+            crate::push_jmp_code!(self, Jmp, format!("L{}", self.pattern_labels));
+        }
+        // 処理内容の作成
+        for arm in arms {
+            // 自分のラベルを作成
+            crate::push_jmp_code!(self, Block, format!("L{}", self.jmp_labels));
+            self.gen_inst(&arm.body);
+        }
+        // 条件が終了したときにジャンプする場所を指定
+        crate::push_jmp_code!(self, Block, format!("L{}", self.pattern_labels));
+        return self.id_counter - 1;
     }
 
     /// 関数のノードを生成するときに、引数を登録
@@ -463,6 +473,7 @@ mod tests {
             "
         );
         let body = list.ir.func_tree.get(&"main".to_string()).body;
+        println!("{:?}", body);
         assert_eq!(
             body.last().unwrap(),
             &ir::inst::Inst::Mov {

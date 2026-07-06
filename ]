@@ -26,7 +26,6 @@ pub struct AsmEmitter {
     data_idx: usize,
     reg_idx: usize,
     expr_vars: Vec<String>,
-    reserved_label_name: Option<String>,
 
     pub(super) asm_fmt: mng_fmt::MngAsmFmt, 
 
@@ -45,7 +44,6 @@ impl AsmEmitter {
             data_idx: 0,
             reg_idx: 0,
             expr_vars: Vec::new(),
-            reserved_label_name: None,
 
             asm_fmt: mng_fmt::MngAsmFmt::new(asm_setting), 
             curr_inst: Vec::new(),
@@ -67,21 +65,15 @@ impl AsmEmitter {
 
             for node in self.curr_inst.clone().iter() {
                 match &node {
-                    inst::Inst::ExpectJmp(name) => {
-                        // 次のフォーマットに使うラベルの名前を予約する
-                        if self.reserved_label_name.is_none() {
-                            self.reserved_label_name = Some(name.to_string());
-                        } else {
-                            // 予約するラベルの名前は予約するときにNoneで無ければいけない
-                            panic!("system err");
-                        }
-                    }
                     inst::Inst::Str { dst, value } => {
                         self.data_sec_text.push_str(
                             &format!("M{}: db \"{}\"\n", self.data_idx.to_string(), value)
                         );
                         self.data_map.push((*dst, format!("M{}", self.data_idx.to_string())));
                         self.data_idx += 1;
+                    }
+                    inst::Inst::ExpectJmp(name) => {
+                        self.asm_text = self.asm_text.replace("{label}", name);
                     }
                     inst::Inst::Expr(expr) => {
                         let asm = self.format_expr_inst(&expr);
@@ -304,24 +296,12 @@ impl AsmEmitter {
             inst::ExprKind::GreaterThen => "cmp_g",
         };
 
-        let formated = self.asm_fmt
+        self.asm_fmt
             .get_opcode_tmpl(key)
             .replace("{dst}", &self.get_reg(Some(&self.reg_idx)))
             .replace("{src1}", &self.extract_operand_text(&expr.ls))
             .replace("{src2}", &self.extract_operand_text(&expr.rs))
-            .to_string();
-
-        if let Some(ref name) = self.reserved_label_name.take() {
-            // ラベルの予約があるかつフォーマット中の文字列に"{label}"
-            // がない場合はシステムエラー
-            if formated.find("{label}").is_some() {
-                formated.replace("{label}", name)
-            } else {
-                panic!("system err");
-            }
-        } else {
-            formated
-        }
+            .to_string()
     }
 }
 

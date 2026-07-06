@@ -4,6 +4,7 @@ mod err;
 mod parse;
 mod node;
 mod ir;
+mod macros;
 
 use std::fs;
 use std::env;
@@ -34,6 +35,7 @@ mod asm_setting_module {
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Func {
         pub ret: usize,
+        pub call: String,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
