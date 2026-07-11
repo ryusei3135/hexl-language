@@ -29,24 +29,29 @@
   "section": ".{name}\n",
   "fmt": {
 	"reg": "%{}",
-	"num": "${}"
+	"num": "${}",
+    "static_var": "{name}(%rip)",
+    "string": "{name}: .ascii \"{}\"",
+    "global": ".global {name}\n"
   },
   "op": {
+      "push": {"len": 1, "template": "{space}push {dst}\n"},
+      "pop": {"len": 1, "template": "{space}pop {dst}\n"},
     "add": {
         "len": 2,
-        "template": "{space}mov {src1}, {dst}\n{space}add {src2}, {dst}\n"
+        "template": "{space}mov {src1}, {dst}\n{space}add {dst}, {src2}\n"
     },
     "sub": {
         "len": 2,
-        "template": "{space}mov {src1}, {dst}\n{space}sub {src2}, {dst}\n"
+        "template": "{space}mov {src1}, {dst}\n{space}sub {dst}, {src2}\n"
     },
     "mul": {
         "len": 2,
-        "template": "{space}mov {src1}, {dst}\n{space}mul {src2}, {dst}\n"
+        "template": "{space}mov {src1}, {dst}\n{space}mul {dst}, {src2}\n"
     },
     "div": {
         "len": 2,
-        "template": "{space}mov {src1}, {dst}\n{space}div {src2}, {dst}\n"
+        "template": "{space}mov {src1}, {dst}\n{space}div {dst}, {src2}\n"
     },
     "mov": {
         "len": 2,
@@ -54,11 +59,11 @@
     },
     "cmp_l": {
         "len": 2,
-        "template": "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jl {label}\n"
+        "template": "{space}mov {src1}, {dst}\n{space}cmp {dst}, {src2}\n{space}jl {label}\n"
     },
     "cmp_g": {
         "len": 2,
-        "template": "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jg {label}\n"
+        "template": "{space}mov {src1}, {dst}\n{space}cmp {dst}, {src2}\n{space}jg {label}\n"
     },
     "ret": {
         "len": 1,

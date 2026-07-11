@@ -15,9 +15,10 @@ impl AsmEmitter {
             let param_reg = self.asm_fmt.get_fmt_param::<usize>(&index);
             // 引数のレジスタと値のidを挿入
             let param_asm = self.format_line("mov", Some(&param_reg), &param, None);
+            println!("{:?}", param);
             call_func.push_str(&param_asm);
         }
-        self.asm_fmt.get_call_func_fmt(&meta_data.name);
+        call_func.push_str(&self.asm_fmt.get_call_func_fmt(&meta_data.name));
         call_func
     }
 }

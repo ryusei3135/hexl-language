@@ -1,5 +1,6 @@
 use regex::{Captures, Regex};
 use super::*;
+use crate::asm_setting;
 
 
 
@@ -23,6 +24,17 @@ impl AsmEmitter {
         name: &String,
         nodes: &Vec<String>,
     ) {
+        // inlineアセンブラの中に現在使用中のレジスタがあるかを確認
+        let search_reg = |asm_fmt: &asm_setting::AsmFormat, target: &String| -> Option<String> {
+            self.var_hash_map
+                .iter()
+                .find(|&(_name, ref info)| {
+                        let reg_txt = asm_fmt.get_fmt_reg(&info.reg, &Size::DD);
+                        target.contains(&reg_txt)
+                    }
+                )
+                .map(|v| asm_fmt.get_fmt_reg(&v.1.reg, &Size::DD))
+        };
 
         let mut pushed_regs: Vec<String> = Vec::new();
 
@@ -36,9 +48,9 @@ impl AsmEmitter {
             for ref one_line in nodes.iter() { 
                 // もしinlineアセンブラの中に現在使用中のレジスタがある場合は
                 // スタックするアセンブリコードを生成する
-                if let Some(reg) = self.search_reg(&self.asm_fmt, &one_line) {
+                if let Some(reg) = search_reg(&one_line) {
                     pushed_regs.push(reg.clone());
-                    self.asm_text.push_str(&self.asm_fmt.get_push(&reg));
+                    self.asm_text.push_str(self.asm_fmt.get_push(&reg).as_str());
                 }
 
                 let line = self.format_inline_asm(&one_line);
@@ -48,22 +60,11 @@ impl AsmEmitter {
             }
             self.asm_text.push_str(&inline_asm);
 
-            while let Some(poped) = pushed_regs.pop() {
+            for poped in pushed_regs.pop() {
                 self.asm_text.push_str(self.asm_fmt.get_pop(&poped).as_str());
             }
         } else {
             panic!();
         }
-    }
-
-    pub fn search_reg(&self, asm_fmt: &mng_fmt::MngAsmFmt, target: &String) -> Option<String> {
-        self.var_hash_map
-            .iter()
-            .find(|&(_name, ref info)| {
-                    let reg_txt = asm_fmt.get_fmt_reg(&info.reg, &Size::DD);
-                    target.contains(&reg_txt)
-                }
-            )
-            .map(|v| asm_fmt.get_fmt_reg(&v.1.reg, &Size::DQ))
     }
 }

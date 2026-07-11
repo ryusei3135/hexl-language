@@ -37,6 +37,9 @@ pub struct FuncArgsReg {
 pub struct ValueFmt {
     pub reg: String,
     pub num: String,
+    pub static_var: String,
+    pub string: String,
+    pub global: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

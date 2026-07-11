@@ -15,8 +15,8 @@ use crate::asm_setting;
 //    reg: Reg,
 //    op: HashMap<String, OperandInfo>,
 
-#[derive(Debug)]
-struct VarIndexInfo {
+#[derive(Debug, Clone)]
+pub struct VarIndexInfo {
     pub reg: usize,
     pub index: usize,
 }
@@ -35,7 +35,7 @@ pub struct AsmEmitter {
     // (親のid, 変数の名前)
     data_map: Vec<(usize, String)>,
     last_inst_idx: Vec<(usize, usize)>,
-    var_hash_map: HashMap<String, VarIndexInfo>,
+    pub(super) var_hash_map: HashMap<String, VarIndexInfo>,
 }
 
 impl AsmEmitter {
@@ -62,7 +62,7 @@ impl AsmEmitter {
     }
 
     pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_fmt_name: &Option<String>) -> String {
-        self.asm_text = String::new();
+        self.asm_text = String::from(&self.asm_fmt.get_entry_point());
 
         for func in func_tree.func.clone().iter_mut() {
             // 新しく関数の作成、
@@ -81,13 +81,14 @@ impl AsmEmitter {
                         }
                     }
                     inst::Inst::Str { dst, value } => {
-                        self.data_sec_text.push_str(
-                            &format!("M{}: db \"{}\"\n", self.data_idx.to_string(), value)
-                        );
-                        self.data_map.push((*dst, format!("M{}", self.data_idx.to_string())));
+                        let label_name = format!("M{}", self.data_idx.to_string());
+                        let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
+                        self.data_sec_text.push_str(&fmt_data);
+                        self.data_map.push((*dst, label_name));
                         self.data_idx += 1;
                     }
                     inst::Inst::Expr(expr) => {
+                        println!("{:?}", expr);
                         let asm = self.format_expr_inst(&expr);
 
                         self.asm_text.push_str(&asm);
@@ -104,7 +105,7 @@ impl AsmEmitter {
                     }
                     inst::Inst::Comple{name, nodes} => {
                         if let Some(asm_name) = asm_fmt_name {
-                            if name.as_str() == asm_name {
+                            if name.as_str() == asm_name.as_str() {
                                 self.deploy_inline_asm(&name, &nodes);
                             } else {
                                 panic!("unmatch asm name");
@@ -123,7 +124,7 @@ impl AsmEmitter {
 
                         if self.expr_vars.iter().find(|v| v.as_str() == name.as_str()).is_some() {
                             self.update_value_reg(&name, &current_reg);
-                            println!("{:?}", self.var_hash_map);
+                            println!(">> {:?}", self.var_hash_map);
                         }
                     }
                     inst::Inst::Ret(idx) => {
@@ -166,6 +167,7 @@ impl AsmEmitter {
                             &param.name, &param.dst, reg_num
                         );
                     }
+                    _ => {}
                 }
             }
 
@@ -182,7 +184,7 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
-        let index = self.var_hash_map.get(name).unwrap().index;
+        let index = self.var_hash_map.get(name).expect(&format!("this -> {}", name)).index;
         self.extract_operand_text(&index).to_string()
     }
 
@@ -252,6 +254,10 @@ impl AsmEmitter {
             inst::Inst::Param(param) => {
                 let num = self.var_hash_map.get(&param.name).unwrap().reg;
 
+                self.asm_fmt.get_fmt_reg(&num, &Size::DD)
+            }
+            inst::Inst::AssignVar { ref name, .. } => {
+                let num = self.var_hash_map.get(&name.to_string()).unwrap().reg;
                 self.asm_fmt.get_fmt_reg(&num, &Size::DD)
             }
             inst::Inst::Str { .. } => {

@@ -2,28 +2,25 @@
 
 
 add(a: b4, b: b4): b4 {
+    c: b1 = "hello world"
     loop a > 10 {
-        b = b + 1
+        #gcc_x64 {
+            "{space}mov $1, %eax"
+            "{space}mov $1, %edi"
+            "{space}lea ${c}(%rip), %rsi"
+            "{space}mov $10, %edx"
+            "{space}syscall"
+        }
         a = a - 1
     }
     ret b
 }
 
-_start(a: a, b: b): b1 {
-    c: b1 = "hello world"
-    match {
-        10 < 1 {
-            add(15, 1)
-        }
-        | {
-            add(3, 3)
-        }
-    }
-    #x64 {
-        "mov eax, 1"
-        "mov edi, 1"
-        "lea esi, ${c}"
-        "mov edx, 10"
-        "syscall"
+main(): b1 {
+    add(20, 1)
+    #gcc_x64 {
+        "{space}mov $0, %eax"
+        "{space}mov $60, %edi"
+        "{space}syscall"
     }
 }

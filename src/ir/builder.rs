@@ -286,18 +286,16 @@ impl IR {
             node::Expr::CallFunc(meta_data) => {
                 // 関数の定義を取得
                 let defined_func_data = self.func_tree.get(&meta_data.name);
-                let mut arg_len = defined_func_data.args.len();
                 let def_args = defined_func_data.args.clone();
                 // 関数のノードを作成
                 let mut func_meta_data 
                     = inst::CallFuncMetaData::new(meta_data.name);
 
-                while arg_len > 0 {
-                    let expr_arg = meta_data.args.get(arg_len - 1).unwrap().clone();
-                    let ty = Size::new(&def_args[arg_len - 1].ty).clone();
-                    let idx = self.gen_expr_ir(expr_arg, &ty) - 1;
+                for (index, _) in meta_data.args.iter().enumerate() {
+                    let expr_arg = meta_data.args.get(index).unwrap().clone();
+                    let ty = Size::new(&def_args[index].ty).clone();
+                    let idx = self.gen_expr_ir(expr_arg, &ty);
                     func_meta_data.insert_param_parent_id(idx);
-                    arg_len -= 1;
                 }
                 self.id_counter += 1;
                 inst::Inst::CallFunc(func_meta_data)
@@ -401,16 +399,16 @@ impl IR {
 
     /// 関数のノードを生成するときに、引数を登録
     fn register_argument(&mut self, params: &Vec<node::ArgsNode>) {
-        for param_count in 0..params.len() {
+        for (index, param) in params.iter().enumerate() {
             self.var_tree.push::<'p'>(
-                &params[param_count].name,
-                &param_count,
+                &param.name,
+                &index,
             );
             self.ir_tree.push(
                 inst::Inst::Param(
                     inst::ParamMetaData::new(
-                        params[param_count].name.to_string(),
-                        param_count,
+                        param.name.to_string(),
+                        index,
                         self.ir_tree.len()
                     )
                 )

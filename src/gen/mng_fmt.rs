@@ -50,14 +50,37 @@ impl MngAsmFmt {
         }
     }
 
-    pub fn get_section_fmt(&self, section: &str) -> String {
-        self.fmt.section.replace("{}", section)
+    pub fn get_push(&self, reg: &String) -> String {
+        self.get_opcode_tmpl(&"push".to_string()).replace("{dst}", reg)
     }
 
+    pub fn get_pop(&self, reg: &String) -> String {
+        self.get_opcode_tmpl(&"pop".to_string()).replace("{dst}", reg)
+    }
+
+    pub fn get_str_fmt(&self, value: &String, label: &String) -> String {
+        self.fmt.fmt.string
+            .replace("{}", value)
+            .replace("{name}", &label)
+    }
+    
+    /// エントリーポイントを作成
+    pub fn get_entry_point(&self) -> String {
+        self.fmt.fmt.global
+            .replace("{name}", &self.asm_setting.as_ref().unwrap().entry)
+    }
+
+    /// アセンブリ言語のセクションを定義するフォーマット
+    pub fn get_section_fmt(&self, section: &str) -> String {
+        self.fmt.section.replace("{name}", section)
+    }
+
+    /// オペコードのフォーマット
     pub fn get_opcode_tmpl(&self, key: &str) -> String {
         self.opcode_fmt.get(key).unwrap().template.clone()
     }
 
+    /// 数字のフォーマット
     pub fn get_fmt_num(&self, value: &String) -> String {
         self.fmt.fmt.num.replace("{}", value).to_string()
     }

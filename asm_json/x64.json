@@ -29,7 +29,8 @@
   "section": "section {name}\n",
   "fmt": {
 	"reg": "{}",
-	"num": "{}"
+	"num": "{}",
+    "string": "{name}: db {}"
   },
   "op": {
         "add": {
