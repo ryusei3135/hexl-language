@@ -61,7 +61,7 @@ impl AsmEmitter {
         me
     }
 
-    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree) -> String {
+    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_fmt_name: &Option<String>) -> String {
         self.asm_text = String::new();
 
         for func in func_tree.func.clone().iter_mut() {
@@ -103,7 +103,15 @@ impl AsmEmitter {
                         self.asm_text.push_str(&format!("{}:\n", name));
                     }
                     inst::Inst::Comple{name, nodes} => {
-                        self.deploy_inline_asm(&name, &nodes);
+                        if let Some(asm_name) = asm_fmt_name {
+                            if name.as_str() == asm_name {
+                                self.deploy_inline_asm(&name, &nodes);
+                            } else {
+                                panic!("unmatch asm name");
+                            }
+                        } else {
+                            self.deploy_inline_asm(&name, &nodes);
+                        }
                     }
                     inst::Inst::Jmp(name) => {
                         self.asm_text.push_str(&format!("jmp {}\n", name));
@@ -329,14 +337,3 @@ impl AsmEmitter {
     }
 }
 
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn check_func_args() {
-        //
-    }
-}

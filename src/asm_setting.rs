@@ -116,5 +116,5 @@ pub fn gen_asm_text(
 
     let asm_fmt = asm_settings.get_asm_fmt(inline_name);
     let mut writer = gen::AsmEmitter::new(asm_settings, asm_fmt);
-    writer.to_asm_text(&mut tree)
+    writer.to_asm_text(&mut tree, &inline_name)
 }
