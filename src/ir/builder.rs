@@ -126,10 +126,8 @@ pub struct IR {
     pub var_tree: VarTree,
     pub func_tree: FuncTree,
     id_counter: usize,
-    jmp_label_counter: usize,
     func_ret_ty: Option<Size>,
     ir_tree: Vec<inst::Inst>,
-    branch_top: usize,
     pattern_labels: usize,
     jmp_labels: usize,
 }
@@ -141,10 +139,8 @@ impl IR {
             var_tree: VarTree::new(),
             func_tree: FuncTree::new(),
             id_counter: 0,
-            jmp_label_counter: 0,
             func_ret_ty: None,
             ir_tree: Vec::new(),
-            branch_top: 0,
             pattern_labels: 0,
             jmp_labels: 0,
         }
@@ -321,7 +317,7 @@ impl IR {
                 return self.gen_match_expr_ir(&pattern, &arms, &arm_else);
             }
             node::Expr::Loop { pattern, body } => {
-                panic!();
+                return self.gen_loop_expr_ir(pattern, &body);
             }
         };
 
@@ -332,19 +328,47 @@ impl IR {
     }
 
     #[inline(always)]
+    fn gen_loop_expr_ir(
+        &mut self,
+        pattern: Option<Box<node::Expr>>,
+        body: &Vec<node::Group2Node>,
+    ) -> usize {
+        // 反復処理が始まる場所を作成
+        let start = self.pattern_labels;
+        self.pattern_labels += 1;
+        let end = self.pattern_labels;
+        self.pattern_labels += 1;
+        crate::push_jmp_code!(self, Block, start.clone());
+
+        // ループする条件の作成
+        if let Some(expr) = pattern {
+            crate::push_jmp_code!(self, ExpectJmp, &self.pattern_labels);
+            let _ = self.gen_expr_ir(*expr, &Size::DD);
+            // もし条件がfalseならendまでジャンプ
+            crate::push_jmp_code!(self, Jmp, &end);
+            // 条件がtrueのときジャンプする場所
+            crate::push_jmp_code!(self, Block, &self.pattern_labels);
+        }
+        self.gen_inst(&body);
+        crate::push_jmp_code!(self, Jmp, &start);
+        crate::push_jmp_code!(self, Block, &end);
+        self.id_counter - 1
+    }
+
+    #[inline(always)]
     fn gen_match_expr_ir(
         &mut self,
         pattern: &Option<Box<node::Expr>>,
         arms: &Vec<node::MatchArm>,
         arm_else: &Option<Vec<node::Group2Node>>
     ) -> usize {
-        if let Some(pattern) = pattern {
+        if let Some(_expr) = pattern {
             //
         }
 
         // 条件分岐の塊を作成
         if arms.len() == 1 {
-            crate::push_jmp_code!(self, ExpectJmp, format!("L{}", self.pattern_labels));
+            crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
             // 条件が一つだけの場合]
             // 条件式の生成
             self.gen_expr_ir(*arms[0].pattern.clone(), &Size::DD);
@@ -353,7 +377,7 @@ impl IR {
         } else {
             // 条件が複数の場合
             for arm in arms.clone() {
-                crate::push_jmp_code!(self, ExpectJmp, format!("L{}", self.pattern_labels));
+                crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
                 self.gen_expr_ir(*arm.pattern, &Size::DD);
             }
         }
@@ -362,16 +386,16 @@ impl IR {
         self.pattern_labels += 1;
         if let Some(arm) = arm_else.clone() {
             self.gen_inst(&arm);
-            crate::push_jmp_code!(self, Jmp, format!("L{}", self.pattern_labels));
+            crate::push_jmp_code!(self, Jmp, self.pattern_labels);
         }
         // 処理内容の作成
         for arm in arms {
             // 自分のラベルを作成
-            crate::push_jmp_code!(self, Block, format!("L{}", self.jmp_labels));
+            crate::push_jmp_code!(self, Block, self.jmp_labels);
             self.gen_inst(&arm.body);
         }
         // 条件が終了したときにジャンプする場所を指定
-        crate::push_jmp_code!(self, Block, format!("L{}", self.pattern_labels));
+        crate::push_jmp_code!(self, Block, self.pattern_labels);
         return self.id_counter - 1;
     }
 
@@ -448,6 +472,38 @@ mod tests {
                 ir::inst::Inst::Num { dst: 1, value: "10".to_string(), size: Size::DD },
                 ir::inst::Inst::AssignVar { name: "a".to_string(), value: 1 },
                 ir::inst::Inst::Ret(0),
+            ]
+        );
+    }
+
+    #[test]
+    pub fn check_loop_inst() {
+        let mut list = InstCheckList::new();
+        list.gen(
+            "
+                main(): b1 {
+                    loop 1 < 10 {
+                        b: b4 = 10
+                        b = b + 6
+                    }
+                    ret 1
+                }
+            "
+        );
+        let body = list.ir.func_tree.get(&"main".to_string()).body;
+        println!("{:?}", body);
+        assert_eq!(
+            body[0..=6],
+            vec![
+                ir::inst::Inst::Block("L0".to_string()),
+                ir::inst::Inst::ExpectJmp("L2".to_string()),
+                ir::inst::Inst::gen_num("10", &Size::DD, 2),
+                ir::inst::Inst::gen_num("1", &Size::DD, 3),
+                ir::inst::Inst::Expr(
+                    ir::inst::ExprInst{dst: 4, ls: 2, rs: 3, kind: ir::inst::ExprKind::LessThen}
+                ),
+                ir::inst::Inst::Jmp("L1".to_string()),
+                ir::inst::Inst::Block("L2".to_string()),
             ]
         );
     }

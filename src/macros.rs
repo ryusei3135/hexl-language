@@ -1,4 +1,4 @@
-use crate::ir::inst;
+//use crate::ir::inst;
 
 /// ブロックやラベルなどジャンプ系のノードを生成する
 /// ときに使うマクロ
@@ -6,7 +6,7 @@ use crate::ir::inst;
 #[macro_export]
 macro_rules! push_jmp_code {
     ($tree:expr, $variant:ident, $value:expr) => {
-        $tree.ir_tree.push(inst::Inst::$variant($value));
+        $tree.ir_tree.push(inst::Inst::$variant(format!("L{}", $value)));
         $tree.id_counter += 1;
     };
 }

@@ -2,17 +2,18 @@
 
 
 add(a: b4, b: b4): b4 {
-    a = a + 100
-    c: b4 = b + a
-    c = a + 2
-    ret c
+    loop a > 10 {
+        b = b + 1
+        a = a - 1
+    }
+    ret b
 }
 
 _start(a: a, b: b): b1 {
     c: b1 = "hello world"
     match {
         10 < 1 {
-            add(10, 1)
+            add(15, 1)
         }
         | {
             add(3, 3)

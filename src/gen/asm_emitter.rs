@@ -1,4 +1,5 @@
 use super::*;
+use crate::asm_setting;
 
 
 // struct Reg
@@ -38,7 +39,10 @@ pub struct AsmEmitter {
 }
 
 impl AsmEmitter {
-    pub fn new(asm_setting: AsmSetting) -> Self {
+    pub fn new(
+        asm_setting: asm_setting::AsmSetting,
+        asm_fmt: asm_setting::AsmFormat
+    ) -> Self {
         let mut me = Self {
             asm_text: String::new(),
             data_sec_text: String::new(),
@@ -47,7 +51,7 @@ impl AsmEmitter {
             expr_vars: Vec::new(),
             reserved_label_name: None,
 
-            asm_fmt: mng_fmt::MngAsmFmt::new(asm_setting), 
+            asm_fmt: mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt), 
             curr_inst: Vec::new(),
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
@@ -164,7 +168,7 @@ impl AsmEmitter {
             "{}\n{}\n{}",
             self.data_sec_text,
             self.asm_fmt.get_section_fmt("text"),
-            self.asm_text
+            self.asm_text.replace("{space}", "  ")
         )
     }
 

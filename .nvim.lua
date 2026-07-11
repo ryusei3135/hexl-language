@@ -76,7 +76,7 @@ local function apply_highlights()
     vim.api.nvim_set_hl(0, "rustCommentLineDoc",           { fg = "#5AC8A8", italic = true })
     vim.api.nvim_set_hl(0, "rustCommentBlockDoc",          { fg = "#5AC8A8", italic = true })
 
-    -- 演算子・区切り記号(青系)
+    -- 演算子・区切り記号(青系).attribute.rust
     vim.api.nvim_set_hl(0, "rustOperator",           { fg = "#5AA5E8" })
     vim.api.nvim_set_hl(0, "@operator",              { fg = "#5AA5E8" })
     vim.api.nvim_set_hl(0, "@punctuation.bracket",   { fg = "#4A90D9" })
@@ -84,6 +84,11 @@ local function apply_highlights()
     vim.api.nvim_set_hl(0, "@punctuation.special",   { fg = "#6FB8F0", bold = true })
     vim.api.nvim_set_hl(0, "Delimiter", { fg = "#4A90D9" })
     vim.api.nvim_set_hl(0, "MatchParen", { fg = "#FFFFFF", bg = "#245A8C", bold = true })
+    vim.api.nvim_set_hl(0, "@operator.rust.try", { fg = "#00bfff", bold = true })
+
+    vim.api.nvim_set_hl(0, "@lsp.type.builtinAttribute.rust", { fg = "#32cd32", bold = true})
+    vim.api.nvim_set_hl(0, "@lsp.typemod.generic.attribute.rust", { fg = "#32cd32", bold = true })
+    vim.api.nvim_set_hl(0, "@lsp.typemod.attributeBracket.attribute.rust", { fg = "#228d22", bold = true})
 end
 
 apply_highlights()

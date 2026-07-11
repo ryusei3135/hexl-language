@@ -1,10 +1,8 @@
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyNode {
-    Auto,
     Ty(String),
     RefTy(String),
-    TknTy(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]

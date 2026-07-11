@@ -16,6 +16,7 @@ pub enum SyntaxErr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrKind {
     EndTkn,
+    OptErr,
     SystemErr(SystemErr),
     UnexpectedToken,
     NotFoundTkn(lex::Tkn),

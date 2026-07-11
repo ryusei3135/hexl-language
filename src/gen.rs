@@ -11,9 +11,6 @@ use crate::ir::{
     inst,
     Size,
 };
-use crate::{
-    *,
-};
 use std::mem;
 use std::collections::HashMap;
 

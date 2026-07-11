@@ -45,10 +45,6 @@ impl ParamMetaData {
             dst
         }
     }
-
-    pub fn get_param_reg(&self, param_regs: &Vec<usize>) -> usize {
-        param_regs[self.num].clone()
-    }
 }
 
 
@@ -106,7 +102,7 @@ pub enum Inst {
 }
 
 impl Inst {
-    pub fn gen_num(value: &String, size: &Size, dst: usize) -> Self {
+    pub fn gen_num(value: &str, size: &Size, dst: usize) -> Self {
         match size {
             Size::DB => {
                 value.parse::<u8>().unwrap();
@@ -123,7 +119,7 @@ impl Inst {
         }
         Self::Num{
             dst,
-            value: value.clone(),
+            value: value.to_string(),
             size: size.clone(),
         }
     }

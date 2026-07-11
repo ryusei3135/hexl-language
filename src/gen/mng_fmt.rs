@@ -2,28 +2,30 @@
 
 
 use super::*;
+use crate::asm_setting;
 use std::any::{Any, TypeId};
 
 /// アセンブリ言語のフォーマットをするAPIを提供
 pub struct MngAsmFmt {
     param_fmt: Vec<usize>, 
-    reg_fmt: Reg,
-    opcode_fmt: HashMap<String, OperandInfo>,
-    pub(super) asm_setting: Option<AsmSetting>,
-    default: AsmFormat,
+    reg_fmt: asm_setting::Reg,
+    opcode_fmt: HashMap<String, asm_setting::OperandInfo>,
+    pub(super) asm_setting: Option<asm_setting::AsmSetting>,
+    fmt: asm_setting::AsmFormat,
 }
 
 impl MngAsmFmt {
-    pub fn new(asm_setting: AsmSetting) -> Self {
+    pub fn new(
+        asm_setting: asm_setting::AsmSetting,
+        asm_fmt: asm_setting::AsmFormat
+    ) -> Self {
         // === アセンブラのフォーマットの設定 ===
-        let default = asm_setting
-            .get_default_format();
         Self {
-            param_fmt: default.args.fmt.get("linux").unwrap().clone(),
-            reg_fmt: default.reg.clone(),
-            opcode_fmt: default.op.clone(),
+            param_fmt: asm_fmt.args.fmt.get("linux").unwrap().clone(),
+            reg_fmt: asm_fmt.reg.clone(),
+            opcode_fmt: asm_fmt.op.clone(),
             asm_setting: Some(asm_setting),
-            default: default.clone(),
+            fmt: asm_fmt
         }
     }
 
@@ -49,7 +51,7 @@ impl MngAsmFmt {
     }
 
     pub fn get_section_fmt(&self, section: &str) -> String {
-        self.default.section.replace("{}", section)
+        self.fmt.section.replace("{}", section)
     }
 
     pub fn get_opcode_tmpl(&self, key: &str) -> String {
@@ -57,11 +59,11 @@ impl MngAsmFmt {
     }
 
     pub fn get_fmt_num(&self, value: &String) -> String {
-        self.default.fmt.num.replace("{}", value).to_string()
+        self.fmt.fmt.num.replace("{}", value).to_string()
     }
 
     pub fn get_call_func_fmt(&self, func_name: &String) -> String {
-        self.default.func.call.replace("{name}", func_name)
+        self.fmt.func.call.replace("{name}", func_name)
     }
 
     pub fn get_fmt_reg(&self, reg_num: &usize, size: &Size) -> String {
@@ -79,7 +81,7 @@ impl MngAsmFmt {
                 &self.reg_fmt.dq
             }
         };
-        self.default.fmt.reg.replace("{}", reg[*reg_num].as_str()).to_string()
+        self.fmt.fmt.reg.replace("{}", reg[*reg_num].as_str()).to_string()
     }
 
     pub fn inline_asm_list(&self) -> Vec<String> {
