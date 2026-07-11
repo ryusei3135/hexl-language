@@ -3,13 +3,27 @@
 
 add(a: b4, b: b4): b4 {
     c: b1 = "hello world"
+    d: b1 = "tomato"
     loop a > 10 {
-        #gcc_x64 {
-            "{space}mov $1, %eax"
-            "{space}mov $1, %edi"
-            "{space}lea ${c}(%rip), %rsi"
-            "{space}mov $10, %edx"
-            "{space}syscall"
+        match {
+            a > 15 {
+                #gcc_x64 {
+                    "{space}mov $1, %eax"
+                    "{space}mov $1, %edi"
+                    "{space}lea ${c}(%rip), %rsi"
+                    "{space}mov $10, %edx"
+                    "{space}syscall"
+                }
+            }
+            | {
+                #gcc_x64 {
+                    "{space}mov $1, %eax"
+                    "{space}mov $1, %edi"
+                    "{space}lea ${d}(%rip), %rsi"
+                    "{space}mov $10, %edx"
+                    "{space}syscall"
+                }
+            }
         }
         a = a - 1
     }

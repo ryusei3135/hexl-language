@@ -365,26 +365,28 @@ impl IR {
         }
 
         // 条件分岐の塊を作成
-        if arms.len() == 1 {
-            crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
+        let end_label = if arms.len() == 1 {
+            // アセンブリコードを生成するときに作成するラベル
+            self.jmp_labels = self.pattern_labels + 1;
+            crate::push_jmp_code!(self, ExpectJmp, self.jmp_labels);
             // 条件が一つだけの場合]
             // 条件式の生成
             self.gen_expr_ir(*arms[0].pattern.clone(), &Size::DD);
-            self.pattern_labels += 1;
             //self.push_jmp_code(self.pattern_labels);
+            self.jmp_labels.clone() + 1
         } else {
             // 条件が複数の場合
             for arm in arms.clone() {
                 crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
                 self.gen_expr_ir(*arm.pattern, &Size::DD);
             }
-        }
+            arms.len() + 1
+        };
 
         // elseの処理を作成
-        self.pattern_labels += 1;
         if let Some(arm) = arm_else.clone() {
             self.gen_inst(&arm);
-            crate::push_jmp_code!(self, Jmp, self.pattern_labels);
+            crate::push_jmp_code!(self, Jmp, &end_label);
         }
         // 処理内容の作成
         for arm in arms {
@@ -393,7 +395,7 @@ impl IR {
             self.gen_inst(&arm.body);
         }
         // 条件が終了したときにジャンプする場所を指定
-        crate::push_jmp_code!(self, Block, self.pattern_labels);
+        crate::push_jmp_code!(self, Block, end_label);
         return self.id_counter - 1;
     }
 

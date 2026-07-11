@@ -31,7 +31,7 @@
 	"reg": "%{}",
 	"num": "${}",
     "static_var": "{name}(%rip)",
-    "string": "{name}: .ascii \"{}\"",
+    "string": "{name}: .ascii \"{}\"\n",
     "global": ".global {name}\n"
   },
   "op": {
