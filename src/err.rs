@@ -13,6 +13,28 @@ pub enum SyntaxErr {
     DoubleTokenErr(lex::Tkn),
 }
 
+/// プリプロセッサ関係のエラーコード
+#[derive(Clone, Debug, PartialEq)]
+pub enum PreprocErrs {
+    // #asm
+    ExpectedLParenAfterAsm,
+    ExpectedRParenAfterAsm,
+    NotFoundAsmName,
+
+    // #include
+    ExpectedPathSegment,
+}
+
+impl PreprocErrs {
+    pub fn build(self, line: &usize) -> ErrKind {
+        ErrKind::PreprocErr {
+            kind: self,
+            line: line.clone()
+        } 
+    }
+}
+
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrKind {
     EndTkn,
@@ -21,6 +43,10 @@ pub enum ErrKind {
     UnexpectedToken,
     NotFoundTkn(lex::Tkn),
     SyntaxErr(SyntaxErr),
+    PreprocErr {
+        kind: PreprocErrs,
+        line: usize,
+    },
 }
 
 

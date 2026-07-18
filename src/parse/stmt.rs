@@ -1,8 +1,9 @@
+//! group1は、関数や構造体など
+//! group2は変数の定義や条件分岐など
+
 use super::*;
 
 
-/// group1は、関数や構造体など
-/// group2は変数の定義や条件分岐など
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum GenFlag {
     Group1,
@@ -55,6 +56,11 @@ impl Parser {
                             self.gen_flag = GenFlag::Group2;
                             self.scope_counter += 1;
                         }
+                        lex::Tkn::CompleSyn => {
+                            let node = self.comple_syntax()
+                                .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?;
+                            self.gen_nodes.push(node.change_group1());
+                        }
                         t => panic!("{:?}", t),
                     };
                 },
@@ -66,6 +72,7 @@ impl Parser {
                         node::Group1Node::FuncDefine(func) => {
                             func.add(node);
                         }
+                        t => println!("{:?}", t),
                     }
 
                     if self.current_tkn() == &lex::Tkn::RBrace {
@@ -170,30 +177,7 @@ impl Parser {
         let lex::Tkn::Name(name) = self.next_tkn()? else {
             panic!();
         };
-
-        let mut nodes = Vec::<String>::new();
-
-        if let Ok(lex::Tkn::LBrace) = self.next_tkn() {
-            let _ = self.next_tkn()?;
-            loop {
-                match self.current_tkn() {
-                    lex::Tkn::Str(value) => {
-                        nodes.push(value.clone());
-                    }
-                    lex::Tkn::RBrace => {
-                        self.next_tkn()?;
-                        break;
-                    }
-                    t => {
-                        panic!("{:?}", t);
-                    }
-                }
-                self.next_tkn()?;
-            }
-            return Ok(node::Group2Node::CompleSyntax((name, nodes)));
-        }
-
-        Err(err::ErrKind::UnexpectedToken)
+        self.make_preproc(&name)
     }
 
     pub(super) fn next_tkn(&mut self) -> Result<lex::Tkn, err::ErrKind> {

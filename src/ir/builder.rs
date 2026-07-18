@@ -24,10 +24,10 @@ impl Size {
         match ty {
             node::TyNode::Ty(ty) => {
                 match ty.as_str() {
-                    "b1" => Self::DB,
-                    "b2" => Self::DW,
-                    "b4" => Self::DD,
-                    "b8" => Self::DQ,
+                    "char" => Self::DB,
+                    "short" => Self::DW,
+                    "int" => Self::DD,
+                    "long" => Self::DQ,
                     _ => panic!(),
                 }
             }
@@ -162,6 +162,7 @@ impl IR {
                     self.ir_tree = Vec::new();
                     self.id_counter = 0;
                 }
+                _ => {}
             }
         }
         Ok(())
@@ -185,6 +186,7 @@ impl IR {
                     );
                     self.id_counter += 1;
                 }
+                t => println!("{:?}", t),
             }
         } 
         self.id_counter

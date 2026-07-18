@@ -88,7 +88,6 @@ impl AsmEmitter {
                         self.data_idx += 1;
                     }
                     inst::Inst::Expr(expr) => {
-                        println!("{:?}", expr);
                         let asm = self.format_expr_inst(&expr);
 
                         self.asm_text.push_str(&asm);
@@ -124,7 +123,6 @@ impl AsmEmitter {
 
                         if self.expr_vars.iter().find(|v| v.as_str() == name.as_str()).is_some() {
                             self.update_value_reg(&name, &current_reg);
-                            println!(">> {:?}", self.var_hash_map);
                         }
                     }
                     inst::Inst::Ret(idx) => {

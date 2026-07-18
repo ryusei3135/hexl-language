@@ -115,6 +115,24 @@ impl Expr {
 }
 
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ModPath {
+    Path(Vec<String>),
+}
+
+impl ModPath {
+    pub fn new() -> Self {
+        Self::Path(Vec::new())
+    }
+
+    pub fn add_path(&mut self, path_name: &String) {
+        match self {
+            Self::Path(path) => {
+                path.push(path_name.clone())
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallInfo {
@@ -127,11 +145,25 @@ pub enum Group2Node {
     Stmt(StmtNode),
     Expr(Expr),
     CompleSyntax((String, Vec<String>)),
+    Include(ModPath),
+    Line(String),
+}
+
+impl Group2Node {
+    pub fn change_group1(self) -> Group1Node {
+        match self {
+            Self::Include(v) => Group1Node::Include(v),
+            Self::Line(v) => Group1Node::Line(v),
+            t => panic!("{:?} <- これは対応していません", t)
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Group1Node {
     FuncDefine(FuncDefine),
+    Include(ModPath),
+    Line(String)
 }
 
 

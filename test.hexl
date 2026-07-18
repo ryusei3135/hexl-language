@@ -1,22 +1,22 @@
+#include std::io
 
 
-
-add(a: b4, b: b4): b4 {
-    c: b1 = "hello world"
-    d: b1 = "tomato"
+add(a: int, b: int): int {
+    c: char = "hello world\n"
+    d: char = "tomato"
     loop a > 10 {
         match {
             a > 15 {
-                #gcc_x64 {
+                #asm(gcc_x64) {
                     "{space}mov $1, %eax"
                     "{space}mov $1, %edi"
                     "{space}lea ${c}(%rip), %rsi"
-                    "{space}mov $10, %edx"
+                    "{space}mov $12, %edx"
                     "{space}syscall"
                 }
             }
             | {
-                #gcc_x64 {
+                #asm(gcc_x64) {
                     "{space}mov $1, %eax"
                     "{space}mov $1, %edi"
                     "{space}lea ${d}(%rip), %rsi"
@@ -30,9 +30,9 @@ add(a: b4, b: b4): b4 {
     ret b
 }
 
-main(): b1 {
+main(): int {
     add(20, 1)
-    #gcc_x64 {
+    #asm(gcc_x64) {
         "{space}mov $0, %eax"
         "{space}mov $60, %edi"
         "{space}syscall"
