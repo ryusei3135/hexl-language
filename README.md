@@ -21,6 +21,26 @@ c言語ライクな言語
 - 低レイヤ寄りの言語作成
 - c言語ライクな言語の作成
 
+## 説明
+### キーワード
+- ret
+- match
+- loop
+### プロプロセッサ
+- #include
+- #asm(..)
+### 変数の定義方法
+```
+name: ty = value
+```
+### 関数の定義方法
+```
+name(args: ty): ret_ty {
+    ...
+    ret value
+}
+```
+
 ## Changelog
 - [CHANGELOG.md](./CHANGELOG.md)
 
