@@ -24,6 +24,7 @@ pub struct OperandInfo {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Func {
+    pub extern_def: String,
     pub ret: usize,
     pub call: String,
 }
@@ -113,11 +114,18 @@ pub fn load_setting() -> AsmSetting {
 /// アセンブリ言語のフォーマットを取得し、生成する
 pub fn gen_asm_text(
     mut tree: ir::FuncTree,
+    extern_funcs: &Vec<ir::inst::Inst>,
+    global_funcs: &Vec<String>,
     inline_name: &Option<String>
 ) -> String {
     let asm_settings = load_setting();
 
     let asm_fmt = asm_settings.get_asm_fmt(inline_name);
     let mut writer = gen::AsmEmitter::new(asm_settings, asm_fmt);
-    writer.to_asm_text(&mut tree, &inline_name)
+    writer.to_asm_text(
+        &mut tree,
+        &inline_name,
+        &extern_funcs,
+        &global_funcs
+    )
 }

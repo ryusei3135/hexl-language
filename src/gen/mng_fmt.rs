@@ -29,6 +29,11 @@ impl MngAsmFmt {
         }
     }
 
+    /// 外部に定義されている物のフォーマット
+    pub fn get_extern_func(&self, name: &String) -> String {
+        self.fmt.func.extern_def.replace("{name}", name)
+    }
+
     /// 設定された、関数の引数のレジスタを返す
     /// ## Rについて
     /// - Stringの場合はレジスタが返される
@@ -62,6 +67,11 @@ impl MngAsmFmt {
         self.fmt.fmt.string
             .replace("{}", value)
             .replace("{name}", &label)
+    }
+
+    pub fn get_global_fmt(&self, name: &String) -> String {
+        self.fmt.fmt.global
+            .replace("{name}", name)
     }
     
     /// エントリーポイントを作成

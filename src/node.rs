@@ -13,6 +13,7 @@ pub struct ArgsNode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncDefine {
+    pub public: bool,
     pub name: String,
     pub params: Vec<ArgsNode>,
     pub ret_ty: TyNode,
@@ -24,10 +25,12 @@ impl FuncDefine {
     pub fn new(
         name: String,
         args: Vec<ArgsNode>,
-        ret_ty: TyNode
+        ret_ty: TyNode,
+        public: bool
     ) -> Group1Node {
         Group1Node::FuncDefine(
             Self {
+                public,
                 name: name,
                 params: args,
                 ret_ty: ret_ty,
@@ -116,21 +119,35 @@ impl Expr {
 
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ModPath {
-    Path(Vec<String>),
+pub struct ModPath {
+    path: Vec<String>,
 }
 
 impl ModPath {
     pub fn new() -> Self {
-        Self::Path(Vec::new())
+        Self {
+            path: Vec::new()
+        }
     }
 
     pub fn add_path(&mut self, path_name: &String) {
-        match self {
-            Self::Path(path) => {
-                path.push(path_name.clone())
+        self.path.push(path_name.clone());
+    }
+
+    pub fn gen_path(&self) -> String {
+        // ディレクトリの最初のパスのインデックス
+        const PATH_START: usize = 0;
+
+        let mut path = String::new();
+        for (index, dir) in self.path.iter().enumerate() {
+            if index != PATH_START {
+                path.push('/');
             }
+            path.push_str(dir);
         }
+        // 最後に拡張子を追加
+        path.push_str(".hexl");
+        path
     }
 }
 

@@ -28,6 +28,7 @@ pub enum Tkn {
     KeyWordRet,
     KeyWordMatch,
     KeyWordLoop,
+    KeyWordPub,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -6,7 +6,8 @@ use super::{Parser, *};
 impl Parser {
     pub(super) fn func_node(
         &mut self,
-        func_name: &String
+        func_name: &String,
+        is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
         let arg = match self.next_tkn()? {
             lex::Tkn::LParen => {
@@ -26,6 +27,7 @@ impl Parser {
                             func_name.clone(),
                             arg,
                             ret_ty,
+                            is_public,
                         )
                     )
                 } else {

@@ -1,9 +1,16 @@
-mod builder;
-pub mod inst;
+use std::collections::HashMap;
+use std::{
+    mem,
+};
+use crate::node;
 
-pub use builder::Size;
+pub mod inst;
+mod builder;
+
+pub mod types;
 
 pub use builder::{
     IR,
     FuncTree,
+    FuncDefMetaData,
 };

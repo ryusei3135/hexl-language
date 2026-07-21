@@ -42,19 +42,38 @@ impl Parser {
         &mut self,
         tkns: Vec<lex::LocatedTkn>,
     ) -> Result<&Vec<node::Group1Node>, err::Errs> {
+        // 関数の中身などを作成する
+        // P は、この関数が公開されるかどうかのbool
+        fn build_func<const P: bool>(
+            this: &mut Parser,
+            name: &String
+        ) -> Result<(), err::Errs> {
+            let node = this.func_node(&name, P)
+                .map_err(|v| v.gen(this.current_line(), this.tkn_chr_pos()))?;
+            this.gen_nodes.push(node);
+
+            this.gen_flag = GenFlag::Group2;
+            this.scope_counter += 1;
+            Ok(())
+        }
+
         self.tkns = Some(tkns);
 
         loop {
-            match self.gen_flag {
+            match &self.gen_flag {
                 GenFlag::Group1 => {
                     match self.current_tkn().clone() {
+                        lex::Tkn::KeyWordPub => {
+                            // この関数などは、公開する
+                            match self.next_tkn().expect("jjj") {
+                                lex::Tkn::Name(name) => {
+                                    build_func::<true>(&mut *self, &name)?;
+                                }
+                                t => panic!("{:?}", t),
+                            }
+                        }
                         lex::Tkn::Name(name) => {
-                            let node = self.func_node(&name)
-                                .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?;
-                            self.gen_nodes.push(node);
-
-                            self.gen_flag = GenFlag::Group2;
-                            self.scope_counter += 1;
+                            build_func::<false>(&mut *self, &name)?;
                         }
                         lex::Tkn::CompleSyn => {
                             let node = self.comple_syntax()

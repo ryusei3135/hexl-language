@@ -61,8 +61,36 @@ impl AsmEmitter {
         me
     }
 
-    pub fn to_asm_text(&mut self, func_tree: &mut FuncTree, asm_fmt_name: &Option<String>) -> String {
+    pub fn to_asm_text(
+        &mut self,
+        func_tree: &mut FuncTree,
+        asm_fmt_name: &Option<String>,
+        extern_funcs: &Vec<inst::Inst>,
+        global_funcs: &Vec<String>,
+    ) -> String {
         self.asm_text = String::from(&self.asm_fmt.get_entry_point());
+
+        // 自身が公開する関数を生成
+        for func_name in global_funcs.iter() {
+            self.asm_text.push_str(
+                self.asm_fmt
+                .get_global_fmt(func_name)
+                .as_str()
+            );
+        }
+
+        for func in extern_funcs.iter() {
+            if let inst::Inst::ExternFunc(name) = func {
+                self.asm_text
+                    .push_str(
+                        self.asm_fmt
+                        .get_extern_func(&name)
+                        .as_str()
+                    );
+            } else {
+                panic!();
+            }
+        }
 
         for func in func_tree.func.clone().iter_mut() {
             // 新しく関数の作成、
@@ -301,7 +329,7 @@ impl AsmEmitter {
                     // レジスタの文字列を取得
                     self.asm_fmt.get_fmt_reg(&result.1, &Size::DD)
                 } else {
-                    panic!("{:?}", t);
+                    panic!("{:?}",self.curr_inst);
                 }
             }
         }

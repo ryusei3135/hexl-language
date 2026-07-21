@@ -9,7 +9,7 @@ mod mng_fmt;
 use crate::ir::{
     FuncTree,
     inst,
-    Size,
+    types::Size,
 };
 use std::mem;
 use std::collections::HashMap;

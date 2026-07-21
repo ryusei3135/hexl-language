@@ -36,6 +36,14 @@ pub mod cmd_line_args {
             }
         }
 
+        pub fn new_file(&self, file_name: &String) -> Self {
+            Self {
+                fmt_name: self.fmt_name.clone(),
+                file_name: Some(file_name.clone()),
+                opt_flags: Some(OptFlags::SetFile),
+            }
+        }
+
         /// 値を渡す、フラグがすでに立っているなら成功
         pub fn set_value(
             &mut self,
@@ -101,33 +109,71 @@ pub mod cmd_line_args {
 }
 
 
-fn main() -> io::Result<()> {
-    let args: Vec<String> = env::args().collect();
+/// もらった情報で、データを生成
+/// ## 戻り値
+/// 関数の戻り値は呼び出し元に現在の公開されている
+/// 関数の情報の配列を返す
+pub fn build(
+    settings: &cmd_line_args::OptSettings,
+) -> io::Result<Vec<ir::FuncDefMetaData>> {
+    // 初期化
+    let content = fs::read_to_string(
+        &settings
+            .file_name
+            .as_ref()
+            .unwrap()
+        )
+        .expect(
+            format!(
+                "file >> {:?}",
+                settings
+                    .file_name
+                    .as_ref()
+                    .unwrap()
+            )
+            .as_str()
+        );
+
 
     let mut lexer = lex::Lexer::new();
     let mut parser = parse::Parser::new();
     let mut ir_builder = ir::IR::new();
-    
+    // アセンブリ言語のデータを作成
+    let _ = lexer.analy(&content).map_err(|v| v.print_log(&content)); 
+
+    let nodes = parser
+        .parser(lexer.gen_tkns.clone())
+        .map_err(|v| v.print_log(&content))
+        .unwrap();
+    let func_def_meta_data = ir_builder
+        .builder(
+            &nodes,
+            &settings
+        )
+        .unwrap();
+    let asm_text = asm_setting::gen_asm_text(
+        ir_builder.func_tree,
+        &ir_builder.extern_funcs,
+        &ir_builder.public_func_tree,
+        &settings.fmt_name
+    );
+    // 出力先のアセンブリ言語のファイル
+    let asm_file = settings
+        .file_name
+        .as_ref()
+        .map(|v| v.replace(".hexl", ""))
+        .unwrap();
+    fs::write(format!("{}.s", asm_file), asm_text).unwrap();
+    Ok(func_def_meta_data)
+}
+
+fn main() -> io::Result<()> {
+    let args: Vec<String> = env::args().collect();
     // オプションなどの設定
     let settings = cmd_line_args::mng_opt_cmd(&args);
 
     asm_setting::load_setting();
 
-
-    let content = fs::read_to_string(&settings.file_name.unwrap())?;
-
-
-    let _ = lexer.analy(&content).map_err(|v| v.print_log(&content)); 
-
-    let nodes = parser.parser(lexer.gen_tkns.clone())
-        .map_err(|v| v.print_log(&content))
-        .unwrap();
-    ir_builder.builder(&nodes).unwrap();
-    let asm_text = asm_setting::gen_asm_text(
-        ir_builder.func_tree,
-        &settings.fmt_name
-    );
-
-    fs::write("a.s", asm_text).unwrap();
+    let _ = build(&settings)?;
     Ok(())
 }

@@ -236,6 +236,7 @@ impl Lexer {
                         "ret" => Tkn::KeyWordRet,
                         "match" => Tkn::KeyWordMatch,
                         "loop" => Tkn::KeyWordLoop,
+                        "pub" => Tkn::KeyWordPub,
                         _ => Tkn::Name(self.chr_stk.clone()),
                     }
                 }

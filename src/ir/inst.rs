@@ -50,6 +50,7 @@ impl ParamMetaData {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallFuncMetaData {
+    pub public: bool,
     pub name: String,
     pub params: Vec<ValueId>,
 }
@@ -57,6 +58,7 @@ pub struct CallFuncMetaData {
 impl CallFuncMetaData {
     pub fn new(name: String) -> Self {
         Self {
+            public: false,
             name,
             params: Vec::new(),
         }
@@ -70,6 +72,7 @@ impl CallFuncMetaData {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
+    ExternFunc(String),
     Expr(ExprInst),
     Block(String),
     Jmp(String),
@@ -82,7 +85,7 @@ pub enum Inst {
     Num{
         dst: ValueId,
         value: String,
-        size: Size,
+        size: types::Size,
     },
     Str {
         dst: ValueId,
@@ -102,18 +105,18 @@ pub enum Inst {
 }
 
 impl Inst {
-    pub fn gen_num(value: &str, size: &Size, dst: usize) -> Self {
+    pub fn gen_num(value: &str, size: &types::Size, dst: usize) -> Self {
         match size {
-            Size::DB => {
+            types::Size::DB => {
                 value.parse::<u8>().unwrap();
             }
-            Size::DW => {
+            types::Size::DW => {
                 value.parse::<u16>().unwrap();
             }
-            Size::DD => {
+            types::Size::DD => {
                 value.parse::<u32>().unwrap();
             }
-            Size::DQ => {
+            types::Size::DQ => {
                 value.parse::<u64>().unwrap();
             }
         }

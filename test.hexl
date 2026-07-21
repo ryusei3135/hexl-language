@@ -1,12 +1,13 @@
-#include std::io
+#include test::b
 
 
 add(a: int, b: int): int {
     c: char = "hello world\n"
     d: char = "tomato"
-    loop a > 10 {
+    add_1(10)
+    loop a > 0 {
         match {
-            a > 15 {
+            a > 5 {
                 #asm(gcc_x64) {
                     "{space}mov $1, %eax"
                     "{space}mov $1, %edi"
@@ -31,7 +32,7 @@ add(a: int, b: int): int {
 }
 
 main(): int {
-    add(20, 1)
+    add(10, 1)
     #asm(gcc_x64) {
         "{space}mov $0, %eax"
         "{space}mov $60, %edi"

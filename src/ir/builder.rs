@@ -2,50 +2,13 @@ use crate::{
     err,
     node
 };
-use std::collections::HashMap;
-use std::{
-    mem,
-};
 use super::*;
 
 
 
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Size {
-    DB,
-    DW,
-    DD,
-    DQ
-}
-
-impl Size {
-    pub fn new(ty: &node::TyNode) -> Self {
-        match ty {
-            node::TyNode::Ty(ty) => {
-                match ty.as_str() {
-                    "char" => Self::DB,
-                    "short" => Self::DW,
-                    "int" => Self::DD,
-                    "long" => Self::DQ,
-                    _ => panic!(),
-                }
-            }
-            _ => panic!(),
-        }
-    }
-}
-
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum VarType {
-    Local(usize),// 変数の値や式のidx
-    Param(usize),//これは、左から何番目の引数かを保存
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
-    pub hash: HashMap<String, VarType>,
+    pub hash: HashMap<String, types::VarType>,
 }
 
 impl VarTree {
@@ -62,17 +25,17 @@ impl VarTree {
     pub fn push<const K: char>(&mut self, name: &String, index: &usize) {
         let var = match K {
             'l' => {
-                VarType::Local(*index)
+                types::VarType::Local(*index)
             }
             'p' => {
-                VarType::Param(*index)
+                types::VarType::Param(*index)
             }
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
         self.hash.insert(name.clone(), var);
     }
 
-    pub fn get(&self, name: &String) -> &VarType {
+    pub fn get(&self, name: &String) -> &types::VarType {
         self.hash.get(name).expect(name)
     }
 }
@@ -81,7 +44,8 @@ impl VarTree {
 pub struct FuncDefInfo {
     pub args: Vec<node::ArgsNode>,
     pub body: Vec<inst::Inst>,
-    pub ret_ty: Option<Size>,
+    pub ret_ty: Option<node::TyNode>,
+    pub public: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -96,40 +60,71 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&mut self, name: &String) -> FuncDefInfo {
-        self.func.get(name).unwrap().clone()
+    pub fn get(&mut self, name: &String) -> Option<FuncDefInfo> {
+        self.func.get(name).map(|v| v.clone())
     }
-
-    //pub fn gen_vec(&self) -> Vec<(String, FuncDefInfo)> {
-      //  self.func.clone().into_iter().collect()
-    //}
     
     pub fn add(
         &mut self,
         body: Vec<inst::Inst>,
-        name: &String,
-        args: Vec<node::ArgsNode>,
-        ret_ty: Size
+        meta_data: &node::FuncDefine,
+        ret_ty: &node::TyNode,
     ) {
         self.func.insert(
-            name.clone(),
+            meta_data.name.clone(),
             FuncDefInfo {
-                args,
+                args: meta_data.params.clone(),
                 body,
-                ret_ty: Some(ret_ty),
+                ret_ty: Some(ret_ty.clone()),
+                public: meta_data.public,
             }
         );
     }
 }
 
+
+#[derive(Clone, Debug)]
+pub struct FuncDefMetaData {
+    name: String,
+    params: Vec<node::ArgsNode>,
+    ret_ty: Option<node::TyNode>,
+}
+
+impl FuncDefMetaData {
+    pub fn new(info: &node::FuncDefine) -> Self {
+        Self {
+            name: info.name.clone(),
+            params: info.params.clone(),
+            ret_ty: Some(info.ret_ty.clone()),
+        }
+    }
+
+    pub fn gen(&self) -> FuncDefInfo {
+        FuncDefInfo {
+            args: self.params.clone(),
+            body: Vec::new(),
+            ret_ty: self.ret_ty.clone(),
+            public: true,
+        }
+    }
+}
+
+
 pub struct IR {
     pub var_tree: VarTree,
-    pub func_tree: FuncTree,
+    pub extern_funcs: Vec<inst::Inst>,
     id_counter: usize,
-    func_ret_ty: Option<Size>,
+    func_ret_ty: Option<node::TyNode>,
     ir_tree: Vec<inst::Inst>,
     pattern_labels: usize,
     jmp_labels: usize,
+    // 関数の情報
+    pub func_tree: FuncTree,
+    // 外部の関数の情報
+    extern_func_tree: Vec<FuncDefMetaData>,
+    // 自身が公開する関数の配列:
+    pub public_func_tree: Vec<String>,
+    define_meta_data: Vec<FuncDefMetaData>
 }
 
 
@@ -137,42 +132,87 @@ impl IR {
     pub fn new() -> Self {
         Self {
             var_tree: VarTree::new(),
-            func_tree: FuncTree::new(),
+            extern_funcs: Vec::new(),
             id_counter: 0,
             func_ret_ty: None,
             ir_tree: Vec::new(),
             pattern_labels: 0,
             jmp_labels: 0,
+            // 関数の情報を初期化
+            func_tree: FuncTree::new(),
+            extern_func_tree: Vec::new(),
+            public_func_tree: Vec::new(),
+            define_meta_data: Vec::new(),
         }
     }
 
-    pub fn builder(&mut self, nodes: &Vec<node::Group1Node>) -> Result<(), err::Errs> {
+    pub fn builder(
+        &mut self,
+        nodes: &Vec<node::Group1Node>,
+        settings: &crate::cmd_line_args::OptSettings,
+    ) -> Result<Vec<FuncDefMetaData>, err::Errs> {
+
         for node in nodes {
             match node {
                 node::Group1Node::FuncDefine(info) => {
-                    self.func_ret_ty = Some(Size::new(&info.ret_ty));
+                    // 関数の情報を登録
+                    self.entry_func_info(&info);
+
                     self.register_argument(&info.params);
                     self.gen_inst(&info.body.clone());
-                    self.func_tree.add(
-                        mem::take(&mut self.ir_tree),
-                        &info.name,
-                        info.params.clone(),
-                        self.func_ret_ty.clone().unwrap(),
-                    );
+                    // 使うデータを初期化
                     self.ir_tree = Vec::new();
                     self.id_counter = 0;
                 }
+                node::Group1Node::Include(path) => {
+                    // パスの情報を作成
+                    let dir = path.gen_path();
+                    let new_setting = settings
+                        .new_file(&dir);
+                    let fn_tree = crate::build(&new_setting).unwrap();
+                    self.make_extern_func_inst(&fn_tree);
+                    self.extern_func_tree.extend(fn_tree);
+                }  
                 _ => {}
             }
         }
-        Ok(())
+        Ok(mem::take(&mut self.define_meta_data))
+    }
+
+    /// 現在処理中の関数の情報を登録する
+    fn entry_func_info(&mut self, info: &node::FuncDefine) {
+        self.func_ret_ty = Some(info.ret_ty.clone());
+        // 関数のデータをpush
+        self.func_tree.add(
+            // 関数の処理
+            mem::take(&mut self.ir_tree),
+            // 関数の引数や名前など
+            &info,
+            // 関数の戻り値
+            &info.ret_ty,
+        );
+        self.define_meta_data.push(FuncDefMetaData::new(&info));
+        // 公開する関数を登録   
+        if info.public {
+            self.public_func_tree.push(info.name.to_string());
+        }
+    }
+
+    /// 外部の関数を定義するノードを
+    /// 作成し、スタックする関数
+    fn make_extern_func_inst(&mut self, fn_tree: &Vec<FuncDefMetaData>) {
+        for func in fn_tree {
+            self.extern_funcs.push(
+                inst::Inst::ExternFunc(func.name.clone())
+            );
+        }
     }
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
         for stmt in node {
             match stmt.clone() {
                 node::Group2Node::Expr(expr) => {
-                    let _ = self.gen_expr_ir(expr, &Size::DD);
+                    let _ = self.gen_expr_ir(expr, &types::Size::DD);
                 }
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir(stmt);
@@ -196,8 +236,10 @@ impl IR {
     fn gen_stmt_ir(&mut self, stmt: node::StmtNode) -> usize {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
-                let func_ret_ty = self.func_ret_ty.clone().unwrap();
-                let idx = self.gen_expr_ir(expr, &func_ret_ty);
+                let func_ret_ty = self.func_ret_ty
+                    .as_ref()
+                    .unwrap();
+                let idx = self.gen_expr_ir(expr, &types::Size::new(&func_ret_ty));
                 inst::Inst::Ret(idx)
             }
         };
@@ -211,7 +253,7 @@ impl IR {
     fn left_right_pair(
         &mut self,
         node: (Box<node::Expr>, Box<node::Expr>),
-        expect_byte: &Size
+        expect_byte: &types::Size
     ) -> (usize, usize) {
         (
             self.gen_expr_ir(*node.0, &expect_byte),
@@ -224,7 +266,7 @@ impl IR {
     fn build_expr_inst(
         &mut self,
         node: (Box<node::Expr>, Box<node::Expr>),
-        expect_byte: &Size,
+        expect_byte: &types::Size,
         kind: inst::ExprKind,
     ) -> inst::Inst {
         let pair = self.left_right_pair(node, &expect_byte);
@@ -236,7 +278,7 @@ impl IR {
         }.new()
     }
 
-    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &Size) -> usize {
+    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
         let inst = match expr {
             node::Expr::Add(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::Add)
@@ -276,7 +318,7 @@ impl IR {
             node::Expr::DefVar(mut var) => {
                 let value_idx = self.gen_expr_ir(
                     *var.value,
-                    &Size::new(&var.ty)
+                    &types::Size::new(&var.ty)
                 );
                 self.var_tree.push::<'l'>(&var.name, &value_idx);
                 inst::Inst::Mov{
@@ -287,7 +329,20 @@ impl IR {
             }
             node::Expr::CallFunc(meta_data) => {
                 // 関数の定義を取得
-                let defined_func_data = self.func_tree.get(&meta_data.name);
+                let defined_func_data = {
+                    if let Some(def_data) = self.func_tree.get(&meta_data.name) {
+                        def_data
+                    } else {
+                        let result = self.extern_func_tree
+                            .iter()
+                            .find(|v| v.name.as_str() == &meta_data.name);
+                        if let Some(def_data) = result {
+                            def_data.gen()
+                        } else {
+                            panic!();
+                        }
+                    }
+                };
                 let def_args = defined_func_data.args.clone();
                 // 関数のノードを作成
                 let mut func_meta_data 
@@ -295,19 +350,19 @@ impl IR {
 
                 for (index, _) in meta_data.args.iter().enumerate() {
                     let expr_arg = meta_data.args.get(index).unwrap().clone();
-                    let ty = Size::new(&def_args[index].ty).clone();
+                    let ty = types::Size::new(&def_args[index].ty).clone();
                     let idx = self.gen_expr_ir(expr_arg, &ty);
+                    println!(">>: {:?}", idx);
                     func_meta_data.insert_param_parent_id(idx);
                 }
-                self.id_counter += 1;
                 inst::Inst::CallFunc(func_meta_data)
             }
             node::Expr::Var(name) => {
                 return match self.var_tree.get(&name) {
-                    VarType::Local(index) => {
+                    types::VarType::Local(index) => {
                         *index
                     }
-                    VarType::Param(param) => {
+                    types::VarType::Param(param) => {
                         // 引数のノード
                         *param
                     }
@@ -343,7 +398,7 @@ impl IR {
         // ループする条件の作成
         if let Some(expr) = pattern {
             crate::push_jmp_code!(self, ExpectJmp, &self.pattern_labels);
-            let _ = self.gen_expr_ir(*expr, &Size::DD);
+            let _ = self.gen_expr_ir(*expr, &types::Size::DD);
             // もし条件がfalseならendまでジャンプ
             crate::push_jmp_code!(self, Jmp, &end);
             // 条件がtrueのときジャンプする場所
@@ -373,14 +428,14 @@ impl IR {
             crate::push_jmp_code!(self, ExpectJmp, self.jmp_labels);
             // 条件が一つだけの場合]
             // 条件式の生成
-            self.gen_expr_ir(*arms[0].pattern.clone(), &Size::DD);
+            self.gen_expr_ir(*arms[0].pattern.clone(), &types::Size::DD);
             //self.push_jmp_code(self.pattern_labels);
             self.jmp_labels.clone() + 1
         } else {
             // 条件が複数の場合
             for arm in arms.clone() {
                 crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
-                self.gen_expr_ir(*arm.pattern, &Size::DD);
+                self.gen_expr_ir(*arm.pattern, &types::Size::DD);
             }
             arms.len() + 1
         };
@@ -471,7 +526,7 @@ mod tests {
                 ir::inst::Inst::Param(
                     ir::inst::ParamMetaData::new("a".to_string(), 0, 0)
                 ),
-                ir::inst::Inst::Num { dst: 1, value: "10".to_string(), size: Size::DD },
+                ir::inst::Inst::Num { dst: 1, value: "10".to_string(), size: types::Size::DD },
                 ir::inst::Inst::AssignVar { name: "a".to_string(), value: 1 },
                 ir::inst::Inst::Ret(0),
             ]
@@ -499,8 +554,8 @@ mod tests {
             vec![
                 ir::inst::Inst::Block("L0".to_string()),
                 ir::inst::Inst::ExpectJmp("L2".to_string()),
-                ir::inst::Inst::gen_num("10", &Size::DD, 2),
-                ir::inst::Inst::gen_num("1", &Size::DD, 3),
+                ir::inst::Inst::gen_num("10", &types::Size::DD, 2),
+                ir::inst::Inst::gen_num("1", &types::Size::DD, 3),
                 ir::inst::Inst::Expr(
                     ir::inst::ExprInst{dst: 4, ls: 2, rs: 3, kind: ir::inst::ExprKind::LessThen}
                 ),

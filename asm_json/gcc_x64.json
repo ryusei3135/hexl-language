@@ -71,6 +71,7 @@
     }
   },
     "func": {
+    "extern_def": ".extern {name}\n",
   	"ret": 0,
 	"call": "call {name}\n"
   }

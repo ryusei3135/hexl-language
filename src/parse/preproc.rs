@@ -42,23 +42,35 @@ impl Parser {
         let mut flag: Option<PathTkn> = None;
         let mut mod_path = node::ModPath::new();
         loop {
-            match self.next_tkn()? {
+            match self.next_tkn_ref()? {
                 lex::Tkn::Name(name) => {
-                    mod_path.add_path(&name);
-                    flag.insert(PathTkn::Name);
+                    // 前回のトークンの種類が、無いまたは、"::"の場合だけ実行
+                    if flag
+                        .as_ref()
+                        .is_none_or(|v| matches!(v, PathTkn::PathTkn))
+                    {
+                        mod_path.add_path(&name);
+                        flag = Some(PathTkn::Name);
+                    } else {
+                        // pathの終了
+                        break;
+                    }
                 }
                 lex::Tkn::ModPathTkn => {
-                    flag.insert(PathTkn::PathTkn);
-                    continue;
+                    flag = Some(PathTkn::PathTkn);
                 }
                 _ => {
-                    if flag.is_some_and(|v| matches!(v, PathTkn::Name)) {
+                    if flag
+                        .as_ref()
+                        .is_some_and(|v| matches!(v, PathTkn::Name))
+                    {
                         break;
                     } else {
-                        Err(err::PreprocErrs::ExpectedPathSegment)?;
+                        crate::preproc_err!(self, ExpectedPathSegment);
                     }
                 }
             }
+            self.next_tkn().unwrap();
         }
         Ok(mod_path)
     }
@@ -68,32 +80,25 @@ impl Parser {
     fn build_asm_ast(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // #asm(...)なので、(以外が来たらエラー
         if self.next_tkn()? != lex::Tkn::LParen {
-            return Err(
-                err::PreprocErrs::ExpectedLParenAfterAsm
-                    .build(&self.current_line())
-            );
+            crate::preproc_err!(self, ExpectedLParenAfterAsm);
         }
 
         let asm_name = if let lex::Tkn::Name(asm_name) = self.next_tkn()? {
             asm_name
         } else {
-            Err(
-                err::PreprocErrs::NotFoundAsmName.
-                    build(&self.current_line())
-            )?
+            crate::preproc_err!(self, NotFoundAsmName);
         };
 
         // #asm(...)なので、(以外が来たらエラー
         if self.next_tkn()? != lex::Tkn::RParen {
-            return Err(
-                err::PreprocErrs::ExpectedRParenAfterAsm
-                    .build(&self.current_line())
-            );
+            crate::preproc_err!(self, ExpectedRParenAfterAsm);
         }
         let nodes = self.gen_asm_preproc()?;
         Ok(node::Group2Node::CompleSyntax((asm_name, nodes)))
     }
 
+    /// アセンブリ言語のプロプロセッサの
+    /// 中身(アセンブリ言語本体)を生成する関数
     fn gen_asm_preproc(&mut self) -> Result<Vec<String>, err::ErrKind> {
         let mut nodes = Vec::<String>::new();
 
