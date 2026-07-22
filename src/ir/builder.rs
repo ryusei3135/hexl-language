@@ -153,7 +153,11 @@ pub struct IR {
     extern_func_tree: Vec<FuncDefMetaData>,
     // 自身が公開する関数の配列:
     pub public_func_tree: Vec<String>,
-    define_meta_data: Vec<FuncDefMetaData>
+    define_meta_data: Vec<FuncDefMetaData>,
+    // 定義済みの構造体の情報
+    pub struct_tree: HashMap<String, node::StructDefine>,
+    // 定義済みの列挙型の情報
+    pub enum_tree: HashMap<String, node::EnumDefine>,
 }
 
 
@@ -172,14 +176,16 @@ impl IR {
             extern_func_tree: Vec::new(),
             public_func_tree: Vec::new(),
             define_meta_data: Vec::new(),
+            struct_tree: HashMap::new(),
+            enum_tree: HashMap::new(),
         }
     }
 
     pub fn builder(
         &mut self,
         nodes: &Vec<node::Group1Node>,
-        settings: &crate::cmd_line_args::OptSettings,
-    ) -> Result<Vec<FuncDefMetaData>, err::Errs> {
+        #[cfg(not(test))] settings: &crate::cmd_line_args::OptSettings
+    ) -> Result<Vec<FuncDefMetaData>, err::ErrKind> {
 
         for node in nodes {
             match node {
@@ -196,6 +202,7 @@ impl IR {
                     self.ir_tree = Vec::new();
                     self.id_counter = 0;
                 }
+                #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
                     // パスの情報を作成
                     let dir = path.gen_path();
@@ -217,7 +224,15 @@ impl IR {
                         );
                     self.make_extern_func_inst(&extern_fn_tree);
                     self.extern_func_tree.extend(extern_fn_tree);
-                }  
+                }
+                node::Group1Node::StructDefine(info) => {
+                    // 構造体の情報を登録
+                    self.struct_tree.insert(info.name.clone(), info.clone());
+                }
+                node::Group1Node::EnumDefine(info) => {
+                    // 列挙型の情報を登録
+                    self.enum_tree.insert(info.name.clone(), info.clone());
+                }
                 _ => {}
             }
         }
@@ -569,7 +584,6 @@ mod tests {
             self.lex.analy(&contents.to_string());
             let nodes = self.par
                 .parser(self.lex.gen_tkns.clone())
-                .map_err(|v| v.print_log(&contents.to_string()))
                 .unwrap();
             self.ir.builder(&nodes).unwrap();
         }
@@ -586,7 +600,7 @@ mod tests {
             }
             "
         );
-        let body = list.ir.func_tree.get(&"add".to_string()).body;
+        let body = list.ir.func_tree.get(&"add".to_string(), None).unwrap().body;
         assert_eq!(
             body,
             vec![
@@ -614,7 +628,7 @@ mod tests {
                 }
             "
         );
-        let body = list.ir.func_tree.get(&"main".to_string()).body;
+        let body = list.ir.func_tree.get(&"main".to_string(), None).unwrap().body;
         println!("{:?}", body);
         assert_eq!(
             body[0..=6],
@@ -652,7 +666,7 @@ mod tests {
                 }
             "
         );
-        let body = list.ir.func_tree.get(&"main".to_string()).body;
+        let body = list.ir.func_tree.get(&"main".to_string(), None).unwrap().body;
         println!("{:?}", body);
         assert_eq!(
             body.last().unwrap(),

@@ -41,15 +41,14 @@ impl Parser {
     pub fn parser(
         &mut self,
         tkns: Vec<lex::LocatedTkn>,
-    ) -> Result<&Vec<node::Group1Node>, err::Errs> {
+    ) -> Result<&Vec<node::Group1Node>, err::ErrKind> {
         // 関数の中身などを作成する
         // P は、この関数が公開されるかどうかのbool
         fn build_func<const P: bool>(
             this: &mut Parser,
             name: &String
-        ) -> Result<(), err::Errs> {
-            let node = this.func_node(&name, P)
-                .map_err(|v| v.gen(this.current_line(), this.tkn_chr_pos()))?;
+        ) -> Result<(), err::ErrKind> {
+            let node = this.func_node(&name, P)?;
             this.gen_nodes.push(node);
 
             this.gen_flag = GenFlag::Group2;
@@ -65,33 +64,39 @@ impl Parser {
                     match self.current_tkn().clone() {
                         lex::Tkn::KeyWordPub => {
                             // この関数などは、公開する
-                            match self.next_tkn().expect("jjj") {
+                            match self.next_tkn()? {
                                 lex::Tkn::Name(name) => {
-                                    build_func::<true>(&mut *self, &name)?;
+                                    build_func::<true>(&mut *self, &name)
                                 }
-                                t => panic!("{:?}", t),
-                            }
+                                unexpect_tkn => Err(err::ErrKind::MissingTknAfter(Some(unexpect_tkn))),
+                            }?;
                         }
                         lex::Tkn::Name(name) => {
                             build_func::<false>(&mut *self, &name)?;
                         }
                         lex::Tkn::CompleSyn => {
-                            let node = self.comple_syntax()
-                                .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?;
+                            let node = self.comple_syntax()?;
                             self.gen_nodes.push(node.change_group1());
+                        }
+                        lex::Tkn::KeyWordStruct => {
+                            let node = self.struct_node()?;
+                            self.gen_nodes.push(node);
+                        }
+                        lex::Tkn::KeyWordEnum => {
+                            let node = self.enum_node()?;
+                            self.gen_nodes.push(node);
                         }
                         t => panic!("{:?}", t),
                     };
                 },
                 GenFlag::Group2 => {
-                    let node = self.one_line_node()
-                        .map_err(|v| v.gen(self.current_line(), self.tkn_chr_pos()))?;
+                    let node = self.one_line_node()?;
 
                     match self.gen_nodes.last_mut().unwrap() {
                         node::Group1Node::FuncDefine(func) => {
                             func.add(node);
                         }
-                        t => println!("{:?}", t),
+                        t => panic!("KK"),
                     }
 
                     if self.current_tkn() == &lex::Tkn::RBrace {

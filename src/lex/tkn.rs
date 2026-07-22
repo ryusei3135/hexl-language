@@ -30,6 +30,8 @@ pub enum Tkn {
     KeyWordMatch,
     KeyWordLoop,
     KeyWordPub,
+    KeyWordStruct,
+    KeyWordEnum,
 }
 
 #[derive(Clone, Debug, PartialEq)]

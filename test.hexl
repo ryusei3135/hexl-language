@@ -1,6 +1,11 @@
 #include test::b
 
 
+struct Name {
+    name: int
+}
+
+
 add(a: int, b: int): int {
     c: char = "hello world\n"
     d: char = "tomato"

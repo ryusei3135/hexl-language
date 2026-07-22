@@ -111,15 +111,16 @@ impl Lexer {
         }
     }
 
-    pub fn analy(&mut self, content: &String) -> Result<(), err::Errs> {
+    pub fn analy(&mut self, content: &String) -> Result<(), err::ErrKind> {
         self.gen_tkns = Vec::new();
         self.chr_stk = String::new();
         self.last_kind = None;
         self.gen_flag = None;
         let char_table: [CharKind; 256] = make_char_table();
 
+        // 現在の行の何文字目か
         let mut chr_counter: usize = 1;
-        let mut tkn_start: usize = 1;
+        // 現在の行
         let mut line_counter: usize = 1;
 
         for chr in content.chars() {
@@ -132,9 +133,8 @@ impl Lexer {
                 // スタック可能か調べ、不可能ならトークンを生成
                 let stk_result = self.check_stkable_chr(curr_kind, &chr);
                 if stk_result != StkResult::Stackable {
-                    match self.gen_tkn(&tkn_start, &line_counter) {
+                    match self.gen_tkn(&line_counter, &chr_counter) {
                         Ok(tkn) => {
-                            tkn_start = chr_counter.clone();
                             let t = LocatedTkn {
                                 tkn: self.join_sym_tkn(&tkn).unwrap_or(tkn.tkn.clone()),
                                 pos: chr_counter.clone(),
@@ -183,8 +183,7 @@ impl Lexer {
 
         if self.gen_flag.is_some() {
             self.gen_tkns.push(
-                self.gen_tkn(&tkn_start, &line_counter)
-                    .map_err(|v| v.gen(&line_counter, &tkn_start))?
+                self.gen_tkn(&line_counter, &chr_counter)?
             );
         }
 
@@ -194,8 +193,8 @@ impl Lexer {
     /// トークンを生成しOptionで返す
     fn gen_tkn(
         &self,
-        chr_counter: &usize,
-        line_counter: &usize
+        line_counter: &usize,
+        chr_counter: &usize
     ) -> Result<LocatedTkn, err::ErrKind> {
         if let Some(ref flag) = self.gen_flag {
             let tkn = match flag {
@@ -226,7 +225,8 @@ impl Lexer {
                             self.chr_stk.trim_start_matches("0x"),
                             16,
                         ).map_err(|_| {
-                            err::ErrKind::SystemErr(err::SystemErr::FlagNotFound)
+                            err::LexErr::ThisNumIsInvalid
+                                .fmt(&line_counter, &chr_counter)
                         })?;
                         Tkn::Number(num.to_string())
                     } else {
@@ -239,6 +239,8 @@ impl Lexer {
                         "match" => Tkn::KeyWordMatch,
                         "loop" => Tkn::KeyWordLoop,
                         "pub" => Tkn::KeyWordPub,
+                        "struct" => Tkn::KeyWordStruct,
+                        "enum" => Tkn::KeyWordEnum,
                         _ => Tkn::Name(self.chr_stk.clone()),
                     }
                 }

@@ -4,6 +4,8 @@ mod expr;
 /// プリプロセッサのノードを作成するAPIを提供
 mod preproc;
 mod path;
+/// 構造体、列挙型のノードを作成するAPIを提供
+mod typedef;
 
 use crate::{
     err,

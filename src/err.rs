@@ -36,6 +36,22 @@ impl PreprocErrs {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum LexErr {
+    ThisNumIsInvalid
+}
+
+impl LexErr {
+    pub fn fmt(self, line: &usize, pos: &usize) -> ErrKind {
+        ErrKind::LexErrs {
+            kind: self,
+            line: line.clone(),
+            pos: pos.clone(),
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum ErrKind {
     EndTkn,
     OptErr,
@@ -47,32 +63,23 @@ pub enum ErrKind {
         kind: PreprocErrs,
         line: usize,
     },
+    MissingTknAfter(Option<lex::Tkn>),
+    LexErrs {
+        kind: LexErr,
+        line: usize,
+        pos: usize,
+    } 
 }
-
 
 impl ErrKind {
-    pub fn gen(self, line: &usize, pos: &usize) -> Errs {
-        Errs {
-            line: line.clone(),
-            pos: pos.clone(),
-            kind: self,
+    pub fn lex_err(&self) {
+        if let Self::LexErrs { kind, line, pos } = self {
+            match &kind {
+                LexErr::ThisNumIsInvalid => {
+                    println!("this num is invalid");
+                    println!("line `{}`, pos `{}`", line, pos);
+                }
+            }
         }
-    }
-}
-
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Errs {
-    line: usize,
-    pos: usize,
-    kind: ErrKind,
-}
-
-impl Errs {
-    pub fn print_log(&self, contents: &String) {
-        let line = contents.lines().nth(self.line - 1).unwrap();
-
-        println!("[err] line {}, pos: {}", self.line, self.pos);
-        println!("{:?}: {:?}", self.kind, line);
     }
 }

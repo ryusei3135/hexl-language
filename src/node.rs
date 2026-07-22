@@ -52,6 +52,40 @@ impl FuncDefine {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct StructField {
+    pub name: String,
+    pub ty: TyNode,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructDefine {
+    pub name: String,
+    pub fields: Vec<StructField>,
+}
+
+impl StructDefine {
+    pub fn new(name: String, fields: Vec<StructField>) -> Group1Node {
+        Group1Node::StructDefine(
+            Self { name, fields }
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnumDefine {
+    pub name: String,
+    pub variants: Vec<String>,
+}
+
+impl EnumDefine {
+    pub fn new(name: String, variants: Vec<String>) -> Group1Node {
+        Group1Node::EnumDefine(
+            Self { name, variants }
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum StmtNode {
     Return(Expr),
 }
@@ -193,6 +227,8 @@ impl Group2Node {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Group1Node {
     FuncDefine(FuncDefine),
+    StructDefine(StructDefine),
+    EnumDefine(EnumDefine),
     Include(ModPath),
     Line(String)
 }

@@ -139,16 +139,15 @@ pub fn build(
     let mut parser = parse::Parser::new();
     let mut ir_builder = ir::IR::new();
     // アセンブリ言語のデータを作成
-    let _ = lexer.analy(&content).map_err(|v| v.print_log(&content)); 
+    let _ = lexer.analy(&content).map_err(|v| v.lex_err()); 
 
     let nodes = parser
         .parser(lexer.gen_tkns.clone())
-        .map_err(|v| v.print_log(&content))
         .unwrap();
     let func_def_meta_data = ir_builder
         .builder(
             &nodes,
-            &settings
+            #[cfg(not(test))] &settings
         )
         .unwrap();
     let asm_text = asm_setting::gen_asm_text(

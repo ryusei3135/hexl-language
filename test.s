@@ -1,44 +1,52 @@
-use super::*;
+.data
+M0: .ascii "hello world\n"
+M1: .ascii "tomato"
 
+.text
 
-impl Parser {
-    pub(super) fn build_scope_node(
-        &mut self,
-        name: &String
-    ) -> Result<Option<node::Group2Node>, err::ErrKind> {
-        // "::"がないので、何も返さない
-        if !matches!(self.next_tkn_ref()?, lex::Tkn::ModPathTkn) {
-            return Ok(None);
-        }
-        // "::"をスキップ
-        let _ = self.next_tkn()?;
-        let mut path_node = Vec::<String>::new();
-        loop {
-            if let lex::Tkn::Name(name) = self.next_tkn()? {
-                path_node.push(name);
-            } else {
-                panic!();
-            }
-
-            if !matches!(self.next_tkn_ref()?, lex::Tkn::ModPathTkn) {
-                let node = node::Group2Node::scope {
-                    scope: path_node,
-                    target: Box::new(
-                        node::Group2Node::Expr(
-                        self.expr_define_var(
-                            path_node
-                            .last()
-                            .unwrap()
-                            .to_string()
-                        )?
-                    ))
-                };
-                Ok(Some(node))
-            } else {
-                let _ = self.next_tkn()?;
-            }
-        }
-    }
-
-    pub(super) fn build_member_node(&mut self) -> Result<node, err::ErrKind>
-}
+.global _start
+.extern add_1
+_start:
+  mov $10, %edi
+  mov $1, %esi
+call add
+  mov $0, %eax
+  mov $60, %edi
+  syscall
+ret
+add:
+L0:
+  mov $0, %eax
+  cmp %eax, %edi
+  jg L2
+jmp L1
+L2:
+  mov $5, %ecx
+  cmp %ecx, %edi
+  jg L3
+  push %rax
+  push %rdi
+  mov $1, %eax
+  mov $1, %edi
+  lea M1(%rip), %rsi
+  mov $10, %edx
+  syscall
+  pop %rdi
+  pop %rax
+jmp L4
+L3:
+  push %rax
+  push %rdi
+  mov $1, %eax
+  mov $1, %edi
+  lea M0(%rip), %rsi
+  mov $12, %edx
+  syscall
+  pop %rdi
+  pop %rax
+L4:
+  mov $1, %edx
+  sub %edx, %edi
+jmp L0
+L1:
+ret
