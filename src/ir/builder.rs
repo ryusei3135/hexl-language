@@ -42,6 +42,7 @@ impl VarTree {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncDefInfo {
+    pub module: Option<String>,
     pub args: Vec<node::ArgsNode>,
     pub body: Vec<inst::Inst>,
     pub ret_ty: Option<node::TyNode>,
@@ -60,8 +61,22 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&mut self, name: &String) -> Option<FuncDefInfo> {
-        self.func.get(name).map(|v| v.clone())
+    pub fn get(&mut self, name: &String, module_name: Option<&String>) -> Option<FuncDefInfo> {
+        if let Some(func) = self.func.get(name) {
+            // 指定された関数がモジュールに入っていないかつ、自分も
+            // モジュールを指定していない場合そのまま関数のデータを返す
+            if module_name.is_none() && func.module.is_none() {
+                return Some(func.clone());
+            }
+
+            if func.module == module_name.map(|v| v.to_string()) {
+                Some(func.clone())
+            } else {
+                panic!("not found this module in {}", name);
+            }
+        } else {
+            None
+        }
     }
     
     pub fn add(
@@ -73,6 +88,7 @@ impl FuncTree {
         self.func.insert(
             meta_data.name.clone(),
             FuncDefInfo {
+                module: None,
                 args: meta_data.params.clone(),
                 body,
                 ret_ty: Some(ret_ty.clone()),
@@ -85,22 +101,35 @@ impl FuncTree {
 
 #[derive(Clone, Debug)]
 pub struct FuncDefMetaData {
+    module: Option<String>,
     name: String,
     params: Vec<node::ArgsNode>,
     ret_ty: Option<node::TyNode>,
 }
 
 impl FuncDefMetaData {
-    pub fn new(info: &node::FuncDefine) -> Self {
+    /// moduleは自分自身がどのモジュールに属しているか
+    /// Noneの場合は、#includeで関数の名前ごと指定しているか
+    /// 自分のファイルの中にあるかのどちらか
+    pub fn new(
+        info: &node::FuncDefine,
+        module: Option<&String>
+    ) -> Self {
         Self {
+            module: module.map(|v| v.clone()),
             name: info.name.clone(),
             params: info.params.clone(),
             ret_ty: Some(info.ret_ty.clone()),
         }
     }
 
+    pub fn add_self_module_name(&mut self, self_name: &String) {
+        self.module = Some(self_name.to_string());
+    }
+
     pub fn gen(&self) -> FuncDefInfo {
         FuncDefInfo {
+            module: None,
             args: self.params.clone(),
             body: Vec::new(),
             ret_ty: self.ret_ty.clone(),
@@ -160,6 +189,9 @@ impl IR {
 
                     self.register_argument(&info.params);
                     self.gen_inst(&info.body.clone());
+
+                    // 関数の処理内容をpush
+                    self.push_func_ir_tree(&info);
                     // 使うデータを初期化
                     self.ir_tree = Vec::new();
                     self.id_counter = 0;
@@ -169,19 +201,31 @@ impl IR {
                     let dir = path.gen_path();
                     let new_setting = settings
                         .new_file(&dir);
-                    let fn_tree = crate::build(&new_setting).unwrap();
-                    self.make_extern_func_inst(&fn_tree);
-                    self.extern_func_tree.extend(fn_tree);
+                    let mut extern_fn_tree: Vec<FuncDefMetaData> = crate::build(&new_setting).unwrap();
+                    // 関数にモジュールの名前を追加
+                    extern_fn_tree
+                        .iter_mut()
+                        .for_each(
+                            |v| {
+                                v.add_self_module_name(
+                                    path
+                                    .path
+                                    .last()
+                                    .unwrap()
+                                )
+                            }
+                        );
+                    self.make_extern_func_inst(&extern_fn_tree);
+                    self.extern_func_tree.extend(extern_fn_tree);
                 }  
                 _ => {}
             }
         }
         Ok(mem::take(&mut self.define_meta_data))
     }
-
-    /// 現在処理中の関数の情報を登録する
-    fn entry_func_info(&mut self, info: &node::FuncDefine) {
-        self.func_ret_ty = Some(info.ret_ty.clone());
+    
+    /// 関数の情報を関数ツリーに登録
+    fn push_func_ir_tree(&mut self, info: &node::FuncDefine) {
         // 関数のデータをpush
         self.func_tree.add(
             // 関数の処理
@@ -191,7 +235,13 @@ impl IR {
             // 関数の戻り値
             &info.ret_ty,
         );
-        self.define_meta_data.push(FuncDefMetaData::new(&info));
+    }
+
+    /// 現在処理中の関数の情報を登録する
+    /// **これは自分自身のファイルの中の関数**
+    fn entry_func_info(&mut self, info: &node::FuncDefine) {
+        self.func_ret_ty = Some(info.ret_ty.clone());
+        self.define_meta_data.push(FuncDefMetaData::new(&info, None));
         // 公開する関数を登録   
         if info.public {
             self.public_func_tree.push(info.name.to_string());
@@ -200,6 +250,7 @@ impl IR {
 
     /// 外部の関数を定義するノードを
     /// 作成し、スタックする関数
+    /// アセンブリ言語を出力する際にだけ使う
     fn make_extern_func_inst(&mut self, fn_tree: &Vec<FuncDefMetaData>) {
         for func in fn_tree {
             self.extern_funcs.push(
@@ -225,6 +276,13 @@ impl IR {
                         }
                     );
                     self.id_counter += 1;
+                }
+                node::Group2Node::Scope { scope, target } => {
+                    if let node::Expr::CallFunc(call_func_node) = *target {
+                        self.gen_call_func_ir(scope.last(), &call_func_node);
+                    } else {
+                        panic!();
+                    }
                 }
                 t => println!("{:?}", t),
             }
@@ -278,10 +336,46 @@ impl IR {
         }.new()
     }
 
+    fn gen_call_func_ir(
+        &mut self,
+        module_name: Option<&String>,
+        meta_data: &node::CallInfo
+    ) -> inst::Inst {
+        // 関数の定義を取得
+        let defined_func_data = {
+            if let Some(def_data) = self.func_tree.get(&meta_data.name, module_name) {
+                def_data
+            } else {
+                let result = self.extern_func_tree
+                    .iter()
+                    .find(|v| v.name.as_str() == &meta_data.name);
+                    if let Some(def_data) = result {
+                        def_data.gen()
+                    } else {
+                        panic!();
+                    }
+                }
+            };
+        let def_args = defined_func_data.args.clone();
+        // 関数のノードを作成
+        let mut func_meta_data 
+            = inst::CallFuncMetaData::new(meta_data.name.clone());
+
+        for (index, _) in meta_data.args.iter().enumerate() {
+            let expr_arg = meta_data.args.get(index).unwrap().clone();
+            let ty = types::Size::new(&def_args[index].ty).clone();
+            let idx = self.gen_expr_ir(expr_arg, &ty);
+            println!(">>: {:?}", idx);
+            func_meta_data.insert_param_parent_id(idx);
+        }
+        inst::Inst::CallFunc(func_meta_data)
+    }
+
+
     fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
         let inst = match expr {
             node::Expr::Add(node) => {
-                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Add)
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)
             }
             node::Expr::Sub(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)
@@ -328,34 +422,7 @@ impl IR {
                 }
             }
             node::Expr::CallFunc(meta_data) => {
-                // 関数の定義を取得
-                let defined_func_data = {
-                    if let Some(def_data) = self.func_tree.get(&meta_data.name) {
-                        def_data
-                    } else {
-                        let result = self.extern_func_tree
-                            .iter()
-                            .find(|v| v.name.as_str() == &meta_data.name);
-                        if let Some(def_data) = result {
-                            def_data.gen()
-                        } else {
-                            panic!();
-                        }
-                    }
-                };
-                let def_args = defined_func_data.args.clone();
-                // 関数のノードを作成
-                let mut func_meta_data 
-                    = inst::CallFuncMetaData::new(meta_data.name);
-
-                for (index, _) in meta_data.args.iter().enumerate() {
-                    let expr_arg = meta_data.args.get(index).unwrap().clone();
-                    let ty = types::Size::new(&def_args[index].ty).clone();
-                    let idx = self.gen_expr_ir(expr_arg, &ty);
-                    println!(">>: {:?}", idx);
-                    func_meta_data.insert_param_parent_id(idx);
-                }
-                inst::Inst::CallFunc(func_meta_data)
+                self.gen_call_func_ir(None, &meta_data)
             }
             node::Expr::Var(name) => {
                 return match self.var_tree.get(&name) {

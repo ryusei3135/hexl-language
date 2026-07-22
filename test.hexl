@@ -4,7 +4,7 @@
 add(a: int, b: int): int {
     c: char = "hello world\n"
     d: char = "tomato"
-    add_1(10)
+    b::add_1(10)
     loop a > 0 {
         match {
             a > 5 {
@@ -31,11 +31,12 @@ add(a: int, b: int): int {
     ret b
 }
 
-main(): int {
+_start(): int {
     add(10, 1)
     #asm(gcc_x64) {
         "{space}mov $0, %eax"
         "{space}mov $60, %edi"
         "{space}syscall"
     }
+    ret 0
 }

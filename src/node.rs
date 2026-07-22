@@ -17,7 +17,8 @@ pub struct FuncDefine {
     pub name: String,
     pub params: Vec<ArgsNode>,
     pub ret_ty: TyNode,
-    pub body: Vec<Group2Node>
+    pub body: Vec<Group2Node>,
+    pub module: Option<String>,
 }
 
 
@@ -26,7 +27,7 @@ impl FuncDefine {
         name: String,
         args: Vec<ArgsNode>,
         ret_ty: TyNode,
-        public: bool
+        public: bool,
     ) -> Group1Node {
         Group1Node::FuncDefine(
             Self {
@@ -35,8 +36,13 @@ impl FuncDefine {
                 params: args,
                 ret_ty: ret_ty,
                 body: Vec::new(),
+                module: None,
             }
         )
+    }
+
+    pub fn self_module_name(&mut self, name: &String) {
+        self.module = Some(name.to_string());
     }
 
     pub fn add(&mut self, node: Group2Node) {
@@ -120,7 +126,7 @@ impl Expr {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModPath {
-    path: Vec<String>,
+    pub path: Vec<String>,
 }
 
 impl ModPath {
@@ -159,6 +165,14 @@ pub struct CallInfo {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Group2Node {
+    Scope{
+        scope: Vec<String>,
+        target: Box<Expr>,
+    },
+    Member{
+        scope: Vec<String>,
+        target: Box<Expr>,
+    },
     Stmt(StmtNode),
     Expr(Expr),
     CompleSyntax((String, Vec<String>)),

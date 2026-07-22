@@ -15,6 +15,7 @@ pub enum Tkn {
     Comma,
     Colon,
     Or,
+    Dot,
     LAngleBracket,
     RAngleBracket,
 

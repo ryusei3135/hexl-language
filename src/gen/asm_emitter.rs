@@ -23,18 +23,18 @@ pub struct VarIndexInfo {
 
 pub struct AsmEmitter { 
     pub(super) asm_text: String,
-    data_sec_text: String,
-    data_idx: usize,
-    reg_idx: usize,
-    expr_vars: Vec<String>,
-    reserved_label_name: Option<String>,
+    pub(super) data_sec_text: String,
+    pub(super) data_idx: usize,
+    pub(super) reg_idx: usize,
+    pub(super) expr_vars: Vec<String>,
+    pub(super) reserved_label_name: Option<String>,
 
     pub(super) asm_fmt: mng_fmt::MngAsmFmt, 
 
-    curr_inst: Vec<inst::Inst>,
+    pub(super) curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
-    data_map: Vec<(usize, String)>,
-    last_inst_idx: Vec<(usize, usize)>,
+    pub(super) data_map: Vec<(usize, String)>,
+    pub(super) last_inst_idx: Vec<(usize, usize)>,
     pub(super) var_hash_map: HashMap<String, VarIndexInfo>,
 }
 
@@ -70,133 +70,28 @@ impl AsmEmitter {
     ) -> String {
         self.asm_text = String::from(&self.asm_fmt.get_entry_point());
 
-        // 自身が公開する関数を生成
-        for func_name in global_funcs.iter() {
-            self.asm_text.push_str(
-                self.asm_fmt
-                .get_global_fmt(func_name)
-                .as_str()
+        self.gen_global_func_asm(&global_funcs);
+        self.gen_extern_func_asm(&extern_funcs);
+
+        // エントリーポイントを先頭に配置
+        if let Some(ref mut meta_data)
+            = func_tree
+                .func
+                .remove_entry("_start")
+        {
+            self.build_func_process(
+                meta_data,
+                &asm_fmt_name
             );
         }
 
-        for func in extern_funcs.iter() {
-            if let inst::Inst::ExternFunc(name) = func {
-                self.asm_text
-                    .push_str(
-                        self.asm_fmt
-                        .get_extern_func(&name)
-                        .as_str()
-                    );
-            } else {
-                panic!();
-            }
-        }
-
-        for func in func_tree.func.clone().iter_mut() {
-            // 新しく関数の作成、
-            self.asm_text.push_str(&format!("{}:\n", func.0));
-            self.curr_inst = mem::take(&mut func.1.body);
-
-            for node in self.curr_inst.clone().iter() {
-                match &node {
-                    inst::Inst::ExpectJmp(name) => {
-                        // 次のフォーマットに使うラベルの名前を予約する
-                        if self.reserved_label_name.is_none() {
-                            self.reserved_label_name = Some(name.to_string());
-                        } else {
-                            // 予約するラベルの名前は予約するときにNoneで無ければいけない
-                            panic!("system err");
-                        }
-                    }
-                    inst::Inst::Str { dst, value } => {
-                        let label_name = format!("M{}", self.data_idx.to_string());
-                        let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
-                        self.data_sec_text.push_str(&fmt_data);
-                        self.data_map.push((*dst, label_name));
-                        self.data_idx += 1;
-                    }
-                    inst::Inst::Expr(expr) => {
-                        let asm = self.format_expr_inst(&expr);
-
-                        self.asm_text.push_str(&asm);
-
-                        self.last_inst_idx.push(
-                            (expr.dst, self.reg_idx)
-                        );
-                        self.reg_idx += 1;
-                    }
-                    inst::Inst::Num{ .. } => {
-                    }
-                    inst::Inst::Block(name) => {
-                        self.asm_text.push_str(&format!("{}:\n", name));
-                    }
-                    inst::Inst::Comple{name, nodes} => {
-                        if let Some(asm_name) = asm_fmt_name {
-                            if name.as_str() == asm_name.as_str() {
-                                self.deploy_inline_asm(&name, &nodes);
-                            } else {
-                                panic!("unmatch asm name");
-                            }
-                        } else {
-                            self.deploy_inline_asm(&name, &nodes);
-                        }
-                    }
-                    inst::Inst::Jmp(name) => {
-                        self.asm_text.push_str(&format!("jmp {}\n", name));
-                    }
-                    inst::Inst::AssignVar { name, value } => {
-                        self.update_value_info(&name, &value);
-
-                        let current_reg = self.reg_idx;
-
-                        if self.expr_vars.iter().find(|v| v.as_str() == name.as_str()).is_some() {
-                            self.update_value_reg(&name, &current_reg);
-                        }
-                    }
-                    inst::Inst::Ret(idx) => {
-                        self.format_line(
-                            "mov",
-                            Some(&0),
-                            &idx,
-                            None
-                        );
-                        self.asm_text.push_str("ret\n");
-                    }
-                    inst::Inst::Mov { name, dst, src } => {
-                        if self.data_map.iter().find(|v| &v.0 == src).is_some() {
-                            // 子のノードがstaticりょいきの値なので、変数名だけ登録する
-                            self.insert_var_info(&name.as_ref().unwrap(), &dst, self.reg_idx);
-                        } else {
-                            // レジスタに置く変数
-                            let formated = self.format_line("mov", Some(dst), src, None);
-
-                            self.reg_idx += 1;
-                            self.asm_text.push_str(&formated);
-
-                            if let Some(var_name) = name {
-                                self.insert_var_info(&var_name, &dst, self.reg_idx);
-                                let current_reg = self.reg_idx;
-
-                                if self.expr_vars.iter().find(|v| v.as_str() == var_name.as_str()).is_some() {
-                                    self.update_value_reg(&var_name, &current_reg);
-                                }
-                            }
-                        }
-                    }
-                    inst::Inst::CallFunc(meta_data) => {
-                        let asm_text = self.emit_call_func(&meta_data);
-                        self.asm_text.push_str(asm_text.as_str());
-                    }
-                    inst::Inst::Param(param) => {
-                        let reg_num = self.asm_fmt.get_fmt_param::<usize>(&param.num);
-                        self.insert_var_info(
-                            &param.name, &param.dst, reg_num
-                        );
-                    }
-                    _ => {}
-                }
-            }
-
+        for mut func_meta_data in func_tree.func.drain() {
+            // == アセンブリ言語の生成 ==
+            self.build_func_process(
+                &mut func_meta_data,
+                &asm_fmt_name
+            );
+            // == データの初期化 ==
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
         }
@@ -209,13 +104,42 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
+    fn gen_global_func_asm(&mut self, global_funcs: &Vec<String>) {
+        // 自身が公開する関数を生成
+        for func_name in global_funcs.iter() {
+            self.asm_text.push_str(
+                self.asm_fmt
+                .get_global_fmt(func_name)
+                .as_str()
+            );
+        }
+    }
+
+    #[inline(always)]
+    fn gen_extern_func_asm(&mut self, extern_funcs: &Vec<inst::Inst>) {
+        for func in extern_funcs.iter() {
+            if let inst::Inst::ExternFunc(name) = func {
+                self.asm_text
+                    .push_str(
+                        self.asm_fmt
+                        .get_extern_func(&name)
+                        .as_str()
+                    );
+            } else {
+                panic!();
+            }
+        }
+    }
+
+
+    #[inline(always)]
     pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
         let index = self.var_hash_map.get(name).expect(&format!("this -> {}", name)).index;
         self.extract_operand_text(&index).to_string()
     }
 
     #[inline(always)]
-    fn insert_var_info(&mut self, name: &String, index: &usize, reg_idx: usize) {
+    pub(super) fn insert_var_info(&mut self, name: &String, index: &usize, reg_idx: usize) {
         self.expr_vars.push(name.clone());
         self.var_hash_map.insert(
             name.clone(),
@@ -227,12 +151,12 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn update_value_info(&mut self, name: &String, index: &usize) {
+    pub(super) fn update_value_info(&mut self, name: &String, index: &usize) {
         self.var_hash_map.get_mut(name).unwrap().index = *index;
     }
 
     #[inline(always)]
-    fn update_value_reg(&mut self, name: &String, reg: &usize) {
+    pub(super) fn update_value_reg(&mut self, name: &String, reg: &usize) {
         self.var_hash_map.get_mut(name).unwrap().reg = *reg;
     }
 
@@ -335,7 +259,7 @@ impl AsmEmitter {
         }
     }
 
-    fn format_expr_inst(
+    pub(super) fn format_expr_inst(
         &mut self,
         expr: &inst::ExprInst,
     ) -> String {

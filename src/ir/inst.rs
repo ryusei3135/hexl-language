@@ -50,6 +50,7 @@ impl ParamMetaData {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallFuncMetaData {
+    pub path: Vec<String>,
     pub public: bool,
     pub name: String,
     pub params: Vec<ValueId>,
@@ -58,6 +59,7 @@ pub struct CallFuncMetaData {
 impl CallFuncMetaData {
     pub fn new(name: String) -> Self {
         Self {
+            path: Vec::new(),
             public: false,
             name,
             params: Vec::new(),
@@ -66,6 +68,10 @@ impl CallFuncMetaData {
 
     pub fn insert_param_parent_id(&mut self, value_id: ValueId) {
         self.params.push(value_id);
+    }
+
+    pub fn module(&mut self, path: &Vec<String>) {
+        self.path = path.clone();
     }
 }
 

@@ -26,6 +26,7 @@ c言語ライクな言語
 - ret
 - match
 - loop
+- pub
 ### プロプロセッサ
 - #include
 - #asm(..)

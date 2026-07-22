@@ -6,3 +6,4 @@ Cargo.lock
 *.out
 test/
 test
+test.sh

@@ -116,9 +116,7 @@ impl Parser {
                 self.comple_syntax()?
             }
             lex::Tkn::Name(name) => {
-                node::Group2Node::Expr(
-                    self.expr_define_var(name)?
-                )
+                self.build_scope_node(&name)?
             }
             lex::Tkn::KeyWordRet => {
                 node::StmtNode::Return(

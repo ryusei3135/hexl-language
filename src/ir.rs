@@ -5,7 +5,7 @@ use std::{
 use crate::node;
 
 pub mod inst;
-mod builder;
+pub mod builder;
 
 pub mod types;
 

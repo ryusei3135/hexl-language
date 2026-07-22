@@ -9,6 +9,7 @@ mod mng_fmt;
 use crate::ir::{
     FuncTree,
     inst,
+    builder,
     types::Size,
 };
 use std::mem;

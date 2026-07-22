@@ -59,6 +59,7 @@ mod local {
         Comma,
         Colon,
         Or,
+        Dot,
         LAngleBracket,
         RAngleBracket,
 
@@ -210,6 +211,7 @@ impl Lexer {
                 GenFlag::Comma => Tkn::Comma,
                 GenFlag::Colon => Tkn::Colon,
                 GenFlag::Or => Tkn::Or,
+                GenFlag::Dot => Tkn::Dot,
                 GenFlag::LAngleBracket => Tkn::LAngleBracket,
                 GenFlag::RAngleBracket => Tkn::RAngleBracket,
 
@@ -280,6 +282,7 @@ impl Lexer {
             Some('<') => GenFlag::LAngleBracket,
             Some('>') => GenFlag::RAngleBracket,
             Some('|') => GenFlag::Or,
+            Some('.') => GenFlag::Dot,
             _ => return self.get_value_by_flag_ty(chr, StkResult::GenTkn),
         };
         self.over_write_flag::<true>(sym_flag);

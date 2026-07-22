@@ -27,7 +27,7 @@ impl Parser {
                             func_name.clone(),
                             arg,
                             ret_ty,
-                            is_public,
+                            is_public
                         )
                     )
                 } else {
