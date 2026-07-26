@@ -100,12 +100,13 @@ impl AsmEmitter {
                     }
                 }
                 inst::Inst::Ret(idx) => {
-                    self.format_line(
+                    let ret_asm = self.format_line(
                         "mov",
                         Some(&0),
                         &idx,
                         None
                     );
+                    self.asm_text.push_str(&ret_asm);
                     self.asm_text.push_str(self.asm_fmt.func_frame_end().as_str());
                     self.asm_text.push_str("ret\n");
                 }
@@ -183,6 +184,10 @@ impl AsmEmitter {
                 }
                 _ => {}
             }
+        }
+        // retがない場合つけたす
+        if !self.asm_text.ends_with("ret\n") {
+            self.asm_text.push_str("leave\nret\n");
         }
     }
 }

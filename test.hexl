@@ -6,7 +6,7 @@ struct Name {
 }
 
 
-add(a: int, b: int): int {
+add(a: int, b: int) {
     c: byte = "hello world\n"
     d: byte = "tomato\n"
 
@@ -33,7 +33,6 @@ add(a: int, b: int): int {
         }
         a = a - 1
     }
-    ret b
 }
 
 _start(): int {
@@ -43,10 +42,11 @@ _start(): int {
         name: 10
     }
     add(s.name, a)
+    add(a, 0)
     #asm(gcc_x64) {
         "{space}mov $60, %eax"
         "{space}mov $0, %edi"
-        "{space}syscall"
+        "syscall"
     }
     ret 0
 }

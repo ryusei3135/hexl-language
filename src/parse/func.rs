@@ -36,8 +36,17 @@ impl Parser {
                     Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace))
                 }
             },
+            // 戻り値の型が指定されていない場合、組み込みの`int`型を
+            // デフォルトの戻り値の型として扱う
             lex::Tkn::LBrace => {
-                panic!();
+                Ok(
+                    node::FuncDefine::new(
+                        func_name.clone(),
+                        arg,
+                        node::TyNode::Ty("int".to_string()),
+                        is_public,
+                    )
+                )
             },
             t => panic!("{:?}", t),
         }
