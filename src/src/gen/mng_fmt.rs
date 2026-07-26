@@ -140,17 +140,12 @@ impl MngAsmFmt {
     }
 
     pub fn get_static_num_fmt(&self, value: &String, label: &String, size: &types::Size) -> String {
-        format!(".align 4\n{}: .long {}\n", label, value.replace("$", ""))
+        format!("{}: .long {}\n", label, value)
     }
 
     pub fn get_global_fmt(&self, name: &String) -> String {
         self.fmt.fmt.global
             .replace("{name}", name)
-    }
-
-    /// 静的領域の変数に%ripをつけて返す
-    pub fn fmt_static_var_rip(&self, name: &String) -> String {
-        self.fmt.fmt.static_var.replace("{name}", name)
     }
     
     /// エントリーポイントを作成

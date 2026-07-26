@@ -134,7 +134,7 @@ impl AsmEmitter {
         }
     }
 
-  /// 静的領域の変数がどんなラベルで登録されているかを取得する
+
     #[inline(always)]
     pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
         let index = self.var_hash_map.get(name).expect(&format!("this -> {}", name)).index;
@@ -295,13 +295,12 @@ impl AsmEmitter {
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 if kind == &inst::MemoryKind::Static {
                     // 静的領域の変数: データセクションに置いたラベルを参照する
-                    let name = self.data_map
+                    self.data_map
                         .iter()
                         .find(|v| &v.0 == parent_id)
                         .expect("static var label not found")
                         .1
-                        .clone();
-                    self.asm_fmt.fmt_static_var_rip(&name)
+                        .clone()
                 } else {
                     // スタック領域の変数: %rbpからのオフセットを参照する
                     self.asm_fmt.fmt_ref_operand(

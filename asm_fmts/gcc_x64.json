@@ -4,26 +4,26 @@
 	"al", "cl", "dl", "bl"
     ],
     "dw": [
-      "ax", "cx", "dx", "bx",
-      "sp", "bp", "si", "di"
+      "ax", "cx", "dx",
+      "si", "di"
     ],
     "dd": [
-	"eax", "ecx", "edx", "ebx",
-    	"esp", "ebp", "esi", "edi",
+        "eax", "ecx", "edx",
+    	"esi", "edi",
     	"r8d", "r9d", "r10d", "r11d",
     	"r12d", "r13d", "r14d", "r15d"
     ],
     "dq": [
-	"rax", "rcx", "rdx", "rbx",
-    	"rsp", "rbp", "rsi", "rdi",
+        "rax", "rcx", "rdx",
+    	"rsi", "rdi",
     	"r8", "r9", "r10", "r11",
     	"r12", "r13", "r14", "r15"
     ]
   },
   "args": {
 	"fmt": {
-		"linux": [7, 6, 2, 1, 8, 9],
-	  	"win": [1, 2, 8, 9]
+		"linux": [4, 3, 2, 1, 5, 6],
+	  	"win": [1, 2, 5, 6]
 	}
   },
   "section": ".{name}\n",
@@ -32,7 +32,20 @@
 	"num": "${}",
     "static_var": "{name}(%rip)",
     "string": "{name}: .ascii \"{}\"\n",
-    "global": ".global {name}\n"
+    "global": ".global {name}\n",
+    "data": {
+        "head": "{space}push %rbp\n{space}mov %rsp, %rbp\n{space}sub ${size}, %rsp\n",
+        "fmt": "{space}mov {dst}, -{size}(%rbp)\n"
+    },
+    "op_size": {
+        "db": "b",
+        "dw": "w",
+        "dd": "l",
+        "dq": "q"
+    },
+    "ref_stack": "-{size}({src})",
+    "frame": "{space}push %rbp\n{space}mov %rsp, %rbp\n",
+    "frame_end": "{space}leave\n"
   },
   "op": {
       "push": {"len": 1, "template": "{space}push {dst}\n"},

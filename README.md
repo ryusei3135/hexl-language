@@ -27,13 +27,28 @@ c言語ライクな言語
 - match
 - loop
 - pub
+- const
+- struct
+- enum
+
 ### プロプロセッサ
 - #include
 - #asm(..)
+    - (..)に任意のアセンブラの設定ファイルの名前を入れると使える
+
 ### 変数の定義方法
+1. 普通の変数の定義
+2. スタック領域の変数
+3. 静的領域の変数
+4. 配列の変数
 ```
-name: ty = value
+d: ty = value
+a: [int] = 10
+b: ""[int] = 10
+c: [int 4] = [1, 2, 3, 4]
 ```
+- [変数の扱い](./documents/variable.md)
+
 ### 関数の定義方法
 ```
 name(args: ty): ret_ty {
@@ -41,6 +56,8 @@ name(args: ty): ret_ty {
     ret value
 }
 ```
+
+- [アセンブリ言語のフォーマットについて](./documents/asm_fmts.md)
 
 ## Changelog
 - [CHANGELOG.md](./CHANGELOG.md)
