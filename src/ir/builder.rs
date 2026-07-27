@@ -354,7 +354,7 @@ impl IR {
             } 
             // ポインタの中身
             node::Expr::DefVar(mut var) => {
-                match &var.ty {
+                match &var.ty.clone() {
                     node::TyNode::Stack{..} | node::TyNode::Static{..} => {
                         self.gen_mem_def_var(var)
                     }
@@ -363,7 +363,7 @@ impl IR {
                             *var.value,
                             &self.size_of(&var.ty)
                         );
-                        self.var_tree.push::<'l'>(&var.name, &value_idx, &ty_name);
+                        self.var_tree.push::<'l'>(&var.name, &value_idx, &var.ty);
                         inst::Inst::Mov{
                             name: Some(mem::take(&mut var.name)),
                             size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
@@ -376,7 +376,7 @@ impl IR {
                             *var.value,
                             &self.size_of(&var.ty)
                         );
-                        self.var_tree.push::<'l'>(&var.name, &value_idx, &ty_name.get_ty_str_name());
+                        self.var_tree.push::<'l'>(&var.name, &value_idx, &var.ty);
                         inst::Inst::Mov{
                             name: Some(mem::take(&mut var.name)),
                             size: types::Size::build_ptr_ty(&*ty_name),
@@ -392,10 +392,10 @@ impl IR {
             }
             node::Expr::Var(name) => {
                 return match self.var_tree.get(&name) {
-                    types::VarType::Local(index) => {
+                    def_tree::VarType::Local(index) => {
                         *index
                     }
-                    types::VarType::Param(param) => {
+                    def_tree::VarType::Param(param) => {
                         // 引数のノード
                         *param
                     }
@@ -458,16 +458,16 @@ impl IR {
                 match &*target {
                     node::Expr::Var(name) => {
                         let _ = match self.var_tree.get(&scope.last().unwrap()) {
-                            types::VarType::Local(index) => {
+                            def_tree::VarType::Local(index) => {
                                 *index
                             }
-                            types::VarType::Param(param) => {
+                            def_tree::VarType::Param(param) => {
                                 // 引数のノード
                                 *param
                             }
                         };
                         let size = self.struct_tree.get_pos(
-                            &self.var_tree.get_ty_name(&scope.last().unwrap()),
+                            &scope.last().unwrap(),
                             &name,
                         );
                         inst::Inst::RefStruct{
@@ -540,7 +540,7 @@ impl IR {
         //  変数を参照した際に即値やレジスタが直接使われてしまい、
         //  スタック/静的領域への書き込みが無視されるバグがあった)
         let var_idx = self.id_counter;
-        self.var_tree.push::<'l'>(&mem::take(&mut var.name), &var_idx, &ty_name);
+        self.var_tree.push::<'l'>(&mem::take(&mut var.name), &var_idx, &var.ty);
 
         inst::Inst::MemoryValue(mem_insts)
     }
@@ -627,13 +627,10 @@ impl IR {
     /// 関数のノードを生成するときに、引数を登録
     fn push_param_meta_data(&mut self, params: &Vec<node::ArgsNode>) {
         for (index, param) in params.iter().enumerate() {
-            let node::TyNode::Ty(ty_name) = &param.ty else {
-                panic!();
-            };
             self.var_tree.push::<'p'>(
                 &param.name,
                 &index,
-                &ty_name
+                &param.ty
             );
             self.ir_tree.push(
                 inst::Inst::Param(

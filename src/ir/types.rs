@@ -77,28 +77,6 @@ impl Size {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum VarType {
-    Local(usize),// 変数の値や式のidx
-    Param(usize),//これは、左から何番目の引数かを保存
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct VarMetaData {
-    pub attribute: VarType,
-    pub name: String,
-}
-
-impl VarMetaData {
-    pub fn new(name: &String, attribute: &VarType) -> Self {
-        Self {
-            attribute: attribute.clone(),
-            name: name.to_string()
-        }
-    }
-}
-
-
 /// 構造体のバイトサイズを取得する関数
 /// アセンブリ言語を生成する際に、サイズが必要だから
 pub fn get_struct_size(struct_node: &Vec<inst::MemoryInst>) -> usize {

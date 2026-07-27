@@ -2,8 +2,30 @@ use super::*;
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum VarType {
+    Local(usize),// 変数の値や式のidx
+    Param(usize),//これは、左から何番目の引数かを保存
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VarMetaData {
+    pub attribute: VarType,
+    pub size: node::TyNode,
+}
+
+impl VarMetaData {
+    pub fn new(attribute: &VarType, size: &node::TyNode) -> Self {
+        Self {
+            attribute: attribute.clone(),
+            size: size.clone(),
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
-    pub hash: HashMap<String, types::VarMetaData>,
+    pub hash: HashMap<String, VarMetaData>,
 }
 
 impl VarTree {
@@ -21,26 +43,26 @@ impl VarTree {
         &mut self,
         var_name: &String,
         var_index: &usize,
-        ty_name: &String,
+        var_ty: &node::TyNode,
     ) {
         let var = match K {
             'l' => {
-                types::VarType::Local(*var_index)
+                VarType::Local(*var_index)
             }
             'p' => {
-                types::VarType::Param(*var_index)
+                VarType::Param(*var_index)
             }
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
-        self.hash.insert(var_name.clone(), types::VarMetaData::new(&ty_name, &var));
+        self.hash.insert(var_name.clone(), VarMetaData::new(&var, &var_ty));
     }
 
-    pub fn get_ty_name(&self, name: &String) -> String {
-        self.hash.get(name).unwrap().name.to_string()
+    pub fn get_ty_name(&self, name: &String) -> node::TyNode {
+        self.hash.get(name).unwrap().size.clone()
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
-    pub fn get(&self, name: &String) -> &types::VarType {
+    pub fn get(&self, name: &String) -> &VarType {
         &self.hash.get(name).expect(name).attribute
     }
 }
