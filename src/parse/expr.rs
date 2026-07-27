@@ -18,28 +18,49 @@ impl Parser {
                 lex::Tkn::Comma => {
                     return Ok(node::Expr::Var(name));
                 }
-                _ => {}
+                // ポインタ参照
+                lex::Tkn::RBracket => {
+                    if !matches!(self.next_tkn()?, lex::Tkn::Equal) {
+                        panic!();
+                    }
+                    return Ok(
+                        node::AssignVar::new(
+                            &name,
+                            node::Expr::GetAddress(Box::new(node::Expr::Var(name.to_string()))),
+                            self.expr_branch()?
+                        )
+                    );
+                }
+                _ => {},
             }
 
-            // コロンが来た場合、それは型の定義なので、変数の定義
-            let ty_node = if self.current_tkn() == &lex::Tkn::Colon {
-                self.define_ty_node()?
-            } else {
-                // define assign var node
-                return Ok(node::Expr::Assign {
-                    name,
-                    value: Box::new(self.expr_branch()?),
-                });
+            let ty_node = match &self.current_tkn() {
+                // コロンが来た場合、それは型の定義なので、変数の定義
+                lex::Tkn::Colon => {
+                    self.define_ty_node()?
+                }
+                _ => {
+                    // define assign var node
+                    return Ok(node::AssignVar::new(&name, node::Expr::Var(name.to_string()), self.expr_branch()?));
+                }
             };
 
+            if self.current_tkn() == &lex::Tkn::RBracket {
+                if &self.next_tkn()? == &lex::Tkn::Equal {
+                    return Ok(
+                        node::DefineVar::new(
+                            &name,
+                            node::Expr::ConnectAddr(Box::new(self.expr_branch()?)), 
+                            &ty_node
+                        ).wrap()
+                    );
+                }
+            }
+
             if self.current_tkn() == &lex::Tkn::Equal {
-                node::DefineVar {
-                    name: name.clone(),
-                    value: Box::new(self.expr_branch()?),
-                    ty: ty_node,
-                }.wrap()
+                node::DefineVar::new(&name, self.expr_branch()?, &ty_node).wrap()
             } else {
-                panic!();
+                panic!("{:?}", self.current_tkn());
             }
         } else {
             panic!();
@@ -204,6 +225,21 @@ impl Parser {
         }
 
         let v = match self.next_tkn()? {
+            // 変数のアドレスを取得するノード
+            lex::Tkn::LBracket => {
+                let result = self.expr_add()?;
+
+                if self.current_tkn() == &lex::Tkn::LBracket {
+                    dbg!(self.current_tkn());
+                    Err(err::ErrKind::UnexpectedToken)?
+                } else {
+                    node::Expr::GetAddress(Box::new(result))
+                }
+            }
+            // ポインタにアクセス
+            lex::Tkn::Mul => {
+                node::Expr::ConnectAddr(Box::new(self.expr_value()?))
+            }
             lex::Tkn::Number(value) => {
                 node::Expr::Number(value)
             }
@@ -336,6 +372,32 @@ mod expr_tests {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         lexer.gen_tkns.clone()
+    }
+
+    #[test]
+    fn check_get_address_var() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes(
+            "main(): b1 { a: int* = [b] }"
+        );
+        let node::Group1Node::FuncDefine(ref node)
+            = p.parser(tkns).expect("node is err")[0]
+                else {
+                    panic!("not func");
+                };
+        assert_eq!(
+            &node.body[0],
+            &node::Expr::DefVar(node::DefineVar {
+                name: "a".to_string(),
+                value: Box::new(
+                    node::Expr::GetAddress(Box::new(node::Expr::Var("b".to_string())))
+                ),
+                ty: node::TyNode::Pointer {
+                    is_const: false,
+                    ty_name: Box::new(node::TyNode::Ty("int".to_string()))
+                }
+            }).wrap_group2()
+        );
     }
 
     #[test]

@@ -57,6 +57,14 @@ impl MngAsmFmt {
         }
     }
 
+    pub  fn fmt_pointer(&self, src: &String, size: &Size) -> String {
+        let ptr_asm = self.fmt.op.get("address")
+            .unwrap()
+            .template
+            .replace("{src1}", &src);
+        self.fmt_mnemonic_resize("lea", &ptr_asm, size)
+    }
+
     pub fn fmt_ref_operand(&self, reg: &String, size: &usize) -> String {
         self.fmt.fmt.ref_stack
             .replace("{src}", reg.as_str())
@@ -114,7 +122,8 @@ impl MngAsmFmt {
         fmted.replace("mov", &format!("mov{}", s_fmt))
     }
 
-    pub fn mem_ref_fmt(&self, value: &String, size: &types::Size) -> String {
+    /// ニーモニックのサイズを調整
+    pub fn fmt_mnemonic_resize(&self, mnemonic: &str, value: &String, size: &types::Size) -> String {
         let s_fmt = match &size {
             types::Size::DB => crate::mov_size_fmt!(self, db),
             types::Size::DW => crate::mov_size_fmt!(self, dw),
@@ -122,7 +131,7 @@ impl MngAsmFmt {
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
             _ => panic!()
         };
-        value.replace("mov", &format!("mov{}", s_fmt))
+        value.replace(mnemonic, &format!("{}{}", mnemonic, s_fmt))
     }
 
     pub fn get_push(&self, reg: &String) -> String {
@@ -192,7 +201,7 @@ impl MngAsmFmt {
             Size::DQ => { 
                 &self.reg_fmt.dq
             }
-            Size::Struct(_) => panic!(),
+            _ => panic!(),
         };
         self.fmt.fmt.reg.replace("{}", reg[*reg_num].as_str()).to_string()
     }

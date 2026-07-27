@@ -4,10 +4,16 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyNode {
     Ty(String),
+    /// ポインタ型
+    Pointer{
+        /// 不変ポインタの場合true
+        is_const: bool,
+        ty_name: Box<TyNode>
+    },
     /// 参照の変数
     RefTy(Box<TyNode>),
     /// スタック領域に確保する変数の型
-    /// `name: [ty] = 100` / `name: [ty 4] = [100, 100, 100, 100]`
+    /// `name: [ty] = 100` / `name: [ty 4] = {100, 100, 100, 100}`
     /// - name: 要素の型名
     /// - len: 要素数(指定が無ければ1)
     Stack {
@@ -26,6 +32,16 @@ pub enum TyNode {
 impl TyNode {
     pub fn make_ref_ty(ty_name: &String) -> Self {
         Self::RefTy(Box::new(Self::Ty(ty_name.to_string())))
+    }
+
+    pub fn get_ty_str_name(&self) -> String {
+        match self {
+            Self::Ty(name) => name.to_string(),
+            Self::RefTy(t) => t.get_ty_str_name(),
+            Self::Stack { name, ..} => name.to_string(),
+            Self::Static { name, .. } => name.to_string(),
+            Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name()
+        }
     }
 }
 
@@ -144,6 +160,14 @@ pub struct DefineVar {
 }
 
 impl DefineVar {
+    pub fn new(name: &String, value: Expr, ty: &TyNode) -> Self {
+        Self {
+            name: name.to_string(),
+            value: Box::new(value),
+            ty: ty.clone()
+        }
+    }
+
     pub fn wrap(self) -> Expr {
         Expr::DefVar(self)
     }
@@ -157,15 +181,36 @@ pub struct MatchArm {
 
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct AssignVar {
+    pub name: String,
+    // Expr::Varなど
+    pub dst: Box<Expr>,
+    pub value: Box<Expr>
+}
+
+impl AssignVar {
+    pub fn new(name: &String, dst: Expr, value: Expr) -> Expr {
+        Expr::Assign(
+            Self {
+                name: name.to_string(),
+                dst: Box::new(dst),
+                value: Box::new(value)
+            }
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
+    /// ポインタ関係
+    GetAddress(Box<Expr>),
+    ConnectAddr(Box<Expr>),
+
     Number(String),
     Str(String),
     Var(String),
     CallFunc(CallInfo),
-    Assign{
-        name: String,
-        value: Box<Expr>,
-    },
+    Assign(AssignVar),
     Add((Box<Expr>, Box<Expr>)),
     Sub((Box<Expr>, Box<Expr>)),
     Mul((Box<Expr>, Box<Expr>)),
@@ -209,7 +254,22 @@ impl Expr {
         (Box::new(left), Box::new(right))
     }
 
-    #[cfg(test)]
+    pub fn get_assign_node_name(&self) -> String {
+        match &self {
+            Self::Assign(assign_node) => {
+                assign_node.clone().name
+            }
+            _ => panic!(),
+        }
+    }
+
+    pub fn get_assign_node(&mut self) -> &mut AssignVar {
+        match self {
+            Self::Assign(ref mut name) => return name,
+            _ => panic!(),
+        }
+    }
+
     pub fn wrap_group2(self) -> Group2Node {
         Group2Node::Expr(self)
     }

@@ -108,6 +108,8 @@ pub enum MemoryInst {
 pub enum Inst {
     /// ポインタの対象のidx
     Pointer(usize),
+    GetAddress(usize),
+
     ExternFunc(String),
     Expr(ExprInst),
     Block(String),
@@ -115,6 +117,7 @@ pub enum Inst {
     ExpectJmp(String),// ジャンプする場所
     Mov{
         name: Option<String>,
+        size: types::Size,
         dst: ValueId,
         src: ValueId,
     },
@@ -141,6 +144,8 @@ pub enum Inst {
     },
     AssignVar{
         name: String,
+        /// 代入先のノードがあるindex
+        dst: usize,
         value: usize,
     },
     Param(ParamMetaData),
@@ -150,6 +155,14 @@ pub enum Inst {
 }
 
 impl Inst {
+    pub fn is_pointer(&self) -> bool {
+        match self {
+            Self::Pointer(..) => true,
+            Self::GetAddress(..) => true,
+            _ => false,
+        }
+    }
+
     pub fn gen_num(value: &str, size: &types::Size, dst: usize) -> Self {
         match size {
             types::Size::DB => {
@@ -166,6 +179,9 @@ impl Inst {
             }
             types::Size::Struct(_) => {
                 panic!("gen_num: 構造体型に数値を直接代入することはできません");
+            }
+            types::Size::Pointer { .. } => {
+                panic!();
             }
         }
         Self::Num{

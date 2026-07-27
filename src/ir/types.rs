@@ -7,7 +7,11 @@ pub enum Size {
     DW,
     DD,
     DQ,
-    Struct(Vec<Box<(String, Size)>>)
+    Struct(Vec<Box<(String, Size)>>),
+    Pointer{
+        ty:Box<Size>,
+        is_const: bool
+    },
 }
 
 impl Size {
@@ -29,7 +33,29 @@ impl Size {
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 Self::new(&node::TyNode::Ty(name.clone()))
             }
+            node::TyNode::Pointer { is_const, ty_name } => {
+                Self::Pointer{
+                    ty: Box::new(Self::new(&*ty_name)),
+                    is_const: is_const.clone()
+                }
+            }
             _ => panic!(),
+        }
+    }
+
+    pub fn is_pointer(&self) -> Option<Size> {
+        if let Self::Pointer { ty, .. } = self {
+            Some(*ty.clone())
+        } else {
+            None
+        }
+    }
+
+    /// ポインタ型を作成する
+    pub fn build_ptr_ty(ty: &node::TyNode) -> Self {
+        Self::Pointer {
+            ty: Box::new(Self::new(&ty)),
+            is_const: false,
         }
     }
 
@@ -45,7 +71,7 @@ impl Size {
             Self::DW => 2,
             Self::DD => 4,
             Self::DQ => 8,
-            Self::Struct(_) => panic!(),
+            _ => panic!(),
         }
     }
 }

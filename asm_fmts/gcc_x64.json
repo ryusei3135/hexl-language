@@ -81,6 +81,10 @@
     "ret": {
         "len": 1,
         "template": "{space}ret\n"
+    },
+    "address": {
+        "len": 1,
+        "template": "{space}lea {src1}, {dst}\n"
     }
   },
     "func": {

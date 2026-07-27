@@ -90,13 +90,48 @@ impl AsmEmitter {
                 inst::Inst::Jmp(name) => {
                     self.asm_text.push_str(&format!("jmp {}\n", name));
                 }
-                inst::Inst::AssignVar { name, value } => {
-                    self.update_value_info(&name, &value);
+                inst::Inst::AssignVar { name, dst, value } => {
+                    // `[b] = 20`のように、代入先がポインタの参照先
+                    // (`Inst::Pointer`)の場合は、変数自体への代入ではなく
+                    // ポインタが指しているメモリに直接値を書き込む必要がある
+                    if matches!(self.curr_inst[*dst], inst::Inst::Pointer(..)) {
+                        // ポインタが指すメモリのオペランド(書き込み先)
+                        let dst_operand = self.extract_operand_text(dst);
+                        // 書き込む値のオペランド
+                        let value_operand = self.extract_operand_text(value);
 
-                    let current_reg = self.reg_idx;
+                        let text = self.asm_fmt
+                            .get_opcode_tmpl("mov")
+                            .replace("{dst}", &dst_operand)
+                            .replace("{src1}", &value_operand);
 
-                    if self.expr_vars.iter().find(|v| v.as_str() == name.as_str()).is_some() {
-                        self.update_value_reg(&name, &current_reg);
+                        self.asm_text.push_str(&text);
+                    } else {
+                        // 通常の変数への再代入(`b = 10`など)
+                        self.update_value_info(&name, &value);
+
+                        let current_reg = self.reg_idx;
+                        // 代入する値(value)がアドレスを求める式
+                        // (`GetAddress`/`Pointer`)の場合のみ`lea`相当の
+                        // ニーモニックを使う。
+                        // (代入先の変数がかつてポインタとして定義された
+                        //  ものであっても、今回代入する値自体が
+                        //  アドレス計算を必要としないなら`mov`で良い)
+                        let mnemonic = if self.curr_inst[*value].is_pointer() {
+                            "address"
+                        } else {
+                            "mov"
+                        };
+
+                        let mut text = self.format_line(mnemonic, Some(&current_reg), &value, None);
+                        if mnemonic == "address" {
+                            text = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &text, &Size::DQ);
+                        }
+
+                        if self.expr_vars.iter().find(|v| v == &name).is_some() {
+                            self.update_value_reg(&name, &current_reg);
+                        }
+                        self.asm_text.push_str(&text);
                     }
                 }
                 inst::Inst::Ret(idx) => {
@@ -110,20 +145,34 @@ impl AsmEmitter {
                     self.asm_text.push_str(self.asm_fmt.func_frame_end().as_str());
                     self.asm_text.push_str("ret\n");
                 }
-                inst::Inst::Mov { name, dst, src } => {
+                inst::Inst::Mov { name, size, dst, src } => {
                     if self.data_map.iter().find(|v| &v.0 == src).is_some() {
                         // 子のノードがstaticりょいきの値なので、変数名だけ登録する
-                        self.insert_var_info(&name.as_ref().unwrap(), &dst, self.reg_idx);
+                        self.insert_var_info(
+                            &name.as_ref().unwrap(),
+                            asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
+                        );
                     } else {
                         self.reg_idx += 1;
                         // レジスタに置く変数
                         let reg = self.reg_idx.clone();
-                        let formated = self.format_line("mov", Some(&reg), &src, None);
+                        // メモリのポインタか、値かで、ニーモニックが変わる
+                        let mnemonic = if size.is_pointer().is_some() {
+                            // ポインタの場合
+                            "address"
+                        } else {
+                            // 普通の場合
+                            "mov"
+                        };
+                        let formated = self.format_line(mnemonic, Some(&reg), &src, None);
 
                         self.asm_text.push_str(&formated);
 
                         if let Some(var_name) = name {
-                            self.insert_var_info(&var_name, &dst, self.reg_idx);
+                            self.insert_var_info(
+                                &var_name, 
+                                asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
+                            );
                             let current_reg = self.reg_idx;
 
                             if self.expr_vars.iter().find(|v| v.as_str() == var_name.as_str()).is_some() {
@@ -144,7 +193,10 @@ impl AsmEmitter {
                                 self.data_map.push((*dst, label_name));
                                 self.data_idx += 1;
                                 // 子のノードがstaticりょいきの値なので、変数名だけ登録する
-                                self.insert_var_info(&name, &dst, self.reg_idx);
+                                self.insert_var_info(
+                                    &name,
+                                    asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
+                                );
                             } else {
                                 // スタック領域のローカル変数を作成する 
                                 let mut txt = String::new();
@@ -159,9 +211,12 @@ impl AsmEmitter {
                                 .replace("{dst}", &s)
                                 .replace("{src1}", value.as_str());
                                 txt.push_str(
-                                    self.asm_fmt.mem_ref_fmt(&mov_line, &size).as_str()
+                                    self.asm_fmt.fmt_mnemonic_resize("mov", &mov_line, &size).as_str()
                                 );
-                                self.insert_var_info(&name, &dst, self.reg_idx);
+                                self.insert_var_info(
+                                    &name, 
+                                    asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
+                                );
                                 self.asm_text.push_str(txt.as_str());
                             }
                         }
@@ -174,15 +229,14 @@ impl AsmEmitter {
                     let reg_num = self.asm_fmt.get_fmt_param::<usize>(&param.num);
                     self.insert_var_info(
                         &param.name,
-                        &param.dst,
-                        reg_num
+                        asm_emitter::VarIndexInfo::new(&reg_num, &Size::DQ, &param.dst)
                     );
                 }
                 inst::Inst::CallFunc(meta_data) => {
                     let asm_text = self.emit_call_func(&meta_data);
                     self.asm_text.push_str(asm_text.as_str());
                 }
-                _ => {}
+                t => println!("call func {:?}", t),
             }
         }
         // retがない場合つけたす

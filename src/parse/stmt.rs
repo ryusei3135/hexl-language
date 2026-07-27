@@ -125,6 +125,18 @@ impl Parser {
             lex::Tkn::Name(name) => {
                 node::Group2Node::Expr(self.build_scope_node(&name)?)
             }
+            // ポインタにアクセスするノードの作成
+            lex::Tkn::LBracket => {
+                if let lex::Tkn::Name(name) = self.next_tkn()?.clone() {
+                    let mut ptr_connect = self.expr_define_var(name.to_string())?;
+                    ptr_connect.get_assign_node().name = name.to_string();
+                    let dst = ptr_connect.get_assign_node().clone().dst;
+                    ptr_connect.get_assign_node().dst = Box::new(node::Expr::ConnectAddr(dst));
+                    ptr_connect.wrap_group2()
+                } else {
+                    panic!();
+                }
+            }
             lex::Tkn::KeyWordRet => {
                 node::StmtNode::Return(
                     self.expr_add()?
@@ -147,7 +159,7 @@ impl Parser {
                 panic!();
             }
             t => {
-                panic!("{:?}  {:?}", t, self.next_tkn_ref());
+                panic!("parse stmt {:?}  {:?}", t, self.next_tkn_ref());
             }
         };
         Ok(node)

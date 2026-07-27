@@ -148,6 +148,12 @@ impl IR {
 
                 panic!("未定義の型です: {}", name);
             }
+            node::TyNode::Pointer { is_const, ty_name } => {
+                types::Size::Pointer{
+                    ty: Box::new(self.size_of(ty_name)),
+                    is_const: is_const.clone()
+                }
+            }
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 self.size_of(&node::TyNode::Ty(name.clone()))
@@ -298,6 +304,16 @@ impl IR {
 
     fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
         let inst = match expr {
+            // ポインタ関係
+            node::Expr::GetAddress(target) => {
+                let idx = self.gen_expr_ir(*target, &expect_byte);
+                inst::Inst::GetAddress(idx)
+            }
+            node::Expr::ConnectAddr(target) => {
+                let idx = self.gen_expr_ir(*target, &expect_byte);
+                inst::Inst::Pointer(idx)
+            }
+
             node::Expr::Add(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)
             }
@@ -319,11 +335,14 @@ impl IR {
             node::Expr::Number(value) => {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
             }
-            node::Expr::Assign { name, value } => {
-                let right_expr_idx = self.gen_expr_ir(*value, &expect_byte);
+            node::Expr::Assign(assign_node) => {
+                println!("{:?}", assign_node);
+                let right_expr_idx = self.gen_expr_ir(*assign_node.value, &expect_byte);
+                let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
 
                 inst::Inst::AssignVar {
-                    name,
+                    name: assign_node.name.to_string(),
+                    dst: dst_idx,
                     value: right_expr_idx,
                 }
             }
@@ -333,6 +352,7 @@ impl IR {
                     value,
                 }
             } 
+            // ポインタの中身
             node::Expr::DefVar(mut var) => {
                 match &var.ty {
                     node::TyNode::Stack{..} | node::TyNode::Static{..} => {
@@ -346,6 +366,20 @@ impl IR {
                         self.var_tree.push::<'l'>(&var.name, &value_idx, &ty_name);
                         inst::Inst::Mov{
                             name: Some(mem::take(&mut var.name)),
+                            size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
+                            dst: self.id_counter,
+                            src: value_idx,
+                        }
+                    }
+                    node::TyNode::Pointer { is_const, ty_name } => {
+                        let value_idx = self.gen_expr_ir(
+                            *var.value,
+                            &self.size_of(&var.ty)
+                        );
+                        self.var_tree.push::<'l'>(&var.name, &value_idx, &ty_name.get_ty_str_name());
+                        inst::Inst::Mov{
+                            name: Some(mem::take(&mut var.name)),
+                            size: types::Size::build_ptr_ty(&*ty_name),
                             dst: self.id_counter,
                             src: value_idx,
                         }

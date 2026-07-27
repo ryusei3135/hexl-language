@@ -3,25 +3,24 @@
 
 use super::*;
 use crate::asm_setting;
+use crate::ir::types;
 
-
-// struct Reg
-
-//   dd: Vec<String>,
-//   dq: Vec<String>,
-
-// struct OperandInfo
-//    len: usize,
-//    template: String,
-
-// struct AsmFormat {
-//    reg: Reg,
-//    op: HashMap<String, OperandInfo>,
 
 #[derive(Debug, Clone)]
 pub struct VarIndexInfo {
     pub reg: usize,
+    pub size: types::Size,
     pub index: usize,
+}
+
+impl VarIndexInfo {
+    pub fn new(reg: &usize, size: &types::Size, index: &usize) -> Self {
+        Self {
+            reg: *reg,
+            size: size.clone(),
+            index: *index
+        }
+    }
 }
 
 pub struct AsmEmitter { 
@@ -134,7 +133,7 @@ impl AsmEmitter {
         }
     }
 
-  /// 静的領域の変数がどんなラベルで登録されているかを取得する
+    /// 静的領域の変数がどんなラベルで登録されているかを取得する
     #[inline(always)]
     pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
         let index = self.var_hash_map.get(name).expect(&format!("this -> {}", name)).index;
@@ -142,14 +141,15 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) fn insert_var_info(&mut self, name: &String, index: &usize, reg_idx: usize) {
+    pub(super) fn insert_var_info(
+        &mut self,
+        name: &String,
+        var: VarIndexInfo,
+    ) {
         self.expr_vars.push(name.clone());
         self.var_hash_map.insert(
             name.clone(),
-            VarIndexInfo {
-                reg: reg_idx,
-                index: *index,
-            }
+            var
         );
     }
 
@@ -191,9 +191,9 @@ impl AsmEmitter {
         };
 
         if self.check_node_is_struct(&src1) {
-            formated = self.asm_fmt.mem_ref_fmt(&formated, &Size::DD);
+            formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &Size::DD);
         } else if let Some(size) = self.check_node_is_memory_value(&src1) {
-            formated = self.asm_fmt.mem_ref_fmt(&formated, &size);
+            formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &size);
         }
 
 
@@ -318,6 +318,22 @@ impl AsmEmitter {
                     ),
                     &size,
                 )
+            }
+            inst::Inst::GetAddress(index) => {
+                self.extract_operand_text(&index.clone())
+            }
+            // ポインタの指す先を参照する(`*p` / `[p]`)
+            //
+            // `GetAddress`と対になる命令で、`GetAddress`がアドレスを求める
+            // 対象の値をそのまま参照する(`Pointer(GetAddress(x))`は`x`
+            // 自身を指すことになるため)のと同様に、参照先の値を
+            // そのまま取り出す。これにより
+            // - 読み込み: `c: int = [b]` (`b`が指すメモリの値をコピーする)
+            // - 書き込み: `[b] = 20` (`b`が指すメモリに値を書き込む)
+            // のどちらの場合でも、実際に値が置かれているメモリ/レジスタの
+            // オペランドを解決できる
+            inst::Inst::Pointer(index) => {
+                self.extract_operand_text(&index.clone())
             }
             t => {
                 if let Some(result) = self.last_inst_idx
