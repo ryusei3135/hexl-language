@@ -57,8 +57,11 @@ impl VarTree {
         self.hash.insert(var_name.clone(), VarMetaData::new(&var, &var_ty));
     }
 
-    pub fn get_ty_name(&self, name: &String) -> node::TyNode {
-        self.hash.get(name).unwrap().size.clone()
+    pub fn get_ty_name(&self, name: &String) -> String {
+        match &self.hash.get(name).unwrap().size {
+            node::TyNode::Ty(name) => name.to_string(),
+            t => panic!("{:?}", t),
+        }
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す

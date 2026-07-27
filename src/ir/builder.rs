@@ -467,7 +467,9 @@ impl IR {
                             }
                         };
                         let size = self.struct_tree.get_pos(
-                            &scope.last().unwrap(),
+                            // 変数の名前で登録されている変数の型を取得する
+                            // （変数）の名前の文字列
+                            &self.var_tree.get_ty_name(scope.last().unwrap()),
                             &name,
                         );
                         inst::Inst::RefStruct{
