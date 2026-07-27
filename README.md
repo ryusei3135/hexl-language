@@ -48,7 +48,7 @@ b: ""[int] = 10
 c: [int 4] = {1, 2, 3, 4}
 ```
 - [変数の扱い](./documents/variable.md)
-- [ポインタの説明](./documents/type.md)
+- [型について](./documents/type.md)
 
 ### 構造体・列挙型
 - [構造体・列挙型](./documents/struct_and_enum.md)
