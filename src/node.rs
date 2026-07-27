@@ -250,7 +250,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn wrap(right: Expr, left: Expr) -> (Box<Expr>, Box<Expr>) {
+    pub fn wrap(left: Expr, right: Expr) -> (Box<Expr>, Box<Expr>) {
         (Box::new(left), Box::new(right))
     }
 
