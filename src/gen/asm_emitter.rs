@@ -23,6 +23,51 @@ impl VarIndexInfo {
     }
 }
 
+/// 現在使用中のレジスタを管理する
+///
+/// レジスタは`reg_idx`によって使い切り(一度使ったレジスタ番号を
+/// 再利用しない)方式で割り当てられていくため、ここでは「これまでに
+/// 使用された(かつまだ解放されていない)レジスタ番号」を記録しておく。
+///
+/// インラインアセンブラを展開する際、ここに記録されているレジスタを
+/// 全て`push`しておき、展開が終わったら`pop`することで、インライン
+/// アセンブラの中身によって使用中のレジスタの値が破壊されるのを防ぐ。
+#[derive(Debug, Clone, Default)]
+pub struct UsedRegManager {
+    used: Vec<usize>,
+}
+
+impl UsedRegManager {
+    pub fn new() -> Self {
+        Self { used: Vec::new() }
+    }
+
+    /// 指定したレジスタを使用中として記録する
+    pub fn mark_used(&mut self, reg: &usize) {
+        if !self.used.contains(reg) {
+            self.used.push(*reg);
+        }
+    }
+
+    /// 指定したレジスタの使用中の記録を解除する
+    pub fn mark_unused(&mut self, reg: &usize) {
+        self.used.retain(|used_reg| used_reg != reg);
+    }
+
+    /// 現在使用中のレジスタ番号を、使用され始めた順(昇順)に取得する
+    pub fn used_regs(&self) -> Vec<usize> {
+        let mut regs = self.used.clone();
+        regs.sort();
+        regs
+    }
+
+    /// 記録している使用中のレジスタの情報を全て消去する
+    /// (関数一つ分のアセンブリ言語の生成が終わった際などに使う)
+    pub fn clear(&mut self) {
+        self.used.clear();
+    }
+}
+
 pub struct AsmEmitter { 
     pub(super) asm_text: String,
     pub(super) data_sec_text: String,
@@ -38,6 +83,8 @@ pub struct AsmEmitter {
     pub(super) data_map: Vec<(usize, String)>,
     pub(super) last_inst_idx: Vec<(usize, usize)>,
     pub(super) var_hash_map: HashMap<String, VarIndexInfo>,
+    // 現在使用中のレジスタを管理する
+    pub(super) used_reg: UsedRegManager,
 }
 
 impl AsmEmitter {
@@ -58,6 +105,7 @@ impl AsmEmitter {
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
             var_hash_map: HashMap::new(),
+            used_reg: UsedRegManager::new(),
         };
         me.data_sec_text.push_str(&me.asm_fmt.get_section_fmt("data"));
         me
@@ -96,6 +144,7 @@ impl AsmEmitter {
             // == データの初期化 ==
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
+            self.used_reg.clear();
         }
         format!(
             "{}\n{}\n{}",
@@ -150,6 +199,7 @@ impl AsmEmitter {
         name: &String,
         var: VarIndexInfo,
     ) {
+        self.used_reg.mark_used(&var.reg);
         self.expr_vars.push(name.clone());
         self.var_hash_map.insert(
             name.clone(),
@@ -164,6 +214,7 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn update_value_reg(&mut self, name: &String, reg: &usize) {
+        self.used_reg.mark_used(reg);
         self.var_hash_map.get_mut(name).unwrap().reg = *reg;
     }
 

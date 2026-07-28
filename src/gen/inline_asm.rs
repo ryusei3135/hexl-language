@@ -20,6 +20,16 @@ impl AsmEmitter {
             .find(|v| v.as_str() == name.as_str())
             .is_some()
         {
+            // インラインアセンブラの内容によって、現在使用中の
+            // レジスタの値が破壊されてしまう可能性があるため、
+            // 展開する前に使用中のレジスタを全てスタックに退避(push)する
+            let used_regs = self.used_reg.used_regs();
+            for reg in used_regs.iter() {
+                let reg_name = self.asm_fmt.get_fmt_reg(reg, &Size::DQ);
+                let push_asm = self.asm_fmt.get_push(&reg_name);
+                self.asm_text.push_str(&push_asm);
+            }
+
             for (template, operand_ids) in lines.iter() {
                 let mut asm_line = template.clone();
 
@@ -33,6 +43,14 @@ impl AsmEmitter {
 
                 asm_line.push('\n');
                 self.asm_text.push_str(&asm_line);
+            }
+
+            // 退避しておいたレジスタの値を、pushした時とは逆順に
+            // pop して元の状態に戻す
+            for reg in used_regs.iter().rev() {
+                let reg_name = self.asm_fmt.get_fmt_reg(reg, &Size::DQ);
+                let pop_asm = self.asm_fmt.get_pop(&reg_name);
+                self.asm_text.push_str(&pop_asm);
             }
         } else {
             panic!();

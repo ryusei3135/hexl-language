@@ -66,6 +66,8 @@ impl AsmEmitter {
 
                     self.asm_text.push_str(&asm);
 
+                    // 式の結果を置いたレジスタを使用中として記録する
+                    self.used_reg.mark_used(&self.reg_idx);
                     self.last_inst_idx.push(
                         (expr.dst, self.reg_idx)
                     );
@@ -157,6 +159,8 @@ impl AsmEmitter {
                         self.reg_idx += 1;
                         // レジスタに置く変数
                         let reg = self.reg_idx.clone();
+                        // このレジスタを使用中として記録する
+                        self.used_reg.mark_used(&reg);
                         // メモリのポインタか、値かで、ニーモニックが変わる
                         let mnemonic = if size.is_pointer().is_some() {
                             // ポインタの場合
