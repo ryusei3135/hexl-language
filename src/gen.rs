@@ -11,7 +11,6 @@ mod mng_fmt;
 use crate::ir::{
     def_tree,
     inst,
-    builder,
     types::Size,
 };
 use std::mem;

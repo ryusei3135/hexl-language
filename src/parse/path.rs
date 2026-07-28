@@ -8,11 +8,11 @@ impl Parser {
         &mut self,
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
-        if matches!(self.next_tkn_ref()?, lex::Tkn::Dot) {
+        if matches!(self.next_tkn_ref(vec!["."])?, lex::Tkn::Dot) {
             return self.build_member_node(&name);
         }
         // "::"がないので、何も返さない
-        if !matches!(self.next_tkn_ref()?, lex::Tkn::ModPathTkn) {
+        if !matches!(self.next_tkn_ref(vec!["not `::`"])?, lex::Tkn::ModPathTkn) {
             return Ok(self.expr_define_var(name.to_string())?);
         }
 
@@ -26,7 +26,7 @@ impl Parser {
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
         // "."がないので、何も返さない
-        if !matches!(self.next_tkn_ref()?, lex::Tkn::Dot) {
+        if !matches!(self.next_tkn_ref(vec!["not `.`"])?, lex::Tkn::Dot) {
             return Ok(self.expr_define_var(name.to_string())?);
         }
         crate::scope_node!(self, Dot, Member, &name);

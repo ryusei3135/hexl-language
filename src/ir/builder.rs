@@ -206,11 +206,29 @@ impl IR {
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir(stmt);
                 }
-                node::Group2Node::CompleSyntax((name, nodes)) => {
+                // inlineアセンブラ
+                node::Group2Node::CompleSyntax((name, lines)) => {
+                    // それぞれの行にある`${...}`由来の式を、通常の式と
+                    // 同様にIRへ変換する。構造体のメンバーやポインタの
+                    // 参照/アドレス取得なども、既存の式の生成処理
+                    // (`gen_expr_ir`)がそのまま扱えるので、ここでは
+                    // 各オペランドを順番に渡すだけでよい
+                    let asm_lines = lines
+                        .into_iter()
+                        .map(|line| {
+                            let operand_ids = line
+                                .operands
+                                .into_iter()
+                                .map(|expr| self.gen_expr_ir(expr, &types::Size::DD))
+                                .collect::<Vec<usize>>();
+                            (line.asm, operand_ids)
+                        })
+                        .collect::<Vec<(String, Vec<usize>)>>();
+
                     self.ir_tree.push(
                         inst::Inst::Comple{
                             name,
-                            nodes,
+                            lines: asm_lines,
                         }
                     );
                     self.id_counter += 1;
@@ -371,7 +389,7 @@ impl IR {
                             src: value_idx,
                         }
                     }
-                    node::TyNode::Pointer { is_const, ty_name } => {
+                    node::TyNode::Pointer { ty_name, .. } => {
                         let value_idx = self.gen_expr_ir(
                             *var.value,
                             &self.size_of(&var.ty)

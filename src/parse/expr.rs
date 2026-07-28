@@ -5,8 +5,15 @@ type ExprResult = Result<node::Expr, err::ErrKind>;
 
 
 impl Parser {
-    pub(super) fn expr_define_var(&mut self, name: String) -> ExprResult {
-        let node = if self.next_tkn().is_ok() {
+    pub(super) fn expr_define_var(
+        &mut self, 
+        // 呼び出す前にでた、変数や関数などの名前   
+        name: String
+    ) -> Result<node::Expr, err::ErrKind> {
+        let node = if self
+            .next_tkn(vec!["(", "{", ",", "[", ":", "=", "]"])
+            .map(|_| true)?
+        {
             match &self.current_tkn() {
                 lex::Tkn::LParen => {
                     // 関数の呼び出しノードを生成
@@ -20,9 +27,12 @@ impl Parser {
                 }
                 // ポインタ参照
                 lex::Tkn::RBracket => {
-                    if !matches!(self.next_tkn()?, lex::Tkn::Equal) {
-                        panic!();
+                    // ポインタ参照なので、次のトークンに進めずに
+                    // ノードを返す
+                    if !matches!(self.next_tkn_ref(vec!["="])?, lex::Tkn::Equal) {
+                        return Ok(node::Expr::Var(name));
                     }
+                    self.next_tkn(vec!["="])?;
                     return Ok(
                         node::AssignVar::new(
                             &name,
@@ -45,8 +55,8 @@ impl Parser {
                 }
             };
 
-            if self.current_tkn() == &lex::Tkn::RBracket {
-                if &self.next_tkn()? == &lex::Tkn::Equal {
+            if matches!(self.current_tkn(), lex::Tkn::RBracket) {
+                if matches!(self.next_tkn(vec!["="])?, lex::Tkn::Equal) {
                     return Ok(
                         node::DefineVar::new(
                             &name,
@@ -63,23 +73,27 @@ impl Parser {
                 panic!("{:?}", self.current_tkn());
             }
         } else {
-            panic!();
+            let result = err::SyntaxErr::tkn_is_eof(
+                self.build_err_span(),
+                vec!["(", "{", ",", ":", "]", "="]
+            );
+            panic!("{:?}", result);
         };
 
         Ok(node)
     }
 
     /// 式に代入する物が、構文の式 例(match)かどうかで
-    pub(super) fn expr_branch(&mut self) -> ExprResult {
-        if let Ok(lex::Tkn::KeyWordMatch) = self.next_tkn_ref() {
-            self.next_tkn()?;
+    pub(super) fn expr_branch(&mut self) -> Result<node::Expr, err::ErrKind> {
+        if matches!(self.next_tkn_ref(vec!["match"])?, lex::Tkn::KeyWordMatch) {
+            self.next_tkn(vec![])?;
             self.expr_match()
         } else {
             self.expr_cmp()
         }
     }
 
-    pub(super) fn expr_cmp(&mut self) -> ExprResult {
+    pub(super) fn expr_cmp(&mut self) -> Result<node::Expr, err::ErrKind> {
         let mut left = self.expr_add()?;
 
         loop {
@@ -139,11 +153,10 @@ impl Parser {
             // パターン else 
             if self.current_tkn() == &lex::Tkn::Or {
                 // {
-                self.next_tkn()?;
-                if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
+                if !matches!(self.next_tkn(vec!["{"])?, lex::Tkn::LBrace) {
                     return Err(err::ErrKind::UnexpectedToken);
                 }
-                self.next_tkn()?;
+                self.next_tkn(vec![])?;
                 // ここでアーム本体を解析
                 let body = self.gen_block_node()?;
                 // }
@@ -151,11 +164,11 @@ impl Parser {
                     return Err(err::ErrKind::UnexpectedToken);
                 }
                 // }
-                if !matches!(self.next_tkn()?, lex::Tkn::RBrace) {
+                if !matches!(self.next_tkn(vec!["}"])?, lex::Tkn::RBrace) {
                     panic!("e");
                 }
                 //}
-                self.next_tkn()?;
+                self.next_tkn(vec![])?;
                 let node = node::Expr::Match {
                     pattern: target,
                     arms,
@@ -170,20 +183,22 @@ impl Parser {
             if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
                 return Err(err::ErrKind::UnexpectedToken);
             }
-            self.next_tkn()?;
+            self.next_tkn(vec![])?;
             // ここでアーム本体を解析
             let body = self.gen_block_node()?;
             // }
             if !matches!(self.current_tkn(), lex::Tkn::RBrace) {
                 return Err(err::ErrKind::UnexpectedToken);
             }
-            self.next_tkn()?;
+            self.next_tkn(vec![])?;
             arms.push(node::MatchArm {
                 pattern: Box::new(pattern),
                 body,
             });
         }
-        self.next_tkn()?;//}
+
+        // 式の終了
+        self.next_tkn(vec!["}"])?;//}
 
         let node = node::Expr::Match {
             pattern: target,
@@ -214,7 +229,7 @@ impl Parser {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
-            if !self.next_tkn().is_ok_and(|v| &v == &lex::Tkn::LParen) {
+            if !matches!(self.next_tkn(vec!["("])?, lex::Tkn::LParen) {
                 panic!();
             }
             if self.current_tkn() == &lex::Tkn::Dot {
@@ -224,7 +239,9 @@ impl Parser {
             return self.call_func_expr(&name);
         }
 
-        let v = match self.next_tkn()? {
+        let v = match self
+            .next_tkn(vec!["[", "*", "number", "string", "name", "(", "{"])?
+        {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => {
                 let result = self.expr_add()?;
@@ -247,7 +264,7 @@ impl Parser {
                 node::Expr::Str(value)
             }
             lex::Tkn::Name(name) => {
-                match self.next_tkn_ref()? {
+                match self.next_tkn_ref(vec![".", "(", "`", "::"])? {
                     lex::Tkn::Dot => {
                         return self.build_scope_node(&name);
                     }
@@ -258,14 +275,14 @@ impl Parser {
                     // 構造体の初期化ノードを作成する
                     lex::Tkn::LBrace => {
                         // "{"から始まらないといけないので、次に進める
-                        self.next_tkn()?;
+                        self.next_tkn(vec!["{"])?;
                         return self.struct_init_node(&name);
                     }
                     // 列挙型のメンバへのアクセス: `Name::Mem`
                     lex::Tkn::ModPathTkn => {
                         // "::"を飛ばす
-                        self.next_tkn()?;
-                        let lex::Tkn::Name(variant) = self.next_tkn()? else {
+                        self.next_tkn(vec!["name"])?;
+                        let lex::Tkn::Name(variant) = self.next_tkn(vec!["name"])? else {
                             panic!("列挙型のメンバ名が必要です");
                         };
                         node::Expr::EnumVariant { name, variant }
@@ -287,7 +304,7 @@ impl Parser {
             lex::Tkn::LBrace => {
                 let mut items = Vec::<node::Expr>::new();
 
-                if self.next_tkn_ref()? != &lex::Tkn::RBrace {
+                if !matches!(self.next_tkn_ref(vec!["not `}`"])?, lex::Tkn::RBrace) {
                     loop {
                         items.push(self.expr_cmp()?);
 
@@ -298,7 +315,7 @@ impl Parser {
                         }
                     }
                 }
-                self.next_tkn()?;
+                self.next_tkn(vec![])?;
                 node::Expr::Array(items)
             }
             t => panic!("{:?}", t),
@@ -307,7 +324,7 @@ impl Parser {
         match self.current_tkn() {
             lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::Str(_)
                 | lex::Tkn::RParen | lex::Tkn::RBracket => {
-                self.next_tkn()?;
+                self.next_tkn(vec![])?;
             }
             _ => {},
         }
@@ -324,14 +341,14 @@ impl Parser {
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
     /// である必要がある
     fn call_func_expr(&mut self, name: &String) -> ExprResult {
-        if self.current_tkn() != &lex::Tkn::LParen {
+        if !matches!(self.current_tkn(), lex::Tkn::LParen) {
             panic!("call_func_exprを呼び出す際にLParenではない");
         }
         // 引数
         let mut args = Vec::<node::Expr>::new();
 
         // 関数を呼び出す式に引数がない場合は実行されない
-        if self.next_tkn_ref()? != &lex::Tkn::RParen {
+        if !matches!(self.next_tkn_ref(vec!["not `)`"])?, lex::Tkn::RParen) {
             loop {
                 // 引数の式を取得
                 args.push(self.expr_cmp()?);
@@ -342,13 +359,16 @@ impl Parser {
                         // 関数の最後の部分に来たので、ループを終了する
                         break;
                     },
-                    t => panic!("{:?}", t),
+                    t => {
+                println!("{:?} <<", self.next_tkn_ref(vec![]));
+                        panic!("{:?}", t);
+                    }
                 } 
             }
         } 
         //
         // ')'をスキップ
-        self.next_tkn()?;
+        self.next_tkn(vec![])?;
         Ok(node::Expr::CallFunc(
             node::CallInfo {
                 name: name.clone(),

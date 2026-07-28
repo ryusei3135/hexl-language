@@ -2,7 +2,7 @@
   <img src="hexl_lang.png" width="128" />
 </p>
 
-# HexlLanguage - 自作プログラミング言語 / Custom Programming Language
+# Hexl(Hexadecagon Language) - 自作プログラミング言語 / Custom Programming Language
 Hexlはrustで実装されたプログラミング言語であり
 字句解析・構文解析・AST・コンパイラを自前で実装しており、
 c言語ライクな言語を作ることを目的としています。
@@ -22,7 +22,9 @@ c言語ライクな言語
 - c言語ライクな言語の作成
 
 ## 説明
+
 ### 使い方
+- gccが必要
 ```bash
 ./ビルドした名前 ソースコード.hexl
 gcc 生成したアセンブリソースコード -nostdlib
@@ -30,7 +32,8 @@ gcc 生成したアセンブリソースコード -nostdlib
 - これで実行ファイルが作成可能
 * 注意  まだlinuxにしか対応していない windowsの場合はwslを使うことを
 おすすめします(それかDocker)
-### キーワード
+
+### 予約語
 - ret
 - match
 - loop
@@ -42,6 +45,7 @@ gcc 生成したアセンブリソースコード -nostdlib
 ### プロプロセッサ
 - #include
 - #asm(..)
+    [詳細](./documents/inline_asm.md)
     - (..)に任意のアセンブラの設定ファイルの名前を入れると使える
 
 ### 変数の定義方法

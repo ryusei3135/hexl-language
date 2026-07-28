@@ -148,7 +148,7 @@ impl MngAsmFmt {
             .replace("{name}", &label)
     }
 
-    pub fn get_static_num_fmt(&self, value: &String, label: &String, size: &types::Size) -> String {
+    pub fn get_static_num_fmt(&self, value: &String, label: &String, _size: &types::Size) -> String {
         format!(".align 4\n{}: .long {}\n", label, value.replace("$", ""))
     }
 

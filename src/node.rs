@@ -316,10 +316,19 @@ pub struct CallInfo {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct InlineAsm {
+    /// `${...}` の部分が `{0}`, `{1}`, ... のような
+    /// プレースホルダーに置き換えられたアセンブリの文字列
+    pub asm: String,
+    /// プレースホルダーに対応する式(出現順、`{n}` <-> `operands[n]`)
+    pub operands: Vec<Expr>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Group2Node {
     Stmt(StmtNode),
     Expr(Expr),
-    CompleSyntax((String, Vec<String>)),
+    CompleSyntax((String, Vec<InlineAsm>)),
     Include(ModPath),
     Line(String),
 }

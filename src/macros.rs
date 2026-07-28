@@ -15,7 +15,7 @@ macro_rules! push_jmp_code {
 #[macro_export]
 macro_rules! preproc_err {
     ($self:tt, $name:ident) => {
-        return Err(err::PreprocErrs::$name.build(&$self.current_line()));
+        return Err(err::PreprocErrs::$name.build($self.build_err_span()));
     };
 }
 
@@ -24,19 +24,19 @@ macro_rules! preproc_err {
 macro_rules! scope_node {
     ($self:tt, $target:ident, $result:ident, $start:expr) => {
         // "::"をスキップ
-        let _ = $self.next_tkn()?;
+        let _ = $self.next_tkn(vec![])?;
         let mut path_node = Vec::<String>::new();
         path_node.push($start.to_string());
         loop {
             // スコープのノードを作成
-            if let lex::Tkn::Name(name) = $self.next_tkn()? {
+            if let lex::Tkn::Name(name) = $self.next_tkn(vec!["name"])? {
                 path_node.push(name);
             } else {
                 panic!();
             }
 
             // スコープやメゾットでなくなったので、ノードを作成
-            if !matches!($self.next_tkn_ref()?, lex::Tkn::$target) {
+            if !matches!($self.next_tkn_ref(vec![])?, lex::Tkn::$target) {
                 let expr =
                     match 
                     $self.expr_define_var(
@@ -60,7 +60,7 @@ macro_rules! scope_node {
                 };
                 return Ok(node);
             }
-            let _ = $self.next_tkn()?;
+            let _ = $self.next_tkn(vec![])?;
         }
     };
 }
@@ -75,7 +75,7 @@ macro_rules! gen_struct_asm {
             .get_fmt_struct_init($struct_node)
         );
         for member in $struct_node.clone().iter() {
-            let inst::MemoryInst::Member{parent, value_idx, size} = member else {
+            let inst::MemoryInst::Member{ value_idx, size, .. } = member else {
                 panic!();
             };
 

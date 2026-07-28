@@ -11,7 +11,7 @@ impl Parser {
         func_name: &String,
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
-        let arg = match self.next_tkn()? {
+        let arg = match self.next_tkn(vec!["(", "<"])? {
             lex::Tkn::LParen => {
                 self.define_arg_node()?
             }
@@ -55,6 +55,11 @@ impl Parser {
     /// 引数の定義をするノードを作成する
     /// この関数では、型のあとまでトークンを進めているので、呼び出し元では
     /// current_tknでトークンを判定する
+    ///
+    /// ## Panic
+    /// - 初回以外で、`,`を挟まずに次の引数の定義なら
+    /// - `,`の次に`)`が来た場合panic
+    /// - `,`の次に`,`が来たら
     fn define_arg_node(&mut self) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
             return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LParen));
@@ -68,12 +73,12 @@ impl Parser {
             if !can_create_param {
                 panic!();
             }
-            match self.next_tkn()? {
+            match self.next_tkn(vec!["name", ")"])? {
                 lex::Tkn::Name(name) => {
                     if !can_create_param {
                         panic!();
                     }
-                    self.next_tkn()?;
+                    self.next_tkn(vec![])?;
                     let ty = self.define_ty_node()?;
                     args_params.push(node::ArgsNode {
                         name: name.clone(),
@@ -81,16 +86,17 @@ impl Parser {
                     });
                     can_create_param = false;
                 }
+                // これが来た場合引数の定義が終了
                 lex::Tkn::RParen => {
-                    self.next_tkn()?;
+                    self.next_tkn(vec![])?;
                     break;
                 },
-                t => {panic!("{:?} {:?}", t, self.next_tkn_ref()?)},
+                t => {panic!("{:?} {:?}", t, self.next_tkn_ref(vec![])?)},
             }
 
             match self.current_tkn() {
                 lex::Tkn::RParen => {
-                    self.next_tkn()?;
+                    self.next_tkn(vec![])?;
                     break;
                 }
                 lex::Tkn::Comma => {

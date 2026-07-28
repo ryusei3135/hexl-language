@@ -71,6 +71,9 @@ impl Size {
             Self::DW => 2,
             Self::DD => 4,
             Self::DQ => 8,
+            Self::Pointer { ty, .. } => {
+                (*ty).to_bytes()
+            }
             _ => panic!(),
         }
     }

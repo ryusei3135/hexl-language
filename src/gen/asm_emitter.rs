@@ -140,6 +140,10 @@ impl AsmEmitter {
         self.extract_operand_text(&index).to_string()
     }
 
+    pub fn get_var_ty(&self, name: &String) -> Size {
+        self.var_hash_map.get(name).expect(&format!("not found {}", name)).size.clone()
+    }
+
     #[inline(always)]
     pub(super) fn insert_var_info(
         &mut self,
@@ -247,9 +251,17 @@ impl AsmEmitter {
                 self.asm_fmt.get_fmt_num(&value)
             }
             inst::Inst::Param(param) => {
-                let num = self.var_hash_map.get(&param.name).unwrap().reg;
+                let var_info = self.var_hash_map.get(&param.name).unwrap();
+                let reg = self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DD);
 
-                self.asm_fmt.get_fmt_reg(&num, &Size::DD)
+                if let Some(ty) = var_info.size.is_pointer() {
+                    self.asm_fmt.fmt_ref_operand(
+                        &reg,
+                        &ty.to_bytes()
+                    )
+                } else {
+                    reg
+                }
             }
             inst::Inst::AssignVar { ref name, .. } => {
                 let num = self.var_hash_map.get(&name.to_string()).unwrap().reg;

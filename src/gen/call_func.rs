@@ -76,15 +76,15 @@ impl AsmEmitter {
                 inst::Inst::Block(name) => {
                     self.asm_text.push_str(&format!("{}:\n", name));
                 }
-                inst::Inst::Comple{name, nodes} => {
+                inst::Inst::Comple{name, lines} => {
                     if let Some(asm_name) = asm_fmt_name {
                         if name.as_str() == asm_name.as_str() {
-                            self.deploy_inline_asm(&name, &nodes);
+                            self.deploy_inline_asm(&name, &lines);
                         } else {
                             panic!("unmatch asm name");
                         }
                     } else {
-                        self.deploy_inline_asm(&name, &nodes);
+                        self.deploy_inline_asm(&name, &lines);
                     }
                 }
                 inst::Inst::Jmp(name) => {
@@ -100,11 +100,12 @@ impl AsmEmitter {
                         // 書き込む値のオペランド
                         let value_operand = self.extract_operand_text(value);
 
-                        let text = self.asm_fmt
+                        let mut text = self.asm_fmt
                             .get_opcode_tmpl("mov")
                             .replace("{dst}", &dst_operand)
                             .replace("{src1}", &value_operand);
 
+                        text = self.asm_fmt.fmt_mnemonic_resize("mov", &text, &self.get_var_ty(&name));
                         self.asm_text.push_str(&text);
                     } else {
                         // 通常の変数への再代入(`b = 10`など)

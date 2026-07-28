@@ -140,7 +140,8 @@ pub enum Inst {
     CallFunc(CallFuncMetaData),
     Comple {
         name: String,
-        nodes: Vec<String>,
+        /// inlineアセンブラの各行: `(プレースホルダー入りの文字列, オペランドのidx)`
+        lines: Vec<(String, Vec<usize>)>,
     },
     AssignVar{
         name: String,

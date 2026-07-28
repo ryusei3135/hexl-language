@@ -19,7 +19,7 @@ pub(super) enum StkInfo {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parser {
     gen_nodes: Vec<node::Group1Node>,
-    tkns: Option<Vec<lex::LocatedTkn>>,
+    pub(super) tkns: Option<Vec<lex::LocatedTkn>>,
     idx: usize,
     scope_counter: usize,
     pub(super) gen_flag: GenFlag,
@@ -64,11 +64,19 @@ impl Parser {
                     match self.current_tkn().clone() {
                         lex::Tkn::KeyWordPub => {
                             // この関数などは、公開する
-                            match self.next_tkn()? {
+                            match self.next_tkn(vec!["name", ".."])? {
                                 lex::Tkn::Name(name) => {
                                     build_func::<true>(&mut *self, &name)
                                 }
-                                unexpect_tkn => Err(err::ErrKind::MissingTknAfter(Some(unexpect_tkn))),
+                                unexpect_tkn => {
+                                    // 期待したトークンじゃないので、エラー
+                                    err::SyntaxErr::unexpect_tkn_after_keyword(
+                                        self.build_err_span(),
+                                        lex::Tkn::KeyWordPub,
+                                        vec!["struct", "enum", "name"],
+                                        &unexpect_tkn,
+                                    )
+                                }
                             }?;
                         }
                         lex::Tkn::Name(name) => {
@@ -96,12 +104,12 @@ impl Parser {
                         node::Group1Node::FuncDefine(func) => {
                             func.add(node);
                         }
-                        t => panic!("KK"),
+                        t => panic!("KK {:?}", t),
                     }
 
                     if self.current_tkn() == &lex::Tkn::RBrace {
                         self.scope_counter -= 1;
-                        if self.next_tkn().is_err() {
+                        if self.next_tkn(vec![]).is_err() {
                             return Ok(&self.gen_nodes);
                         }
                         
@@ -110,14 +118,14 @@ impl Parser {
                     continue;
                 },
             }
-            if self.next_tkn().is_err() && self.scope_counter == 0 {
+            if self.next_tkn(vec![]).is_err() && self.scope_counter == 0 {
                 return Ok(&self.gen_nodes);
             } 
         }
         //Ok(&self.gen_nodes)
     }
 
-    fn one_line_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
+    pub(super) fn one_line_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let node = match self.current_tkn().clone() {
             lex::Tkn::CompleSyn => {
                 self.comple_syntax()?
@@ -127,7 +135,7 @@ impl Parser {
             }
             // ポインタにアクセスするノードの作成
             lex::Tkn::LBracket => {
-                if let lex::Tkn::Name(name) = self.next_tkn()?.clone() {
+                if let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])?.clone() {
                     let mut ptr_connect = self.expr_define_var(name.to_string())?;
                     ptr_connect.get_assign_node().name = name.to_string();
                     let dst = ptr_connect.get_assign_node().clone().dst;
@@ -146,7 +154,7 @@ impl Parser {
                 self.make_loop_node()?
             }
             lex::Tkn::KeyWordMatch => {
-                self.next_tkn()?;
+                self.next_tkn(vec![".."])?;
                 let n = self.expr_match()?;
                 node::Group2Node::Expr(n)
             }
@@ -159,7 +167,7 @@ impl Parser {
                 panic!();
             }
             t => {
-                panic!("parse stmt {:?}  {:?}", t, self.next_tkn_ref());
+                panic!("parse stmt {:?}  {:?}", t, self.next_tkn_ref(vec![]));
             }
         };
         Ok(node)
@@ -168,7 +176,9 @@ impl Parser {
     /// 反復処理のノードを作成する関数
     fn make_loop_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // 反復処理の条件式
-        let pattern = match self.next_tkn_ref()? {
+        let pattern = match self
+            .next_tkn_ref(vec!["{", ".."])?
+        {
             // "{"の場合は条件無し
             lex::Tkn::LBrace => {
                 None
@@ -182,10 +192,10 @@ impl Parser {
         if self.current_tkn() != &lex::Tkn::LBrace {
             panic!();
         }
-        self.next_tkn()?;
+        self.next_tkn(vec!["{"])?;
 
         let body = self.gen_block_node()?;
-        self.next_tkn()?;
+        self.next_tkn(vec!["expr"])?;
 
         let node = node::Group2Node::Expr(
             node::Expr::Loop {
@@ -212,27 +222,74 @@ impl Parser {
     }
 
     pub(super) fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn()? else {
+        let lex::Tkn::Name(name) = self
+            .next_tkn(vec![])? else
+        {
             panic!();
         };
         self.make_preproc(&name)
     }
 
-    pub(super) fn next_tkn(&mut self) -> Result<lex::Tkn, err::ErrKind> {
+    /// 現在の位置から1つ先のトークンを取得する。
+    /// `next_tkn_ref`と違い、それ以上トークンが無い場合は
+    /// エラーではなく`None`を返す。
+    ///
+    /// inlineアセンブラの`${...}`内の式は、文の途中ではなく
+    /// それだけで閉じた短いトークン列として解析されるため、
+    /// 最後まで解析した後に続くトークンが存在しないことがある。
+    /// そのため通常の文の解析(常に後続のトークンがある前提)
+    /// とは違い、EOFをエラーにしない先読みが必要になる。
+    pub(super) fn peek_tkn(&self) -> Option<lex::Tkn> {
+        self.tkns
+            .as_ref()
+            .unwrap()
+            .get(self.idx + 1)
+            .map(|v| v.tkn.clone())
+    }
+
+    /// 次のトークンが存在する場合だけ位置を1つ進める。
+    /// 存在しない場合は位置を変えずに`None`を返す
+    pub(super) fn advance_tkn(&mut self) -> Option<lex::Tkn> {
+        if let Some(next) = self.tkns.as_ref().unwrap().get(self.idx + 1) {
+            self.idx += 1;
+            Some(next.tkn.clone())
+        } else {
+            None
+        }
+    }
+
+    /// なにのトークンが期待されていたかは呼び出し元で決める
+    pub(super) fn next_tkn(
+        &mut self,
+        expected: Vec<&'static str>,
+    ) -> Result<lex::Tkn, err::ErrKind> {
         self.idx += 1;
         if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx) {
             Ok(value.tkn.clone())
         } else {
-            Err(err::ErrKind::EndTkn)
+            err::SyntaxErr::tkn_is_eof(self.build_err_span(), expected)
         }
     }
 
-    pub(super) fn next_tkn_ref(&self) -> Result<&lex::Tkn, err::ErrKind> {
+    /// なにのトークンが期待されていたかは呼び出し元で決める
+    pub(super) fn next_tkn_ref(
+        &self,
+        expected: Vec<&'static str>,
+    ) -> Result<lex::Tkn, err::ErrKind> {
         if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx + 1) {
-            Ok(&value.tkn)
+            Ok(value.tkn.clone())
         } else {
-            Err(err::ErrKind::EndTkn)
+            err::SyntaxErr::tkn_is_eof(self.build_err_span(), expected)
         }
+    }
+
+    /// エラーが発生したときのどの行の何文字目がエラーかを
+    /// 確認する構造体を作成する
+    pub fn build_err_span(&self) -> err::Span {
+        err::Span::new(
+            self.current_line(self.idx - 1),
+            self.tkn_chr_pos()
+        )
     }
 
     #[inline(always)]
@@ -241,8 +298,8 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(super) fn current_line(&self) -> &usize {
-        &self.tkns.as_ref().unwrap()[self.idx].line
+    pub(super) fn current_line(&self, idx: usize) -> &usize {
+        &self.tkns.as_ref().unwrap()[idx].line
     }
 
     #[inline(always)]

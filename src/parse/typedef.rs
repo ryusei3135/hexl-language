@@ -6,11 +6,11 @@ impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
     pub(super) fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn()? else {
+        let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])? else {
             panic!("構造体の名前が必要です");
         };
 
-        match self.next_tkn()? {
+        match self.next_tkn(vec!["{"])? {
             lex::Tkn::LBrace => {},
             t => panic!("{:?}", t),
         }
@@ -29,7 +29,7 @@ impl Parser {
         }
 
         // {を飛ばす
-        let _ = self.next_tkn()?;
+        let _ = self.next_tkn(vec![])?;
 
         let mut fields = HashMap::<String, Box<node::Expr>>::new();
 
@@ -44,21 +44,21 @@ impl Parser {
                 t => panic!("{:?}", t),
             };
             // :じゃないとエラー
-            if !self.next_tkn().is_ok_and(|v| &v == &lex::Tkn::Colon) {
-                panic!("{:?} {:?}", self.current_tkn(), self.next_tkn_ref()?);    
+            if !matches!(self.next_tkn(vec![":"])?, lex::Tkn::Colon) {
+                panic!("{:?} {:?}", self.current_tkn(), self.next_tkn_ref(vec![])?);    
             }
             fields.insert(name, Box::new(self.expr_cmp()?));
 
             match self.current_tkn() {
                 lex::Tkn::Comma => {
                     // ","を飛ばして次のフィールドへ
-                    self.next_tkn()?;
+                    self.next_tkn(vec![])?;
                 }
                 lex::Tkn::RBrace => break,
                 t => panic!("{:?}", t),
             }
         }
-        self.next_tkn()?;
+        self.next_tkn(vec![])?;
         Ok(
             node::Expr::InitStruct{
                 name: name.to_string(),
@@ -70,11 +70,11 @@ impl Parser {
     /// `enum name { mem, mem2 }` を解析する
     /// 呼び出し時は current_tkn() が `KeyWordEnum`
     pub(super) fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn()? else {
+        let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])? else {
             panic!("列挙型の名前が必要です");
         };
 
-        match self.next_tkn()? {
+        match self.next_tkn(vec!["{"])? {
             lex::Tkn::LBrace => {},
             t => panic!("{:?}", t),
         }
@@ -98,11 +98,11 @@ impl Parser {
         let mut methods = Vec::new();
 
         loop {
-            match self.next_tkn()? {
+            match self.next_tkn(vec!["name", "pub", "}"])? {
                 lex::Tkn::Name(name) => {
-                    match self.next_tkn_ref()? {
+                    match self.next_tkn_ref(vec![":", "("])? {
                         lex::Tkn::Colon => {
-                            self.next_tkn()?;
+                            self.next_tkn(vec![])?;
                             let ty = self.define_ty_node()?;
 
                             fields.push(node::StructField {
@@ -114,7 +114,12 @@ impl Parser {
                                 lex::Tkn::Comma => {}
                                 lex::Tkn::RBrace => break,
                                 t => {
-                                    return Err(err::ErrKind::UnexpectedToken);
+                                    err::SyntaxErr::unexpect_tkn_after_keyword(
+                                        self.build_err_span(),
+                                        lex::Tkn::Colon,
+                                        vec![",", "}"],
+                                        t
+                                    )?
                                 }
                             }
                             continue;
@@ -134,7 +139,7 @@ impl Parser {
                         _ => return Err(err::ErrKind::UnexpectedToken),
                     }
                     pub_flag = false;
-                    self.next_tkn()?;
+                    self.next_tkn(vec![])?;
                 }
                 lex::Tkn::KeyWordPub => {
                     pub_flag = true;
@@ -161,11 +166,11 @@ impl Parser {
         let mut methods = Vec::new();
 
         loop {
-            match self.next_tkn()? {
+            match self.next_tkn(vec!["name", "pub", "}"])? {
                 lex::Tkn::Name(name) => {
                     variants.push(name.to_string());
 
-                    match self.next_tkn()? {
+                    match self.next_tkn(vec!["}", ",", "("])? {
                         lex::Tkn::RBrace => break,
                         lex::Tkn::Comma => {},
                         lex::Tkn::LParen => methods.push(self.func_node(&name, pub_flag.clone())?),
@@ -190,18 +195,19 @@ impl Parser {
             return Err(err::ErrKind::UnexpectedToken);
         }
 
-        match self.next_tkn()? {
+        match self.next_tkn(vec!["name", "[", "string"])? {
             lex::Tkn::Name(name) => {
-                let ty = match self.next_tkn()? {
+                let ty = match self.next_tkn(vec!["<", "*"])? {
                     lex::Tkn::LAngleBracket => panic!(),
                     // ポインタの型
                     lex::Tkn::Mul => {
-                        let is_const = if self.next_tkn_ref().is_ok_and(|v| v == &lex::Tkn::KeyWordConst) {
-                            true
-                        } else {
-                            false
-                        };
-                        self.next_tkn()?;
+                        let is_const = 
+                            if matches!(self.next_tkn_ref(vec!["const"])?,lex::Tkn::KeyWordConst) {
+                                true
+                            } else {
+                                false
+                            };
+                        self.next_tkn(vec![])?;
                         
                         node::TyNode::Pointer {
                             is_const,
@@ -230,7 +236,7 @@ impl Parser {
             }
             // 静的領域: `""[ty]` / `""[ty 4]`
             lex::Tkn::Str(ref s) if s.is_empty() => {
-                if self.next_tkn()? != lex::Tkn::LBracket {
+                if !matches!(self.next_tkn(vec!["["])?, lex::Tkn::LBracket) {
                     panic!("静的領域の定義には`[`が必要です");
                 }
                 self.define_mem_ty_node(true)
@@ -246,17 +252,17 @@ impl Parser {
     ///
     /// 呼び出し終了時は、`]`の次のトークンを指す
     fn define_mem_ty_node(&mut self, is_static: bool) -> Result<node::TyNode, err::ErrKind> {
-        let lex::Tkn::Name(ty_name) = self.next_tkn()? else {
+        let lex::Tkn::Name(ty_name) = self.next_tkn(vec!["name"])? else {
             panic!("スタック/静的領域の型名が必要です");
         };
 
-        let len = match self.next_tkn()? {
+        let len = match self.next_tkn(vec!["number", "]"])? {
             lex::Tkn::Number(num) => {
                 let len = num
                     .parse::<usize>()
                     .expect("配列の長さは数値である必要があります");
 
-                if self.next_tkn()? != lex::Tkn::RBracket {
+                if !matches!(self.next_tkn(vec!["not `]`"])?, lex::Tkn::RBracket) {
                     panic!("`]`が必要です");
                 }
                 len
@@ -266,7 +272,7 @@ impl Parser {
         };
         // `]`の次のトークンに進める
         // (呼び出し元が`=`などを current_tkn() で判定できるように)
-        self.next_tkn()?;
+        self.next_tkn(vec![])?;
 
         if is_static {
             Ok(node::TyNode::Static { name: ty_name, len })
