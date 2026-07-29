@@ -70,24 +70,29 @@ macro_rules! scope_node {
 #[macro_export]
 macro_rules! gen_struct_asm {
     ($self:tt, $struct_node:path) => {
-        let mut struct_txt = String::from(
-            $self.asm_fmt
-            .get_fmt_struct_init($struct_node)
-        );
+        let mut struct_txt = String::new();
+        let mut add_size = 0;
         for member in $struct_node.clone().iter() {
             let inst::MemoryInst::Member{ value_idx, size, .. } = member else {
                 panic!();
             };
 
             let value = $self.extract_operand_text(&value_idx).to_string();
+            // このメンバー分を足した「累積」サイズ
+            // (これが、このメンバーの`%rbp`からのオフセットになる)
+            add_size += size.to_bytes();
 
             struct_txt.push_str(
                 $self.asm_fmt.get_fmt_struct_member(
                     value,
-                    &size
+                    &size,
+                    // 既に使用していたスタックのサイズ + ここまでの
+                    // メンバーの累積サイズ = このメンバーの正しいオフセット
+                    &($self.stk_use_counter + add_size)
                 ).as_str()
             );
         }
+        $self.stk_use_counter += add_size;
         return struct_txt;
     };
 }

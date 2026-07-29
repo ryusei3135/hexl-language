@@ -22,6 +22,7 @@ pub struct IR {
     pub struct_tree: def_tree::StructTree,
     // 定義済みの列挙型の情報
     pub enum_tree: HashMap<String, node::EnumDefine>,
+    stk_counter: usize,
 }
 
 
@@ -42,6 +43,7 @@ impl IR {
             define_meta_data: Vec::new(),
             struct_tree: def_tree::StructTree::new(),
             enum_tree: HashMap::new(),
+            stk_counter: 0,
         }
     }
 
@@ -172,7 +174,9 @@ impl IR {
             &info,
             // 関数の戻り値
             &info.ret_ty,
+            self.stk_counter,
         );
+        self.stk_counter = 0;
     }
 
     /// 現在処理中の関数の情報を登録する
@@ -239,6 +243,10 @@ impl IR {
         self.id_counter
     }
 
+    fn stack_counter(&mut self, size: &node::TyNode) {
+        self.stk_counter += types::Size::new(size).to_bytes();
+    }
+
     /// 文のノードを生成
     fn gen_stmt_ir(&mut self, stmt: node::StmtNode) -> usize {
         let node = match stmt {
@@ -299,7 +307,7 @@ impl IR {
                     .iter()
                     .find(|v| v.name.as_str() == &meta_data.name);
                     if let Some(def_data) = result {
-                        def_data.gen()
+                        def_data.gen(self.stk_counter)
                     } else {
                         panic!();
                     }
@@ -308,7 +316,15 @@ impl IR {
         let def_args = defined_func_data.args.clone();
         // 関数のノードを作成
         let mut func_meta_data 
-            = inst::CallFuncMetaData::new(meta_data.name.clone());
+            = inst::CallFuncMetaData::new(
+                meta_data.name.clone(),
+                // 確保するスタックのサイズを渡す
+                if self.stk_counter != 0 {
+                    Some(self.stk_counter)
+                } else {
+                    None
+                }
+            );
 
         for (index, _) in meta_data.args.iter().enumerate() {
             let expr_arg = meta_data.args.get(index).unwrap().clone();
@@ -370,10 +386,33 @@ impl IR {
                     value,
                 }
             } 
+            // 配列を初期化する
+            node::Expr::Array(init_nodes) => {
+                let mut dsts = Vec::new();
+                for node in init_nodes.iter() {
+                    let dst = self.gen_expr_ir(node.clone(), &expect_byte);
+                    dsts.push(dst);
+                }
+                inst::Inst::InitArr(dsts)
+            }
+            // 配列にアクセスする
+            node::Expr::InsertArr { name, dst, index } => {
+                let dst = self.gen_expr_ir(*dst, &expect_byte);
+                inst::Inst::InsertArr {
+                    name: name.to_string(),
+                    dst,
+                    index: index,
+                }
+            }
             // ポインタの中身
             node::Expr::DefVar(mut var) => {
                 match &var.ty.clone() {
-                    node::TyNode::Stack{..} | node::TyNode::Static{..} => {
+                    node::TyNode::Stack{ .. } => {
+                        // 確保するスタックを増やす
+                        self.stack_counter(&var.ty);
+                        self.gen_mem_def_var(var)
+                    }
+                    node::TyNode::Static{..} => {
                         self.gen_mem_def_var(var)
                     }
                     node::TyNode::Ty(ref ty_name) => {
@@ -451,6 +490,9 @@ impl IR {
                 // フィールドは構造体で定義された順番通りに展開する
                 for field in struct_def.fields.clone().iter() {
                     let field_size = self.size_of(&field.ty);
+                    // 確保するスタックを増やす
+                    self.stack_counter(&field.ty);
+
                     let field_expr = fields
                         .remove(&field.name)
                         .unwrap_or_else(|| panic!(

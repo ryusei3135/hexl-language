@@ -59,15 +59,19 @@ pub struct CallFuncMetaData {
     pub public: bool,
     pub name: String,
     pub params: Vec<ValueId>,
+    /// アセンブリ言語を出力する際に、スタックを確保するためのサイズ
+    /// Someの場合、スタックを確保する
+    pub stk_capacity: Option<usize>,
 }
 
 impl CallFuncMetaData {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, stk_capacity: Option<usize>) -> Self {
         Self {
             path: Vec::new(),
             public: false,
             name,
             params: Vec::new(),
+            stk_capacity,
         }
     }
 
@@ -136,6 +140,14 @@ pub enum Inst {
     Str {
         dst: ValueId,
         value: String,
+    },
+    /// これは使われない
+    InitArr(Vec<usize>),
+    /// 配列にアクセスするノード
+    InsertArr {
+        name: String,
+        dst: usize,
+        index: usize,
     },
     CallFunc(CallFuncMetaData),
     Comple {

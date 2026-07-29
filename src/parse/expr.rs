@@ -239,19 +239,13 @@ impl Parser {
             return self.call_func_expr(&name);
         }
 
+        // 配列の中の処理は`src/parse/expr_value.rs`にある
         let v = match self
             .next_tkn(vec!["[", "*", "number", "string", "name", "(", "{"])?
         {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => {
-                let result = self.expr_add()?;
-
-                if self.current_tkn() == &lex::Tkn::LBracket {
-                    dbg!(self.current_tkn());
-                    Err(err::ErrKind::UnexpectedToken)?
-                } else {
-                    node::Expr::GetAddress(Box::new(result))
-                }
+                self.get_var_addr_node()?
             }
             // ポインタにアクセス
             lex::Tkn::Mul => {
@@ -264,31 +258,7 @@ impl Parser {
                 node::Expr::Str(value)
             }
             lex::Tkn::Name(name) => {
-                match self.next_tkn_ref(vec![".", "(", "`", "::"])? {
-                    lex::Tkn::Dot => {
-                        return self.build_scope_node(&name);
-                    }
-                    // 関数を呼びだすノードを作成
-                    lex::Tkn::LParen => {
-                        self.call_func_expr(&name)?
-                    }
-                    // 構造体の初期化ノードを作成する
-                    lex::Tkn::LBrace => {
-                        // "{"から始まらないといけないので、次に進める
-                        self.next_tkn(vec!["{"])?;
-                        return self.struct_init_node(&name);
-                    }
-                    // 列挙型のメンバへのアクセス: `Name::Mem`
-                    lex::Tkn::ModPathTkn => {
-                        // "::"を飛ばす
-                        self.next_tkn(vec!["name"])?;
-                        let lex::Tkn::Name(variant) = self.next_tkn(vec!["name"])? else {
-                            panic!("列挙型のメンバ名が必要です");
-                        };
-                        node::Expr::EnumVariant { name, variant }
-                    }
-                    _ => node::Expr::Var(name)
-                } 
+                self.gen_name_node(name)?
             }
             lex::Tkn::LParen => {
                 let result = self.expr_add()?;
@@ -302,28 +272,14 @@ impl Parser {
             }
             // 配列リテラル: `{100, 100, 100, 100}`
             lex::Tkn::LBrace => {
-                let mut items = Vec::<node::Expr>::new();
-
-                if !matches!(self.next_tkn_ref(vec!["not `}`"])?, lex::Tkn::RBrace) {
-                    loop {
-                        items.push(self.expr_cmp()?);
-
-                        match self.current_tkn() {
-                            lex::Tkn::Comma => continue,
-                            lex::Tkn::RBrace => break,
-                            t => panic!("{:?}", t),
-                        }
-                    }
-                }
-                self.next_tkn(vec![])?;
-                node::Expr::Array(items)
+                self.make_array_node()?
             }
             t => panic!("{:?}", t),
         };
 
         match self.current_tkn() {
             lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::Str(_)
-                | lex::Tkn::RParen | lex::Tkn::RBracket => {
+                | lex::Tkn::RParen | lex::Tkn::RBracket | lex::Tkn::RBrace => {
                 self.next_tkn(vec![])?;
             }
             _ => {},
@@ -340,7 +296,7 @@ impl Parser {
     /// ## Safety
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
     /// である必要がある
-    fn call_func_expr(&mut self, name: &String) -> ExprResult {
+    pub(super) fn call_func_expr(&mut self, name: &String) -> ExprResult {
         if !matches!(self.current_tkn(), lex::Tkn::LParen) {
             panic!("call_func_exprを呼び出す際にLParenではない");
         }
@@ -383,7 +339,6 @@ impl Parser {
 mod expr_tests {
     use crate::{
         lex,
-        err,
         node::{self, *},
         parse,
     };

@@ -85,6 +85,7 @@ pub struct AsmEmitter {
     pub(super) var_hash_map: HashMap<String, VarIndexInfo>,
     // 現在使用中のレジスタを管理する
     pub(super) used_reg: UsedRegManager,
+    pub(super) stk_use_counter: usize,
 }
 
 impl AsmEmitter {
@@ -106,6 +107,7 @@ impl AsmEmitter {
             last_inst_idx: Vec::new(),
             var_hash_map: HashMap::new(),
             used_reg: UsedRegManager::new(),
+            stk_use_counter: 0,
         };
         me.data_sec_text.push_str(&me.asm_fmt.get_section_fmt("data"));
         me
@@ -297,7 +299,7 @@ impl AsmEmitter {
         &mut self,
         parent_id: &usize,
     ) -> String {
-        match &self.curr_inst[*parent_id] {
+        match self.curr_inst[*parent_id].clone() {
             inst::Inst::Num {  value, .. } => {
                 self.asm_fmt.get_fmt_num(&value)
             }
@@ -318,6 +320,14 @@ impl AsmEmitter {
                 let num = self.var_hash_map.get(&name.to_string()).unwrap().reg;
                 self.asm_fmt.get_fmt_reg(&num, &Size::DD)
             }
+            // 配列にアクセス
+            inst::Inst::InsertArr { name, dst, index } => {
+                let size = self.var_hash_map.get(&name).unwrap().size.to_bytes();
+                let pos = size * index + size;
+                let mut src = self.extract_operand_text(&dst);
+                src = src.replace(&format!("{}", size), &pos.to_string());
+                src
+            }
             inst::Inst::Str { .. } => {
                 self.data_map
                     .iter()
@@ -326,7 +336,7 @@ impl AsmEmitter {
                     .1
                     .clone()
             }
-            inst::Inst::Mov { name, src, .. } => {
+            inst::Inst::Mov { ref name, src, .. } => {
                 let Some(var_name) = name else {
                     panic!();
                 };
@@ -337,7 +347,7 @@ impl AsmEmitter {
                     panic!("this var is not found -> {}", name.as_ref().unwrap());
                 };
                 
-                if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
+                if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == &src) {
                     // static領域の変数を返す:
                     //self.var_hash_map.entry(var_name.to_string()).or_insert(0);
                     static_var.1.clone()
@@ -356,7 +366,7 @@ impl AsmEmitter {
                 crate::gen_struct_asm!(self, struct_node);
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
-                if kind == &inst::MemoryKind::Static {
+                if kind == inst::MemoryKind::Static {
                     // 静的領域の変数: データセクションに置いたラベルを参照する
                     let name = self.data_map
                         .iter()
@@ -376,7 +386,7 @@ impl AsmEmitter {
             inst::Inst::RefStruct { src, size } => {
                 self.asm_fmt.fmt_ref_operand(
                     &self.asm_fmt.get_fmt_reg(
-                        &self.var_hash_map.get(src).expect(src).reg,
+                        &self.var_hash_map.get(&src).expect(&src).reg,
                         &Size::DQ
                     ),
                     &size,

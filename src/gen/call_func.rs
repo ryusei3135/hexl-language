@@ -9,6 +9,9 @@ impl AsmEmitter {
     ) -> String {
         // 生成するアセンブリコード
         let mut call_func = String::new();
+        if let Some(size) = meta_data.stk_capacity {
+            call_func.push_str(&self.asm_fmt.gen_stack_frame(size));
+        }
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数のレジスタを取得
@@ -36,12 +39,20 @@ impl AsmEmitter {
         func_meta_data: &mut (String, def_tree::FuncDefInfo),
         asm_fmt_name: &Option<String>,
     ) {
+        // 関数ごとにスタックの使用量をリセットする
+        // (前の関数の`stk_use_counter`を持ち越すと、この関数の
+        //  ローカル変数のオフセットが正しく計算できない)
+        self.stk_use_counter = 0;
+
         // 新しく関数の作成、
         self.asm_text.push_str(&format!("{}:\n", &func_meta_data.0));
         if &func_meta_data.0 != "_start" {
             self.asm_text.push_str(self.asm_fmt.func_frame_fmt().as_str());
         }
         self.curr_inst = mem::take(&mut func_meta_data.1.body);
+
+        // スタックフレームの生成
+        self.asm_text.push_str(&self.asm_fmt.gen_stack_frame(func_meta_data.1.stk_size));
 
         for node in self.curr_inst.clone().iter() {
             match &node {
@@ -75,6 +86,7 @@ impl AsmEmitter {
                 }
                 inst::Inst::Num{ .. } => {
                 }
+                inst::Inst::InitArr(_) => {},
                 inst::Inst::Block(name) => {
                     self.asm_text.push_str(&format!("{}:\n", name));
                 }
@@ -205,12 +217,17 @@ impl AsmEmitter {
                             } else {
                                 // スタック領域のローカル変数を作成する 
                                 let mut txt = String::new();
-                                txt.push_str(&self.asm_fmt.stack_frame_fmt(size.to_bytes()));
                                 let value = self.extract_operand_text(&src);
+                                // スタックの場所を更新
+                                // (この変数のオフセットは、これまで使用した
+                                //  スタックのサイズ`stk_use_counter`に、
+                                //  この変数のサイズを足したもの)
+                                self.stk_use_counter += size.to_bytes();
                                 let s = &self.asm_fmt.fmt_ref_operand(
                                     &"%rbp".to_string(),
-                                    &size.to_bytes(),
+                                    &self.stk_use_counter,
                                 );
+
                                 let mov_line = self.asm_fmt
                                 .get_opcode_tmpl("mov")
                                 .replace("{dst}", &s)

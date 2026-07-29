@@ -235,8 +235,13 @@ pub enum Expr {
         name: String,
         variant: String,
     },
-    /// 配列リテラル: `[100, 100, 100, 100]`
+    /// 配列リテラル: `{100, 100, 100, 100}`
     Array(Vec<Expr>),
+    InsertArr {
+        name: String,
+        dst: Box<Expr>,
+        index: usize,
+    },
 
     DefVar(DefineVar),
     Scope{

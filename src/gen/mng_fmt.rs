@@ -79,23 +79,16 @@ impl MngAsmFmt {
         self.fmt.fmt.frame_end.to_string()
     } 
 
-    /// 構造体の初期化するアセンブリ言語を返す
-    #[inline(always)]
-    pub fn get_fmt_struct_init(&self, size: &Vec<inst::MemoryInst>) -> String {
-        // 構造体のサイズを取得
-        let size: usize = types::get_struct_size(&size);
-        // 構造体のサイズをスタックアライメントに調整
-        let alignment_size = size + (size % 8);
-        self.fmt.fmt.data.head
-            // 確保するスタックのサイズ 
-            .replace(
-                "{size}",
-                &alignment_size.to_string()
-            )
-    }
-
-    pub fn stack_frame_fmt(&self, size: usize) -> String {
-        let alignment_size = size + (size % 8);
+    /// 予約されていた、スタックのサイズ分
+    pub fn gen_stack_frame(&self, size: usize) -> String {
+        // 8バイト境界に切り上げてアライメントする
+        // (例: size=1..8 -> 8, size=9..16 -> 16)
+        let remainder = size % 8;
+        let alignment_size = if remainder == 0 {
+            size
+        } else {
+            size + (8 - remainder)
+        };
         self.fmt.fmt.data.head
             // 確保するスタックのサイズ 
             .replace(
@@ -105,13 +98,24 @@ impl MngAsmFmt {
     }
 
     /// 構造体のメンバーをフォーマット
+    /// ## 引数
+    /// - value = 代入する値
+    /// - size = このメンバーの型のサイズ(movのニーモニックの決定にのみ使う)
+    /// - offset = `%rbp`からのこのメンバーの、確定済みのオフセット
+    ///   (呼び出し側で、これまでの`stk_use_counter`とこのメンバー分の
+    ///   サイズを合計した値を渡す。ここで更にサイズを足してはいけない)
     #[inline(always)]
-    pub fn get_fmt_struct_member(&self, value: String, size: &types::Size) -> String {
+    pub fn get_fmt_struct_member(
+        &self,
+        value: String,
+        size: &types::Size,
+        offset: &usize
+    ) -> String {
         let fmted = self.fmt.fmt
         .data
         .fmt
         .replace("{dst}", value.as_str())
-        .replace("{size}", size.to_bytes().to_string().as_str());
+        .replace("{size}", offset.to_string().as_str());
         let s_fmt = match &size {
             types::Size::DB => crate::mov_size_fmt!(self, db),
             types::Size::DW => crate::mov_size_fmt!(self, dw),

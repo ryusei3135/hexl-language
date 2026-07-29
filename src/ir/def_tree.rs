@@ -123,6 +123,7 @@ pub struct FuncDefInfo {
     pub body: Vec<inst::Inst>,
     pub ret_ty: Option<node::TyNode>,
     pub public: bool,
+    pub stk_size: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -160,6 +161,7 @@ impl FuncTree {
         body: Vec<inst::Inst>,
         meta_data: &node::FuncDefine,
         ret_ty: &node::TyNode,
+        stk_size: usize,
     ) {
         self.func.insert(
             meta_data.name.clone(),
@@ -169,6 +171,7 @@ impl FuncTree {
                 body,
                 ret_ty: Some(ret_ty.clone()),
                 public: meta_data.public,
+                stk_size,
             }
         );
     }
@@ -204,13 +207,14 @@ impl FuncDefMetaData {
         self.module = Some(self_name.to_string());
     }
 
-    pub fn gen(&self) -> FuncDefInfo {
+    pub fn gen(&self, stk_size: usize) -> FuncDefInfo {
         FuncDefInfo {
             module: None,
             args: self.params.clone(),
             body: Vec::new(),
             ret_ty: self.ret_ty.clone(),
             public: true,
+            stk_size 
         }
     }
 }

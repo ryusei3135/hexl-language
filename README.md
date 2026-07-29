@@ -59,7 +59,7 @@ a: [int] = 10
 b: ""[int] = 10
 c: [int 4] = {1, 2, 3, 4}
 ```
-- [変数の扱い](./documents/variable.md)
+- [変数の扱い(配列も含む)](./documents/variable.md)
 - [型について](./documents/type.md)
 
 ### 構造体・列挙型
