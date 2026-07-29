@@ -128,11 +128,16 @@ impl MngAsmFmt {
 
     /// ニーモニックのサイズを調整
     pub fn fmt_mnemonic_resize(&self, mnemonic: &str, value: &String, size: &types::Size) -> String {
+        if let types::Size::Pointer{ ty, .. } = size {
+            return self.fmt_mnemonic_resize(mnemonic, value, ty);
+        }
+
         let s_fmt = match &size {
             types::Size::DB => crate::mov_size_fmt!(self, db),
             types::Size::DW => crate::mov_size_fmt!(self, dw),
             types::Size::DD => crate::mov_size_fmt!(self, dd),
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
+            types::Size::Pointer{ .. } => unreachable!(),
             _ => panic!()
         };
         value.replace(mnemonic, &format!("{}{}", mnemonic, s_fmt))

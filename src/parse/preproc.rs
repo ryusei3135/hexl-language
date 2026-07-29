@@ -25,6 +25,9 @@ impl Parser {
                     self.build_err_span().line.to_string();
                 node::Group2Node::Line(curr_line)
             }
+            "preserve" => {
+                panic!();
+            }
             "asm" => self.build_asm_ast()?,
             _ => panic!(),
         };

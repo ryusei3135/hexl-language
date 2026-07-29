@@ -185,6 +185,9 @@ pub struct FuncDefMetaData {
     pub name: String,
     params: Vec<node::ArgsNode>,
     ret_ty: Option<node::TyNode>,
+    // `#include`で他のファイルから読み込む際に、公開(pub)された
+    // 関数かどうかを判定するために使う
+    pub public: bool,
 }
 
 impl FuncDefMetaData {
@@ -200,11 +203,18 @@ impl FuncDefMetaData {
             name: info.name.clone(),
             params: info.params.clone(),
             ret_ty: Some(info.ret_ty.clone()),
+            public: info.public,
         }
     }
 
     pub fn add_self_module_name(&mut self, self_name: &String) {
         self.module = Some(self_name.to_string());
+    }
+
+    /// この関数がどのモジュール名で登録されているかを返す
+    /// (`#include`でモジュール名を指定せず取り込んだ関数は`None`)
+    pub fn module(&self) -> Option<&String> {
+        self.module.as_ref()
     }
 
     pub fn gen(&self, stk_size: usize) -> FuncDefInfo {

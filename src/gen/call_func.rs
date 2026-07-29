@@ -9,9 +9,6 @@ impl AsmEmitter {
     ) -> String {
         // 生成するアセンブリコード
         let mut call_func = String::new();
-        if let Some(size) = meta_data.stk_capacity {
-            call_func.push_str(&self.asm_fmt.gen_stack_frame(size));
-        }
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数のレジスタを取得
@@ -39,20 +36,22 @@ impl AsmEmitter {
         func_meta_data: &mut (String, def_tree::FuncDefInfo),
         asm_fmt_name: &Option<String>,
     ) {
+        // 新しく関数の作成、
+        self.asm_text.push_str(&format!("{}:\n", &func_meta_data.0));
         // 関数ごとにスタックの使用量をリセットする
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)
         self.stk_use_counter = 0;
-
-        // 新しく関数の作成、
-        self.asm_text.push_str(&format!("{}:\n", &func_meta_data.0));
-        if &func_meta_data.0 != "_start" {
-            self.asm_text.push_str(self.asm_fmt.func_frame_fmt().as_str());
+        if func_meta_data.1.stk_size != 0 {
+            // 予約されたサイズ分確保する
+            self.asm_text.push_str(&self.asm_fmt.gen_stack_frame(func_meta_data.1.stk_size));
+        } else {
+            if &func_meta_data.0 != "_start" {
+                self.asm_text.push_str(self.asm_fmt.func_frame_fmt().as_str());
+            }
         }
-        self.curr_inst = mem::take(&mut func_meta_data.1.body);
 
-        // スタックフレームの生成
-        self.asm_text.push_str(&self.asm_fmt.gen_stack_frame(func_meta_data.1.stk_size));
+        self.curr_inst = mem::take(&mut func_meta_data.1.body);
 
         for node in self.curr_inst.clone().iter() {
             match &node {
@@ -138,10 +137,7 @@ impl AsmEmitter {
                             "mov"
                         };
 
-                        let mut text = self.format_line(mnemonic, Some(&current_reg), &value, None);
-                        if mnemonic == "address" {
-                            text = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &text, &Size::DQ);
-                        }
+                        let text = self.format_line(mnemonic, Some(&current_reg), &value, None);
 
                         if self.expr_vars.iter().find(|v| v == &name).is_some() {
                             self.update_value_reg(&name, &current_reg);

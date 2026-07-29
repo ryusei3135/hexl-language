@@ -312,6 +312,29 @@ impl ModPath {
         path.push_str(".hexl");
         path
     }
+
+    /// パスの最後のセグメントを除いた、
+    /// 親のディレクトリのファイルパスを生成する
+    /// (例: `mod::file::func` -> `mod/file.hexl`)
+    ///
+    /// `#include`で指定されたパスがファイルとして
+    /// 存在しない場合、最後のセグメントは
+    /// 関数名とみなし、その手前までを
+    /// ファイルパスとして探すのに使う
+    pub fn gen_parent_path(&self) -> String {
+        const PATH_START: usize = 0;
+
+        let mut path = String::new();
+        let parent_len = self.path.len().saturating_sub(1);
+        for (index, dir) in self.path[..parent_len].iter().enumerate() {
+            if index != PATH_START {
+                path.push('/');
+            }
+            path.push_str(dir);
+        }
+        path.push_str(".hexl");
+        path
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

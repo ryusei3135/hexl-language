@@ -85,26 +85,73 @@ impl IR {
                 }
                 #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
-                    // パスの情報を作成
-                    let dir = path.gen_path();
-                    let new_setting = settings
-                        .new_file(&dir);
-                    let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData> = crate::build(&new_setting).unwrap();
-                    // 関数にモジュールの名前を追加
-                    extern_fn_tree
-                        .iter_mut()
-                        .for_each(
-                            |v| {
-                                v.add_self_module_name(
-                                    path
-                                    .path
-                                    .last()
-                                    .unwrap()
-                                )
-                            }
-                        );
-                    self.make_extern_func_inst(&extern_fn_tree);
-                    self.extern_func_tree.extend(extern_fn_tree);
+                    // まずパスの全セグメントをファイルパスとして解釈する
+                    // (例: `mod::file2` -> `mod/file2.hexl`)
+                    let full_path = path.gen_path();
+
+                    if std::path::Path::new(&full_path).exists() {
+                        // ファイルとして存在する場合は、そのファイルが
+                        // 公開(pub)している関数を全て、モジュール名
+                        // (パスの最後のセグメント)を指定した上で
+                        // extern_func_treeに登録する
+                        let new_setting = settings.new_file(&full_path);
+                        let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData>
+                            = crate::build(&new_setting).unwrap();
+
+                        // 公開されていない関数は取り込まない
+                        extern_fn_tree.retain(|v| v.public);
+
+                        // 関数にモジュールの名前を追加
+                        let module_name = path.path.last().unwrap();
+                        extern_fn_tree
+                            .iter_mut()
+                            .for_each(|v| v.add_self_module_name(module_name));
+
+                        self.make_extern_func_inst(&extern_fn_tree);
+                        self.extern_func_tree.extend(extern_fn_tree);
+                    } else {
+                        // 全セグメントでのパスが存在しない場合、最後の
+                        // セグメントはファイル名ではなく「関数名」と
+                        // みなし、その手前までをファイルパスとして
+                        // 探し直す
+                        // (例: `mod::file::func` -> `mod/file.hexl`の
+                        //  中にある`func`という関数)
+                        let func_name = path
+                            .path
+                            .last()
+                            .expect("#includeのパスが空です")
+                            .clone();
+                        let parent_path = path.gen_parent_path();
+
+                        if !std::path::Path::new(&parent_path).exists() {
+                            panic!(
+                                "#includeで指定されたファイルが見つかりません: {} (関数名として`{}`も試しましたが、ファイル{}も見つかりませんでした)",
+                                full_path, func_name, parent_path
+                            );
+                        }
+
+                        let new_setting = settings.new_file(&parent_path);
+                        let extern_fn_tree: Vec<def_tree::FuncDefMetaData>
+                            = crate::build(&new_setting).unwrap();
+
+                        // 指定された名前の、公開されている関数だけを
+                        // 取り出す(モジュール名は指定しないので、
+                        // そのまま`func()`のように呼び出せる)
+                        let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData> = extern_fn_tree
+                            .into_iter()
+                            .filter(|v| v.public && v.name == func_name)
+                            .collect();
+
+                        if extern_fn_tree.is_empty() {
+                            panic!(
+                                "#includeで指定された関数が見つかりません: {}::{}",
+                                parent_path, func_name
+                            );
+                        }
+
+                        self.make_extern_func_inst(&extern_fn_tree);
+                        self.extern_func_tree.append(&mut extern_fn_tree);
+                    }
                 }
                 node::Group1Node::StructDefine(info) => {
                     // 構造体の情報を登録
@@ -305,7 +352,10 @@ impl IR {
             } else {
                 let result = self.extern_func_tree
                     .iter()
-                    .find(|v| v.name.as_str() == &meta_data.name);
+                    .find(|v| {
+                        v.name.as_str() == meta_data.name.as_str()
+                            && v.module() == module_name
+                    });
                     if let Some(def_data) = result {
                         def_data.gen(self.stk_counter)
                     } else {
@@ -349,7 +399,7 @@ impl IR {
             }
 
             node::Expr::Add(node) => {
-                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Add)
             }
             node::Expr::Sub(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)

@@ -120,7 +120,16 @@ impl AsmEmitter {
         extern_funcs: &Vec<inst::Inst>,
         global_funcs: &Vec<String>,
     ) -> String {
-        self.asm_text = String::from(&self.asm_fmt.get_entry_point());
+        // `_start`が定義されているファイルの場合だけ、エントリー
+        // ポイントとして`.global _start`を出力する
+        // (#includeされるライブラリ用ファイルなど、`_start`を
+        //  定義しないファイルにまでこれを出力してしまうと、
+        //  存在しないシンボルを公開する不正なアセンブリになる)
+        self.asm_text = if func_tree.func.contains_key("_start") {
+            String::from(&self.asm_fmt.get_entry_point())
+        } else {
+            String::new()
+        };
 
         self.gen_global_func_asm(&global_funcs);
         self.gen_extern_func_asm(&extern_funcs);
@@ -241,13 +250,34 @@ impl AsmEmitter {
             );
             txt
         } else {
+            // `address`(=`lea`)はアドレス(ポインタ)を求める命令なので、
+            // 常にポインタサイズ(8byte = %rcxなどの64bitレジスタ)の
+            // レジスタを使わなければならない。
+            // ここを他のケースと同様に`Size::DD`(32bit)のままにすると、
+            // 後段で`fmt_mnemonic_resize`によってニーモニックだけが
+            // "leaq"のように64bit用に調整される一方でレジスタ表記は
+            // 32bit(`%ecx`など)のままになってしまい、ニーモニックと
+            // レジスタのサイズ表記が食い違ったコードが生成されてしまう。
+            let dst_size = if opcode == "address" {
+                &Size::DQ
+            } else {
+                &Size::DD
+            };
             self.asm_fmt
             .get_opcode_tmpl(opcode)
-            .replace("{dst}", &self.get_reg(dst, &Size::DD))
+            .replace("{dst}", &self.get_reg(dst, dst_size))
             .replace("{src1}", &self.extract_operand_text(src1))
         };
 
-        if self.check_node_is_struct(&src1) {
+        // `address`(=`lea`)は必ずここで`fmt_mnemonic_resize`を通す。
+        // `lea`はアドレス(ポインタ)を求める命令なので、構造体か
+        // どうかに関わらず常にポインタサイズ(8byte)として扱う。
+        // ("address"はテンプレートを引くためのキーであって、
+        //  実際の命令語(テンプレート中の文字列)は"lea"なので、
+        //  `fmt_mnemonic_resize`にもそちらを渡す必要がある)
+        if opcode == "address" {
+            formated = self.asm_fmt.fmt_mnemonic_resize("lea", &formated, &Size::DQ);
+        } else if self.check_node_is_struct(&src1) {
             formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &Size::DD);
         } else if let Some(size) = self.check_node_is_memory_value(&src1) {
             formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &size);
@@ -278,6 +308,16 @@ impl AsmEmitter {
         match &self.curr_inst[*node_idx] {
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { size, .. }) => {
                 Some(size.clone())
+            }
+            // `[a]`のようなポインタ関連のノードは、実際のメモリ参照
+            // (`MemoryValue`)を直接ではなくラップして持っている場合がある。
+            // ここで素通りしてしまうと、実際にはメモリを参照している
+            // オペランドであるにも関わらずサイズが判定できず、
+            // ニーモニックにサイズの接尾辞(`movl`など)が付かないまま
+            // 出力されてしまう。そのため、ラップされている先を辿って
+            // 判定する。
+            inst::Inst::Pointer(inner) | inst::Inst::GetAddress(inner) => {
+                self.check_node_is_memory_value(inner)
             }
             _ => None,
         }
@@ -434,13 +474,38 @@ impl AsmEmitter {
             inst::ExprKind::LessThen => "cmp_l",
             inst::ExprKind::GreaterThen => "cmp_g",
         };
+        // ニーモニックのサイズ調整に使う、実際のニーモニックの文字列
+        // (`cmp_l`/`cmp_g`はテンプレートを引くためのキーであって、
+        //  実際にテンプレート中で使われるニーモニックは"cmp"なので、
+        //  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
+        let mnemonic = match expr.kind {
+            inst::ExprKind::Add => "add",
+            inst::ExprKind::Sub => "sub",
+            inst::ExprKind::Mul => "mul",
+            inst::ExprKind::Div => "div",
+            inst::ExprKind::LessThen | inst::ExprKind::GreaterThen => "cmp",
+        };
 
-        let formated = self.asm_fmt
+        let mut formated = self.asm_fmt
             .get_opcode_tmpl(key)
             .replace("{dst}", &self.get_reg(Some(&self.reg_idx), &Size::DD))
             .replace("{src1}", &self.extract_operand_text(&expr.ls))
             .replace("{src2}", &self.extract_operand_text(&expr.rs))
             .to_string();
+
+        // どちらかのオペランドがメモリ上の値(スタック/静的領域の変数)を
+        // 参照している場合、そのサイズに合わせてニーモニックへ
+        // サイズの接尾辞(`movl`/`subl`など)を付ける。
+        // (テンプレートは通常「一旦movでdstに値を置いてから演算する」
+        //  という2行構成になっているため、両方のニーモニックを
+        //  調整する必要がある)
+        if let Some(size) = self
+            .check_node_is_memory_value(&expr.ls)
+            .or_else(|| self.check_node_is_memory_value(&expr.rs))
+        {
+            formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &size);
+            formated = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &formated, &size);
+        }
 
         if let Some(ref name) = self.reserved_label_name.take() {
             // ラベルの予約があるかつフォーマット中の文字列に"{label}"

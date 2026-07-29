@@ -58,7 +58,6 @@ impl Parser {
                 t => panic!("{:?}", t),
             }
         }
-        self.next_tkn(vec![])?;
         Ok(
             node::Expr::InitStruct{
                 name: name.to_string(),
