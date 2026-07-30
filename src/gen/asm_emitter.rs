@@ -473,6 +473,8 @@ impl AsmEmitter {
             inst::ExprKind::Div => "div",
             inst::ExprKind::LessThen => "cmp_l",
             inst::ExprKind::GreaterThen => "cmp_g",
+            inst::ExprKind::Equal => "cmp_e",
+            inst::ExprKind::NotEq => "cmp_ne",
         };
         // ニーモニックのサイズ調整に使う、実際のニーモニックの文字列
         // (`cmp_l`/`cmp_g`はテンプレートを引くためのキーであって、
@@ -483,7 +485,10 @@ impl AsmEmitter {
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "mul",
             inst::ExprKind::Div => "div",
-            inst::ExprKind::LessThen | inst::ExprKind::GreaterThen => "cmp",
+            inst::ExprKind::LessThen
+                | inst::ExprKind::GreaterThen
+                | inst::ExprKind::NotEq
+                | inst::ExprKind::Equal => "cmp",
         };
 
         let mut formated = self.asm_fmt

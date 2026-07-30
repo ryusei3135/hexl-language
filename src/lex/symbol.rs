@@ -13,6 +13,31 @@ impl Lexer {
                 self.gen_tkns.pop();
                 Some(tkn)
             },
+            Tkn::Equal => {
+                let tkn = match &self.gen_tkns.last()?.tkn {
+                    Tkn::Equal => Tkn::EqEq,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(tkn)
+            },
+            Tkn::Not => {
+                let tkn = match &self.gen_tkns.last()?.tkn {
+                    Tkn::Equal => Tkn::NotEq,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(tkn)
+            }
+            // `=>` (matchの条件/パターンの後に付ける矢印)
+            Tkn::RAngleBracket => {
+                let tkn = match &self.gen_tkns.last()?.tkn {
+                    Tkn::Equal => Tkn::Arrow,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(tkn)
+            },
             _ => None,
         }
     }

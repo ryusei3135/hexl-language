@@ -21,6 +21,13 @@ pub enum Tkn {
     LBracket,
     RBracket,
 
+    /// `==` (値の比較用の等価演算子)
+    EqEq,
+    NotEq,
+    Not,
+    /// `=>` (matchの条件/パターンの後に付ける矢印)
+    Arrow,
+
     CompleSyn,
 
     Number(String),

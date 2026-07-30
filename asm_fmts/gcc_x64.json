@@ -78,6 +78,14 @@
         "len": 2,
         "template": "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jg {label}\n"
     },
+    "cmp_e": {
+        "len": 2,
+        "template": "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jz {label}\n"
+    },
+    "cmp_e": {
+        "len": 2,
+        "template": "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jnz {label}\n"
+    },
     "ret": {
         "len": 1,
         "template": "{space}ret\n"

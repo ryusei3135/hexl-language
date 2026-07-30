@@ -1,5 +1,8 @@
 use super::*;
 
+/// このファイルでしか使われないAPIのモジュール
+mod value_api;
+mod cond;
 
 type ExprResult = Result<node::Expr, err::ErrKind>;
 
@@ -104,6 +107,12 @@ impl Parser {
                 lex::Tkn::RAngleBracket => {
                     node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_add()?))
                 }
+                lex::Tkn::EqEq => {
+                    node::Expr::Equal(node::Expr::wrap(left, self.expr_add()?))
+                }
+                lex::Tkn::NotEq => {
+                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_add()?))
+                }
                 _ => break,
             };
         }
@@ -129,84 +138,6 @@ impl Parser {
         Ok(left)
     }
 
-    /// 最初にキーワードのmatchが来る必要がある
-    pub(super) fn expr_match(&mut self) -> ExprResult {
-        // match の対象式
-        let target = if matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            None
-        } else {
-            Some(Box::new(self.expr_cmp()?))
-        };
-
-        // {
-        if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            return Err(err::ErrKind::UnexpectedToken);
-        }
-
-        let mut arms = Vec::new();
-
-        loop {
-            // }
-            if matches!(self.current_tkn(), lex::Tkn::RBrace) {
-                break;
-            }
-            // パターン else 
-            if self.current_tkn() == &lex::Tkn::Or {
-                // {
-                if !matches!(self.next_tkn(vec!["{"])?, lex::Tkn::LBrace) {
-                    return Err(err::ErrKind::UnexpectedToken);
-                }
-                self.next_tkn(vec![])?;
-                // ここでアーム本体を解析
-                let body = self.gen_block_node()?;
-                // }
-                if !matches!(self.current_tkn(), lex::Tkn::RBrace) {
-                    return Err(err::ErrKind::UnexpectedToken);
-                }
-                // }
-                if !matches!(self.next_tkn(vec!["}"])?, lex::Tkn::RBrace) {
-                    panic!("e");
-                }
-                //}
-                self.next_tkn(vec![])?;
-                let node = node::Expr::Match {
-                    pattern: target,
-                    arms,
-                    arm_else: Some(body),
-                };
-                return Ok(node);
-            }
-            // if 
-            let pattern = self.expr_cmp()?;
-
-            // {
-            if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-                return Err(err::ErrKind::UnexpectedToken);
-            }
-            self.next_tkn(vec![])?;
-            // ここでアーム本体を解析
-            let body = self.gen_block_node()?;
-            // }
-            if !matches!(self.current_tkn(), lex::Tkn::RBrace) {
-                return Err(err::ErrKind::UnexpectedToken);
-            }
-            self.next_tkn(vec![])?;
-            arms.push(node::MatchArm {
-                pattern: Box::new(pattern),
-                body,
-            });
-        }
-
-        // 式の終了
-        self.next_tkn(vec!["}"])?;//}
-
-        let node = node::Expr::Match {
-            pattern: target,
-            arms,
-            arm_else: None,
-        };
-        Ok(node)
-    }
 
     fn expr_mul(&mut self) -> ExprResult {
         let mut left = self.expr_value()?;
@@ -229,9 +160,16 @@ impl Parser {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
-            if !matches!(self.next_tkn(vec!["("])?, lex::Tkn::LParen) {
-                panic!();
+            match self.next_tkn(vec![])? {
+                // おそらくこれは、条件しきなので変数の名前として返す
+                lex::Tkn::LBrace => {
+                    return self.gen_name_node(name);
+                }
+                // 関数を呼ぶノード
+                lex::Tkn::LParen => {},
+                t => panic!(" name {:?} {:?}", name, t),
             }
+            // スコープを作成
             if self.current_tkn() == &lex::Tkn::Dot {
                 return self.build_scope_node(&name); 
             }
@@ -475,10 +413,10 @@ mod expr_tests {
             "
             main(): b1 {
               match {
-                10 < 10 {
+                10 < 10 => {
                   hh: b1 = 100
                 }
-                | {
+                | => {
                   a: b1 = 10
                 }
               }
@@ -499,6 +437,105 @@ mod expr_tests {
                         pattern: Box::new(wrap_expr_cmp("10", "10")),
                         body: vec![
                             gen_var_node("hh", "100", "b1"),
+                        ],
+                    }
+                ],
+                arm_else: Some(
+                    vec![
+                        gen_var_node("a", "10", "b1"),
+                    ]
+                ),
+            }.wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_match_expr_bool() {
+        // 1. Booleanを与えるパターン (単純なif/else)
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes(
+            "
+            main(): b1 {
+              match a == 10 => {
+                hh: b1 = 100
+              } | => {
+                a: b1 = 10
+              }
+            }
+            "
+        );
+        let node::Group1Node::FuncDefine(ref node)
+            = p.parser(tkns).expect("node is err")[0]
+                else {
+                    panic!("not func");
+                };
+        assert_eq!(
+            node.body[0],
+            node::Expr::Match {
+                pattern: None,
+                arms: vec![
+                    node::MatchArm {
+                        pattern: Box::new(
+                            node::Expr::Equal((
+                                Box::new(node::Expr::Var("a".to_string())),
+                                Box::new(node::Expr::Number("10".to_string())),
+                            ))
+                        ),
+                        body: vec![
+                            gen_var_node("hh", "100", "b1"),
+                        ],
+                    }
+                ],
+                arm_else: Some(
+                    vec![
+                        gen_var_node("a", "10", "b1"),
+                    ]
+                ),
+            }.wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_match_expr_value() {
+        // 2. 値を与えるパターン (他の言語のswitch/matchに相当)
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes(
+            "
+            main(): b1 {
+              match a {
+                10 => {
+                  hh: b1 = 100
+                }
+                20 => {
+                  hh: b1 = 200
+                }
+                | => {
+                  a: b1 = 10
+                }
+              }
+            }
+            "
+        );
+        let node::Group1Node::FuncDefine(ref node)
+            = p.parser(tkns).expect("node is err")[0]
+                else {
+                    panic!("not func");
+                };
+        assert_eq!(
+            node.body[0],
+            node::Expr::Match {
+                pattern: Some(Box::new(node::Expr::Var("a".to_string()))),
+                arms: vec![
+                    node::MatchArm {
+                        pattern: Box::new(node::Expr::Number("10".to_string())),
+                        body: vec![
+                            gen_var_node("hh", "100", "b1"),
+                        ],
+                    },
+                    node::MatchArm {
+                        pattern: Box::new(node::Expr::Number("20".to_string())),
+                        body: vec![
+                            gen_var_node("hh", "200", "b1"),
                         ],
                     }
                 ],

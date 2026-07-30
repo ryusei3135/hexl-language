@@ -4,6 +4,24 @@
 ## [Unreleased]
 
 
+## [0.8.0] - 2026-07-30
+
+### Added
+- match式の機能を拡張
+    - 条件にboolを入れることが可能
+    - 値を式に入れることで、`switch`のような徐健分岐が可能  
+    ```
+    match bool ..
+    match value ..
+    ```
+- 演算子を追加
+    - `==`
+    - `!=`
+
+### Changed
+- `parse/expr.rs`にあった一部の関数などを`parse/expr/expr/`に移動
+
+
 ## [0.7.10] - 2026-07-29
 
 ### Fixed

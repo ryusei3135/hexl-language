@@ -64,6 +64,7 @@ mod local {
         RAngleBracket,
         LBracket,
         RBracket,
+        Not,
 
         CompleSyn,
 
@@ -145,7 +146,6 @@ impl Lexer {
                             self.gen_tkns.push(t);
                         }
                         Err(_e) => {
-                            //
                         }
                     }
                     self.chr_stk.clear();
@@ -237,6 +237,7 @@ impl Lexer {
                         Tkn::Number(self.chr_stk.clone())
                     }
                 }
+                GenFlag::Not => Tkn::Not,
                 GenFlag::Name => {
                     match self.chr_stk.as_str() {
                         "ret" => Tkn::KeyWordRet,
@@ -292,6 +293,7 @@ impl Lexer {
             Some(']') => GenFlag::RBracket,
             Some('|') => GenFlag::Or,
             Some('.') => GenFlag::Dot,
+            Some('!') => GenFlag::Not,
             _ => return self.get_value_by_flag_ty(chr, StkResult::GenTkn),
         };
         self.over_write_flag::<true>(sym_flag);

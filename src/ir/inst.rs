@@ -9,6 +9,8 @@ pub enum ExprKind {
     Div,
     LessThen,
     GreaterThen,
+    Equal,
+    NotEq,
 }
 
 pub type ValueId = usize;

@@ -73,6 +73,10 @@ name(args: ty): ret_ty {
 }
 ```
 
+### 条件分岐
+- [条件分岐について](./documents/match.md)
+
+### インラインアセンブラ
 - [アセンブリ言語のフォーマットについて](./documents/asm_fmts.md)
 
 ## Changelog

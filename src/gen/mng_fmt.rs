@@ -184,7 +184,12 @@ impl MngAsmFmt {
 
     /// オペコードのフォーマット
     pub fn get_opcode_tmpl(&self, key: &str) -> String {
-        self.opcode_fmt.get(key).unwrap().template.clone()
+        self.opcode_fmt
+            .get(key)
+            // 渡されたキーがない
+            .expect(&format!("not found key {}", key))
+            .template
+            .clone()
     }
 
     /// 数字のフォーマット

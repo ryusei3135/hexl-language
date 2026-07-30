@@ -416,6 +416,12 @@ impl IR {
             node::Expr::GreaterThen(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::GreaterThen)
             }
+            node::Expr::Equal(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Equal)
+            }
+            node::Expr::NotEq(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::NotEq)
+            }
             node::Expr::Number(value) => {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
             }
@@ -692,9 +698,19 @@ impl IR {
         arms: &Vec<node::MatchArm>,
         arm_else: &Option<Vec<node::Group2Node>>
     ) -> usize {
-        if let Some(_expr) = pattern {
-            //
-        }
+        // 各armの条件式を作成する
+        // - `pattern`(matchに与えられた値)がある場合は、
+        //   その値とarmのパターンを比較する式(値を与えるパターン)にする
+        // - 無い場合は、armのパターンをそのまま真偽値の条件として使う
+        //   (真偽値/何も与えないパターン)
+        let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
+            match pattern {
+                Some(target) => node::Expr::Equal(
+                    (target.clone(), Box::new(arm_pattern.clone()))
+                ),
+                None => arm_pattern.clone(),
+            }
+        };
 
         // 条件分岐の塊を作成
         let end_label = if arms.len() == 1 {
@@ -703,14 +719,16 @@ impl IR {
             crate::push_jmp_code!(self, ExpectJmp, self.jmp_labels);
             // 条件が一つだけの場合]
             // 条件式の生成
-            self.gen_expr_ir(*arms[0].pattern.clone(), &types::Size::DD);
+            let cond = build_cond(&arms[0].pattern);
+            self.gen_expr_ir(cond, &types::Size::DD);
             //self.push_jmp_code(self.pattern_labels);
             self.jmp_labels.clone() + 1
         } else {
             // 条件が複数の場合
             for arm in arms.clone() {
                 crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
-                self.gen_expr_ir(*arm.pattern, &types::Size::DD);
+                let cond = build_cond(&arm.pattern);
+                self.gen_expr_ir(cond, &types::Size::DD);
             }
             arms.len() + 1
         };
@@ -893,6 +911,54 @@ mod mem_var_tests {
                     ))
             )),
             "{:?}", body
+        );
+    }
+}
+
+#[cfg(test)]
+mod match_expr_ir_tests {
+    use super::*;
+    use crate::{lex, parse};
+
+    fn build_func_body(src: &str) -> Vec<inst::Inst> {
+        let mut lexer = lex::Lexer::new();
+        lexer.analy(&src.to_string()).unwrap();
+        let mut parser = parse::Parser::new();
+        let nodes = parser.parser(lexer.gen_tkns.clone()).unwrap().clone();
+        let mut ir = IR::new();
+        ir.builder(&nodes).unwrap();
+        ir.test_only_get_func_body("main")
+    }
+
+    #[test]
+    fn check_match_bool_generates_equal_cmp() {
+        // 1. 真偽値(比較式)を与えるパターンは、その式がそのまま
+        //    条件分岐の判定に使われる (単純なif/else)
+        let body = build_func_body(
+            "main(): int { a: int = 10 match a == 10 => { b: int = 1 } | => { b: int = 0 } }"
+        );
+        assert!(
+            body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::Expr(inst::ExprInst { kind: inst::ExprKind::Equal, .. })
+            )),
+            "`a == 10` の比較命令(Equal)が生成される必要がある: {:?}", body
+        );
+    }
+
+    #[test]
+    fn check_match_value_generates_equal_cmp() {
+        // 2. 値を与えるパターンでは、各armの値とmatch対象の値を
+        //    Equalで比較した条件式が生成される
+        let body = build_func_body(
+            "main(): int { a: int = 10 match a { 10 => { b: int = 1 } 20 => { b: int = 2 } | => { b: int = 0 } } }"
+        );
+        assert!(
+            body.iter().filter(|inst| matches!(
+                inst,
+                inst::Inst::Expr(inst::ExprInst { kind: inst::ExprKind::Equal, .. })
+            )).count() >= 2,
+            "各armごとに`a`との比較命令(Equal)が生成される必要がある: {:?}", body
         );
     }
 }

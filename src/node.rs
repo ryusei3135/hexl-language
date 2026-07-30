@@ -217,6 +217,9 @@ pub enum Expr {
     Div((Box<Expr>, Box<Expr>)),
     LessThen((Box<Expr>, Box<Expr>)),
     GreaterThen((Box<Expr>, Box<Expr>)),
+    /// `==` 値の等価比較
+    Equal((Box<Expr>, Box<Expr>)),
+    NotEq((Box<Expr>, Box<Expr>)),
     Match {
         pattern: Option<Box<Expr>>,
         arms: Vec<MatchArm>,
