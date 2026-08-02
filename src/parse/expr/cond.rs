@@ -41,7 +41,7 @@ impl Parser {
             //if matches!(self.current_tkn(), lex::Tkn::RBrace) {
             //    break;
             //}
-            // ===== elseのノードを作成する ===== 
+            // elseのノードを作成する
             if matches!(self.peek_tkn().unwrap(), lex::Tkn::Or) {
                 self.next_tkn(vec![])?;
                 return self.build_else_arm_node(&cond_expr, arms);
