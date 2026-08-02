@@ -147,14 +147,14 @@ impl Parser {
             }
             lex::Tkn::KeyWordRet => {
                 node::StmtNode::Return(
-                    self.expr_add()?
+                    self.expr_add(true)?
                 ).wrap()
             }
             lex::Tkn::KeyWordLoop => {
                 self.make_loop_node()?
             }
-            lex::Tkn::KeyWordMatch => {
-                self.next_tkn(vec![".."])?;
+            // 条件分岐
+            lex::Tkn::KeyWordCond => {
                 let n = self.expr_match()?;
                 node::Group2Node::Expr(n)
             }
@@ -185,7 +185,8 @@ impl Parser {
             }
             // 条件式あり
             _ => {
-                Some(Box::new(self.expr_cmp()?))
+                // 条件に構造体の初期化を使うことはできない
+                Some(Box::new(self.expr_cmp(false)?))
             }
         };
         // "{"をスキップ

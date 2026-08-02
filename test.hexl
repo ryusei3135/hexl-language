@@ -12,8 +12,8 @@ add(a: int, b: int) {
     d: byte = "tomato\n"
 
     loop a > 0 {
-        match {
-            a > 5 {
+        cond {
+            a > 5 => {
                 #asm(gcc_x64) {
                     "{space}mov $1, %eax"
                     "{space}mov $1, %edi"
@@ -22,7 +22,7 @@ add(a: int, b: int) {
                     "{space}syscall"
                 }
             }
-            | {
+            | => {
                 #asm(gcc_x64) {
                     "{space}mov $1, %eax"
                     "{space}mov $1, %edi"

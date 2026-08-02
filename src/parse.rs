@@ -8,6 +8,7 @@ mod path;
 mod typedef;
 /// inlineアセンブラの`${...}`内の式を解析するAPIを提供
 mod asm_expr;
+mod err_factory;
 
 use crate::{
     err,

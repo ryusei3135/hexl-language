@@ -935,7 +935,14 @@ mod match_expr_ir_tests {
         // 1. 真偽値(比較式)を与えるパターンは、その式がそのまま
         //    条件分岐の判定に使われる (単純なif/else)
         let body = build_func_body(
-            "main(): int { a: int = 10 match a == 10 => { b: int = 1 } | => { b: int = 0 } }"
+            "main(): int { 
+                a: int = 10
+                cond a == 10 {
+                    b: int = 1
+                } | {
+                    b: int = 0 
+                } 
+            }"
         );
         assert!(
             body.iter().any(|inst| matches!(
@@ -951,7 +958,20 @@ mod match_expr_ir_tests {
         // 2. 値を与えるパターンでは、各armの値とmatch対象の値を
         //    Equalで比較した条件式が生成される
         let body = build_func_body(
-            "main(): int { a: int = 10 match a { 10 => { b: int = 1 } 20 => { b: int = 2 } | => { b: int = 0 } } }"
+            "main(): int {
+                a: int = 10
+                cond a {
+                    10 => {
+                        b: int = 1 
+                    } 
+                    20 => { 
+                        b: int = 2 
+                    } 
+                    | => {
+                        b: int = 0
+                    } 
+                } 
+            }"
         );
         assert!(
             body.iter().filter(|inst| matches!(

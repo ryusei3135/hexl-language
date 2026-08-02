@@ -25,7 +25,7 @@ impl Parser {
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            panic!();
+            panic!("typdef::strct_init_node {:?}", self.current_tkn());
         }
 
         // {を飛ばす
@@ -45,9 +45,13 @@ impl Parser {
             };
             // :じゃないとエラー
             if !matches!(self.next_tkn(vec![":"])?, lex::Tkn::Colon) {
-                panic!("{:?} {:?}", self.current_tkn(), self.next_tkn_ref(vec![])?);    
+                panic!("{:?} {:?} name {:?}", self.current_tkn(), self.next_tkn_ref(vec![])?, name);    
             }
-            fields.insert(name, Box::new(self.expr_cmp()?));
+            fields.insert(
+                name,
+                // 構造体を初期化する
+                Box::new(self.expr_cmp(true)?)
+            );
 
             match self.current_tkn() {
                 lex::Tkn::Comma => {

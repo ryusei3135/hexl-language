@@ -408,3 +408,14 @@ pub fn wrap_expr_cmp(left: &str, right: &str) -> Expr {
         )
     )
 }
+
+
+#[cfg(test)]
+pub fn wrap_eq_expr_cmp(left: &str, right: &str) -> Expr {
+    Expr::Equal(
+        (
+            Box::new(Expr::Number(left.to_string())),
+            Box::new(Expr::Number(right.to_string())),
+        )
+    )
+}

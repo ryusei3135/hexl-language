@@ -10,7 +10,7 @@ impl Parser {
         &mut self
     ) -> Result<node::Expr, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn_ref(vec!["name"])? else {panic!()};
-        let result = self.expr_add()?;
+        let result = self.expr_add(true)?;
         let node = match self.current_tkn().clone() {
             lex::Tkn::LBracket => {
                 dbg!(self.current_tkn());
@@ -38,14 +38,19 @@ impl Parser {
     pub(super) fn gen_name_node(
         &mut self,
         name: String,
+        init_struct: bool
     ) -> Result<node::Expr, err::ErrKind> {
+        // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す 
+        if !init_struct {
+            return Ok(node::Expr::Var(name));
+        }
         let node = match self.next_tkn_ref(vec![".", "(", "`", "::"])? {
             lex::Tkn::Dot => {
                 return self.build_scope_node(&name);
             }
             // 関数を呼びだすノードを作成
             lex::Tkn::LParen => {
-                self.call_func_expr(&name)?
+                self.call_func_expr(&name, true)?
             }
             // 構造体の初期化ノードを作成する
             lex::Tkn::LBrace => {
@@ -76,7 +81,8 @@ impl Parser {
 
         if !matches!(self.next_tkn_ref(vec!["not `}`"])?, lex::Tkn::RBrace) {
             loop {
-                items.push(self.expr_cmp()?);
+                // 初期化構造体のノードを作成可能
+                items.push(self.expr_cmp(true)?);
 
                 match self.current_tkn() {
                     lex::Tkn::Comma => continue,

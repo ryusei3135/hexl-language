@@ -8,6 +8,12 @@ impl Parser {
         &mut self,
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
+        if matches!(self.next_tkn_ref(vec!["{"])?, lex::Tkn::LBrace) {
+            self.next_tkn(vec![]).unwrap();
+            let node = self.struct_init_node(name);
+            self.next_tkn(vec![])?;
+            return node;
+        }
         if matches!(self.next_tkn_ref(vec!["."])?, lex::Tkn::Dot) {
             return self.build_member_node(&name);
         }

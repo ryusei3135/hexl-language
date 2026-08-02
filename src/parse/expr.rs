@@ -1,3 +1,9 @@
+//! ## 引数 
+//! 1. init_struct
+//!     - これがtrueの場合構造体を初期化するノードを作成できる
+//!     - falseの場合は初期化ノードを作成しない
+
+
 use super::*;
 
 /// このファイルでしか使われないAPIのモジュール
@@ -20,7 +26,7 @@ impl Parser {
             match &self.current_tkn() {
                 lex::Tkn::LParen => {
                     // 関数の呼び出しノードを生成
-                    return self.call_func_expr(&name);
+                    return self.call_func_expr(&name, true);
                 }
                 lex::Tkn::LBrace => {
                     return self.struct_init_node(&name);
@@ -73,7 +79,7 @@ impl Parser {
             if self.current_tkn() == &lex::Tkn::Equal {
                 node::DefineVar::new(&name, self.expr_branch()?, &ty_node).wrap()
             } else {
-                panic!("{:?}", self.current_tkn());
+                panic!(">> :{:?}", self.current_tkn());
             }
         } else {
             let result = err::SyntaxErr::tkn_is_eof(
@@ -88,30 +94,30 @@ impl Parser {
 
     /// 式に代入する物が、構文の式 例(match)かどうかで
     pub(super) fn expr_branch(&mut self) -> Result<node::Expr, err::ErrKind> {
-        if matches!(self.next_tkn_ref(vec!["match"])?, lex::Tkn::KeyWordMatch) {
+        if matches!(self.next_tkn_ref(vec!["match"])?, lex::Tkn::KeyWordCond) {
             self.next_tkn(vec![])?;
             self.expr_match()
         } else {
-            self.expr_cmp()
+            self.expr_cmp(true)
         }
     }
 
-    pub(super) fn expr_cmp(&mut self) -> Result<node::Expr, err::ErrKind> {
-        let mut left = self.expr_add()?;
+    pub(super) fn expr_cmp(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_add(init_struct)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::LAngleBracket => {
-                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_add()?))
+                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_add(init_struct)?))
                 }
                 lex::Tkn::RAngleBracket => {
-                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_add()?))
+                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_add(init_struct)?))
                 }
                 lex::Tkn::EqEq => {
-                    node::Expr::Equal(node::Expr::wrap(left, self.expr_add()?))
+                    node::Expr::Equal(node::Expr::wrap(left, self.expr_add(init_struct)?))
                 }
                 lex::Tkn::NotEq => {
-                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_add()?))
+                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_add(init_struct)?))
                 }
                 _ => break,
             };
@@ -120,17 +126,17 @@ impl Parser {
         Ok(left)
     }
 
-    pub(super) fn expr_add(&mut self) -> ExprResult {
-        let mut left = self.expr_mul()?;
+    pub(super) fn expr_add(&mut self, init_struct: bool) -> ExprResult {
+        let mut left = self.expr_mul(init_struct)?;
 
         // expr_mulですでにトークンを進めているので現在のトークンを参照
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Add => {
-                    node::Expr::Add(node::Expr::wrap(left, self.expr_mul()?))
+                    node::Expr::Add(node::Expr::wrap(left, self.expr_mul(init_struct)?))
                 },
                 lex::Tkn::Sub => {
-                    node::Expr::Sub(node::Expr::wrap(left, self.expr_mul()?))
+                    node::Expr::Sub(node::Expr::wrap(left, self.expr_mul(init_struct)?))
                 }
                 _ => break,
             };
@@ -139,16 +145,16 @@ impl Parser {
     }
 
 
-    fn expr_mul(&mut self) -> ExprResult {
-        let mut left = self.expr_value()?;
+    fn expr_mul(&mut self, init_struct: bool) -> ExprResult {
+        let mut left = self.expr_value(init_struct)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Mul => {
-                    node::Expr::Mul(node::Expr::wrap(left, self.expr_value()?))
+                    node::Expr::Mul(node::Expr::wrap(left, self.expr_value(init_struct)?))
                 }
                 lex::Tkn::Div => {
-                    node::Expr::Div(node::Expr::wrap(left, self.expr_value()?))
+                    node::Expr::Div(node::Expr::wrap(left, self.expr_value(init_struct)?))
                 }
                 _ => break,
             };
@@ -156,14 +162,14 @@ impl Parser {
         Ok(left)
     }
 
-    fn expr_value(&mut self) -> ExprResult {
+    fn expr_value(&mut self, init_struct: bool) -> ExprResult {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
             match self.next_tkn(vec![])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
-                    return self.gen_name_node(name);
+                    return self.gen_name_node(name, init_struct);
                 }
                 // 関数を呼ぶノード
                 lex::Tkn::LParen => {},
@@ -174,7 +180,7 @@ impl Parser {
                 return self.build_scope_node(&name); 
             }
             // 前回のトークンが名前かつ(なので、関数を呼び出すノードを作成する
-            return self.call_func_expr(&name);
+            return self.call_func_expr(&name, init_struct);
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
@@ -187,7 +193,7 @@ impl Parser {
             }
             // ポインタにアクセス
             lex::Tkn::Mul => {
-                node::Expr::ConnectAddr(Box::new(self.expr_value()?))
+                node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?))
             }
             lex::Tkn::Number(value) => {
                 node::Expr::Number(value)
@@ -196,10 +202,10 @@ impl Parser {
                 node::Expr::Str(value)
             }
             lex::Tkn::Name(name) => {
-                self.gen_name_node(name)?
+                self.gen_name_node(name, init_struct)?
             }
             lex::Tkn::LParen => {
-                let result = self.expr_add()?;
+                let result = self.expr_cmp(init_struct)?;
 
                 if self.current_tkn() == &lex::Tkn::LParen {
                     dbg!(self.current_tkn());
@@ -228,13 +234,23 @@ impl Parser {
 
     /// 関数を呼び出すノードを作成
     ///
+    /// ## Args
+    /// - name
+    ///     関数の名前
+    /// - init_struct
+    ///     これがtrueの場合のみ構造体を初期化するノードを作成可能
+    ///
     /// ## Panics
     /// 現在のトークンが`lex::Tkn::LParen`でないならpanicする
     ///
     /// ## Safety
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
     /// である必要がある
-    pub(super) fn call_func_expr(&mut self, name: &String) -> ExprResult {
+    pub(super) fn call_func_expr(
+        &mut self,
+        name: &String,
+        init_struct: bool
+    ) -> ExprResult {
         if !matches!(self.current_tkn(), lex::Tkn::LParen) {
             panic!("call_func_exprを呼び出す際にLParenではない");
         }
@@ -245,7 +261,7 @@ impl Parser {
         if !matches!(self.next_tkn_ref(vec!["not `)`"])?, lex::Tkn::RParen) {
             loop {
                 // 引数の式を取得
-                args.push(self.expr_cmp()?);
+                args.push(self.expr_cmp(init_struct)?);
 
                 match self.current_tkn() {
                     lex::Tkn::Comma => continue,
@@ -411,9 +427,9 @@ mod expr_tests {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes(
             "
-            main(): b1 {
-              match {
-                10 < 10 => {
+            main(): int {
+              cond {
+                10 == 10 => {
                   hh: b1 = 100
                 }
                 | => {
@@ -434,7 +450,7 @@ mod expr_tests {
                 pattern: None,
                 arms: vec![
                     node::MatchArm {
-                        pattern: Box::new(wrap_expr_cmp("10", "10")),
+                        pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
                         body: vec![
                             gen_var_node("hh", "100", "b1"),
                         ],
@@ -455,11 +471,11 @@ mod expr_tests {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes(
             "
-            main(): b1 {
-              match a == 10 => {
-                hh: b1 = 100
-              } | => {
-                a: b1 = 10
+            main(): int {
+              cond a == 10 {
+                hh: int = 100
+              } | {
+                a: int = 10
               }
             }
             "
@@ -482,13 +498,13 @@ mod expr_tests {
                             ))
                         ),
                         body: vec![
-                            gen_var_node("hh", "100", "b1"),
+                            gen_var_node("hh", "100", "int"),
                         ],
                     }
                 ],
                 arm_else: Some(
                     vec![
-                        gen_var_node("a", "10", "b1"),
+                        gen_var_node("a", "10", "int"),
                     ]
                 ),
             }.wrap_group2()
@@ -501,16 +517,16 @@ mod expr_tests {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes(
             "
-            main(): b1 {
-              match a {
+            main(): int {
+              cond a {
                 10 => {
-                  hh: b1 = 100
+                  hh: int = 100
                 }
                 20 => {
-                  hh: b1 = 200
+                  hh: int = 200
                 }
                 | => {
-                  a: b1 = 10
+                  a: int = 10
                 }
               }
             }
@@ -529,19 +545,19 @@ mod expr_tests {
                     node::MatchArm {
                         pattern: Box::new(node::Expr::Number("10".to_string())),
                         body: vec![
-                            gen_var_node("hh", "100", "b1"),
+                            gen_var_node("hh", "100", "int"),
                         ],
                     },
                     node::MatchArm {
                         pattern: Box::new(node::Expr::Number("20".to_string())),
                         body: vec![
-                            gen_var_node("hh", "200", "b1"),
+                            gen_var_node("hh", "200", "int"),
                         ],
                     }
                 ],
                 arm_else: Some(
                     vec![
-                        gen_var_node("a", "10", "b1"),
+                        gen_var_node("a", "10", "int"),
                     ]
                 ),
             }.wrap_group2()

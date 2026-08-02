@@ -24,10 +24,25 @@ pub enum SystemErr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum UnenclosedScope {
+    Scope,
+    Syntax(lex::Tkn),
+}
+
+/// 構文エラーを管理する
+#[derive(Clone, Debug, PartialEq)]
 pub enum SyntaxErr {
     Expected(char),
     Unexpected(lex::Tkn),
     DoubleTokenErr(lex::Tkn),
+    UnenclosedScope(UnenclosedScope),
+    UnexpectedTkn {
+        /// 期待されたのに無かったトークン
+        found: lex::Tkn,
+        /// 期待したトークン
+        expected: lex::Tkn,
+        syntax: lex::Tkn,
+    },
     UnexpectedEOF {
         expected: Vec<String>
     },
@@ -42,6 +57,39 @@ pub enum SyntaxErr {
 }
 
 impl SyntaxErr {
+    /// {}でスコープが閉じられていないときのエラー
+    pub fn unenclosed_scope(
+        span: Span,
+        target: Option<lex::Tkn>
+    ) -> ErrKind {
+        ErrKind::SyntaxErr {
+            span,
+            kind: Self::UnenclosedScope(
+                target
+                .map(|v| UnenclosedScope::Syntax(v))
+                // Noneの場合はScopeになる
+                .or(Some(UnenclosedScope::Scope))
+                .unwrap()
+            ),
+        }
+    }
+
+    pub fn unexpected_tkn(
+        span: Span,
+        found: lex::Tkn,
+        expected: lex::Tkn,
+        // どの構文でのエラーか
+        syntax: lex::Tkn,
+    ) -> ErrKind {
+        ErrKind::SyntaxErr {
+            span,
+            kind: Self::UnexpectedTkn {
+                found,
+                expected,
+                syntax
+            }
+        }
+    }
     /// 任意のトークンを期待したのに、トークンが
     /// 終了したとき
     pub fn tkn_is_eof(
@@ -146,6 +194,11 @@ pub enum ErrKind {
 }
 
 impl ErrKind {
+    /// エラーのバリアントを`Result`のエラーで包む
+    pub fn wrap_in_err(self) -> Result<(), Self> {
+        Err(self)
+    }
+
     pub fn lex_err(&self) {
         if let Self::LexErrs { kind, line, pos } = self {
             match &kind {

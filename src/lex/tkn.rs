@@ -37,7 +37,7 @@ pub enum Tkn {
     ModPathTkn,
 
     KeyWordRet,
-    KeyWordMatch,
+    KeyWordCond,
     KeyWordLoop,
     KeyWordPub,
     KeyWordStruct,
