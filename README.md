@@ -35,7 +35,7 @@ gcc 生成したアセンブリソースコード -nostdlib
 
 ### 予約語
 - ret
-- match
+- cond
 - loop
 - pub
 - const

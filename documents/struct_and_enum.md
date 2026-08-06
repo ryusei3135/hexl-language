@@ -4,14 +4,14 @@
 - 定義方法
     ```
     struct Name {
-        mem: int,
+        mem: int
         mem2: int
     }
     ```
 - 初期化方法
     ```
     a: Name = Name {
-        mem: 1,
+        mem: 1
         mem: 10
     }
     ```
@@ -20,8 +20,8 @@
 - 定義方法
     ```
     enum Name {
-        Mem,
-        Mem2,
+        Mem
+        Mem2
     }
     ```
 - 初期化方法

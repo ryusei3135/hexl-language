@@ -54,9 +54,8 @@ impl Parser {
             );
 
             match self.current_tkn() {
-                lex::Tkn::Comma => {
-                    // ","を飛ばして次のフィールドへ
-                    self.next_tkn(vec![])?;
+                lex::Tkn::Name(..) => {
+                    continue;
                 }
                 lex::Tkn::RBrace => break,
                 t => panic!("{:?}", t),
@@ -116,6 +115,13 @@ impl Parser {
                             match self.current_tkn() {
                                 lex::Tkn::Comma => {}
                                 lex::Tkn::RBrace => break,
+                                // `,`を省略して改行だけで次のメンバーへ続く場合
+                                // (現在のトークンが次のメンバーの`name`/`pub`を
+                                // 指しているので、位置を1つ戻して、ループの先頭の
+                                // `next_tkn`でもう一度読めるようにする)
+                                lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
+                                    self.back_tkn();
+                                }
                                 t => {
                                     err::SyntaxErr::unexpect_tkn_after_keyword(
                                         self.build_err_span(),
@@ -173,10 +179,26 @@ impl Parser {
                 lex::Tkn::Name(name) => {
                     variants.push(name.to_string());
 
-                    match self.next_tkn(vec!["}", ",", "("])? {
-                        lex::Tkn::RBrace => break,
-                        lex::Tkn::Comma => {},
-                        lex::Tkn::LParen => methods.push(self.func_node(&name, pub_flag.clone())?),
+                    // 次のトークンを先読みし、`,`があるかどうかだけで
+                    // 位置を進めるかを決める
+                    // (`,`が無い場合はcurrent_tknを次のメンバーの
+                    // `name`/`pub`のまま残し、ループの先頭の`next_tkn`で
+                    // もう一度読めるようにする)
+                    match self.next_tkn_ref(vec!["}", ",", "(", "name", "pub"])? {
+                        lex::Tkn::RBrace => {
+                            self.next_tkn(vec![])?;
+                            break;
+                        }
+                        lex::Tkn::Name(..) => {
+                            continue;
+                        }
+                        // `func_node`が`(`を含めて解析するので、
+                        // ここではcurrent_tknを`name`のままにしておく
+                        lex::Tkn::LParen => {
+                            methods.push(self.func_node(&name, pub_flag.clone())?);
+                        }
+                        // `,`を省略して改行だけで次のメンバーへ続く場合
+                        lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {}
                         t => panic!("{:?}", t),
                     }
                     pub_flag = false;
@@ -205,11 +227,7 @@ impl Parser {
                     // ポインタの型
                     lex::Tkn::Mul => {
                         let is_const = 
-                            if matches!(self.next_tkn_ref(vec!["const"])?,lex::Tkn::KeyWordConst) {
-                                true
-                            } else {
-                                false
-                            };
+                            matches!(self.next_tkn_ref(vec!["const"])?,lex::Tkn::KeyWordConst);
                         self.next_tkn(vec![])?;
                         
                         node::TyNode::Pointer {
@@ -303,7 +321,7 @@ mod ty_tests {
     #[test]
     fn test_struct() {
         assert_eq!(
-            &build("struct Name { name: ty, name2: ty }"),
+            &build("struct Name { name: ty name2: ty }"),
             &vec![
                 node::StructDefine::new(
                     "Name".to_string(),
@@ -335,7 +353,7 @@ mod ty_tests {
         };
         f.add(node::Group2Node::Expr(node::Expr::InitStruct { name: "Name".to_string(), fields: map}));
         assert_eq!(
-            &build("main(): int { Name { name: 1, name2: 1 } }"),
+            &build("main(): int { Name { name: 1 name2: 1 } }"),
             &vec![
                 func
             ]
@@ -356,7 +374,7 @@ mod ty_tests {
         };
         func.self_module_name(&"Name".to_string());
         assert_eq!(
-            &build("struct Name { a: int, new(): ty {}}"),
+            &build("struct Name { a: int new(): ty {}}"),
             &vec![
                 node::StructDefine::new(
                     "Name".to_string(),
@@ -372,7 +390,7 @@ mod ty_tests {
     #[test]
     fn enum_node() {
         assert_eq!(
-            &build("enum Name {A, B}"),
+            &build("enum Name {A B}"),
             &vec![
                 node::EnumDefine::new(
                     "Name".to_string(), 

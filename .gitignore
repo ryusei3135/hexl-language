@@ -7,3 +7,4 @@ Cargo.lock
 test/
 test
 test.sh
+*.zip

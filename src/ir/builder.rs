@@ -855,7 +855,7 @@ mod mem_var_tests {
     fn check_enum_as_ty_and_variant_access() {
         // 列挙型を型として使い、`Name::Mem`でメンバにアクセスできる
         let body = build_func_body(
-            "enum Color { Red, Green, Blue } main(): int { a: Color = Color::Green }"
+            "enum Color { Red Green Blue } main(): int { a: Color = Color::Green }"
         );
         assert!(
             body.iter().any(|inst| matches!(
@@ -870,7 +870,7 @@ mod mem_var_tests {
     fn check_enum_forward_reference() {
         // 列挙型が使われる場所より後に定義されていても解決できる
         let body = build_func_body(
-            "main(): int { a: Color = Color::Blue } enum Color { Red, Green, Blue }"
+            "main(): int { a: Color = Color::Blue } enum Color { Red Green Blue }"
         );
         assert!(
             body.iter().any(|inst| matches!(
@@ -885,7 +885,7 @@ mod mem_var_tests {
     fn check_combined_struct_enum_program() {
         // 構造体と列挙型を同じプログラム内で型として使えることを確認する
         let body = build_func_body(
-            "enum Color { Red, Green, Blue } struct Point { x: int, y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1, y: 2 } }"
+            "enum Color { Red Green Blue } struct Point { x: int y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1 y: 2 } }"
         );
         assert!(body.iter().any(|i| matches!(i, inst::Inst::Num{value, ..} if value == "1")));
         assert!(body.iter().any(|i| matches!(i, inst::Inst::Struct(m) if m.len() == 2)));
@@ -895,7 +895,7 @@ mod mem_var_tests {
     fn check_struct_as_ty_and_init() {
         // 構造体を型として使い、フィールドを初期化できる
         let body = build_func_body(
-            "struct Point { x: int, y: int } main(): int { p: Point = Point { x: 1, y: 2 } }"
+            "struct Point { x: int y: int } main(): int { p: Point = Point { x: 1 y: 2 } }"
         );
         assert!(
             body.iter().any(|inst| matches!(
