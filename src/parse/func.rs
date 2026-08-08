@@ -6,6 +6,12 @@ use super::{Parser, *};
 impl Parser {
     /// この関数を呼び出すときは、次のトークンが`(`で無ければ
     /// いけない
+    ///
+    /// ## self_name
+    /// 構造体/列挙型に定義されたメゾットを解析している場合、その
+    /// 構造体/列挙型自身の名前を渡す。引数や戻り値の型に予約語
+    /// `Self`が使われたとき、この名前へ解決するために使われる。
+    /// トップレベルの関数を解析している場合は`None`を渡す。
     pub(super) fn func_node(
         &mut self,
         func_name: &String,
@@ -60,7 +66,16 @@ impl Parser {
     /// - 初回以外で、`,`を挟まずに次の引数の定義なら
     /// - `,`の次に`)`が来た場合panic
     /// - `,`の次に`,`が来たら
-    fn define_arg_node(&mut self) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
+    ///
+    /// ## self_name
+    /// メゾットの引数を解析している場合、そのメゾットが定義されている
+    /// 構造体/列挙型自身の名前を渡す。引数の型に予約語`Self`が使われた
+    /// 場合、`node::TyNode::SelfTy(self_name)`へ解決するために使われる
+    /// (実際に`Self`が第一引数以外に使われていないかのチェックは、
+    /// IRへの変換時に行う)
+    fn define_arg_node(
+        &mut self,
+    ) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
             return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LParen));
         }

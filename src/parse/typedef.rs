@@ -9,13 +9,17 @@ impl Parser {
         let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])? else {
             panic!("構造体の名前が必要です");
         };
+        // 自身の構造体の名前を登録、`Self`をこれに入れ替える
+        self.struct_self_name = Some(name.to_string());
 
         match self.next_tkn(vec!["{"])? {
             lex::Tkn::LBrace => {},
             t => panic!("{:?}", t),
         }
 
-        let fields = self.define_struct_fields(&name)?;
+        let fields = self.define_struct_fields()?;
+        // 構造体の中身をすべて処理し終わったので、`None`にする
+        self.struct_self_name = None;
         Ok(node::StructDefine::new(name, fields.0, fields.1))
     }
 
@@ -89,7 +93,6 @@ impl Parser {
     /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace`
     fn define_struct_fields(
         &mut self,
-        struct_name: &String,
     ) -> Result<(Vec<node::StructField>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
             return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace));
@@ -138,7 +141,7 @@ impl Parser {
                             let mut method = self.func_node(&name, pub_flag)?;
                             // モジュールの名前を登録
                             if let node::Group1Node::FuncDefine(ref mut func) = method {
-                                func.self_module_name(&struct_name);
+                                func.self_module_name(self.struct_self_name.as_ref().unwrap());
                             } else {
                                 panic!();
                             }
@@ -215,12 +218,32 @@ impl Parser {
     }
 
     /// 型のノードを作成する
-    pub(super) fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    ///
+    /// ## self_name
+    /// メゾット(構造体/列挙型に定義された関数)の中で型を解析する場合、
+    /// その構造体/列挙型自身の名前を渡す。
+    /// これにより、型として予約語`Self`が使われたとき、
+    /// `node::TyNode::SelfTy(self_name)`へ解決できる。
+    /// メゾットの外(トップレベルの関数など)では`None`を渡す。
+    pub(super) fn define_ty_node(
+        &mut self,
+    ) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
 
-        match self.next_tkn(vec!["name", "[", "string"])? {
+        match self.next_tkn(vec!["name", "[", "string", "Self"])? {
+            // 予約語`Self`: 自身の構造体を指す型
+            lex::Tkn::KeyWordSelf => {
+                // `Self`の次のトークンへ進める
+                self.next_tkn(vec![])?;
+                Ok(node::TyNode::SelfTy(
+                    self.struct_self_name
+                        .as_ref()
+                        .expect("`Self`は構造体/列挙型のメゾット内でのみ使用できます")
+                        .clone()
+                ))
+            }
             lex::Tkn::Name(name) => {
                 let ty = match self.next_tkn(vec!["<", "*"])? {
                     lex::Tkn::LAngleBracket => panic!(),
@@ -385,6 +408,40 @@ mod ty_tests {
                 )
             ]
         );
+    }
+
+    #[test]
+    fn struct_method_self_ty() {
+        // `Self`は、メゾットが定義されている構造体自身の名前へ
+        // 解決される(第一引数/戻り値のどちらでも使用可能)
+        let nodes = build(
+            "struct Name { \
+                a: int \
+                new(): Self {} \
+                func(self: Self, param: int): int {} \
+            }"
+        );
+        let node::Group1Node::StructDefine(struct_def) = &nodes[0] else {
+            panic!("構造体が定義されていません: {:?}", nodes);
+        };
+
+        let node::Group1Node::FuncDefine(new_func) = &struct_def.methods[0] else {
+            panic!();
+        };
+        assert_eq!(new_func.name, "new");
+        assert_eq!(new_func.ret_ty, node::TyNode::SelfTy("Name".to_string()));
+
+        let node::Group1Node::FuncDefine(func) = &struct_def.methods[1] else {
+            panic!();
+        };
+        assert_eq!(func.name, "func");
+        assert_eq!(
+            func.params[0].ty,
+            node::TyNode::SelfTy("Name".to_string())
+        );
+        assert_eq!(func.params[0].name, "self");
+        assert_eq!(func.params[1].name, "param");
+        assert_eq!(func.params[1].ty, node::TyNode::Ty("int".to_string()));
     }
 
     #[test]

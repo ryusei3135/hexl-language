@@ -22,6 +22,7 @@ pub struct Parser {
     pub(super) tkns: Option<Vec<lex::LocatedTkn>>,
     idx: usize,
     scope_counter: usize,
+    pub(super) struct_self_name: Option<String>,
     pub(super) gen_flag: GenFlag,
     pub(super) other_stk: Vec<(String, StkInfo)>, // 処理中の一時データを保存
 }
@@ -33,6 +34,7 @@ impl Parser {
             tkns: None,
             idx: 0,
             scope_counter: 0,
+            struct_self_name: None,
             gen_flag: GenFlag::Group1,
             other_stk: Vec::new(),
         }
@@ -48,6 +50,8 @@ impl Parser {
             this: &mut Parser,
             func_name: &String
         ) -> Result<(), err::ErrKind> {
+            // トップレベルの関数定義なので、`Self`が解決される
+            // 構造体/列挙型は存在しない
             let node = this.func_node(&func_name, P)?;
             this.gen_nodes.push(node);
 

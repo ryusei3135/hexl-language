@@ -71,6 +71,9 @@ impl IR {
         for node in nodes {
             match node {
                 node::Group1Node::FuncDefine(info) => {
+                    // `Self`型を、実際の構造体の型/ポインタ型へ解決する
+                    let info = self.resolve_self_ty(info.clone());
+
                     // 関数の情報を登録
                     self.entry_func_info(&info);
 
@@ -208,7 +211,68 @@ impl IR {
                 self.size_of(&node::TyNode::Ty(name.clone()))
             }
             node::TyNode::RefTy(inner) => self.size_of(inner),
+            // `Self`はIRへ変換する前に、実際の構造体の型
+            // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
+            node::TyNode::SelfTy(name) => panic!(
+                "内部エラー: `Self`型(構造体`{}`)がIR変換の前に解決されていません",
+                name
+            ),
         }
+    }
+
+    /// 関数のノードに含まれる予約語`Self`を解決する
+    ///
+    /// - 第一引数の型が`Self`の場合、その関数は「メゾット」として扱い、
+    ///   第一引数の型を、自身の構造体を指す**ポインタ型**に変換する
+    ///   (呼び出し側は構造体のポインタをこの引数に渡すことになる)
+    /// - 第一引数以外の引数の型に`Self`が使われている場合はエラー(panic)
+    /// - (第一引数がSelfでない場合、)戻り値の型が`Self`ならば、
+    ///   ただの関数として扱い、戻り値の型は自身の構造体の名前の型
+    ///   (`node::TyNode::Ty`)として解決する
+    fn resolve_self_ty(&self, mut info: node::FuncDefine) -> node::FuncDefine {
+        // 第一引数以外にSelfが使われていないかチェックする
+        for (index, param) in info.params.iter().enumerate() {
+            if index == 0 {
+                continue;
+            }
+            if let node::TyNode::SelfTy(struct_name) = &param.ty {
+                panic!(
+                    "`Self`型は第一引数(`self`)以外の引数には使用できません: \
+                    関数`{}`の引数`{}` (構造体`{}`)",
+                    info.name, param.name, struct_name
+                );
+            }
+        }
+
+        // 第一引数の型がSelfの場合、構造体のポインタとして扱う
+        let has_self_param = matches!(
+            info.params.first().map(|p| &p.ty),
+            Some(node::TyNode::SelfTy(_))
+        );
+
+        if has_self_param {
+            let node::TyNode::SelfTy(struct_name) = info.params[0].ty.clone() else {
+                unreachable!()
+            };
+            let self_ptr_ty = node::TyNode::Pointer {
+                is_const: false,
+                ty_name: Box::new(node::TyNode::Ty(struct_name)),
+            };
+            info.params[0].ty = self_ptr_ty.clone();
+
+            // 戻り値の型がSelfなら、`self`と同じポインタ型として解決する
+            // (例: `func2(self: Self): Self { ret self }`)
+            if matches!(info.ret_ty, node::TyNode::SelfTy(_)) {
+                info.ret_ty = self_ptr_ty;
+            }
+        } else if let node::TyNode::SelfTy(struct_name) = &info.ret_ty {
+            // メゾットではない(第一引数がSelfではない)が、戻り値の型がSelf
+            // -> 普通の関数として定義し、戻り値は自身の構造体の名前の型になる
+            // (例: `new(): Self { ret Self { .. } }`)
+            info.ret_ty = node::TyNode::Ty(struct_name.clone());
+        }
+
+        info
     }
 
     /// 関数の情報を関数ツリーに登録
@@ -775,6 +839,105 @@ impl IR {
         }
     }
 } 
+
+#[cfg(test)]
+mod self_ty_tests {
+    use super::*;
+
+    fn make_func(name: &str, params: Vec<node::ArgsNode>, ret_ty: node::TyNode) -> node::FuncDefine {
+        node::FuncDefine {
+            public: false,
+            name: name.to_string(),
+            params,
+            ret_ty,
+            body: Vec::new(),
+            module: Some("Name".to_string()),
+        }
+    }
+
+    #[test]
+    fn first_arg_self_becomes_pointer_to_struct() {
+        // `func(self: Self, param: int): int` の第一引数は
+        // 構造体`Name`へのポインタとして解決される
+        let ir = IR::new();
+        let func = make_func(
+            "func",
+            vec![
+                node::ArgsNode { name: "self".to_string(), ty: node::TyNode::SelfTy("Name".to_string()) },
+                node::ArgsNode { name: "param".to_string(), ty: node::TyNode::Ty("int".to_string()) },
+            ],
+            node::TyNode::Ty("int".to_string()),
+        );
+
+        let resolved = ir.resolve_self_ty(func);
+
+        assert_eq!(
+            resolved.params[0].ty,
+            node::TyNode::Pointer {
+                is_const: false,
+                ty_name: Box::new(node::TyNode::Ty("Name".to_string())),
+            }
+        );
+        // 第一引数以外はそのまま
+        assert_eq!(resolved.params[1].ty, node::TyNode::Ty("int".to_string()));
+    }
+
+    #[test]
+    #[should_panic]
+    fn self_in_non_first_arg_panics() {
+        // 第一引数以外に`Self`が使われている場合はエラー(panic)にする
+        let ir = IR::new();
+        let func = make_func(
+            "invalid",
+            vec![
+                node::ArgsNode { name: "param".to_string(), ty: node::TyNode::Ty("int".to_string()) },
+                node::ArgsNode { name: "self".to_string(), ty: node::TyNode::SelfTy("Name".to_string()) },
+            ],
+            node::TyNode::Ty("int".to_string()),
+        );
+
+        let _ = ir.resolve_self_ty(func);
+    }
+
+    #[test]
+    fn no_self_arg_but_self_return_resolves_to_struct_ty() {
+        // `new(): Self` のように第一引数にSelfが無く、戻り値がSelfの場合、
+        // 普通の関数として扱い、戻り値は自身の構造体の名前の型になる
+        let ir = IR::new();
+        let func = make_func(
+            "new",
+            Vec::new(),
+            node::TyNode::SelfTy("Name".to_string()),
+        );
+
+        let resolved = ir.resolve_self_ty(func);
+
+        assert_eq!(resolved.ret_ty, node::TyNode::Ty("Name".to_string()));
+    }
+
+    #[test]
+    fn self_arg_and_self_return_resolves_to_matching_pointer() {
+        // `func2(self: Self): Self` のように、第一引数がSelfかつ
+        // 戻り値もSelfの場合、戻り値も`self`と同じポインタ型になる
+        let ir = IR::new();
+        let func = make_func(
+            "func2",
+            vec![
+                node::ArgsNode { name: "self".to_string(), ty: node::TyNode::SelfTy("Name".to_string()) },
+            ],
+            node::TyNode::SelfTy("Name".to_string()),
+        );
+
+        let resolved = ir.resolve_self_ty(func);
+
+        let expected_ptr = node::TyNode::Pointer {
+            is_const: false,
+            ty_name: Box::new(node::TyNode::Ty("Name".to_string())),
+        };
+        assert_eq!(resolved.params[0].ty, expected_ptr.clone());
+        assert_eq!(resolved.ret_ty, expected_ptr);
+    }
+}
 
 #[cfg(test)]
 mod mem_var_tests {

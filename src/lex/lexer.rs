@@ -247,6 +247,7 @@ impl Lexer {
                         "struct" => Tkn::KeyWordStruct,
                         "enum" => Tkn::KeyWordEnum,
                         "const" => Tkn::KeyWordConst,
+                        "Self" => Tkn::KeyWordSelf,
                         _ => Tkn::Name(self.chr_stk.clone()),
                     }
                 }
@@ -617,6 +618,14 @@ mod tests {
         lex.analy(&"ret 5".to_string()).unwrap();
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
         assert_eq!(tkns, vec![Tkn::KeyWordRet, Tkn::Number("5".to_string())]);
+    }
+
+    #[test]
+    fn check_self_keyword() {
+        let mut lex = lexer();
+        lex.analy(&"Self".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(tkns, vec![Tkn::KeyWordSelf]);
     }
 
     #[test]

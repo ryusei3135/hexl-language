@@ -4,6 +4,9 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyNode {
     Ty(String),
+    /// メゾット内で使われる`Self`(自身の構造体を表す予約語)
+    /// - 内側の`String`は、`Self`が実際に指している構造体の名前
+    SelfTy(String),
     /// ポインタ型
     Pointer{
         /// 不変ポインタの場合true
@@ -37,6 +40,7 @@ impl TyNode {
     pub fn get_ty_str_name(&self) -> String {
         match self {
             Self::Ty(name) => name.to_string(),
+            Self::SelfTy(name) => name.to_string(),
             Self::RefTy(t) => t.get_ty_str_name(),
             Self::Stack { name, ..} => name.to_string(),
             Self::Static { name, .. } => name.to_string(),
