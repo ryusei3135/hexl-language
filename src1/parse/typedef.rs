@@ -141,22 +141,17 @@ impl Parser {
                             let mut method = self.func_node(&name, pub_flag)?;
                             self.next_tkn(vec![])?;
                             self.scope_counter += 1;
-                            // メゾットの本体が空(`{}`)の場合、`one_line_node`を
-                            // 呼ばずにそのまま本体無しとして扱う
-                            if self.current_tkn() != &lex::Tkn::RBrace {
-                                'method_body: loop {
-                                    let node = self.one_line_node()?;
+                            'method_body: loop {
+                                let node = self.one_line_node()?;
             
-                                    if let node::Group1Node::FuncDefine(ref mut func) = method {
-                                        func.body.push(node);
-                                    }
+                                if let node::Group1Node::FuncDefine(ref mut func) = method {
+                                    func.body.push(node);
+                                }
             
-                                    if self.current_tkn() == &lex::Tkn::RBrace {
-                                        break 'method_body;
-                                    }
+                                if self.current_tkn() == &lex::Tkn::RBrace {
+                                    break 'method_body;
                                 }
                             }
-                            self.scope_counter -= 1;
                             self.next_tkn(vec![])?;
                             // モジュールの名前を登録
                             if let node::Group1Node::FuncDefine(ref mut func) = method {
@@ -165,22 +160,6 @@ impl Parser {
                                 panic!();
                             }
                             methods.push(method);
-
-                            // メゾットの本体を閉じる`}`の次のトークンは、
-                            // 次のメンバーの`name`/`pub`、または構造体を
-                            // 閉じる`}`のいずれか。すでにそのトークンを
-                            // 指しているので、`Colon`アームと違い
-                            // 下の共通処理(`next_tkn`での読み進め)は
-                            // 行わずここで直接分岐する
-                            match self.current_tkn() {
-                                lex::Tkn::RBrace => break,
-                                lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
-                                    self.back_tkn();
-                                }
-                                t => panic!("{:?}", t),
-                            }
-                            pub_flag = false;
-                            continue;
                         }
 
                         _ => return Err(err::ErrKind::UnexpectedToken),

@@ -102,18 +102,6 @@ impl Parser {
                     };
                 },
                 GenFlag::Group2 => {
-                    // 関数の中身が空(`{}`)の場合、`one_line_node`を呼ばずに
-                    // ここでスコープを閉じる
-                    if self.current_tkn() == &lex::Tkn::RBrace {
-                        self.scope_counter -= 1;
-                        if self.next_tkn(vec![]).is_err() {
-                            return Ok(&self.gen_nodes);
-                        }
-
-                        self.gen_flag = GenFlag::Group1;
-                        continue;
-                    }
-
                     let node = self.one_line_node()?;
 
                     match self.gen_nodes.last_mut().unwrap() {
@@ -175,10 +163,12 @@ impl Parser {
                 node::Group2Node::Expr(n)
             }
             lex::Tkn::RBrace => {
-                // 空のブロック(`{}`)は呼び出し元(`gen_block_node`や
-                // メゾットの本体を解析する処理など)が`one_line_node`を
-                // 呼ぶ前に判定するはずなので、ここに来るのは想定外
-                panic!("one_line_node: 空のブロックが処理されていません");
+                self.scope_counter -= 1;
+
+                if self.scope_counter == 0 {
+                    self.gen_flag = GenFlag::Group1;
+                }
+                panic!("JJJJJJJJ");
             }
             t => {
                 panic!("parse stmt {:?}  {:?}", t, self.next_tkn_ref(vec![]));
@@ -224,12 +214,6 @@ impl Parser {
     /// 同じスコープ内のノードを生成
     pub(super) fn gen_block_node(&mut self) -> Result<Vec<node::Group2Node>, err::ErrKind> {
         let mut block = Vec::<node::Group2Node>::new();
-
-        // ブロックが空(`{}`)の場合、`one_line_node`を呼ばずに
-        // そのまま空のブロックを返す
-        if self.current_tkn() == &lex::Tkn::RBrace {
-            return Ok(block);
-        }
 
         loop {
             let node = self.one_line_node()?;
@@ -280,7 +264,7 @@ impl Parser {
     }
 
     /// 位置を1つ戻す。
-    /// `,`を省略できる構文(構造体/列挙型のメンバー区切りなど)で
+    /// `,`を省略できる構文(構造体/列挙型のメンバー区切りなど)で、
     /// 直後の`next_tkn`呼び出しが現在のトークンをもう一度
     /// 読み直せるようにするために使う。
     pub(super) fn back_tkn(&mut self) {
