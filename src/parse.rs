@@ -1,4 +1,7 @@
+
+mod tkn_mnger;
 mod stmt;
+
 mod func;
 mod expr;
 /// プリプロセッサのノードを作成するAPIを提供
@@ -15,6 +18,7 @@ use crate::{
     lex,
     node,
 };
+use tkn_mnger::*;
 use stmt::*;
 
 pub use stmt::Parser;

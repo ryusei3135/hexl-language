@@ -241,12 +241,39 @@ impl Parser {
             t => panic!("expr {:?} {:?}", t, self.peek_tkn()),
         };
 
-        match self.current_tkn() {
-            lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::Str(_)
-                | lex::Tkn::RParen | lex::Tkn::RBracket | lex::Tkn::RBrace => {
-                self.next_tkn(vec![])?;
+        // `call_func_expr`は、自身で`)`を読み飛ばして呼び出し式の
+        // 次のトークンまで進めた状態で返ってくる(構造体初期化/配列
+        // リテラルが`}`を消費せず呼び出し元に委ねるのとは逆の方式)。
+        // そのため、値が関数呼び出し(または関数呼び出しを直接
+        // 包んだ`Scope`/`Member`)の場合、現在のトークンはすでに
+        // 呼び出し式の「次」を正しく指しており、ここでさらに
+        // 読み進めてはいけない
+        fn already_positioned_after_call(v: &node::Expr) -> bool {
+            match v {
+                node::Expr::CallFunc(..) | node::Expr::Scope { .. } => true,
+                node::Expr::Member { target, .. } => {
+                    matches!(**target, node::Expr::CallFunc(..))
+                }
+                _ => false,
             }
-            _ => {},
+        }
+
+        if !already_positioned_after_call(&v) {
+            match self.current_tkn() {
+                lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::Str(_)
+                    | lex::Tkn::RParen | lex::Tkn::RBracket => {
+                    self.next_tkn(vec![])?;
+                }
+                // `}` は、構造体初期化(`Name { .. }`)や配列リテラル
+                // (`{ .. }`)を閉じる場合にのみ、ここで読み飛ばす。
+                // `self.b`のようなメンバーアクセスの直後に続く`}`は
+                // 呼び出し元のブロック(関数/メゾットの本体など)を
+                // 閉じるトークンなので、消費せずそのまま残す
+                lex::Tkn::RBrace if matches!(v, node::Expr::InitStruct { .. } | node::Expr::Array(..)) => {
+                    self.next_tkn(vec![])?;
+                }
+                _ => {},
+            }
         }
 
         Ok(v)
@@ -280,7 +307,6 @@ impl Parser {
         // 関数を呼び出す式に引数がない場合は実行されない
         if !matches!(self.next_tkn_ref(vec!["not `)`"])?, lex::Tkn::RParen) {
             loop {
-        println!("{:?} lll {:?}", self.current_tkn(), self.peek_tkn());
                 // 引数の式を取得
                 args.push(self.expr_cmp(init_struct)?);
 
@@ -293,13 +319,17 @@ impl Parser {
                         break;
                     },
                     t => {
-                        println!("{:?} {:?} <<", self.current_tkn(), self.peek_tkn());
                         panic!("{:?}", self.next_tkn_ref(vec![]));
                     }
                 } 
             }
-        } 
-        
+        } else {
+            // 引数がない場合、現在のトークンはまだ`(`のままなので、
+            // 引数がある場合のループが`)`を指した状態で抜けるのに
+            // 合わせて、ここで`)`まで進めておく
+            self.next_tkn(vec![])?;
+        }
+
         // ')'をスキップ
         self.next_tkn(vec![])?;
         Ok(node::Expr::CallFunc(

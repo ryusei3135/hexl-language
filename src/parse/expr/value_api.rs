@@ -47,7 +47,6 @@ impl Parser {
         let node = match self.next_tkn_ref(vec![".", "(", "`", "::"])? {
             lex::Tkn::Dot => {
                 let n = self.build_scope_node(&name);
-                println!("value_api gen_name_node ff {:?} {:?}", self.current_tkn(), self.peek_tkn());
                 return n;
             }
             // 関数を呼びだすノードを作成

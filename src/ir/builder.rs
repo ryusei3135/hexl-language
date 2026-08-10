@@ -429,7 +429,7 @@ impl IR {
             };
         let def_args = defined_func_data.args.clone();
         // 関数のノードを作成
-        let mut func_meta_data 
+        let mut func_meta_data
             = inst::CallFuncMetaData::new(
                 meta_data.name.clone(),
                 // 確保するスタックのサイズを渡す
