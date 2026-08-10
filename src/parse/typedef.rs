@@ -148,6 +148,7 @@ impl Parser {
                                 'method_body: loop {
 
                                     let node = self.one_line_node()?;
+                                    println!("{:?}", node);
             
                                     if let node::Group1Node::FuncDefine(ref mut func) = method {
                                         func.body.push(node);

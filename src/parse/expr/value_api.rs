@@ -47,6 +47,7 @@ impl Parser {
         let node = match self.next_tkn_ref(vec![".", "(", "`", "::"])? {
             lex::Tkn::Dot => {
                 let n = self.build_scope_node(&name);
+                println!("value_api gen_name_node ff {:?} {:?}", self.current_tkn(), self.peek_tkn());
                 return n;
             }
             // 関数を呼びだすノードを作成
@@ -62,10 +63,17 @@ impl Parser {
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
             lex::Tkn::ModPathTkn => {
-                // "::"を飛ばす
                 self.next_tkn(vec!["name"])?;
-                let lex::Tkn::Name(variant) = self.next_tkn(vec![])?.clone() else {panic!();};
-                node::Expr::EnumVariant { name, variant }
+                let lex::Tkn::Name(mem_name) = self.next_tkn(vec!["name"])?.clone() else {panic!();};
+                if matches!(self.next_tkn_ref(vec![])?, lex::Tkn::LParen) {
+                    self.next_tkn(vec!["("])?;
+                    node::Expr::Scope {
+                        scope: vec![name],
+                        target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
+                    }
+                } else {
+                    node::Expr::EnumVariant { name, variant: mem_name }
+                }
             }
             _ => node::Expr::Var(name)
         };

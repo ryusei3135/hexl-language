@@ -181,7 +181,7 @@ impl Parser {
                 panic!("one_line_node: 空のブロックが処理されていません");
             }
             t => {
-                panic!("parse stmt {:?}  {:?}", t, self.next_tkn_ref(vec![]));
+                panic!("parse stmt {:?}  {:?}", t, self.peek_tkn());
             }
         };
         Ok(node)

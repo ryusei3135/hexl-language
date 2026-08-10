@@ -25,12 +25,16 @@ impl Parser {
             .map(|_| true)?
         {
             match &self.current_tkn() {
+                lex::Tkn::Dot | lex::Tkn::ModPathTkn => {
+                    return self.build_scope_node(&name); 
+                }
                 lex::Tkn::RBrace => {
                     return Ok(node::Expr::Var(name));
                 }
                 lex::Tkn::LParen => {
                     // 関数の呼び出しノードを生成
-                    return self.call_func_expr(&name, true);
+                    let n= self.call_func_expr(&name, true);
+                    return n;
                 }
                 lex::Tkn::LBrace => {
                     return self.struct_init_node(&name);
@@ -276,11 +280,14 @@ impl Parser {
         // 関数を呼び出す式に引数がない場合は実行されない
         if !matches!(self.next_tkn_ref(vec!["not `)`"])?, lex::Tkn::RParen) {
             loop {
+        println!("{:?} lll {:?}", self.current_tkn(), self.peek_tkn());
                 // 引数の式を取得
                 args.push(self.expr_cmp(init_struct)?);
 
                 match self.current_tkn() {
-                    lex::Tkn::Comma => continue,
+                    lex::Tkn::Comma => {
+                        continue;
+                    }
                     lex::Tkn::RParen => {
                         // 関数の最後の部分に来たので、ループを終了する
                         break;
