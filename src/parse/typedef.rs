@@ -20,6 +20,7 @@ impl Parser {
         let fields = self.define_struct_fields()?;
         // 構造体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
+        self.gen_flag = GenFlag::Group1;
         Ok(node::StructDefine::new(name, fields.0, fields.1))
     }
 
@@ -145,19 +146,22 @@ impl Parser {
                             // 呼ばずにそのまま本体無しとして扱う
                             if self.current_tkn() != &lex::Tkn::RBrace {
                                 'method_body: loop {
+
                                     let node = self.one_line_node()?;
             
                                     if let node::Group1Node::FuncDefine(ref mut func) = method {
                                         func.body.push(node);
                                     }
-            
-                                    if self.current_tkn() == &lex::Tkn::RBrace {
+           
+                                    if matches!(self.current_tkn(), lex::Tkn::RBrace) {
+                                        self.advance_tkn().unwrap();
                                         break 'method_body;
                                     }
                                 }
+                            } else {
+                                self.advance_tkn().unwrap();
                             }
                             self.scope_counter -= 1;
-                            self.next_tkn(vec![])?;
                             // モジュールの名前を登録
                             if let node::Group1Node::FuncDefine(ref mut func) = method {
                                 func.self_module_name(self.struct_self_name.as_ref().unwrap());
@@ -173,7 +177,10 @@ impl Parser {
                             // 下の共通処理(`next_tkn`での読み進め)は
                             // 行わずここで直接分岐する
                             match self.current_tkn() {
-                                lex::Tkn::RBrace => break,
+                                lex::Tkn::RBrace => {
+                                    //self.advance_tkn().unwrap();
+                                    break;
+                                }
                                 lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
                                     self.back_tkn();
                                 }

@@ -27,6 +27,7 @@ impl Parser {
 
     /// メゾットなどのノードを作成
     /// name.method
+    #[inline(always)]
     pub(super) fn build_member_node(
         &mut self,
         name: &String

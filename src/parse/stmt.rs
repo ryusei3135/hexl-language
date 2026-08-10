@@ -286,7 +286,6 @@ impl Parser {
     pub(super) fn back_tkn(&mut self) {
         self.idx -= 1;
     }
-
     /// なにのトークンが期待されていたかは呼び出し元で決める
     pub(super) fn next_tkn(
         &mut self,

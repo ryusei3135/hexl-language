@@ -19,11 +19,15 @@ impl Parser {
         // 呼び出す前にでた、変数や関数などの名前   
         name: String
     ) -> Result<node::Expr, err::ErrKind> {
+        
         let node = if self
             .next_tkn(vec!["(", "{", ",", "[", ":", "=", "]"])
             .map(|_| true)?
         {
             match &self.current_tkn() {
+                lex::Tkn::RBrace => {
+                    return Ok(node::Expr::Var(name));
+                }
                 lex::Tkn::LParen => {
                     // 関数の呼び出しノードを生成
                     return self.call_func_expr(&name, true);
@@ -166,9 +170,13 @@ impl Parser {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
+
             match self.next_tkn(vec![])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
+                    return self.gen_name_node(name, init_struct);
+                }
+                lex::Tkn::RBrace => {
                     return self.gen_name_node(name, init_struct);
                 }
                 // 関数を呼ぶノード
@@ -177,7 +185,7 @@ impl Parser {
             }
             // スコープを作成
             if self.current_tkn() == &lex::Tkn::Dot {
-                return self.build_scope_node(&name); 
+                return self.build_scope_node(&name);
             }
             // 前回のトークンが名前かつ(なので、関数を呼び出すノードを作成する
             return self.call_func_expr(&name, init_struct);
@@ -226,7 +234,7 @@ impl Parser {
             lex::Tkn::LBrace => {
                 self.make_array_node()?
             }
-            t => panic!("{:?}", t),
+            t => panic!("expr {:?} {:?}", t, self.peek_tkn()),
         };
 
         match self.current_tkn() {
@@ -278,13 +286,13 @@ impl Parser {
                         break;
                     },
                     t => {
-                        println!("{:?} <<", self.next_tkn(vec![]));
+                        println!("{:?} {:?} <<", self.current_tkn(), self.peek_tkn());
                         panic!("{:?}", self.next_tkn_ref(vec![]));
                     }
                 } 
             }
         } 
-        //
+        
         // ')'をスキップ
         self.next_tkn(vec![])?;
         Ok(node::Expr::CallFunc(

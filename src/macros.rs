@@ -49,7 +49,9 @@ macro_rules! scope_node {
                         node::Expr::Assign { .. } => {
                             node::Expr::Var(path_node.last().unwrap().to_string())
                         }
-                        n => n,
+                        n => {
+                            n
+                        }
                     };
                 path_node.pop().unwrap();
                 let node = node::Expr::$result {
