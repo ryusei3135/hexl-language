@@ -60,6 +60,7 @@ a: [int] = 10
 b: ""[int] = 10
 c: [int 4] = {1, 2, 3, 4}
 ```
+- [メモリ関連の仕様](./documents/mem.md)
 - [変数の扱い(配列も含む)](./documents/variable.md)
 - [型について](./documents/type.md)
 
