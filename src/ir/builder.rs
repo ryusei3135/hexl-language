@@ -159,6 +159,9 @@ impl IR {
                 node::Group1Node::StructDefine(info) => {
                     // 構造体の情報を登録
                     self.struct_tree.add(info);
+                    // 構造体の中に定義されているメゾットを、
+                    // 通常の関数としてIRへ展開する
+                    self.expand_struct_methods(info);
                 }
                 node::Group1Node::EnumDefine(info) => {
                     // 列挙型の情報を登録
@@ -168,6 +171,48 @@ impl IR {
             }
         }
         Ok(mem::take(&mut self.define_meta_data))
+    }
+
+    /// 構造体の中に定義されているメゾット(`StructDefine::methods`)を、
+    /// 通常のトップレベルの関数として展開してIRへ変換する
+    ///
+    /// - メゾットは、そのメゾットが属する構造体の名前をモジュール名として
+    ///   持つ関数として登録される(`node::FuncDefine::self_module_name`)。
+    ///   これにより`StructName::method_name(..)`という、通常の
+    ///   モジュール(`#include`)経由の関数呼び出しと同じ構文
+    ///   (`node::Expr::Scope`)で呼び出せるようになる
+    /// - 第一引数が`Self`型のメゾット(`self: Self`)は`resolve_self_ty`に
+    ///   よって、自身の構造体を指すポインタを受け取る関数として解決される
+    /// - それ以外の変換処理は、トップレベルの関数定義
+    ///   (`node::Group1Node::FuncDefine`)と全く同じ流れで行う
+    fn expand_struct_methods(&mut self, struct_def: &node::StructDefine) {
+        for method in &struct_def.methods {
+            let node::Group1Node::FuncDefine(method_info) = method else {
+                panic!(
+                    "構造体`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
+                    struct_def.name, method
+                );
+            };
+
+            // メゾットのモジュール名を、自身が属する構造体の名前にする
+            let mut method_info = method_info.clone();
+            method_info.self_module_name(&struct_def.name);
+
+            // `Self`型を、実際の構造体の型/ポインタ型へ解決する
+            let method_info = self.resolve_self_ty(method_info);
+
+            // 関数の情報を登録
+            self.entry_func_info(&method_info);
+
+            self.push_param_meta_data(&method_info.params);
+            self.gen_inst(&method_info.body.clone());
+
+            // 関数の処理内容をpush
+            self.push_func_ir_tree(&method_info);
+            // 使うデータを初期化
+            self.ir_tree = Vec::new();
+            self.id_counter = 0;
+        }
     }
     
     /// 型からサイズを求める
@@ -294,8 +339,12 @@ impl IR {
     /// **これは自分自身のファイルの中の関数**
     fn entry_func_info(&mut self, info: &node::FuncDefine) {
         self.func_ret_ty = Some(info.ret_ty.clone());
-        self.define_meta_data.push(def_tree::FuncDefMetaData::new(&info, None));
-        // 公開する関数を登録   
+        // メゾットの場合、`info.module`に自身が属する構造体の名前が
+        // 入っているので、そのままモジュール名として登録する
+        self.define_meta_data.push(
+            def_tree::FuncDefMetaData::new(&info, info.module.as_ref())
+        );
+        // 公開する関数を登録
         if info.public {
             self.public_func_tree.push(info.name.to_string());
         }
@@ -657,6 +706,28 @@ impl IR {
                             size
                         }
                     }
+                    node::Expr::CallFunc(call_func_info) => {
+                        // `変数名.メゾット名(引数, ..)`という、メンバーアクセス
+                        // を経由したメゾット呼び出し
+                        //
+                        // - `scope.last()`に入っている、呼び出し元の変数の
+                        //   型(構造体名)をモジュール名として使い、
+                        //   `構造体名::メゾット名`を探すのと同じ方法
+                        //   (`gen_call_func_ir`)で呼び出す関数を解決する
+                        // - メゾットの第一引数`self`には、呼び出し元の
+                        //   変数のアドレス(構造体へのポインタ)を
+                        //   暗黙的に第一引数として渡す
+                        let var_name = scope.last().unwrap().clone();
+                        let struct_name = self.var_tree.get_ty_name(&var_name);
+
+                        let mut call_info = call_func_info.clone();
+                        call_info.args.insert(
+                            0,
+                            node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
+                        );
+
+                        self.gen_call_func_ir(Some(&struct_name), &call_info)
+                    }
                     t => panic!("{:?}", t),
                 }
             }
@@ -816,6 +887,18 @@ impl IR {
     #[cfg(test)]
     pub(crate) fn test_only_get_func_body(&self, name: &str) -> Vec<inst::Inst> {
         self.func_tree.func.get(name).unwrap().body.clone()
+    }
+
+    /// 構造体のメゾットとして展開された関数の処理内容を取得する
+    /// (テスト用)
+    #[cfg(test)]
+    pub(crate) fn test_only_get_method_body(&self, module: &str, name: &str) -> Vec<inst::Inst> {
+        self.func_tree
+            .func
+            .get(&format!("{}::{}", module, name))
+            .unwrap()
+            .body
+            .clone()
     }
 
     /// 関数のノードを生成するときに、引数を登録
@@ -1142,6 +1225,251 @@ mod match_expr_ir_tests {
                 inst::Inst::Expr(inst::ExprInst { kind: inst::ExprKind::Equal, .. })
             )).count() >= 2,
             "各armごとに`a`との比較命令(Equal)が生成される必要がある: {:?}", body
+        );
+    }
+}
+
+#[cfg(test)]
+mod struct_method_expand_tests {
+    use super::*;
+
+    /// `self`を第一引数に取るメゾットを持つ構造体`StructDefine`を作る
+    fn make_struct_with_method(
+        struct_name: &str,
+        method_name: &str,
+        method_params: Vec<node::ArgsNode>,
+        method_ret_ty: node::TyNode,
+        method_body: Vec<node::Group2Node>,
+    ) -> node::StructDefine {
+        let method = node::FuncDefine {
+            public: true,
+            name: method_name.to_string(),
+            params: method_params,
+            ret_ty: method_ret_ty,
+            body: method_body,
+            // 展開前は、どのモジュールにも属していない
+            module: None,
+        };
+
+        node::StructDefine {
+            name: struct_name.to_string(),
+            fields: vec![node::StructField::make_field("x", "int")],
+            methods: vec![node::Group1Node::FuncDefine(method)],
+        }
+    }
+
+    #[test]
+    fn method_is_registered_as_function_with_struct_as_module() {
+        // 構造体`Point`のメゾット`get_num`が、モジュール名`Point`を
+        // 持つ通常の関数としてIRに展開されることを確認する
+        let struct_def = make_struct_with_method(
+            "Point",
+            "get_num",
+            vec![
+                node::ArgsNode {
+                    name: "self".to_string(),
+                    ty: node::TyNode::SelfTy("Point".to_string()),
+                },
+            ],
+            node::TyNode::Ty("int".to_string()),
+            vec![node::StmtNode::Return(node::Expr::Number("1".to_string())).wrap()],
+        );
+
+        let mut ir = IR::new();
+        ir.builder(&vec![node::Group1Node::StructDefine(struct_def)]).unwrap();
+
+        // `Point::get_num`として展開され、呼び出せる状態になっている
+        let body = ir.test_only_get_method_body("Point", "get_num");
+        assert!(
+            body.iter().any(|inst| matches!(inst, inst::Inst::Ret(_))),
+            "メゾットの中身がそのままIRに変換されている必要がある: {:?}", body
+        );
+
+        // メゾットの第一引数(`self`)は、構造体`Point`へのポインタとして
+        // 解決されている必要がある
+        let registered = ir.func_tree.get(
+            &"get_num".to_string(),
+            Some(&"Point".to_string()),
+        ).unwrap();
+        assert_eq!(
+            registered.args[0].ty,
+            node::TyNode::Pointer {
+                is_const: false,
+                ty_name: Box::new(node::TyNode::Ty("Point".to_string())),
+            }
+        );
+
+        // モジュール名(構造体名)を指定しない場合は解決できない
+        // (トップレベルの関数と名前空間が混ざらないようにするため)
+        assert!(ir.func_tree.get(&"get_num".to_string(), None).is_none());
+    }
+
+    #[test]
+    fn method_can_be_called_via_struct_name_scope() {
+        // `self`を取らない、構造体の「静的メゾット」を定義し、
+        // `Point::answer()`のように呼び出せることを確認する
+        let struct_def = make_struct_with_method(
+            "Point",
+            "answer",
+            vec![],
+            node::TyNode::Ty("int".to_string()),
+            vec![node::StmtNode::Return(node::Expr::Number("42".to_string())).wrap()],
+        );
+
+        let main_fn = node::FuncDefine {
+            public: true,
+            name: "main".to_string(),
+            params: vec![],
+            ret_ty: node::TyNode::Ty("int".to_string()),
+            body: vec![
+                node::StmtNode::Return(
+                    node::Expr::Scope {
+                        scope: vec!["Point".to_string()],
+                        target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                            name: "answer".to_string(),
+                            args: vec![],
+                        })),
+                    }
+                ).wrap()
+            ],
+            module: None,
+        };
+
+        let nodes = vec![
+            node::Group1Node::StructDefine(struct_def),
+            node::Group1Node::FuncDefine(main_fn),
+        ];
+
+        let mut ir = IR::new();
+        ir.builder(&nodes).unwrap();
+
+        let body = ir.test_only_get_func_body("main");
+        assert!(
+            body.iter().any(|inst| matches!(inst, inst::Inst::CallFunc(_))),
+            "`Point::answer()`の呼び出しが生成される必要がある: {:?}", body
+        );
+    }
+
+    #[test]
+    fn methods_with_same_name_on_different_structs_do_not_collide() {
+        // 別々の構造体が同じ名前(`new`)のメゾットを持っていても、
+        // モジュール名(構造体名)によって区別され、互いを
+        // 上書きしないことを確認する
+        let point_def = make_struct_with_method(
+            "Point",
+            "new",
+            vec![],
+            node::TyNode::Ty("int".to_string()),
+            vec![node::StmtNode::Return(node::Expr::Number("1".to_string())).wrap()],
+        );
+        let rect_def = make_struct_with_method(
+            "Rect",
+            "new",
+            vec![],
+            node::TyNode::Ty("int".to_string()),
+            vec![node::StmtNode::Return(node::Expr::Number("2".to_string())).wrap()],
+        );
+
+        let nodes = vec![
+            node::Group1Node::StructDefine(point_def),
+            node::Group1Node::StructDefine(rect_def),
+        ];
+
+        let mut ir = IR::new();
+        ir.builder(&nodes).unwrap();
+
+        let point_new = ir.test_only_get_method_body("Point", "new");
+        let rect_new = ir.test_only_get_method_body("Rect", "new");
+
+        assert!(point_new.iter().any(|i| matches!(
+            i, inst::Inst::Num { value, .. } if value == "1"
+        )));
+        assert!(rect_new.iter().any(|i| matches!(
+            i, inst::Inst::Num { value, .. } if value == "2"
+        )));
+    }
+}
+
+#[cfg(test)]
+mod method_call_via_member_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn calling_method_via_dot_syntax_passes_implicit_self_pointer() {
+        // `p.get_num()`のように、変数のメンバーアクセス経由で
+        // メゾットを呼び出すと、暗黙的に`p`のアドレスが
+        // 第一引数(`self`)として渡されることを確認する
+        let method = node::FuncDefine {
+            public: true,
+            name: "get_num".to_string(),
+            params: vec![
+                node::ArgsNode {
+                    name: "self".to_string(),
+                    ty: node::TyNode::SelfTy("Point".to_string()),
+                },
+            ],
+            ret_ty: node::TyNode::Ty("int".to_string()),
+            body: vec![node::StmtNode::Return(node::Expr::Number("7".to_string())).wrap()],
+            module: None,
+        };
+
+        let struct_def = node::StructDefine {
+            name: "Point".to_string(),
+            fields: vec![node::StructField::make_field("x", "int")],
+            methods: vec![node::Group1Node::FuncDefine(method)],
+        };
+
+        let mut fields = HashMap::new();
+        fields.insert("x".to_string(), Box::new(node::Expr::Number("1".to_string())));
+
+        let def_p = node::DefineVar::new(
+            &"p".to_string(),
+            node::Expr::InitStruct { name: "Point".to_string(), fields },
+            &node::TyNode::Ty("Point".to_string()),
+        ).wrap().wrap_group2();
+
+        let call_method = node::StmtNode::Return(
+            node::Expr::Member {
+                scope: vec!["p".to_string()],
+                target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                    name: "get_num".to_string(),
+                    args: vec![],
+                })),
+            }
+        ).wrap();
+
+        let main_fn = node::FuncDefine {
+            public: true,
+            name: "main".to_string(),
+            params: vec![],
+            ret_ty: node::TyNode::Ty("int".to_string()),
+            body: vec![def_p, call_method],
+            module: None,
+        };
+
+        let nodes = vec![
+            node::Group1Node::StructDefine(struct_def),
+            node::Group1Node::FuncDefine(main_fn),
+        ];
+
+        let mut ir = IR::new();
+        ir.builder(&nodes).unwrap();
+
+        let body = ir.test_only_get_func_body("main");
+
+        // `self`のアドレスを取得する`GetAddress`命令が生成されている
+        assert!(
+            body.iter().any(|inst| matches!(inst, inst::Inst::GetAddress(_))),
+            "`p.get_num()`は暗黙的に`p`のアドレスを渡す必要がある: {:?}", body
+        );
+        // 関数呼び出し命令(`get_num`)が生成されている
+        assert!(
+            body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::CallFunc(inst::CallFuncMetaData{name, ..}) if name == "get_num"
+            )),
+            "{:?}", body
         );
     }
 }

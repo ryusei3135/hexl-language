@@ -3,7 +3,11 @@ use super::*;
 
 impl AsmEmitter {
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する
-    fn emit_call_func(
+    ///
+    /// `gen/asm_emitter.rs`の`extract_operand_text`から、関数呼び出しの
+    /// 結果を値として使う(戻り値を任意のレジスタへ代入する)際にも
+    /// 使われるため`pub(super)`にしている
+    pub(super) fn emit_call_func(
         &mut self,
         meta_data: &inst::CallFuncMetaData
     ) -> String {

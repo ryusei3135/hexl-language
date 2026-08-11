@@ -7,7 +7,7 @@ pub enum TyNode {
     /// メゾット内で使われる`Self`(自身の構造体を表す予約語)
     /// - 内側の`String`は、`Self`が実際に指している構造体の名前
     SelfTy(String),
-    /// ポインタ型
+    /// ポインタ
     Pointer{
         /// 不変ポインタの場合true
         is_const: bool,

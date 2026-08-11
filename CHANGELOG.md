@@ -3,6 +3,12 @@
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-08-11
+
+### Added
+- `gen/asm_emitter::extract_operand_text`の中身の一部を`asm_emitter/operand_txt`え移動
+- メゾットを呼び出し可能に
+- 予約語`Self`を追加
 
 ## [0.8.3] - 2026-08-08
 

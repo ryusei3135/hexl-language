@@ -1,5 +1,5 @@
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
-
+mod operand_txt;
 
 use super::*;
 use crate::asm_setting;
@@ -335,6 +335,7 @@ impl AsmEmitter {
         self.asm_fmt.get_fmt_reg(&num, &size)
     }
 
+
     pub(super) fn extract_operand_text(
         &mut self,
         parent_id: &usize,
@@ -344,17 +345,8 @@ impl AsmEmitter {
                 self.asm_fmt.get_fmt_num(&value)
             }
             inst::Inst::Param(param) => {
-                let var_info = self.var_hash_map.get(&param.name).unwrap();
-                let reg = self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DD);
-
-                if let Some(ty) = var_info.size.is_pointer() {
-                    self.asm_fmt.fmt_ref_operand(
-                        &reg,
-                        &ty.to_bytes()
-                    )
-                } else {
-                    reg
-                }
+                // `asm_emitter/operand_txt/`に記述
+                self.param_ref(&param.name)
             }
             inst::Inst::AssignVar { ref name, .. } => {
                 let num = self.var_hash_map.get(&name.to_string()).unwrap().reg;
@@ -362,39 +354,16 @@ impl AsmEmitter {
             }
             // 配列にアクセス
             inst::Inst::InsertArr { name, dst, index } => {
-                let size = self.var_hash_map.get(&name).unwrap().size.to_bytes();
-                let pos = size * index + size;
-                let mut src = self.extract_operand_text(&dst);
-                src = src.replace(&format!("{}", size), &pos.to_string());
-                src
+                // `asm_emitter/operand_txt/`に記述
+                self.insert_arr_txt(&name, &dst, &index)
             }
             inst::Inst::Str { .. } => {
-                self.data_map
-                    .iter()
-                    .find(|v| &v.0 == parent_id)
-                    .unwrap()
-                    .1
-                    .clone()
+                // `asm_emitter/operand_txt/`に記述
+                self.string_mem_ref(&parent_id)
             }
             inst::Inst::Mov { ref name, src, .. } => {
-                let Some(var_name) = name else {
-                    panic!();
-                };
-
-                let reg_num = if let Some(var) = self.var_hash_map.get(&*var_name) {
-                    var.reg
-                } else {
-                    panic!("this var is not found -> {}", name.as_ref().unwrap());
-                };
-                
-                if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == &src) {
-                    // static領域の変数を返す:
-                    //self.var_hash_map.entry(var_name.to_string()).or_insert(0);
-                    static_var.1.clone()
-                } else {
-                    self.reg_idx = reg_num.clone();
-                    self.asm_fmt.get_fmt_reg(&reg_num, &Size::DD)
-                }
+                // `asm_emitter/operand_txt/`に記述
+                self.gen_mov_code(&name, &src)
             }
             inst::Inst::Block(name) => {
                 name.to_string()
@@ -403,37 +372,22 @@ impl AsmEmitter {
                 name.to_string()
             }
             inst::Inst::Struct(struct_node) => {
+                // `asm_emitter/operand_txt/`に記述
                 crate::gen_struct_asm!(self, struct_node);
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
-                if kind == inst::MemoryKind::Static {
-                    // 静的領域の変数: データセクションに置いたラベルを参照する
-                    let name = self.data_map
-                        .iter()
-                        .find(|v| &v.0 == parent_id)
-                        .expect("static var label not found")
-                        .1
-                        .clone();
-                    self.asm_fmt.fmt_static_var_rip(&name)
-                } else {
-                    // スタック領域の変数: %rbpからのオフセットを参照する
-                    self.asm_fmt.fmt_ref_operand(
-                        &"%rbp".to_string(),
-                        &size.to_bytes(),
-                    )
-                }
+                // `asm_emitter/operand_txt/`に記述
+                self.ref_mem_value_txt(&kind, &size, &parent_id)
             }
             inst::Inst::RefStruct { src, size } => {
-                self.asm_fmt.fmt_ref_operand(
-                    &self.asm_fmt.get_fmt_reg(
-                        &self.var_hash_map.get(&src).expect(&src).reg,
-                        &Size::DQ
-                    ),
-                    &size,
-                )
+                // `asm_emitter/operand_txt/`に記述
+                self.ref_struct_txt(&src, &size)
             }
             inst::Inst::GetAddress(index) => {
                 self.extract_operand_text(&index.clone())
+            }
+            inst::Inst::CallFunc(call_func_info) => {
+                self.emit_call_func(&call_func_info)
             }
             // ポインタの指す先を参照する(`*p` / `[p]`)
             //

@@ -60,6 +60,12 @@ impl VarTree {
     pub fn get_ty_name(&self, name: &String) -> String {
         match &self.hash.get(name).unwrap().size {
             node::TyNode::Ty(name) => name.to_string(),
+            node::TyNode::Pointer { ty_name, .. } => {
+                match &**ty_name {
+                    node::TyNode::Ty(name) => name.to_string(),
+                    _ => panic!(),
+                }
+            },
             t => panic!("{:?}", t),
         }
     }
@@ -138,24 +144,24 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&mut self, name: &String, module_name: Option<&String>) -> Option<FuncDefInfo> {
-        if let Some(func) = self.func.get(name) {
-            // 指定された関数がモジュールに入っていないかつ、自分も
-            // モジュールを指定していない場合そのまま関数のデータを返す
-            if module_name.is_none() && func.module.is_none() {
-                return Some(func.clone());
-            }
-
-            if func.module == module_name.map(|v| v.to_string()) {
-                Some(func.clone())
-            } else {
-                panic!("not found this module in {}", name);
-            }
-        } else {
-            None
+    /// `func`ハッシュマップに登録する際のキーを生成する
+    ///
+    /// 構造体のメゾットを展開した関数など、モジュール名を持つ
+    /// 関数は`モジュール名::関数名`をキーにする(`StructName::method`の
+    /// ように同名のメゾットが別の構造体にあっても衝突しないようにする)。
+    /// モジュール名を持たない、通常の(トップレベルの)関数は
+    /// そのまま関数名だけをキーにする
+    fn make_key(name: &String, module_name: Option<&String>) -> String {
+        match module_name {
+            Some(module) => format!("{}::{}", module, name),
+            None => name.clone(),
         }
     }
-    
+
+    pub fn get(&mut self, name: &String, module_name: Option<&String>) -> Option<FuncDefInfo> {
+        self.func.get(&Self::make_key(name, module_name)).cloned()
+    }
+
     pub fn add(
         &mut self,
         body: Vec<inst::Inst>,
@@ -163,10 +169,13 @@ impl FuncTree {
         ret_ty: &node::TyNode,
         stk_size: usize,
     ) {
+        let key = Self::make_key(&meta_data.name, meta_data.module.as_ref());
         self.func.insert(
-            meta_data.name.clone(),
+            key,
             FuncDefInfo {
-                module: None,
+                // 構造体のメゾットとして展開された関数の場合、
+                // 属している構造体の名前がここに入る
+                module: meta_data.module.clone(),
                 args: meta_data.params.clone(),
                 body,
                 ret_ty: Some(ret_ty.clone()),
