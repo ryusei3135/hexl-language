@@ -103,7 +103,7 @@ pub enum MemoryInst {
     Memory {
         name: String,
         size: types::Size,
-        src: usize,
+        src: Vec<usize>,
         kind: MemoryKind,
         dst: usize
     },
@@ -143,7 +143,6 @@ pub enum Inst {
         dst: ValueId,
         value: String,
     },
-    /// これは使われない
     InitArr(Vec<usize>),
     /// 配列にアクセスするノード
     InsertArr {

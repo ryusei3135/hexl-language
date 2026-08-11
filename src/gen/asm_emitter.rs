@@ -319,6 +319,14 @@ impl AsmEmitter {
             inst::Inst::Pointer(inner) | inst::Inst::GetAddress(inner) => {
                 self.check_node_is_memory_value(inner)
             }
+            // `[arr 0]`のような配列の要素への参照(`Inst::InsertArr`)も
+            // 同様にメモリを直接参照するオペランドになる。
+            // `Inst::InsertArr`自体はサイズの情報を持っていないため、
+            // 配列の変数名(`name`)から`var_hash_map`に登録済みの
+            // サイズを引いて判定する。
+            inst::Inst::InsertArr { name, .. } => {
+                self.var_hash_map.get(name).map(|var| var.size.clone())
+            }
             _ => None,
         }
     }

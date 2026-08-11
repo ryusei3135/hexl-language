@@ -128,7 +128,8 @@ impl IR {
 
                         if !std::path::Path::new(&parent_path).exists() {
                             panic!(
-                                "#includeで指定されたファイルが見つかりません: {} (関数名として`{}`も試しましたが、ファイル{}も見つかりませんでした)",
+                                "#includeで指定されたファイルが見つかりません: {} (\
+                                関数名として`{}`も試しましたが、ファイル{}も見つかりませんでした)",
                                 full_path, func_name, parent_path
                             );
                         }
@@ -539,7 +540,7 @@ impl IR {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
             }
             node::Expr::Assign(assign_node) => {
-                println!("{:?}", assign_node);
+                println!(">>>>>>>>> ir {:?}", assign_node);
                 let right_expr_idx = self.gen_expr_ir(*assign_node.value, &expect_byte);
                 let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
 
@@ -565,12 +566,12 @@ impl IR {
                 inst::Inst::InitArr(dsts)
             }
             // 配列にアクセスする
-            node::Expr::InsertArr { name, dst, index } => {
+            node::Expr::RefArray { name, dst, index } => {
                 let dst = self.gen_expr_ir(*dst, &expect_byte);
                 inst::Inst::InsertArr {
                     name: name.to_string(),
                     dst,
-                    index: index,
+                    index: self.gen_expr_ir(*index, &expect_byte),
                 }
             }
             // ポインタの中身
@@ -760,9 +761,9 @@ impl IR {
             other => vec![other],
         };
 
-        let mut last_value_idx = None;
+        let mut value_idx = Vec::new();
         for value in values {
-            last_value_idx = Some(self.gen_expr_ir(value, &elem_size));
+            value_idx.push(self.gen_expr_ir(value, &elem_size));
         }
 
         // メモリ領域の情報を作成
@@ -777,7 +778,7 @@ impl IR {
             inst::MemoryInst::Memory{
                 name: var.name.to_string(),
                 size: elem_size.clone(),
-                src: last_value_idx.unwrap(),
+                src: value_idx,
                 kind: mem_kind,
                 dst: self.ir_tree.len(),
             };

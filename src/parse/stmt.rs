@@ -40,25 +40,26 @@ impl Parser {
         }
     }
 
+    // 関数の中身などを作成する
+    // P は、この関数が公開されるかどうかのbool
+    fn build_func<const P: bool>(
+        &mut self,
+        func_name: &String
+    ) -> Result<(), err::ErrKind> {
+        // トップレベルの関数定義なので、`Self`が解決される
+        // 構造体/列挙型は存在しない
+        let node = self.func_node(&func_name, P)?;
+        self.gen_nodes.push(node);
+
+        self.gen_flag = GenFlag::Group2;
+        self.scope_counter += 1;
+        Ok(())
+    }
+
     pub fn parser(
         &mut self,
         tkns: Vec<lex::LocatedTkn>,
     ) -> Result<&Vec<node::Group1Node>, err::ErrKind> {
-        // 関数の中身などを作成する
-        // P は、この関数が公開されるかどうかのbool
-        fn build_func<const P: bool>(
-            this: &mut Parser,
-            func_name: &String
-        ) -> Result<(), err::ErrKind> {
-            // トップレベルの関数定義なので、`Self`が解決される
-            // 構造体/列挙型は存在しない
-            let node = this.func_node(&func_name, P)?;
-            this.gen_nodes.push(node);
-
-            this.gen_flag = GenFlag::Group2;
-            this.scope_counter += 1;
-            Ok(())
-        }
 
         self.tkns = Some(tkns);
 
@@ -70,7 +71,7 @@ impl Parser {
                             // この関数などは、公開する
                             match self.next_tkn(vec!["name", ".."])? {
                                 lex::Tkn::Name(name) => {
-                                    build_func::<true>(&mut *self, &name)
+                                    self.build_func::<true>(&name)
                                 }
                                 unexpect_tkn => {
                                     // 期待したトークンじゃないので、エラー
@@ -84,7 +85,7 @@ impl Parser {
                             }?;
                         }
                         lex::Tkn::Name(name) => {
-                            build_func::<false>(&mut *self, &name)?;
+                            self.build_func::<false>(&name)?;
                         }
                         lex::Tkn::CompleSyn => {
                             let node = self.comple_syntax()?;
@@ -149,14 +150,25 @@ impl Parser {
             lex::Tkn::Name(name) => {
                 node::Group2Node::Expr(self.build_scope_node(&name)?)
             }
-            // ポインタにアクセスするノードの作成
+            // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
                 if let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])?.clone() {
-                    let mut ptr_connect = self.expr_define_var(name.to_string())?;
-                    ptr_connect.get_assign_node().name = name.to_string();
-                    let dst = ptr_connect.get_assign_node().clone().dst;
-                    ptr_connect.get_assign_node().dst = Box::new(node::Expr::ConnectAddr(dst));
-                    ptr_connect.wrap_group2()
+                    match self.peek_tkn() {
+                        // `name`の次が数字の場合、配列への代入
+                        // `[name index] = value`
+                        Some(lex::Tkn::Number(_)) => {
+                            self.make_array_assign_node(&name)?.wrap_group2()
+                        }
+                        // それ以外の場合、ポインタへの代入
+                        // `[name] = value`
+                        _ => {
+                            let mut ptr_connect = self.expr_define_var(name.to_string())?;
+                            ptr_connect.get_assign_node().name = name.to_string();
+                            let dst = ptr_connect.get_assign_node().clone().dst;
+                            ptr_connect.get_assign_node().dst = Box::new(node::Expr::ConnectAddr(dst));
+                            ptr_connect.wrap_group2()
+                        }
+                    }
                 } else {
                     panic!();
                 }
@@ -249,5 +261,43 @@ impl Parser {
             panic!();
         };
         self.make_preproc(&name)
+    }
+
+    /// 配列に値を代入するノードを作成する
+    ///
+    /// ## 呼び出し時の前提
+    /// 呼び出し元(`one_line_node`)で`lex::Tkn::LBracket`の次の
+    /// `lex::Tkn::Name(name)`まで読み進めた状態で呼び出す。
+    /// つまり`current_tkn()`が`name`を指している必要がある。
+    ///
+    /// ## 文法のルール
+    /// `[name index] = value`
+    /// - `[arr 0] = 10`
+    ///
+    /// ## Panics
+    /// `name`の次のトークンが数字(`lex::Tkn::Number`)ではない場合panicする
+    fn make_array_assign_node(
+        &mut self,
+        name: &String,
+    ) -> Result<node::Expr, err::ErrKind> {
+        // `index`は数字である必要がある。そうでなければpanicする
+        let lex::Tkn::Number(index) = self.next_tkn(vec!["number"])? else {
+            panic!("配列のインデックスは数字である必要があります");
+        };
+        self.next_tkn(vec!["]"])?;
+        self.next_tkn(vec!["="])?;
+        let value = self.expr_branch()?;
+
+        Ok(
+            node::AssignVar::new(
+                name,
+                node::Expr::RefArray {
+                    name: name.to_string(),
+                    dst: Box::new(node::Expr::Var(name.to_string())),
+                    index: Box::new(node::Expr::Number(index)),
+                },
+                value,
+            )
+        )
     }
 }

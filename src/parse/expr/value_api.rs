@@ -19,10 +19,10 @@ impl Parser {
             // nameの次に、数字が来た場合、それは配列にアクセスする
             lex::Tkn::Number(index) => {
                 let _ = self.next_tkn(vec!["]"])?;
-                node::Expr::InsertArr {
+                node::Expr::RefArray {
                     name,
                     dst: Box::new(result),
-                    index: index.parse::<usize>().unwrap(),
+                    index: Box::new(node::Expr::Number(index)),
                 }
             }
             _ => {
@@ -31,6 +31,7 @@ impl Parser {
         };
         Ok(node)
     }
+
 
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が
     /// あった場合呼び出される、関数やモジュールの指定メンバー

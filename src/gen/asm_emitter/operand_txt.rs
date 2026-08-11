@@ -38,11 +38,34 @@ impl AsmEmitter {
         dst: &usize,
         index: &usize,
     ) -> String {
+        // `index`は添字の数字そのものではなく、その数字を保持する
+        // `Inst::Num`ノードのid(`curr_inst`内のインデックス)。
+        // これを解決せずそのまま計算に使ってしまうと、添字ではなく
+        // 「何番目に生成された命令か」という無関係な数字で
+        // オフセットが計算されてしまい、間違った位置(あるいは
+        // 全く無関係なメモリ)を指すオペランドが生成されてしまう
+        let index_value = match &self.curr_inst[*index] {
+            inst::Inst::Num { value, .. } => {
+                value
+                    .parse::<usize>()
+                    .expect("配列の添字は数字である必要があります")
+            }
+            t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
+        };
+
         let size = self.var_hash_map.get(&name.to_string()).unwrap().size.to_bytes();
-        let pos = size * index + size;
-        let mut src = self.extract_operand_text(&dst);
-        src = src.replace(&format!("{}", size), &pos.to_string());
-        src
+        let pos = size * index_value + size;
+
+        // 配列本体(`dst`)が実際にメモリ上のどこにあるかを踏まえた
+        // オペランドを取得した上で、文字列の中の数字を置換するのではなく、
+        // 計算したオフセット(`pos`)で`%rbp`からのオペランドを
+        // 直接組み立て直す。
+        // (元のコードは`src.replace(&size.to_string(), &pos.to_string())`
+        //  のように、既存のオペランド文字列に含まれる数字をそのまま
+        //  置換していたため、オフセットが2桁以上になったときなどに
+        //  無関係な数字まで置換してしまう可能性があった)
+        let _ = self.extract_operand_text(&dst);
+        self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), &pos)
     }
 
     /// 構造体を参照するコードを作成

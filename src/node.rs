@@ -244,10 +244,15 @@ pub enum Expr {
     },
     /// 配列リテラル: `{100, 100, 100, 100}`
     Array(Vec<Expr>),
-    InsertArr {
+    /// 配列の要素へのアクセス(参照/代入どちらの対象にもなる)
+    /// `[name index]`
+    /// - name: 配列変数の名前
+    /// - dst: 配列本体を指す式
+    /// - index: 添字を表す式(`node::Expr::Number`など)
+    RefArray {
         name: String,
         dst: Box<Expr>,
-        index: usize,
+        index: Box<Expr>,
     },
 
     DefVar(DefineVar),
