@@ -36,6 +36,74 @@ impl Parser {
         if !matches!(self.next_tkn_ref(vec!["not `.`"])?, lex::Tkn::Dot) {
             return Ok(self.expr_define_var(name.to_string())?);
         }
+
+        // "."の次のトークンを確認するため一旦"."まで進める
+        self.next_tkn(vec!["."])?;
+        let after_dot_is_bracket = matches!(
+            self.next_tkn_ref(vec!["name", "["])?,
+            lex::Tkn::LBracket
+        );
+        // まだ"."を消費していない状態(呼び出し時点の位置)に戻す
+        self.back_tkn();
+
+        // "."の次が"["の場合、構造体の配列メンバーの要素に
+        // アクセス(または代入)するノードを作成する: `name.[member index]`
+        if after_dot_is_bracket {
+            // "."をスキップ
+            self.next_tkn(vec!["."])?;
+            // "["をスキップ
+            self.next_tkn(vec!["["])?;
+            return self.build_member_array_node(name);
+        }
+
         crate::scope_node!(self, Dot, Member, &name);
+    }
+
+    /// 構造体の配列メンバーの要素にアクセス、または代入するノードを作成する
+    /// - 読み取り: `name.[member index]`
+    /// - 代入:     `name.[member index] = value`
+    ///
+    /// ## 呼び出し時の前提
+    /// 呼び出し元(`build_member_node`)で、`.`と`[`を読み飛ばした
+    /// 状態で呼び出す。つまり`current_tkn()`が`[`を指している必要がある。
+    ///
+    /// ## Panics
+    /// `member`の次のトークンが名前(`lex::Tkn::Name`)、または
+    /// その次が数字(`lex::Tkn::Number`)ではない場合panicする
+    fn build_member_array_node(
+        &mut self,
+        name: &String,
+    ) -> Result<node::Expr, err::ErrKind> {
+        let lex::Tkn::Name(member) = self.next_tkn(vec!["name"])? else {
+            panic!("配列メンバーへのアクセスには名前が必要です");
+        };
+        let lex::Tkn::Number(index) = self.next_tkn(vec!["number"])? else {
+            panic!("配列のインデックスは数字である必要があります");
+        };
+        // "]"まで進める(current_tkn()は"]"を指す)
+        self.next_tkn(vec!["]"])?;
+
+        let member_node = node::Expr::Member {
+            scope: vec![name.to_string()],
+            target: Box::new(node::Expr::RefArray {
+                name: member.clone(),
+                dst: Box::new(node::Expr::Var(member)),
+                index: Box::new(node::Expr::Number(index)),
+            }),
+        };
+
+        // `a.[c 0] = 10`のように代入の場合、"="の後に続く値を
+        // 読み取り、代入のノードとして返す
+        if matches!(self.next_tkn_ref(vec!["="])?, lex::Tkn::Equal) {
+            self.next_tkn(vec!["="])?;
+            let value = self.expr_branch()?;
+            return Ok(
+                node::AssignVar::new(name, member_node, value)
+            );
+        }
+
+        // 代入ではなく値の参照なので、"]"を消費せずに返す
+        // (呼び出し元の`expr_value`が続けて読み進める)
+        Ok(member_node)
     }
 }

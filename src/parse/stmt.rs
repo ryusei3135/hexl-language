@@ -93,6 +93,7 @@ impl Parser {
                         }
                         lex::Tkn::KeyWordStruct => {
                             let node = self.struct_node()?;
+                            println!("strct >> {:?}", node);
                             self.gen_nodes.push(node);
                         }
                         lex::Tkn::KeyWordEnum => {

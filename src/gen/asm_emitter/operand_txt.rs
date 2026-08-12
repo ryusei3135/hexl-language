@@ -132,6 +132,70 @@ impl AsmEmitter {
             )
         }
     }
+
+    /// `Inst::InitArr`(変数に束縛されていない配列リテラル、
+    /// 例: 関数の引数にそのまま渡された`{1,2,3}`)を
+    /// スタック上に展開し、その先頭要素を指すオペランドを返す
+    ///
+    /// `MemoryInst::Memory{ kind: Stack, src, .. }`を初期化する処理
+    /// (`gen/call_func.rs`)と同じ組み立て方をしているが、こちらは
+    /// 変数名を持たない(`var_hash_map`に登録できない)ため、
+    /// 先頭要素のオペランドをその場で返す点が異なる
+    ///
+    /// ## 引数
+    /// - ids: 配列の各要素の値を持つノード(`Inst::Num`など)のid
+    pub(super) fn init_arr_txt(&mut self, ids: &Vec<usize>) -> String {
+        let Some(first_id) = ids.first() else {
+            panic!("空の配列リテラルはサポートされていません");
+        };
+
+        // 配列の要素のサイズは先頭の要素から求める
+        // (配列の要素は全て同じ型/サイズであることが前提)
+        let size = match &self.curr_inst[*first_id] {
+            inst::Inst::Num { size, .. } => size.clone(),
+            t => panic!("配列の要素には数字のノードが必要です: {:?}", t),
+        };
+
+        let mut txt = String::new();
+        // 配列の先頭要素を書き込んだ直後のスタックオフセット。
+        // 配列は先頭の要素から順にスタックへ積んでいくため、
+        // 最初に確定したオフセットが配列全体の先頭を指すことになる
+        let mut head_offset = None;
+
+        for id in ids.iter() {
+            let value = self.extract_operand_text(id);
+
+            // スタックの場所を更新
+            // (この要素のオフセットは、これまで使用したスタックのサイズ
+            //  `stk_use_counter`に、この要素のサイズを足したもの)
+            self.stk_use_counter += size.to_bytes();
+            if head_offset.is_none() {
+                head_offset = Some(self.stk_use_counter);
+            }
+
+            let dst = self.asm_fmt.fmt_ref_operand(
+                &"%rbp".to_string(),
+                &self.stk_use_counter,
+            );
+
+            let mov_line = self.asm_fmt
+                .get_opcode_tmpl("mov")
+                .replace("{dst}", &dst)
+                .replace("{src1}", value.as_str());
+
+            txt.push_str(
+                self.asm_fmt.fmt_mnemonic_resize("mov", &mov_line, &size).as_str()
+            );
+        }
+
+        self.asm_text.push_str(txt.as_str());
+
+        // 配列の先頭要素を指すオペランドを返す
+        self.asm_fmt.fmt_ref_operand(
+            &"%rbp".to_string(),
+            &head_offset.unwrap(),
+        )
+    }
 }
 
 

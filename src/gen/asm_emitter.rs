@@ -394,8 +394,23 @@ impl AsmEmitter {
             inst::Inst::GetAddress(index) => {
                 self.extract_operand_text(&index.clone())
             }
+            // 配列リテラル自体を値として参照する場合
+            // (例: 変数に束縛されずそのまま関数の引数などに使われる`{1,2,3}`)
+            inst::Inst::InitArr(ids) => {
+                // `asm_emitter/operand_txt/`に記述
+                self.init_arr_txt(&ids)
+            }
             inst::Inst::CallFunc(call_func_info) => {
-                self.emit_call_func(&call_func_info)
+                // `emit_call_func`は引数を積む`mov`と`call`命令を含む
+                // 「複数行のアセンブリ文字列」を返す。これをそのまま
+                // `{src1}`などのオペランドとして埋め込んでしまうと、
+                // `mov call new\n, %ecx`のような壊れたコードになる。
+                // そのため呼び出し自体は先に`asm_text`へ積んでおき、
+                // 呼び出し規約上戻り値が置かれるレジスタ(`Ret`と同じ
+                // レジスタ0番、`%eax`など)をオペランドとして返す
+                let call_asm = self.emit_call_func(&call_func_info);
+                self.asm_text.push_str(&call_asm);
+                self.asm_fmt.get_fmt_reg(&0, &Size::DD)
             }
             // ポインタの指す先を参照する(`*p` / `[p]`)
             //
