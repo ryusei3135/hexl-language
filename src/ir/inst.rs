@@ -61,18 +61,27 @@ pub struct CallFuncMetaData {
     pub public: bool,
     pub name: String,
     pub params: Vec<ValueId>,
+
+    /// 関数を呼ぶ際に、代入する変数があるかをbooleanで表現
+    /// 呼び出すときに、変数へ代入するなら、false
+    pub parent: bool,
     /// アセンブリ言語を出力する際に、スタックを確保するためのサイズ
     /// Someの場合、スタックを確保する
     pub stk_capacity: Option<usize>,
 }
 
 impl CallFuncMetaData {
-    pub fn new(name: String, stk_capacity: Option<usize>) -> Self {
+    pub fn new(
+        name: String, 
+        start_expr: bool, 
+        stk_capacity: Option<usize>
+    ) -> Self {
         Self {
             path: Vec::new(),
             public: false,
             name,
             params: Vec::new(),
+            parent: start_expr,
             stk_capacity,
         }
     }

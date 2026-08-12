@@ -408,9 +408,13 @@ impl AsmEmitter {
                 // そのため呼び出し自体は先に`asm_text`へ積んでおき、
                 // 呼び出し規約上戻り値が置かれるレジスタ(`Ret`と同じ
                 // レジスタ0番、`%eax`など)をオペランドとして返す
-                let call_asm = self.emit_call_func(&call_func_info);
-                self.asm_text.push_str(&call_asm);
-                self.asm_fmt.get_fmt_reg(&0, &Size::DD)
+                if call_func_info.parent == crate::ir::IS_ASSIGN_EXPR {
+                    let call_asm = self.emit_call_func(&call_func_info);
+                    self.asm_text.push_str(&call_asm);
+                    self.asm_fmt.get_fmt_reg(&0, &Size::DD)
+                } else {
+                    String::new()
+                }
             }
             // ポインタの指す先を参照する(`*p` / `[p]`)
             //

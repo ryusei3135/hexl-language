@@ -2,30 +2,6 @@
 use super::*;
 
 
-
-pub struct IR {
-    pub var_tree: def_tree::VarTree,
-    pub extern_funcs: Vec<inst::Inst>,
-    id_counter: usize,
-    func_ret_ty: Option<node::TyNode>,
-    ir_tree: Vec<inst::Inst>,
-    pattern_labels: usize,
-    jmp_labels: usize,
-    // 関数の情報
-    pub func_tree: def_tree::FuncTree,
-    // 外部の関数の情報
-    extern_func_tree: Vec<def_tree::FuncDefMetaData>,
-    // 自身が公開する関数の配列:
-    pub public_func_tree: Vec<String>,
-    define_meta_data: Vec<def_tree::FuncDefMetaData>,
-    // 定義済みの構造体の情報
-    pub struct_tree: def_tree::StructTree,
-    // 定義済みの列挙型の情報
-    pub enum_tree: HashMap<String, node::EnumDefine>,
-    stk_counter: usize,
-}
-
-
 impl IR {
     pub fn new() -> Self {
         Self {
@@ -36,6 +12,7 @@ impl IR {
             ir_tree: Vec::new(),
             pattern_labels: 0,
             jmp_labels: 0,
+            expr_counter: 0,
             // 関数の情報を初期化
             func_tree: def_tree::FuncTree::new(),
             extern_func_tree: Vec::new(),
@@ -69,6 +46,7 @@ impl IR {
         }
 
         for node in nodes {
+            self.expr_counter = 0;
             match node {
                 node::Group1Node::FuncDefine(info) => {
                     // `Self`型を、実際の構造体の型/ポインタ型へ解決する
@@ -364,6 +342,7 @@ impl IR {
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
         for stmt in node {
+            self.expr_counter = 0;
             match stmt.clone() {
                 node::Group2Node::Expr(expr) => {
                     let _ = self.gen_expr_ir(expr, &types::Size::DD);
@@ -482,6 +461,11 @@ impl IR {
         let mut func_meta_data
             = inst::CallFuncMetaData::new(
                 meta_data.name.clone(),
+                if self.expr_counter == 1 {
+                    IS_NOT_ASSIGN_EXPR
+                } else {
+                    IS_ASSIGN_EXPR
+                },
                 // 確保するスタックのサイズを渡す
                 if self.stk_counter != 0 {
                     Some(self.stk_counter)
@@ -500,7 +484,12 @@ impl IR {
     }
 
 
-    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
+    fn gen_expr_ir(
+        &mut self, 
+        expr: node::Expr, 
+        expect_byte: &types::Size
+    ) -> usize {
+        self.expr_counter += 1;
         let inst = match expr {
             // ポインタ関係
             node::Expr::GetAddress(target) => {

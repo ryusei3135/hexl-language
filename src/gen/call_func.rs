@@ -1,4 +1,5 @@
 use super::*;
+use crate::ir;
 
 
 impl AsmEmitter {
@@ -29,10 +30,7 @@ impl AsmEmitter {
     /// アセンブリ言語をフォーマットに沿って生成する関数
     ///
     /// ## 引数
-    /// - func_body
-    ///     関数の処理
-    /// - func_name
-    ///     関数の名前
+    /// - func_meta_data
     /// - asm_fmt_name
     ///     出力するアセンブリ言語のフォーマットの名前
     pub(super) fn build_func_process(
@@ -266,8 +264,11 @@ impl AsmEmitter {
                     );
                 }
                 inst::Inst::CallFunc(meta_data) => {
-                    let asm_text = self.emit_call_func(&meta_data);
-                    self.asm_text.push_str(asm_text.as_str());
+                    // 関数を呼ぶノードが変数に戻り値を代入しないばあいのみ生成
+                    if meta_data.parent == ir::IS_NOT_ASSIGN_EXPR {
+                        let asm_text = self.emit_call_func(&meta_data);
+                        self.asm_text.push_str(asm_text.as_str());
+                    }
                 }
                 t => println!("call func >> gen {:?}", t),
             }
