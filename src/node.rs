@@ -234,6 +234,7 @@ pub enum Expr {
         body: Vec<Group2Node>
     },
     InitStruct {
+        is_self: bool,
         name: String,
         fields: HashMap<String, Box<Expr>>
     },
@@ -310,7 +311,7 @@ impl ModPath {
     }
 
     pub fn gen_path(&self) -> String {
-        // ディレクトリの最初のパスのインデックス
+        // ディレクトリの最初のパスのインデック
         const PATH_START: usize = 0;
 
         let mut path = String::new();

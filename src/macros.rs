@@ -89,9 +89,21 @@ macro_rules! scope_node {
 
 /// asm_settingで使う
 /// 構造体のアセンブリ言語を生成する処理を展開する
+///
+/// ## $name (第三引数)について
+/// - `false`: 通常の構造体の初期化。呼び出し元(この関数自身)が
+///   新しくスタックフレームを確保するので、各メンバーへは
+///   `%rbp`からのオフセット(これまでの`stk_use_counter` + 累積サイズ)
+///   で書き込む
+/// - `true`: `self`経由の構造体の初期化(例: `Struct::new()`が暗黙的に
+///   受け取る自分自身へのポインタに、初期化した値を書き込むケース)。
+///   この場合、書き込み先のメモリは呼び出し元が既に確保済みなので、
+///   新たにスタックを確保する必要はない。生成されるオペランドの
+///   基準レジスタを`%rbp`から第一引数(`self`のポインタ)のレジスタに
+///   置き換えるだけで良い(例: `-4(%rbp)` -> `-4(%rdi)`)
 #[macro_export]
 macro_rules! gen_struct_asm {
-    ($self:tt, $struct_node:path) => {
+    ($self:tt, $struct_node:path, $name:expr) => {
         let mut struct_txt = String::new();
         let mut add_size = 0;
         for member in $struct_node.clone().iter() {
@@ -104,17 +116,42 @@ macro_rules! gen_struct_asm {
             // (これが、このメンバーの`%rbp`からのオフセットになる)
             add_size += size.to_bytes();
 
-            struct_txt.push_str(
-                $self.asm_fmt.get_fmt_struct_member(
-                    value,
-                    &size,
-                    // 既に使用していたスタックのサイズ + ここまでの
-                    // メンバーの累積サイズ = このメンバーの正しいオフセット
-                    &($self.stk_use_counter + add_size)
-                ).as_str()
+            let offset = if $name {
+                // `self`のポインタ先に直接書き込むので、既存の
+                // `stk_use_counter`(このスコープでのスタック使用量)は
+                // 無関係。累積サイズそのものがオフセットになる
+                add_size
+            } else {
+                // 既に使用していたスタックのサイズ + ここまでの
+                // メンバーの累積サイズ = このメンバーの正しいオフセット
+                $self.stk_use_counter + add_size
+            };
+
+            let fmted = $self.asm_fmt.get_fmt_struct_member(
+                value,
+                &size,
+                &offset
             );
+
+            if $name {
+                // 第一引数(`self`のポインタ)のレジスタを取得し、
+                // `%rbp`をそのレジスタに置き換える
+                // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
+                let self_ptr_reg = $self.asm_fmt.get_fmt_reg(
+                    &$self.asm_fmt.get_fmt_param::<usize>(&0),
+                    &Size::DQ,
+                );
+                struct_txt.push_str(&fmted.replace("%rbp", &self_ptr_reg));
+            } else {
+                struct_txt.push_str(&fmted);
+            }
         }
-        $self.stk_use_counter += add_size;
+        if !$name {
+            // 新しくスタックを確保したのは自分自身の場合のみ加算する。
+            // (`self`のポインタ先に書き込むだけの場合は、呼び出し元が
+            //  既にスタックを確保済みなので、ここで加算してはいけない)
+            $self.stk_use_counter += add_size;
+        }
         return struct_txt;
     };
 }

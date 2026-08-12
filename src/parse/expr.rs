@@ -37,7 +37,7 @@ impl Parser {
                     return n;
                 }
                 lex::Tkn::LBrace => {
-                    return self.struct_init_node(&name);
+                    return self.struct_init_node::<false>(&name);
                 }
                 lex::Tkn::Comma => {
                     return Ok(node::Expr::Var(name));
@@ -178,10 +178,10 @@ impl Parser {
             match self.next_tkn(vec![])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
-                    return self.gen_name_node(name, init_struct);
+                    return self.gen_name_node::<false>(name, init_struct);
                 }
                 lex::Tkn::RBrace => {
-                    return self.gen_name_node(name, init_struct);
+                    return self.gen_name_node::<false>(name, init_struct);
                 }
                 // 関数を呼ぶノード
                 lex::Tkn::LParen => {},
@@ -216,13 +216,13 @@ impl Parser {
                     .as_ref()
                     .unwrap()
                     .to_string();
-                self.gen_name_node(self_name, init_struct)?
+                self.gen_name_node::<true>(self_name, init_struct)?
             }
             lex::Tkn::Str(value) => {
                 node::Expr::Str(value)
             }
             lex::Tkn::Name(name) => {
-                self.gen_name_node(name, init_struct)?
+                self.gen_name_node::<false>(name, init_struct)?
             }
             lex::Tkn::LParen => {
                 let result = self.expr_cmp(init_struct)?;

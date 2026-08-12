@@ -25,7 +25,7 @@ impl Parser {
     }
 
     /// 構造体を初期化する式を生成
-    pub(super) fn struct_init_node(
+    pub(super) fn struct_init_node<const T: bool>(
         &mut self,
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
@@ -68,6 +68,7 @@ impl Parser {
         }
         Ok(
             node::Expr::InitStruct{
+                is_self: T,
                 name: name.to_string(),
                 fields: fields.clone()
             }

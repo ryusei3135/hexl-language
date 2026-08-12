@@ -124,6 +124,10 @@ pub enum Inst {
     /// ポインタの対象のidx
     Pointer(usize),
     GetAddress(usize),
+    GetPtr {
+        size: types::Size,
+        stk: usize,
+    },
 
     ExternFunc(String),
     Expr(ExprInst),
@@ -143,6 +147,7 @@ pub enum Inst {
         /// 指定された、メンバーの場所
         size: usize,
     },
+    Stacks { size: usize },
     Num{
         dst: ValueId,
         value: String,
@@ -173,7 +178,7 @@ pub enum Inst {
     },
     Param(ParamMetaData),
     Ret(ValueId),
-    Struct(Vec<MemoryInst>),
+    Struct{ name: String, mem: Vec<MemoryInst>, is_self: bool },
     MemoryValue(MemoryInst),
 }
 
@@ -203,6 +208,9 @@ impl Inst {
             types::Size::Struct(_) => {
                 panic!("gen_num: 構造体型に数値を直接代入することはできません");
             }
+            types::Size::Array { size, .. } => {
+                Self::gen_num(&value, &size, dst);
+            },
             types::Size::Pointer { .. } => {
                 panic!();
             }

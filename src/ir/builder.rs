@@ -1,3 +1,7 @@
+mod proc_fn_info;
+mod expr_node;
+mod member;
+mod scope;
 
 use super::*;
 
@@ -49,20 +53,7 @@ impl IR {
             self.expr_counter = 0;
             match node {
                 node::Group1Node::FuncDefine(info) => {
-                    // `Self`型を、実際の構造体の型/ポインタ型へ解決する
-                    let info = self.resolve_self_ty(info.clone());
-
-                    // 関数の情報を登録
-                    self.entry_func_info(&info);
-
-                    self.push_param_meta_data(&info.params);
-                    self.gen_inst(&info.body.clone());
-
-                    // 関数の処理内容をpush
-                    self.push_func_ir_tree(&info);
-                    // 使うデータを初期化
-                    self.ir_tree = Vec::new();
-                    self.id_counter = 0;
+                    self.init_def_fn_info(&info);
                 }
                 #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
@@ -194,56 +185,6 @@ impl IR {
         }
     }
     
-    /// 型からサイズを求める
-    ///
-    /// 組み込み型(`byte`/`u16`/`int`/`u64`)は`types::Size::new`と
-    /// 同じ結果を返すが、構造体・列挙型などのユーザー定義の型名が渡された
-    /// 場合は`struct_tree`/`enum_tree`を参照して解決する
-    fn size_of(&self, ty: &node::TyNode) -> types::Size {
-        match ty {
-            node::TyNode::Ty(name) => {
-                if types::Size::is_builtin_ty_name(name) {
-                    return types::Size::new(ty);
-                }
-
-                if self.enum_tree.contains_key(name) {
-                    // 列挙型は現在、タグ(整数値)として扱う
-                    return types::Size::DD;
-                }
-
-                if let Some(struct_def) = self.struct_tree.get(&name) {
-                    let fields = struct_def
-                        .fields
-                        .iter()
-                        .map(|field| {
-                            Box::new((field.name.clone(), self.size_of(&field.ty)))
-                        })
-                        .collect();
-                    return types::Size::Struct(fields);
-                }
-
-                panic!("未定義の型です: {}", name);
-            }
-            node::TyNode::Pointer { is_const, ty_name } => {
-                types::Size::Pointer{
-                    ty: Box::new(self.size_of(ty_name)),
-                    is_const: is_const.clone()
-                }
-            }
-            // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
-                self.size_of(&node::TyNode::Ty(name.clone()))
-            }
-            node::TyNode::RefTy(inner) => self.size_of(inner),
-            // `Self`はIRへ変換する前に、実際の構造体の型
-            // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
-            node::TyNode::SelfTy(name) => panic!(
-                "内部エラー: `Self`型(構造体`{}`)がIR変換の前に解決されていません",
-                name
-            ),
-        }
-    }
-
     /// 関数のノードに含まれる予約語`Self`を解決する
     ///
     /// - 第一引数の型が`Self`の場合、その関数は「メゾット」として扱い、
@@ -253,7 +194,7 @@ impl IR {
     /// - (第一引数がSelfでない場合、)戻り値の型が`Self`ならば、
     ///   ただの関数として扱い、戻り値の型は自身の構造体の名前の型
     ///   (`node::TyNode::Ty`)として解決する
-    fn resolve_self_ty(&self, mut info: node::FuncDefine) -> node::FuncDefine {
+    pub(super) fn resolve_self_ty(&self, mut info: node::FuncDefine) -> node::FuncDefine {
         // 第一引数以外にSelfが使われていないかチェックする
         for (index, param) in info.params.iter().enumerate() {
             if index == 0 {
@@ -297,47 +238,6 @@ impl IR {
         }
 
         info
-    }
-
-    /// 関数の情報を関数ツリーに登録
-    fn push_func_ir_tree(&mut self, info: &node::FuncDefine) {
-        // 関数のデータをpush
-        self.func_tree.add(
-            // 関数の処理
-            mem::take(&mut self.ir_tree),
-            // 関数の引数や名前など
-            &info,
-            // 関数の戻り値
-            &info.ret_ty,
-            self.stk_counter,
-        );
-        self.stk_counter = 0;
-    }
-
-    /// 現在処理中の関数の情報を登録する
-    /// **これは自分自身のファイルの中の関数**
-    fn entry_func_info(&mut self, info: &node::FuncDefine) {
-        self.func_ret_ty = Some(info.ret_ty.clone());
-        // メゾットの場合、`info.module`に自身が属する構造体の名前が
-        // 入っているので、そのままモジュール名として登録する
-        self.define_meta_data.push(
-            def_tree::FuncDefMetaData::new(&info, info.module.as_ref())
-        );
-        // 公開する関数を登録
-        if info.public {
-            self.public_func_tree.push(info.name.to_string());
-        }
-    }
-
-    /// 外部の関数を定義するノードを
-    /// 作成し、スタックする関数
-    /// アセンブリ言語を出力する際にだけ使う
-    fn make_extern_func_inst(&mut self, fn_tree: &Vec<def_tree::FuncDefMetaData>) {
-        for func in fn_tree {
-            self.extern_funcs.push(
-                inst::Inst::ExternFunc(func.name.clone())
-            );
-        }
     }
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
@@ -433,56 +333,6 @@ impl IR {
         }.new()
     }
 
-    fn gen_call_func_ir(
-        &mut self,
-        module_name: Option<&String>,
-        meta_data: &node::CallInfo
-    ) -> inst::Inst {
-        // 関数の定義を取得
-        let defined_func_data = {
-            if let Some(def_data) = self.func_tree.get(&meta_data.name, module_name) {
-                def_data
-            } else {
-                let result = self.extern_func_tree
-                    .iter()
-                    .find(|v| {
-                        v.name.as_str() == meta_data.name.as_str()
-                            && v.module() == module_name
-                    });
-                    if let Some(def_data) = result {
-                        def_data.gen(self.stk_counter)
-                    } else {
-                        panic!();
-                    }
-                }
-            };
-        let def_args = defined_func_data.args.clone();
-        // 関数のノードを作成
-        let mut func_meta_data
-            = inst::CallFuncMetaData::new(
-                meta_data.name.clone(),
-                if self.expr_counter == 1 {
-                    IS_NOT_ASSIGN_EXPR
-                } else {
-                    IS_ASSIGN_EXPR
-                },
-                // 確保するスタックのサイズを渡す
-                if self.stk_counter != 0 {
-                    Some(self.stk_counter)
-                } else {
-                    None
-                }
-            );
-
-        for (index, _) in meta_data.args.iter().enumerate() {
-            let expr_arg = meta_data.args.get(index).unwrap().clone();
-            let ty = self.size_of(&def_args[index].ty).clone();
-            let idx = self.gen_expr_ir(expr_arg, &ty);
-            func_meta_data.insert_param_parent_id(idx);
-        }
-        inst::Inst::CallFunc(func_meta_data)
-    }
-
 
     fn gen_expr_ir(
         &mut self, 
@@ -529,14 +379,8 @@ impl IR {
                 inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
             }
             node::Expr::Assign(assign_node) => {
-                let right_expr_idx = self.gen_expr_ir(*assign_node.value, &expect_byte);
-                let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
-
-                inst::Inst::AssignVar {
-                    name: assign_node.name.to_string(),
-                    dst: dst_idx,
-                    value: right_expr_idx,
-                }
+                // `src/ir/builder/expr_node.rs`
+                self.assign_expr_node(assign_node, &expect_byte)
             }
             node::Expr::Str(value) => {
                 inst::Inst::Str{
@@ -546,61 +390,18 @@ impl IR {
             } 
             // 配列を初期化する
             node::Expr::Array(init_nodes) => {
-                let mut dsts = Vec::new();
-                for node in init_nodes.iter() {
-                    let dst = self.gen_expr_ir(node.clone(), &expect_byte);
-                    dsts.push(dst);
-                }
-                inst::Inst::InitArr(dsts)
+                // `src/ir/builder/expr_node.rs`
+                self.init_array_node(init_nodes, &expect_byte)
             }
             // 配列にアクセスする
             node::Expr::RefArray { name, dst, index } => {
-                let dst = self.gen_expr_ir(*dst, &expect_byte);
-                inst::Inst::InsertArr {
-                    name: name.to_string(),
-                    dst,
-                    index: self.gen_expr_ir(*index, &expect_byte),
-                }
+                // `src/ir/builder/expr_node.rs`
+                self.ref_array_node(*dst, *index, &name, &expect_byte)
             }
             // ポインタの中身
             node::Expr::DefVar(mut var) => {
-                match &var.ty.clone() {
-                    node::TyNode::Stack{ .. } => {
-                        // 確保するスタックを増やす
-                        self.stack_counter(&var.ty);
-                        self.gen_mem_def_var(var)
-                    }
-                    node::TyNode::Static{..} => {
-                        self.gen_mem_def_var(var)
-                    }
-                    node::TyNode::Ty(ref ty_name) => {
-                        let value_idx = self.gen_expr_ir(
-                            *var.value,
-                            &self.size_of(&var.ty)
-                        );
-                        self.var_tree.push::<'l'>(&var.name, &value_idx, &var.ty);
-                        inst::Inst::Mov{
-                            name: Some(mem::take(&mut var.name)),
-                            size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
-                            dst: self.id_counter,
-                            src: value_idx,
-                        }
-                    }
-                    node::TyNode::Pointer { ty_name, .. } => {
-                        let value_idx = self.gen_expr_ir(
-                            *var.value,
-                            &self.size_of(&var.ty)
-                        );
-                        self.var_tree.push::<'l'>(&var.name, &value_idx, &var.ty);
-                        inst::Inst::Mov{
-                            name: Some(mem::take(&mut var.name)),
-                            size: types::Size::build_ptr_ty(&*ty_name),
-                            dst: self.id_counter,
-                            src: value_idx,
-                        }
-                    }
-                    t => panic!("{:?}", t),
-                }
+                // `src/ir/builder/expr_node.rs`
+                self.def_var_node(var, &expect_byte)
             }
             node::Expr::CallFunc(meta_data) => {
                 self.gen_call_func_ir(None, &meta_data)
@@ -625,135 +426,31 @@ impl IR {
             // 列挙型のメンバへのアクセス: `Name::Mem`
             // メンバの定義順に基いたタグ(整数値)として展開する
             node::Expr::EnumVariant { name, variant } => {
-                let enum_def = self.enum_tree
-                    .get(&name)
-                    .unwrap_or_else(|| panic!("未定義の列挙型です: {}", name));
-                let variant_index = enum_def
-                    .variants
-                    .iter()
-                    .position(|v| v == &variant)
-                    .unwrap_or_else(|| panic!(
-                        "列挙型 `{}` にメンバ `{}` は存在しません", name, variant
-                    ));
-                inst::Inst::gen_num(&variant_index.to_string(), &expect_byte, self.id_counter)
+                // `src/ir/builder/expr_node.rs`
+                self.enum_variant_node(&name, &variant, &expect_byte)
             }
             // 構造体の初期化: `Name { field: value, .. }`
-            node::Expr::InitStruct { name, mut fields } => {
-                let struct_def = self.struct_tree
-                    .get(&name)
-                    .clone()
-                    .unwrap_or_else(|| panic!("未定義の構造体です: {}", name));
-
-                let mut mem_insts = Vec::with_capacity(struct_def.fields.len());
-                // フィールドは構造体で定義された順番通りに展開する
-                for field in struct_def.fields.clone().iter() {
-                    let field_size = self.size_of(&field.ty);
-                    // 確保するスタックを増やす
-                    self.stack_counter(&field.ty);
-
-                    let field_expr = fields
-                        .remove(&field.name)
-                        .unwrap_or_else(|| panic!(
-                            "構造体 `{}` の初期化にフィールド `{}` の値がありません", name, field.name
-                        ));
-                    let value_idx = self.gen_expr_ir(*field_expr, &field_size);
-                    mem_insts.push(inst::MemoryInst::Member {
-                        parent: field.name.clone(),
-                        value_idx: value_idx,
-                        size: field_size,
-                    });
-                }
-                inst::Inst::Struct(mem_insts)
+            node::Expr::InitStruct { name, mut fields, is_self } => {
+                // `src/ir/builder/expr_node.rs`
+                self.init_struct_node(&name, &mut fields, &expect_byte, is_self)
             }
             node::Expr::Scope { scope, target } => {
-                if let node::Expr::CallFunc(call_func_node) = *target {
-                    self.gen_call_func_ir(scope.last(), &call_func_node)
-                } else {
-                    panic!();
-                }
+                self.scope_node(&scope, target)
             }
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
-                        let _ = match self.var_tree.get(&scope.last().unwrap()) {
-                            def_tree::VarType::Local(index) => {
-                                *index
-                            }
-                            def_tree::VarType::Param(param) => {
-                                // 引数のノード
-                                *param
-                            }
-                        };
-                        let size = self.struct_tree.get_pos(
-                            // 変数の名前で登録されている変数の型を取得する
-                            // （変数）の名前の文字列
-                            &self.var_tree.get_ty_name(scope.last().unwrap()),
-                            &name,
-                        );
-                        inst::Inst::RefStruct{
-                            src: scope.last().unwrap().to_string(),
-                            size
-                        }
+                        // `src/ir/builder/member.rs`
+                        self.member_is_var(&scope, &name)
                     }
                     node::Expr::CallFunc(call_func_info) => {
-                        // `変数名.メゾット名(引数, ..)`という、メンバーアクセス
-                        // を経由したメゾット呼び出し
-                        //
-                        // - `scope.last()`に入っている、呼び出し元の変数の
-                        //   型(構造体名)をモジュール名として使い、
-                        //   `構造体名::メゾット名`を探すのと同じ方法
-                        //   (`gen_call_func_ir`)で呼び出す関数を解決する
-                        // - メゾットの第一引数`self`には、呼び出し元の
-                        //   変数のアドレス(構造体へのポインタ)を
-                        //   暗黙的に第一引数として渡す
-                        let var_name = scope.last().unwrap().clone();
-                        let struct_name = self.var_tree.get_ty_name(&var_name);
-
-                        let mut call_info = call_func_info.clone();
-                        call_info.args.insert(
-                            0,
-                            node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
-                        );
-
-                        self.gen_call_func_ir(Some(&struct_name), &call_info)
+                        // `src/ir/builder/member.rs`
+                        self.member_is_fn(&scope, &call_func_info)
                     }
                     // `変数名.[メンバー名 添字]`
                     node::Expr::RefArray { name, index, .. } => {
-                        let var_name = scope.last().unwrap().clone();
-                        let struct_name = self.var_tree.get_ty_name(&var_name);
-
-                        // 対象メンバーの型を取得し、要素1つ分のサイズを求める
-                        let field_ty = self.struct_tree
-                            .get(&struct_name)
-                            .unwrap_or_else(|| panic!("未定義の構造体です: {}", struct_name))
-                            .fields
-                            .iter()
-                            .find(|field| &field.name == name)
-                            .unwrap_or_else(|| panic!(
-                                "構造体 `{}` にメンバー `{}` は存在しません", struct_name, name
-                            ))
-                            .ty
-                            .clone();
-                        let elem_size = self.size_of(&field_ty).to_bytes();
-
-                        // 配列メンバー自身の、構造体先頭から見た(1要素目までの)オフセット
-                        let field_pos = self.struct_tree.get_pos(&struct_name, name);
-
-                        // 添字は数字リテラルとしてのみ許可されているので、
-                        // ここでそのまま定数として解決する
-                        let index_num = match &**index {
-                            node::Expr::Number(value) => {
-                                value.parse::<usize>().unwrap_or_else(|_| panic!(
-                                    "配列のインデックスは数字である必要があります: {}", value
-                                ))
-                            }
-                            t => panic!("配列のインデックスは数字リテラルである必要があります: {:?}", t),
-                        };
-
-                        inst::Inst::RefStruct {
-                            src: var_name,
-                            size: field_pos + index_num * elem_size,
-                        }
+                        // `src/ir/builder/member.rs`
+                        self.member_is_arr_ref(&scope, &name, &index)
                     }
                     t => panic!("{:?}", t)// 構造体の配列型メンバーの要素にアクセスする
                 }

@@ -121,6 +121,7 @@ impl MngAsmFmt {
             types::Size::DW => crate::mov_size_fmt!(self, dw),
             types::Size::DD => crate::mov_size_fmt!(self, dd),
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
+            types::Size::Array { size, .. } => return self.get_fmt_struct_member(value, &size, &offset),
             _ => panic!()
         };
         fmted.replace("mov", &format!("mov{}", s_fmt))
@@ -138,7 +139,10 @@ impl MngAsmFmt {
             types::Size::DD => crate::mov_size_fmt!(self, dd),
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
             types::Size::Pointer{ .. } => unreachable!(),
-            _ => panic!()
+            types::Size::Array { size, .. } => {
+                return self.fmt_mnemonic_resize(&mnemonic, &value, &size);
+            }
+            t => panic!("{:?}", t)
         };
         value.replace(mnemonic, &format!("{}{}", mnemonic, s_fmt))
     }

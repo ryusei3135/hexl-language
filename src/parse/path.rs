@@ -10,7 +10,7 @@ impl Parser {
     ) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.next_tkn_ref(vec!["{"])?, lex::Tkn::LBrace) {
             self.next_tkn(vec![]).unwrap();
-            let node = self.struct_init_node(name);
+            let node = self.struct_init_node::<false>(name);
             self.next_tkn(vec![])?;
             return node;
         }

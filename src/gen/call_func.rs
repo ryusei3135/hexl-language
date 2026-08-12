@@ -56,6 +56,7 @@ impl AsmEmitter {
         self.curr_inst = mem::take(&mut func_meta_data.1.body);
 
         for node in self.curr_inst.clone().iter() {
+            println!("line {:?}", node);
             match &node {
                 inst::Inst::ExpectJmp(name) => {
                     // 次のフォーマットに使うラベルの名前を予約する

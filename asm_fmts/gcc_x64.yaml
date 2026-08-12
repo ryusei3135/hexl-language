@@ -1,0 +1,111 @@
+reg:
+  db:
+    - al
+    - cl
+    - dl
+    - bl
+  dw:
+    - ax
+    - cx
+    - dx
+    - si
+    - di
+  dd:
+    - eax
+    - ecx
+    - edx
+    - esi
+    - edi
+    - r8d
+    - r9d
+    - r10d
+    - r11d
+    - r12d
+    - r13d
+    - r14d
+    - r15d
+  dq:
+    - rax
+    - rcx
+    - rdx
+    - rsi
+    - rdi
+    - r8
+    - r9
+    - r10
+    - r11
+    - r12
+    - r13
+    - r14
+    - r15
+
+args:
+  fmt:
+    linux: [4, 3, 2, 1, 5, 6]
+    win: [1, 2, 5, 6]
+
+section: ".{name}\n"
+
+fmt:
+  reg: "%{}"
+  num: "${}"
+  static_var: "{name}(%rip)"
+  string: "{name}: .ascii \"{}\"\n"
+  global: ".global {name}\n"
+  data:
+    head: "{space}push %rbp\n{space}mov %rsp, %rbp\n{space}sub ${size}, %rsp\n"
+    fmt: "{space}mov {dst}, -{size}(%rbp)\n"
+  op_size:
+    db: b
+    dw: w
+    dd: l
+    dq: q
+  ref_stack: "-{size}({src})"
+  frame: "{space}push %rbp\n{space}mov %rsp, %rbp\n"
+  frame_end: "{space}leave\n"
+
+op:
+  push:
+    len: 1
+    template: "{space}push {dst}\n"
+  pop:
+    len: 1
+    template: "{space}pop {dst}\n"
+  add:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}add {src2}, {dst}\n"
+  sub:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}sub {src2}, {dst}\n"
+  mul:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}imul {src2}, {dst}\n"
+  div:
+    len: 2
+    template: "{space}mov {src1}, %eax\n{space}cltd\n{space}mov {src2}, %ecx\n{space}idiv %ecx\n{space}mov %eax, {dst}\n"
+  mov:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n"
+  cmp_l:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jl {label}\n"
+  cmp_g:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jg {label}\n"
+  cmp_e:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jz {label}\n"
+  cmp_ne:
+    len: 2
+    template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jnz {label}\n"
+  ret:
+    len: 1
+    template: "{space}ret\n"
+  address:
+    len: 1
+    template: "{space}lea {src1}, {dst}\n"
+
+func:
+  extern_def: ".extern {name}\n"
+  ret: 0
+  call: "call {name}\n"

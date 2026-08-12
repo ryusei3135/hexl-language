@@ -104,7 +104,7 @@ impl AsmSetting {
 
         let asm_fmt_file_name = format!("asm_fmts/{}", file_name());
 
-        serde_json::from_str(
+        serde_yaml::from_str(
             &fs::read_to_string(
                 &asm_fmt_file_name
             )
@@ -122,12 +122,12 @@ impl AsmSetting {
 }
 
 pub fn load_setting() -> AsmSetting {
-    let setting = fs::read_to_string("asm.json")
-        .expect("not found asm setting file 'asm.json'");
-    serde_json::from_str(&setting).unwrap()
+    let setting = fs::read_to_string("asm.yaml")
+        .expect("not found asm setting file 'asm.yaml'");
+    serde_yaml::from_str(&setting).unwrap()
 
     //let default_format = fs::read_to_string(data.get_default_asm_file()).unwrap();
-    //let x64data: AsmFormat = serde_json::from_str(&default_format).unwrap();
+    //let x64data: AsmFormat = serde_yaml::from_str(&default_format).unwrap();
     //x64data
 }
 

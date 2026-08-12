@@ -238,9 +238,22 @@ impl AsmEmitter {
         src1: &usize,
         src2: Option<&usize>
     ) -> String {
-        let mut formated = if let inst::Inst::Struct(..) = &self.curr_inst[*src1] {
+        let mut formated = if let Some(struct_idx) = self.resolve_struct_idx(src1) {
             // 構造体の生成
-            let mut txt = self.extract_operand_text(src1);
+            //
+            // `src1`は`Inst::Struct`を直接指しているとは限らない。
+            // 例えば`Struct::new()`のように、生成した構造体自身への
+            // ポインタを暗黙的に引数へ渡すケースでは、`src1`は
+            // `Inst::GetAddress(struct_idx)`のように`Inst::Struct`を
+            // ラップしたノードになる。ここで元のまま`src1`の変種を
+            // そのままチェックしてしまうと`Inst::Struct`だと判定
+            // されず、後述の通常パスに落ちて構造体の初期化コード
+            // (複数行の`movl`)がそのまま1つのオペランドの文字列として
+            // 埋め込まれてしまい、`mov   movl $0, -4(%rdi)\n...`のような
+            // 壊れたアセンブリが生成されてしまう。そのため
+            // `resolve_struct_idx`でラップを剥いだ先の`Inst::Struct`の
+            // idxを探してから処理する
+            let mut txt = self.extract_operand_text(&struct_idx);
             txt.push_str(
                 self.asm_fmt
                 .get_opcode_tmpl(opcode)
@@ -288,6 +301,20 @@ impl AsmEmitter {
             formated.replace("{src2}", &self.extract_operand_text(src2_id))
         } else {
             formated
+        }
+    }
+
+    /// `idx`が(直接、あるいは`GetAddress`/`Pointer`でラップされた先に)
+    /// `Inst::Struct`を指している場合、その`Inst::Struct`自身のidxを返す。
+    /// `format_line`が構造体の生成を特別扱いする際、ラップされた
+    /// ノードの内側までたどれるようにするためのヘルパー
+    fn resolve_struct_idx(&self, idx: &usize) -> Option<usize> {
+        match &self.curr_inst[*idx] {
+            inst::Inst::Struct { .. } => Some(*idx),
+            inst::Inst::GetAddress(inner) | inst::Inst::Pointer(inner) => {
+                self.resolve_struct_idx(inner)
+            }
+            _ => None,
         }
     }
 
@@ -352,6 +379,9 @@ impl AsmEmitter {
             inst::Inst::Num {  value, .. } => {
                 self.asm_fmt.get_fmt_num(&value)
             }
+            inst::Inst::GetPtr { size, stk } => {
+                //
+            }
             inst::Inst::Param(param) => {
                 // `asm_emitter/operand_txt/`に記述
                 self.param_ref(&param.name)
@@ -370,6 +400,7 @@ impl AsmEmitter {
                 self.string_mem_ref(&parent_id)
             }
             inst::Inst::Mov { ref name, src, .. } => {
+                println!("{:?}", self.curr_inst[*parent_id]);
                 // `asm_emitter/operand_txt/`に記述
                 self.gen_mov_code(&name, &src)
             }
@@ -379,9 +410,8 @@ impl AsmEmitter {
             inst::Inst::ExpectJmp(name) => {
                 name.to_string()
             }
-            inst::Inst::Struct(struct_node) => {
-                // `asm_emitter/operand_txt/`に記述
-                crate::gen_struct_asm!(self, struct_node);
+            inst::Inst::Struct { mem, is_self, .. } => {
+                crate::gen_struct_asm!(self, mem, is_self);
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
@@ -506,4 +536,3 @@ impl AsmEmitter {
         }
     }
 }
-

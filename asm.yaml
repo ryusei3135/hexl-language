@@ -1,0 +1,7 @@
+settings:
+  - file: x64.yaml
+    name: x64
+  - file: gcc_x64.yaml
+    name: gcc_x64
+default: 1
+entry: _start

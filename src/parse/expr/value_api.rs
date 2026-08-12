@@ -36,7 +36,7 @@ impl Parser {
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が
     /// あった場合呼び出される、関数やモジュールの指定メンバー
     /// にアクセスするノードを作成する
-    pub(super) fn gen_name_node(
+    pub(super) fn gen_name_node<const T: bool>(
         &mut self,
         name: String,
         init_struct: bool
@@ -59,7 +59,7 @@ impl Parser {
             lex::Tkn::LBrace => {
                 // "{"から始まらないといけないので、次に進める
                 self.next_tkn(vec!["{"])?;
-                return self.struct_init_node(&name);
+                return self.struct_init_node::<T>(&name);
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
             lex::Tkn::ModPathTkn => {
