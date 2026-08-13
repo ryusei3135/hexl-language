@@ -125,7 +125,7 @@ pub enum Inst {
     Pointer(usize),
     GetAddress(usize),
     GetPtr {
-        size: types::Size,
+        size: usize,
         stk: usize,
     },
 

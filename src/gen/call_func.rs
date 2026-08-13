@@ -137,19 +137,39 @@ impl AsmEmitter {
                         self.update_value_info(&name, &value);
 
                         let current_reg = self.reg_idx;
-                        // 代入する値(value)がアドレスを求める式
-                        // (`GetAddress`/`Pointer`)の場合のみ`lea`相当の
-                        // ニーモニックを使う。
-                        // (代入先の変数がかつてポインタとして定義された
-                        //  ものであっても、今回代入する値自体が
-                        //  アドレス計算を必要としないなら`mov`で良い)
-                        let mnemonic = if self.curr_inst[*value].is_pointer() {
-                            "address"
-                        } else {
-                            "mov"
-                        };
 
-                        let text = self.format_line(mnemonic, Some(&current_reg), &value, None);
+                        // 代入先の変数の型(サイズ)を確認し、ポインタ型
+                        // であれば、専用のフォーマット(`get_ptr`)で
+                        // アドレスのオペランドを組み立てる
+                        let text = if self.get_var_ty(&name).is_pointer().is_some() {
+                            let dst_reg = self.asm_fmt.get_fmt_reg(&current_reg, &Size::DQ);
+
+                            let ptr_operand = match &self.curr_inst[*value] {
+                                inst::Inst::GetPtr { size, stk } => {
+                                    self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), &size)
+                                }
+                                _ => self.extract_operand_text(value),
+                            };
+
+                            self.asm_fmt
+                                .get_opcode_tmpl("address")
+                                .replace("{dst}", &dst_reg)
+                                .replace("{src1}", &ptr_operand)
+                        } else {
+                            // 代入する値(value)がアドレスを求める式
+                            // (`GetAddress`/`Pointer`)の場合のみ`lea`相当の
+                            // ニーモニックを使う。
+                            // (代入先の変数がかつてポインタとして定義された
+                            //  ものであっても、今回代入する値自体が
+                            //  アドレス計算を必要としないなら`mov`で良い)
+                            let mnemonic = if self.curr_inst[*value].is_pointer() {
+                                "address"
+                            } else {
+                                "mov"
+                            };
+
+                            self.format_line(mnemonic, Some(&current_reg), &value, None)
+                        };
 
                         if self.expr_vars.iter().find(|v| v == &name).is_some() {
                             self.update_value_reg(&name, &current_reg);

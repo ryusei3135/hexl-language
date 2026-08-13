@@ -65,7 +65,25 @@ impl IR {
                     *var.value,
                     &self.size_of(&var.ty)
                 );
-                self.var_tree.push::<'l'>(&var.name, &value_idx, &var.ty);
+                // 変数の位置として登録するのは、初期化子の式
+                // (`value_idx`、例えば`Name::new()`を表す`CallFunc`
+                //  ノードそのもの)ではなく、これから生成する`Mov`
+                // 自身のindex(`self.id_counter`、下の`dst`と同じ値)
+                // でなければならない。
+                //
+                // `value_idx`をそのまま登録してしまうと、後で
+                // `a.add()`のように`self`のアドレスとして変数`a`が
+                // 再度参照された際、`GetAddress(Var("a"))`が
+                // `value_idx`（＝`CallFunc`ノード自身）を直接指す
+                // ことになる。アセンブリ生成時、`GetAddress`は
+                // 参照先をそのまま`extract_operand_text`で解決する
+                // ため、`CallFunc`ノードの「未評価の関数呼び出し」
+                // が再度実行されてしまい、`call new`が二重に
+                // 生成されるバグの原因になっていた。
+                // `Mov`自身のindexを登録しておけば、再参照時は
+                // 既に`var_hash_map`へ登録済みのレジスタ/メモリを
+                // 指すようになり、副作用が繰り返されることはない。
+                self.var_tree.push::<'l'>(&var.name, &self.id_counter, &var.ty);
                 inst::Inst::Mov{
                     name: Some(mem::take(&mut var.name)),
                     size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
@@ -78,7 +96,9 @@ impl IR {
                     *var.value,
                     &self.size_of(&var.ty)
                 );
-                self.var_tree.push::<'l'>(&var.name, &value_idx, &var.ty);
+                // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
+                // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
+                self.var_tree.push::<'l'>(&var.name, &self.id_counter, &var.ty);
                 inst::Inst::Mov{
                     name: Some(mem::take(&mut var.name)),
                     size: types::Size::build_ptr_ty(&*ty_name),

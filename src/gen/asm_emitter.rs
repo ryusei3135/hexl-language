@@ -379,8 +379,13 @@ impl AsmEmitter {
             inst::Inst::Num {  value, .. } => {
                 self.asm_fmt.get_fmt_num(&value)
             }
-            inst::Inst::GetPtr { size, stk } => {
-                //
+            inst::Inst::GetPtr { size: _, stk } => {
+                // スタック上に置かれた値そのもの(値が置かれているメモリ)
+                // を指すオペランドを、`%rbp`からのオフセット`stk`を使って生成する
+                self.asm_fmt.fmt_ref_operand(
+                    &"%rbp".to_string(),
+                    &stk,
+                )
             }
             inst::Inst::Param(param) => {
                 // `asm_emitter/operand_txt/`に記述

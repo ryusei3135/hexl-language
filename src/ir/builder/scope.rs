@@ -30,7 +30,6 @@ impl IR {
                     let self_idx = self.id_counter;
                     self.id_counter += 1;
 
-                    panic!("JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ");
                     self.ir_tree.push(inst::Inst::GetPtr { size, stk: self_idx });
                     let self_idx = self.id_counter;
                     self.id_counter += 1;
