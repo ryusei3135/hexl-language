@@ -9,8 +9,11 @@ impl AsmEmitter {
         &mut self,
         param_name: &String,
     ) -> String {
-        let var_info = self.var_hash_map.get(&param_name.to_string()).unwrap();
-        let reg = self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DD);
+        let var_info = self.var_hash_map
+            .get(&param_name.to_string())
+            .unwrap();
+        let reg = self.asm_fmt
+            .get_fmt_reg(&var_info.reg, &Size::DD);
 
         if let Some(ty) = var_info.size.is_pointer() {
             self.asm_fmt.fmt_ref_operand(
@@ -37,6 +40,7 @@ impl AsmEmitter {
         name: &String,
         dst: &usize,
         index: &usize,
+        in_self_ptr: bool,
     ) -> String {
         // `index`は添字の数字そのものではなく、その数字を保持する
         // `Inst::Num`ノードのid(`curr_inst`内のインデックス)。
@@ -53,19 +57,30 @@ impl AsmEmitter {
             t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
         };
 
-        let size = self.var_hash_map.get(&name.to_string()).unwrap().size.to_bytes();
+        let size = self.var_hash_map
+            .get(&name.to_string())
+            .unwrap()
+            .size
+            .to_bytes();
         let pos = size * index_value + size;
 
-        // 配列本体(`dst`)が実際にメモリ上のどこにあるかを踏まえた
-        // オペランドを取得した上で、文字列の中の数字を置換するのではなく、
-        // 計算したオフセット(`pos`)で`%rbp`からのオペランドを
-        // 直接組み立て直す。
+        // 配列本体(`dst`)が実際にメモリ上のどこにあるか(ベースとなる
+        // レジスタ/オペランド)を解決した上で、文字列の中の数字を
+        // 置換するのではなく、計算したオフセット(`pos`)でそのベースからの
+        // オペランドを直接組み立て直す。
         // (元のコードは`src.replace(&size.to_string(), &pos.to_string())`
         //  のように、既存のオペランド文字列に含まれる数字をそのまま
         //  置換していたため、オフセットが2桁以上になったときなどに
         //  無関係な数字まで置換してしまう可能性があった)
-        let _ = self.extract_operand_text(&dst);
-        self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), &pos)
+        //
+        // 以前はここで得られたベースのオペランドを`let _ = ...`で
+        // 捨てた上、常に`%rbp`決め打ちでオペランドを組み立てていたため、
+        // メソッド内で`self`(引数として渡されるポインタ、例:`%rdi`)が
+        // 指す配列に代入する場合でも、誤ってローカル変数のベースである
+        // `%rbp`が使われてしまっていた。`dst`から解決したベースの
+        // オペランド(`%rdi`など)をそのまま使うように修正する。
+        let base = self.extract_operand_text(&dst, in_self_ptr);
+        self.asm_fmt.fmt_ref_operand(&base, &pos)
     }
 
     /// 構造体を参照するコードを作成
@@ -76,7 +91,10 @@ impl AsmEmitter {
     ) -> String {
         self.asm_fmt.fmt_ref_operand(
             &self.asm_fmt.get_fmt_reg(
-                &self.var_hash_map.get(&src.to_string()).expect(&src).reg,
+                &self.var_hash_map
+                .get(&src.to_string())
+                .expect(&src)
+                .reg,
                 &Size::DQ
             ),
             &size,
@@ -144,7 +162,18 @@ impl AsmEmitter {
     ///
     /// ## 引数
     /// - ids: 配列の各要素の値を持つノード(`Inst::Num`など)のid
-    pub(super) fn init_arr_txt(&mut self, ids: &Vec<usize>) -> String {
+    pub(super) fn init_arr_txt(
+        &mut self, 
+        ids: &Vec<usize>,
+        in_self_ptr: bool,
+    ) -> String {
+        // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
+        let assign_reg = if in_self_ptr {
+            self.asm_fmt.get_fmt_param::<String>(&0)
+        } else {
+            "%rbp".to_string()
+        };
+
         let Some(first_id) = ids.first() else {
             panic!("空の配列リテラルはサポートされていません");
         };
@@ -163,7 +192,7 @@ impl AsmEmitter {
         let mut head_offset = None;
 
         for id in ids.iter() {
-            let value = self.extract_operand_text(id);
+            let value = self.extract_operand_text(id, in_self_ptr);
 
             // スタックの場所を更新
             // (この要素のオフセットは、これまで使用したスタックのサイズ
@@ -174,7 +203,7 @@ impl AsmEmitter {
             }
 
             let dst = self.asm_fmt.fmt_ref_operand(
-                &"%rbp".to_string(),
+                &assign_reg,
                 &self.stk_use_counter,
             );
 
@@ -184,7 +213,13 @@ impl AsmEmitter {
                 .replace("{src1}", value.as_str());
 
             txt.push_str(
-                self.asm_fmt.fmt_mnemonic_resize("mov", &mov_line, &size).as_str()
+                self.asm_fmt
+                .fmt_mnemonic_resize(
+                    "mov", 
+                    &mov_line, 
+                    &size
+                )
+                .as_str()
             );
         }
 

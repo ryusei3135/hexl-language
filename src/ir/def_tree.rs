@@ -132,6 +132,18 @@ pub struct FuncDefInfo {
     pub stk_size: usize,
 }
 
+impl FuncDefInfo {
+    pub fn first_param_is_self(&self) -> bool {
+        self.args
+            .get(0)
+            .is_some_and(
+                |f| {
+                    matches!(f.ty, node::TyNode::SelfTy(..))
+                }
+            )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncTree{
     pub func: HashMap<String, FuncDefInfo>

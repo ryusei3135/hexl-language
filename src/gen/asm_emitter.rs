@@ -195,13 +195,24 @@ impl AsmEmitter {
 
     /// 静的領域の変数がどんなラベルで登録されているかを取得する
     #[inline(always)]
-    pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
-        let index = self.var_hash_map.get(name).expect(&format!("this -> {}", name)).index;
-        self.extract_operand_text(&index).to_string()
+    pub(super) fn get_static_var_name(
+        &mut self, 
+        name: &String
+    ) -> String {
+        let index = self.var_hash_map
+            .get(name)
+            .expect(&format!("this -> {}", name))
+            .index;
+        self.extract_operand_text(&index, false)
+            .to_string()
     }
 
     pub fn get_var_ty(&self, name: &String) -> Size {
-        self.var_hash_map.get(name).expect(&format!("not found {}", name)).size.clone()
+        self.var_hash_map
+            .get(name)
+            .expect(&format!("not found {}", name))
+            .size
+            .clone()
     }
 
     #[inline(always)]
@@ -220,7 +231,10 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn update_value_info(&mut self, name: &String, index: &usize) {
-        self.var_hash_map.get_mut(name).unwrap().index = *index;
+        self.var_hash_map
+            .get_mut(name)
+            .unwrap()
+            .index = *index;
     }
 
     #[inline(always)]
@@ -236,7 +250,8 @@ impl AsmEmitter {
         opcode: &str,
         dst: Option<&usize>,
         src1: &usize,
-        src2: Option<&usize>
+        src2: Option<&usize>,
+        this_is_self: bool,
     ) -> String {
         let mut formated = if let Some(struct_idx) = self.resolve_struct_idx(src1) {
             // 構造体の生成
@@ -253,7 +268,10 @@ impl AsmEmitter {
             // 壊れたアセンブリが生成されてしまう。そのため
             // `resolve_struct_idx`でラップを剥いだ先の`Inst::Struct`の
             // idxを探してから処理する
-            let mut txt = self.extract_operand_text(&struct_idx);
+            let mut txt = self.extract_operand_text(
+                &struct_idx, 
+                this_is_self
+            );
             txt.push_str(
                 self.asm_fmt
                 .get_opcode_tmpl(opcode)
@@ -279,7 +297,7 @@ impl AsmEmitter {
             self.asm_fmt
             .get_opcode_tmpl(opcode)
             .replace("{dst}", &self.get_reg(dst, dst_size))
-            .replace("{src1}", &self.extract_operand_text(src1))
+            .replace("{src1}", &self.extract_operand_text(src1, this_is_self))
         };
 
         // `address`(=`lea`)は必ずここで`fmt_mnemonic_resize`を通す。
@@ -298,7 +316,13 @@ impl AsmEmitter {
 
 
         if let Some(src2_id) = src2 {
-            formated.replace("{src2}", &self.extract_operand_text(src2_id))
+            formated.replace(
+                "{src2}", 
+                &self.extract_operand_text(
+                    src2_id, 
+                    this_is_self
+                )
+            )
         } else {
             formated
         }
@@ -352,7 +376,9 @@ impl AsmEmitter {
             // 配列の変数名(`name`)から`var_hash_map`に登録済みの
             // サイズを引いて判定する。
             inst::Inst::InsertArr { name, .. } => {
-                self.var_hash_map.get(name).map(|var| var.size.clone())
+                self.var_hash_map
+                    .get(name)
+                    .map(|var| var.size.clone())
             }
             _ => None,
         }
@@ -374,6 +400,7 @@ impl AsmEmitter {
     pub(super) fn extract_operand_text(
         &mut self,
         parent_id: &usize,
+        in_self_ptr: bool,
     ) -> String {
         match self.curr_inst[*parent_id].clone() {
             inst::Inst::Num {  value, .. } => {
@@ -398,14 +425,13 @@ impl AsmEmitter {
             // 配列にアクセス
             inst::Inst::InsertArr { name, dst, index } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.insert_arr_txt(&name, &dst, &index)
+                self.insert_arr_txt(&name, &dst, &index, in_self_ptr)
             }
             inst::Inst::Str { .. } => {
                 // `asm_emitter/operand_txt/`に記述
                 self.string_mem_ref(&parent_id)
             }
             inst::Inst::Mov { ref name, src, .. } => {
-                println!("{:?}", self.curr_inst[*parent_id]);
                 // `asm_emitter/operand_txt/`に記述
                 self.gen_mov_code(&name, &src)
             }
@@ -416,7 +442,7 @@ impl AsmEmitter {
                 name.to_string()
             }
             inst::Inst::Struct { mem, is_self, .. } => {
-                crate::gen_struct_asm!(self, mem, is_self);
+                crate::gen_struct_asm!(self, mem, is_self, in_self_ptr);
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
@@ -427,13 +453,13 @@ impl AsmEmitter {
                 self.ref_struct_txt(&src, &size)
             }
             inst::Inst::GetAddress(index) => {
-                self.extract_operand_text(&index.clone())
+                self.extract_operand_text(&index.clone(), in_self_ptr)
             }
             // 配列リテラル自体を値として参照する場合
             // (例: 変数に束縛されずそのまま関数の引数などに使われる`{1,2,3}`)
             inst::Inst::InitArr(ids) => {
                 // `asm_emitter/operand_txt/`に記述
-                self.init_arr_txt(&ids)
+                self.init_arr_txt(&ids, in_self_ptr)
             }
             inst::Inst::CallFunc(call_func_info) => {
                 // `emit_call_func`は引数を積む`mov`と`call`命令を含む
@@ -462,7 +488,7 @@ impl AsmEmitter {
             // のどちらの場合でも、実際に値が置かれているメモリ/レジスタの
             // オペランドを解決できる
             inst::Inst::Pointer(index) => {
-                self.extract_operand_text(&index.clone())
+                self.extract_operand_text(&index.clone(), in_self_ptr)
             }
             t => {
                 if let Some(result) = self.last_inst_idx
@@ -510,9 +536,10 @@ impl AsmEmitter {
         let mut formated = self.asm_fmt
             .get_opcode_tmpl(key)
             .replace("{dst}", &self.get_reg(Some(&self.reg_idx), &Size::DD))
-            .replace("{src1}", &self.extract_operand_text(&expr.ls))
-            .replace("{src2}", &self.extract_operand_text(&expr.rs))
+            .replace("{src1}", &self.extract_operand_text(&expr.ls, false))
+            .replace("{src2}", &self.extract_operand_text(&expr.rs, false))
             .to_string();
+        println!("asm_emitter.rs false argas");
 
         // どちらかのオペランドがメモリ上の値(スタック/静的領域の変数)を
         // 参照している場合、そのサイズに合わせてニーモニックへ

@@ -34,7 +34,7 @@ impl AsmEmitter {
                 let mut asm_line = template.clone();
 
                 for (index, operand_id) in operand_ids.iter().enumerate() {
-                    let operand_text = self.extract_operand_text(operand_id);
+                    let operand_text = self.extract_operand_text(operand_id, false);
                     asm_line = asm_line.replace(
                         &format!("{{{}}}", index),
                         &operand_text,

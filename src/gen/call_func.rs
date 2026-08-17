@@ -1,3 +1,7 @@
+mod assign_var;
+mod mem_ir;
+
+
 use super::*;
 use crate::ir;
 
@@ -19,7 +23,7 @@ impl AsmEmitter {
             // 引数のレジスタを取得
             let param_reg = self.asm_fmt.get_fmt_param::<usize>(&index);
             // 引数のレジスタと値のidを挿入
-            let param_asm = self.format_line("mov", Some(&param_reg), &param, None);
+            let param_asm = self.format_line("mov", Some(&param_reg), &param, None, false);
             call_func.push_str(&param_asm);
         }
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&meta_data.name));
@@ -38,6 +42,7 @@ impl AsmEmitter {
         func_meta_data: &mut (String, def_tree::FuncDefInfo),
         asm_fmt_name: &Option<String>,
     ) {
+        let this_is_self = func_meta_data.1.first_param_is_self();
         // 新しく関数の作成、
         self.asm_text.push_str(&format!("{}:\n", &func_meta_data.0));
         // 関数ごとにスタックの使用量をリセットする
@@ -56,7 +61,6 @@ impl AsmEmitter {
         self.curr_inst = mem::take(&mut func_meta_data.1.body);
 
         for node in self.curr_inst.clone().iter() {
-            println!("line {:?}", node);
             match &node {
                 inst::Inst::ExpectJmp(name) => {
                     // 次のフォーマットに使うラベルの名前を予約する
@@ -120,18 +124,12 @@ impl AsmEmitter {
                     );
 
                     if is_mem_write {
-                        // 書き込み先のメモリのオペランド
-                        let dst_operand = self.extract_operand_text(dst);
-                        // 書き込む値のオペランド
-                        let value_operand = self.extract_operand_text(value);
-
-                        let mut text = self.asm_fmt
-                            .get_opcode_tmpl("mov")
-                            .replace("{dst}", &dst_operand)
-                            .replace("{src1}", &value_operand);
-
-                        text = self.asm_fmt.fmt_mnemonic_resize("mov", &text, &self.get_var_ty(&name));
-                        self.asm_text.push_str(&text);
+                        self.write_mem(
+                            name, 
+                            &dst, 
+                            &value, 
+                            this_is_self
+                        );
                     } else {
                         // 通常の変数への再代入(`b = 10`など)
                         self.update_value_info(&name, &value);
@@ -142,33 +140,17 @@ impl AsmEmitter {
                         // であれば、専用のフォーマット(`get_ptr`)で
                         // アドレスのオペランドを組み立てる
                         let text = if self.get_var_ty(&name).is_pointer().is_some() {
-                            let dst_reg = self.asm_fmt.get_fmt_reg(&current_reg, &Size::DQ);
-
-                            let ptr_operand = match &self.curr_inst[*value] {
-                                inst::Inst::GetPtr { size, stk } => {
-                                    self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), &size)
-                                }
-                                _ => self.extract_operand_text(value),
-                            };
-
-                            self.asm_fmt
-                                .get_opcode_tmpl("address")
-                                .replace("{dst}", &dst_reg)
-                                .replace("{src1}", &ptr_operand)
+                            self.assign_value_ty_is_ptr(
+                                current_reg,
+                                value,
+                                this_is_self
+                            )
                         } else {
-                            // 代入する値(value)がアドレスを求める式
-                            // (`GetAddress`/`Pointer`)の場合のみ`lea`相当の
-                            // ニーモニックを使う。
-                            // (代入先の変数がかつてポインタとして定義された
-                            //  ものであっても、今回代入する値自体が
-                            //  アドレス計算を必要としないなら`mov`で良い)
-                            let mnemonic = if self.curr_inst[*value].is_pointer() {
-                                "address"
-                            } else {
-                                "mov"
-                            };
-
-                            self.format_line(mnemonic, Some(&current_reg), &value, None)
+                            self.assign_value_is_not_ptr(
+                                current_reg,
+                                value,
+                                this_is_self
+                            )
                         };
 
                         if self.expr_vars.iter().find(|v| v == &name).is_some() {
@@ -182,10 +164,15 @@ impl AsmEmitter {
                         "mov",
                         Some(&0),
                         &idx,
-                        None
+                        None,
+                        this_is_self
                     );
                     self.asm_text.push_str(&ret_asm);
-                    self.asm_text.push_str(self.asm_fmt.func_frame_end().as_str());
+                    self.asm_text.push_str(
+                        self.asm_fmt
+                        .func_frame_end()
+                        .as_str()
+                    );
                     self.asm_text.push_str("ret\n");
                 }
                 inst::Inst::Mov { name, size, dst, src } => {
@@ -209,7 +196,13 @@ impl AsmEmitter {
                             // 普通の場合
                             "mov"
                         };
-                        let formated = self.format_line(mnemonic, Some(&reg), &src, None);
+                        let formated = self.format_line(
+                            mnemonic, 
+                            Some(&reg), 
+                            &src, 
+                            None, 
+                            this_is_self
+                        );
 
                         self.asm_text.push_str(&formated);
 
@@ -225,16 +218,23 @@ impl AsmEmitter {
                             }
                         }
                     }
-                }
-                // メモリに配置されている値の生成
+                }// メモリに配置されている値の生成
                 inst::Inst::MemoryValue(memory_value) => {
                     match memory_value {
                         inst::MemoryInst::Memory { name, size, src, kind, dst } => {
                             if kind == &inst::MemoryKind::Static {
                                 println!("src/gen/call_func/MemoryValue");
-                                let value = self.extract_operand_text(&src.last().unwrap());
+                                let value = self.extract_operand_text(
+                                    &src.last().unwrap(), 
+                                    this_is_self
+                                );
                                 let label_name = format!("M{}", self.data_idx.to_string());
-                                let fmt_data = self.asm_fmt.get_static_num_fmt(&value, &label_name, &size);
+                                let fmt_data = self.asm_fmt
+                                    .get_static_num_fmt(
+                                        &value, 
+                                        &label_name, 
+                                        &size
+                                    );
                                 self.data_sec_text.push_str(&fmt_data);
                                 self.data_map.push((*dst, label_name));
                                 self.data_idx += 1;
@@ -244,17 +244,44 @@ impl AsmEmitter {
                                     asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
                                 );
                             } else {
-                                // スタック領域のローカル変数を作成する 
+                                // スタック領域のローカル変数を作成する
+                                //
+                                // `dst`が新しく確保するローカル変数のスロット
+                                // ではなく、`self`(メソッドの第一引数として
+                                // 渡されるポインタ、`%rdi`など)や`[p]`のような
+                                // 既存のメモリを指している場合(例:
+                                // `ret Self { c: {0, 1, 2} }`のように構造体
+                                // リテラルの配列フィールドを構築する場合)は、
+                                // 独立したローカルの一時領域(`%rbp`基準)を
+                                // 新しく確保するのではなく、そのメモリへ
+                                // 直接書き込む必要がある。
+                                // 以前はここで`dst`を全く見ずに常に`%rbp`
+                                // 決め打ちでオペランドを組み立てていたため、
+                                // このようなケースでも誤ってローカルの
+                                // 一時領域に書き込まれてしまっていた。
+                                let base = match &self.curr_inst[*dst] {
+                                    inst::Inst::Pointer(..)
+                                    | inst::Inst::Param(..)
+                                    | inst::Inst::GetPtr { .. } => {
+                                        self.extract_operand_text(&dst, this_is_self)
+                                    }
+                                    _ => "%rbp".to_string(),
+                                };
+
                                 let mut txt = String::new();
                                 for idx in src.iter() {
-                                    let value = self.extract_operand_text(&idx);
+                                    let value = self
+                                        .extract_operand_text(
+                                            &idx, 
+                                            this_is_self
+                                        );
                                     // スタックの場所を更新
                                     // (この変数のオフセットは、これまで使用した
                                     //  スタックのサイズ`stk_use_counter`に、
                                     //  この変数のサイズを足したもの)
                                     self.stk_use_counter += size.to_bytes();
                                     let s = &self.asm_fmt.fmt_ref_operand(
-                                        &"%rbp".to_string(),
+                                        &base,
                                         &self.stk_use_counter,
                                     );
 
@@ -263,7 +290,13 @@ impl AsmEmitter {
                                     .replace("{dst}", &s)
                                     .replace("{src1}", value.as_str());
                                     txt.push_str(
-                                        self.asm_fmt.fmt_mnemonic_resize("mov", &mov_line, &size).as_str()
+                                        self.asm_fmt
+                                        .fmt_mnemonic_resize(
+                                            "mov", 
+                                            &mov_line, 
+                                            &size
+                                        )
+                                        .as_str()
                                     );
                                 }
                                 self.insert_var_info(
@@ -281,7 +314,11 @@ impl AsmEmitter {
                     let reg_num = self.asm_fmt.get_fmt_param::<usize>(&param.num);
                     self.insert_var_info(
                         &param.name,
-                        asm_emitter::VarIndexInfo::new(&reg_num, &Size::DQ, &param.dst)
+                        asm_emitter::VarIndexInfo::new(
+                            &reg_num, 
+                            &Size::DQ, 
+                            &param.dst
+                        )
                     );
                 }
                 inst::Inst::CallFunc(meta_data) => {

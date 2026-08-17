@@ -103,7 +103,7 @@ macro_rules! scope_node {
 ///   置き換えるだけで良い(例: `-4(%rbp)` -> `-4(%rdi)`)
 #[macro_export]
 macro_rules! gen_struct_asm {
-    ($self:tt, $struct_node:path, $name:expr) => {
+    ($self:tt, $struct_node:path, $name:expr, $this_self_ptr:expr) => {
         let mut struct_txt = String::new();
         let mut add_size = 0;
         for member in $struct_node.clone().iter() {
@@ -111,7 +111,10 @@ macro_rules! gen_struct_asm {
                 panic!();
             };
 
-            let value = $self.extract_operand_text(&value_idx).to_string();
+            let value = $self.extract_operand_text(
+                &value_idx, 
+                $this_self_ptr
+            ).to_string();
             // このメンバー分を足した「累積」サイズ
             // (これが、このメンバーの`%rbp`からのオフセットになる)
             add_size += size.to_bytes();
