@@ -46,6 +46,7 @@ gcc 生成したアセンブリソースコード -nostdlib
 - const
 - struct
 - enum
+- Self
 
 ### プロプロセッサ
 - #include

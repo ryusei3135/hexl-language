@@ -419,8 +419,16 @@ impl AsmEmitter {
                 self.param_ref(&param.name)
             }
             inst::Inst::AssignVar { ref name, .. } => {
-                let num = self.var_hash_map.get(&name.to_string()).unwrap().reg;
-                self.asm_fmt.get_fmt_reg(&num, &Size::DD)
+                let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
+                // ポインタ型の変数はアドレス(常に8byte)を保持するため、
+                // 32bitレジスタ(`%ecx`など)ではなく64bitレジスタ
+                // (`%rcx`など)として参照する必要がある
+                let size = if var_info.size.is_pointer().is_some() {
+                    Size::DQ
+                } else {
+                    Size::DD
+                };
+                self.asm_fmt.get_fmt_reg(&var_info.reg, &size)
             }
             // 配列にアクセス
             inst::Inst::InsertArr { name, dst, index } => {

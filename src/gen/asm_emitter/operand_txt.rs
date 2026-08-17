@@ -57,12 +57,23 @@ impl AsmEmitter {
             t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
         };
 
-        let size = self.var_hash_map
-            .get(&name.to_string())
-            .unwrap()
-            .size
-            .to_bytes();
-        let pos = size * index_value + size;
+        // `[ptr 5]`のようにポインタ変数へ添字アクセスする場合は、
+        // ポインタ自身のサイズ(常に8byte)ではなく、ポインタが指す先の
+        // 型(`int*`なら`int`)のサイズを1要素分のオフセットとして
+        // 使う必要がある。また、ポインタは`ptr`自身がすでに先頭要素の
+        // アドレスを指しているため、スタック上の配列(`[arr 0]`、先頭要素の
+        // 前に1要素分の余白がある)と違ってオフセットに`+size`は加えない
+        let pos = {
+            let var_info = self.var_hash_map
+                .get(&name.to_string())
+                .unwrap();
+            if let Some(pointee) = var_info.size.is_pointer() {
+                pointee.to_bytes() * index_value
+            } else {
+                let size = var_info.size.to_bytes();
+                size * index_value + size
+            }
+        };
 
         // 配列本体(`dst`)が実際にメモリ上のどこにあるか(ベースとなる
         // レジスタ/オペランド)を解決した上で、文字列の中の数字を
@@ -110,11 +121,19 @@ impl AsmEmitter {
             panic!();
         };
 
-        let reg_num = if let Some(var) = self.var_hash_map.get(&*var_name) {
-            var.reg
+        // ポインタ型の変数はアドレス(常に8byte)を保持するため、
+        // 32bitレジスタ(`%ecx`など)ではなく64bitレジスタ
+        // (`%rcx`など)として参照する必要がある。
+        // (`[ptr]`のようなポインタの参照先の解決は`GetAddress`/
+        //  `Pointer`を通ってこの関数まで辿り着くため、ここで
+        //  正しいレジスタ幅を選ばないと`(%ecx)`のような不正な
+        //  間接参照になってしまう)
+        let (reg_num, is_ptr) = if let Some(var) = self.var_hash_map.get(&*var_name) {
+            (var.reg, var.size.is_pointer().is_some())
         } else {
             panic!("this var is not found -> {}", name.as_ref().unwrap());
         };
+        let size = if is_ptr { Size::DQ } else { Size::DD };
         
         if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
             // static領域の変数を返す:
@@ -122,7 +141,7 @@ impl AsmEmitter {
             static_var.1.clone()
         } else {
             self.reg_idx = reg_num.clone();
-            self.asm_fmt.get_fmt_reg(&reg_num, &Size::DD)
+            self.asm_fmt.get_fmt_reg(&reg_num, &size)
         }
     }
 

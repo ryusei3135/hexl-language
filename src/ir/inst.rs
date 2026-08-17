@@ -212,7 +212,7 @@ impl Inst {
                 Self::gen_num(&value, &size, dst);
             },
             types::Size::Pointer { .. } => {
-                panic!();
+                value.parse::<u64>().unwrap();
             }
         }
         Self::Num{

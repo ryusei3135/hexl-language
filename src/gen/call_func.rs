@@ -188,21 +188,41 @@ impl AsmEmitter {
                         let reg = self.reg_idx.clone();
                         // このレジスタを使用中として記録する
                         self.used_reg.mark_used(&reg);
-                        // メモリのポインタか、値かで、ニーモニックが変わる
-                        let mnemonic = if size.is_pointer().is_some() {
-                            // ポインタの場合
-                            "address"
-                        } else {
-                            // 普通の場合
-                            "mov"
-                        };
-                        let formated = self.format_line(
-                            mnemonic, 
-                            Some(&reg), 
-                            &src, 
-                            None, 
-                            this_is_self
+                        // ポインタ型の変数へ数値リテラル(`ptr: int* = 0`の
+                        // ような`0`=NULL初期化など)を代入する場合は、
+                        // アドレスを求める`lea`(="address")命令ではなく、
+                        // ポインタのサイズ(64bit)に合わせた`movq`で
+                        // そのまま即値をレジスタへ書き込む
+                        let is_literal_num = matches!(
+                            self.curr_inst[*src],
+                            inst::Inst::Num { .. }
                         );
+
+                        let formated = if size.is_pointer().is_some() && is_literal_num {
+                            let dst_reg = self.asm_fmt.get_fmt_reg(&reg, &Size::DQ);
+                            let value_operand = self.extract_operand_text(&src, this_is_self);
+                            let text = self.asm_fmt
+                                .get_opcode_tmpl("mov")
+                                .replace("{dst}", &dst_reg)
+                                .replace("{src1}", &value_operand);
+                            self.asm_fmt.fmt_mnemonic_resize("mov", &text, &Size::DQ)
+                        } else {
+                            // メモリのポインタか、値かで、ニーモニックが変わる
+                            let mnemonic = if size.is_pointer().is_some() {
+                                // ポインタの場合
+                                "address"
+                            } else {
+                                // 普通の場合
+                                "mov"
+                            };
+                            self.format_line(
+                                mnemonic, 
+                                Some(&reg), 
+                                &src, 
+                                None, 
+                                this_is_self
+                            )
+                        };
 
                         self.asm_text.push_str(&formated);
 
