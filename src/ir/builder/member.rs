@@ -1,16 +1,9 @@
 use super::*;
 
-
 impl IR {
-    pub fn member_is_var(
-        &mut self, 
-        scope: &Vec<String>,
-        name: &String,
-    ) -> inst::Inst {
+    pub fn member_is_var(&mut self, scope: &Vec<String>, name: &String) -> inst::Inst {
         let _ = match self.var_tree.get(&scope.last().unwrap()) {
-            def_tree::VarType::Local(index) => {
-                *index
-            }
+            def_tree::VarType::Local(index) => *index,
             def_tree::VarType::Param(param) => {
                 // 引数のノード
                 *param
@@ -22,9 +15,9 @@ impl IR {
             &self.var_tree.get_ty_name(scope.last().unwrap()),
             &name,
         );
-        inst::Inst::RefStruct{
+        inst::Inst::RefStruct {
             src: scope.last().unwrap().to_string(),
-            size
+            size,
         }
     }
 
@@ -65,15 +58,19 @@ impl IR {
         let struct_name = self.var_tree.get_ty_name(&var_name);
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める
-        let field_ty = self.struct_tree
+        let field_ty = self
+            .struct_tree
             .get(&struct_name)
             .unwrap_or_else(|| panic!("未定義の構造体です: {}", struct_name))
             .fields
             .iter()
             .find(|field| &field.name == name)
-            .unwrap_or_else(|| panic!(
-                "構造体 `{}` にメンバー `{}` は存在しません", struct_name, name
-            ))
+            .unwrap_or_else(|| {
+                panic!(
+                    "構造体 `{}` にメンバー `{}` は存在しません",
+                    struct_name, name
+                )
+            })
             .ty
             .clone();
         let elem_size = self.size_of(&field_ty).to_bytes();
@@ -84,12 +81,13 @@ impl IR {
         // 添字は数字リテラルとしてのみ許可されているので、
         // ここでそのまま定数として解決する
         let index_num = match &**index {
-            node::Expr::Number(value) => {
-                value.parse::<usize>().unwrap_or_else(|_| panic!(
-                    "配列のインデックスは数字である必要があります: {}", value
-                ))
-            }
-            t => panic!("配列のインデックスは数字リテラルである必要があります: {:?}", t),
+            node::Expr::Number(value) => value.parse::<usize>().unwrap_or_else(|_| {
+                panic!("配列のインデックスは数字である必要があります: {}", value)
+            }),
+            t => panic!(
+                "配列のインデックスは数字リテラルである必要があります: {:?}",
+                t
+            ),
         };
 
         inst::Inst::RefStruct {

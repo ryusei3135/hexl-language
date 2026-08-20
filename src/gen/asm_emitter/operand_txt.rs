@@ -1,25 +1,14 @@
-
 //! `extract_operand_text`からのみ呼び出すAPI
 
 use super::*;
 
-
 impl AsmEmitter {
-    pub(super) fn param_ref(
-        &mut self,
-        param_name: &String,
-    ) -> String {
-        let var_info = self.var_hash_map
-            .get(&param_name.to_string())
-            .unwrap();
-        let reg = self.asm_fmt
-            .get_fmt_reg(&var_info.reg, &Size::DD);
+    pub(super) fn param_ref(&mut self, param_name: &String) -> String {
+        let var_info = self.var_hash_map.get(&param_name.to_string()).unwrap();
+        let reg = self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DD);
 
         if let Some(ty) = var_info.size.is_pointer() {
-            self.asm_fmt.fmt_ref_operand(
-                &reg,
-                &ty.to_bytes()
-            )
+            self.asm_fmt.fmt_ref_operand(&reg, &ty.to_bytes())
         } else {
             reg
         }
@@ -36,7 +25,7 @@ impl AsmEmitter {
 
     /// 配列に値を代入するコードを生成
     pub(super) fn insert_arr_txt(
-        &mut self, 
+        &mut self,
         name: &String,
         dst: &usize,
         index: &usize,
@@ -49,11 +38,9 @@ impl AsmEmitter {
         // オフセットが計算されてしまい、間違った位置(あるいは
         // 全く無関係なメモリ)を指すオペランドが生成されてしまう
         let index_value = match &self.curr_inst[*index] {
-            inst::Inst::Num { value, .. } => {
-                value
-                    .parse::<usize>()
-                    .expect("配列の添字は数字である必要があります")
-            }
+            inst::Inst::Num { value, .. } => value
+                .parse::<usize>()
+                .expect("配列の添字は数字である必要があります"),
             t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
         };
 
@@ -64,9 +51,7 @@ impl AsmEmitter {
         // アドレスを指しているため、スタック上の配列(`[arr 0]`、先頭要素の
         // 前に1要素分の余白がある)と違ってオフセットに`+size`は加えない
         let pos = {
-            let var_info = self.var_hash_map
-                .get(&name.to_string())
-                .unwrap();
+            let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
             if let Some(pointee) = var_info.size.is_pointer() {
                 pointee.to_bytes() * index_value
             } else {
@@ -75,48 +60,22 @@ impl AsmEmitter {
             }
         };
 
-        // 配列本体(`dst`)が実際にメモリ上のどこにあるか(ベースとなる
-        // レジスタ/オペランド)を解決した上で、文字列の中の数字を
-        // 置換するのではなく、計算したオフセット(`pos`)でそのベースからの
-        // オペランドを直接組み立て直す。
-        // (元のコードは`src.replace(&size.to_string(), &pos.to_string())`
-        //  のように、既存のオペランド文字列に含まれる数字をそのまま
-        //  置換していたため、オフセットが2桁以上になったときなどに
-        //  無関係な数字まで置換してしまう可能性があった)
-        //
-        // 以前はここで得られたベースのオペランドを`let _ = ...`で
-        // 捨てた上、常に`%rbp`決め打ちでオペランドを組み立てていたため、
-        // メソッド内で`self`(引数として渡されるポインタ、例:`%rdi`)が
-        // 指す配列に代入する場合でも、誤ってローカル変数のベースである
-        // `%rbp`が使われてしまっていた。`dst`から解決したベースの
-        // オペランド(`%rdi`など)をそのまま使うように修正する。
         let base = self.extract_operand_text(&dst, in_self_ptr);
         self.asm_fmt.fmt_ref_operand(&base, &pos)
     }
 
     /// 構造体を参照するコードを作成
-    pub(super) fn ref_struct_txt(
-        &mut self,
-        src: &str,
-        size: &usize
-    ) -> String {
+    pub(super) fn ref_struct_txt(&mut self, src: &str, size: &usize) -> String {
         self.asm_fmt.fmt_ref_operand(
             &self.asm_fmt.get_fmt_reg(
-                &self.var_hash_map
-                .get(&src.to_string())
-                .expect(&src)
-                .reg,
-                &Size::DQ
+                &self.var_hash_map.get(&src.to_string()).expect(&src).reg,
+                &Size::DQ,
             ),
             &size,
         )
     }
 
-    pub(super) fn gen_mov_code(
-        &mut self, 
-        name: &Option<String>, 
-        src: &usize
-    ) -> String {
+    pub(super) fn gen_mov_code(&mut self, name: &Option<String>, src: &usize) -> String {
         let Some(var_name) = name else {
             panic!();
         };
@@ -134,7 +93,7 @@ impl AsmEmitter {
             panic!("this var is not found -> {}", name.as_ref().unwrap());
         };
         let size = if is_ptr { Size::DQ } else { Size::DD };
-        
+
         if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {
             // static領域の変数を返す:
             //self.var_hash_map.entry(var_name.to_string()).or_insert(0);
@@ -150,11 +109,12 @@ impl AsmEmitter {
         &mut self,
         kind: &inst::MemoryKind,
         size: &Size,
-        parent_id: &usize
+        parent_id: &usize,
     ) -> String {
         if matches!(kind, inst::MemoryKind::Static) {
             // 静的領域の変数: データセクションに置いたラベルを参照する
-            let name = self.data_map
+            let name = self
+                .data_map
                 .iter()
                 .find(|v| &v.0 == parent_id)
                 .expect("static var label not found")
@@ -163,10 +123,8 @@ impl AsmEmitter {
             self.asm_fmt.fmt_static_var_rip(&name)
         } else {
             // スタック領域の変数: %rbpからのオフセットを参照する
-            self.asm_fmt.fmt_ref_operand(
-                &"%rbp".to_string(),
-                &size.to_bytes(),
-            )
+            self.asm_fmt
+                .fmt_ref_operand(&"%rbp".to_string(), &size.to_bytes())
         }
     }
 
@@ -181,14 +139,14 @@ impl AsmEmitter {
     ///
     /// ## 引数
     /// - ids: 配列の各要素の値を持つノード(`Inst::Num`など)のid
-    pub(super) fn init_arr_txt(
-        &mut self, 
+    pub(super) fn init_arr_txt<const RET_IS_ASM: bool>(
+        &mut self,
         ids: &Vec<usize>,
         in_self_ptr: bool,
     ) -> String {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
         let assign_reg = if in_self_ptr {
-            self.asm_fmt.get_fmt_param::<String>(&0)
+            self.asm_fmt.get_fmt_param::<String>(&0, Size::DQ)
         } else {
             "%rbp".to_string()
         };
@@ -221,35 +179,43 @@ impl AsmEmitter {
                 head_offset = Some(self.stk_use_counter);
             }
 
-            let dst = self.asm_fmt.fmt_ref_operand(
-                &assign_reg,
-                &self.stk_use_counter,
-            );
+            let dst = self
+                .asm_fmt
+                .fmt_ref_operand(&assign_reg, &self.stk_use_counter);
 
-            let mov_line = self.asm_fmt
+            let mov_line = self
+                .asm_fmt
                 .get_opcode_tmpl("mov")
                 .replace("{dst}", &dst)
                 .replace("{src1}", value.as_str());
 
             txt.push_str(
                 self.asm_fmt
-                .fmt_mnemonic_resize(
-                    "mov", 
-                    &mov_line, 
-                    &size
-                )
-                .as_str()
+                    .fmt_mnemonic_resize("mov", &mov_line, &size)
+                    .as_str(),
             );
         }
 
-        self.asm_text.push_str(txt.as_str());
+        if RET_IS_ASM {
+            return txt;
+        }
+        if !in_self_ptr {
+            self.asm_text.push_str(txt.as_str());
+        }
 
         // 配列の先頭要素を指すオペランドを返す
-        self.asm_fmt.fmt_ref_operand(
-            &"%rbp".to_string(),
-            &head_offset.unwrap(),
-        )
+        //
+        // 以前はここが常に`%rbp`決め打ちだったため、`in_self_ptr`が
+        // `true`のとき(メソッド内で`Self`のフィールドとして配列を
+        // 直接書き込む場合、例: `ret Self { c: {0, 1, 2} }`)でも、
+        // 実際に要素を書き込んだベースレジスタ(`assign_reg` = `%rdi`
+        // など)ではなく`%rbp`を指すオペランドを返してしまっていた。
+        // これにより、呼び出し元(構造体のフィールドへの代入)が
+        // このオペランドを`src`として使うと、実際には値が置かれて
+        // いない`%rbp`側のアドレスを参照してしまい、壊れた
+        // アセンブリが生成されていた。要素の書き込みに使ったのと
+        // 同じ`assign_reg`を使うように修正する。
+        self.asm_fmt
+            .fmt_ref_operand(&assign_reg, &head_offset.unwrap())
     }
 }
-
-

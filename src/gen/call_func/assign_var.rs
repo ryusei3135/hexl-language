@@ -1,14 +1,13 @@
 use super::*;
 
-
 impl AsmEmitter {
     pub(super) fn write_mem(
-        &mut self, 
+        &mut self,
         name: &String,
         dst: &usize,
         value: &usize,
-        this_is_self: bool
-    ) { 
+        this_is_self: bool,
+    ) {
         // 書き込み先のメモリのオペランド
         let dst_operand = self.extract_operand_text(dst, this_is_self);
         // `[ptr] = 10`のように、ポインタが指す先のメモリへ直接
@@ -25,12 +24,15 @@ impl AsmEmitter {
         // 書き込む値のオペランド
         let value_operand = self.extract_operand_text(value, this_is_self);
 
-        let mut text = self.asm_fmt
+        let mut text = self
+            .asm_fmt
             .get_opcode_tmpl("mov")
             .replace("{dst}", &dst_operand)
             .replace("{src1}", &value_operand);
 
-        text = self.asm_fmt.fmt_mnemonic_resize("mov", &text, &self.get_var_ty(&name));
+        text = self
+            .asm_fmt
+            .fmt_mnemonic_resize("mov", &text, &self.get_var_ty(&name));
         self.asm_text.push_str(&text);
     }
 
@@ -46,7 +48,8 @@ impl AsmEmitter {
         if matches!(self.curr_inst[*value], inst::Inst::Num { .. }) {
             let dst_reg = self.asm_fmt.get_fmt_reg(&current_reg, &Size::DQ);
             let value_operand = self.extract_operand_text(value, this_is_self);
-            let text = self.asm_fmt
+            let text = self
+                .asm_fmt
                 .get_opcode_tmpl("mov")
                 .replace("{dst}", &dst_reg)
                 .replace("{src1}", &value_operand);
@@ -86,12 +89,6 @@ impl AsmEmitter {
             "mov"
         };
 
-        self.format_line(
-            mnemonic, 
-            Some(&current_reg), 
-            &value, 
-            None,
-            this_is_self,
-        )
+        self.format_line(mnemonic, Some(&current_reg), &value, None, this_is_self)
     }
 }

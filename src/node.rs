@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyNode {
     Ty(String),
@@ -8,10 +7,10 @@ pub enum TyNode {
     /// - 内側の`String`は、`Self`が実際に指している構造体の名前
     SelfTy(String),
     /// ポインタ
-    Pointer{
+    Pointer {
         /// 不変ポインタの場合true
         is_const: bool,
-        ty_name: Box<TyNode>
+        ty_name: Box<TyNode>,
     },
     /// 参照の変数
     RefTy(Box<TyNode>),
@@ -42,9 +41,9 @@ impl TyNode {
             Self::Ty(name) => name.to_string(),
             Self::SelfTy(name) => name.to_string(),
             Self::RefTy(t) => t.get_ty_str_name(),
-            Self::Stack { name, ..} => name.to_string(),
+            Self::Stack { name, .. } => name.to_string(),
             Self::Static { name, .. } => name.to_string(),
-            Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name()
+            Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name(),
         }
     }
 }
@@ -65,24 +64,16 @@ pub struct FuncDefine {
     pub module: Option<String>,
 }
 
-
 impl FuncDefine {
-    pub fn new(
-        name: String,
-        args: Vec<ArgsNode>,
-        ret_ty: TyNode,
-        public: bool,
-    ) -> Group1Node {
-        Group1Node::FuncDefine(
-            Self {
-                public,
-                name: name,
-                params: args,
-                ret_ty: ret_ty,
-                body: Vec::new(),
-                module: None,
-            }
-        )
+    pub fn new(name: String, args: Vec<ArgsNode>, ret_ty: TyNode, public: bool) -> Group1Node {
+        Group1Node::FuncDefine(Self {
+            public,
+            name: name,
+            params: args,
+            ret_ty: ret_ty,
+            body: Vec::new(),
+            module: None,
+        })
     }
 
     pub fn self_module_name(&mut self, name: &String) {
@@ -93,7 +84,6 @@ impl FuncDefine {
         self.body.push(node);
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructField {
@@ -106,7 +96,7 @@ impl StructField {
     pub fn make_field(name: &str, ty: &str) -> Self {
         Self {
             name: name.to_string(),
-            ty: TyNode::Ty(ty.to_string())
+            ty: TyNode::Ty(ty.to_string()),
         }
     }
 }
@@ -115,18 +105,16 @@ impl StructField {
 pub struct StructDefine {
     pub name: String,
     pub fields: Vec<StructField>,
-    pub methods: Vec<Group1Node>
+    pub methods: Vec<Group1Node>,
 }
 
 impl StructDefine {
-    pub fn new(
-        name: String,
-        fields: Vec<StructField>,
-        methods: Vec<Group1Node>
-    ) -> Group1Node {
-        Group1Node::StructDefine(
-            Self { name, fields, methods }
-        )
+    pub fn new(name: String, fields: Vec<StructField>, methods: Vec<Group1Node>) -> Group1Node {
+        Group1Node::StructDefine(Self {
+            name,
+            fields,
+            methods,
+        })
     }
 }
 
@@ -138,9 +126,7 @@ pub struct EnumDefine {
 
 impl EnumDefine {
     pub fn new(name: String, variants: Vec<String>) -> Group1Node {
-        Group1Node::EnumDefine(
-            Self { name, variants }
-        )
+        Group1Node::EnumDefine(Self { name, variants })
     }
 }
 
@@ -155,7 +141,6 @@ impl StmtNode {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefineVar {
     pub name: String,
@@ -168,7 +153,7 @@ impl DefineVar {
         Self {
             name: name.to_string(),
             value: Box::new(value),
-            ty: ty.clone()
+            ty: ty.clone(),
         }
     }
 
@@ -183,24 +168,21 @@ pub struct MatchArm {
     pub body: Vec<Group2Node>,
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct AssignVar {
     pub name: String,
     // Expr::Varなど
     pub dst: Box<Expr>,
-    pub value: Box<Expr>
+    pub value: Box<Expr>,
 }
 
 impl AssignVar {
     pub fn new(name: &String, dst: Expr, value: Expr) -> Expr {
-        Expr::Assign(
-            Self {
-                name: name.to_string(),
-                dst: Box::new(dst),
-                value: Box::new(value)
-            }
-        )
+        Expr::Assign(Self {
+            name: name.to_string(),
+            dst: Box::new(dst),
+            value: Box::new(value),
+        })
     }
 }
 
@@ -231,12 +213,12 @@ pub enum Expr {
     },
     Loop {
         pattern: Option<Box<Expr>>,
-        body: Vec<Group2Node>
+        body: Vec<Group2Node>,
     },
     InitStruct {
         is_self: bool,
         name: String,
-        fields: HashMap<String, Box<Expr>>
+        fields: HashMap<String, Box<Expr>>,
     },
     /// 列挙型のメンバへのアクセス: `Name::Mem`
     EnumVariant {
@@ -257,11 +239,11 @@ pub enum Expr {
     },
 
     DefVar(DefineVar),
-    Scope{
+    Scope {
         scope: Vec<String>,
         target: Box<Expr>,
     },
-    Member{
+    Member {
         scope: Vec<String>,
         target: Box<Expr>,
     },
@@ -274,9 +256,7 @@ impl Expr {
 
     pub fn get_assign_node_name(&self) -> String {
         match &self {
-            Self::Assign(assign_node) => {
-                assign_node.clone().name
-            }
+            Self::Assign(assign_node) => assign_node.clone().name,
             _ => panic!(),
         }
     }
@@ -293,7 +273,6 @@ impl Expr {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModPath {
     pub path: Vec<String>,
@@ -301,9 +280,7 @@ pub struct ModPath {
 
 impl ModPath {
     pub fn new() -> Self {
-        Self {
-            path: Vec::new()
-        }
+        Self { path: Vec::new() }
     }
 
     pub fn add_path(&mut self, path_name: &String) {
@@ -379,7 +356,7 @@ impl Group2Node {
         match self {
             Self::Include(v) => Group1Node::Include(v),
             Self::Line(v) => Group1Node::Line(v),
-            t => panic!("{:?} <- これは対応していません", t)
+            t => panic!("{:?} <- これは対応していません", t),
         }
     }
 }
@@ -390,42 +367,30 @@ pub enum Group1Node {
     StructDefine(StructDefine),
     EnumDefine(EnumDefine),
     Include(ModPath),
-    Line(String)
+    Line(String),
 }
-
 
 #[cfg(test)]
 pub fn gen_var_node(name: &str, value: &str, ty: &str) -> Group2Node {
-    Group2Node::Expr(
-        Expr::DefVar(
-            DefineVar {
-                name: name.to_string(),
-                value: Box::new(Expr::Number(value.to_string())),
-                ty: TyNode::Ty(ty.to_string()),
-            }
-        )
-    )
+    Group2Node::Expr(Expr::DefVar(DefineVar {
+        name: name.to_string(),
+        value: Box::new(Expr::Number(value.to_string())),
+        ty: TyNode::Ty(ty.to_string()),
+    }))
 }
-
-
 
 #[cfg(test)]
 pub fn wrap_expr_cmp(left: &str, right: &str) -> Expr {
-    Expr::LessThen(
-        (
-            Box::new(Expr::Number(left.to_string())),
-            Box::new(Expr::Number(right.to_string())),
-        )
-    )
+    Expr::LessThen((
+        Box::new(Expr::Number(left.to_string())),
+        Box::new(Expr::Number(right.to_string())),
+    ))
 }
-
 
 #[cfg(test)]
 pub fn wrap_eq_expr_cmp(left: &str, right: &str) -> Expr {
-    Expr::Equal(
-        (
-            Box::new(Expr::Number(left.to_string())),
-            Box::new(Expr::Number(right.to_string())),
-        )
-    )
+    Expr::Equal((
+        Box::new(Expr::Number(left.to_string())),
+        Box::new(Expr::Number(right.to_string())),
+    ))
 }

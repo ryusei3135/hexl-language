@@ -3,13 +3,11 @@
 
 use super::*;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum GenFlag {
     Group1,
     Group2,
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum StkInfo {
@@ -42,10 +40,7 @@ impl Parser {
 
     // 関数の中身などを作成する
     // P は、この関数が公開されるかどうかのbool
-    fn build_func<const P: bool>(
-        &mut self,
-        func_name: &String
-    ) -> Result<(), err::ErrKind> {
+    fn build_func<const P: bool>(&mut self, func_name: &String) -> Result<(), err::ErrKind> {
         // トップレベルの関数定義なので、`Self`が解決される
         // 構造体/列挙型は存在しない
         let node = self.func_node(&func_name, P)?;
@@ -60,7 +55,6 @@ impl Parser {
         &mut self,
         tkns: Vec<lex::LocatedTkn>,
     ) -> Result<&Vec<node::Group1Node>, err::ErrKind> {
-
         self.tkns = Some(tkns);
 
         loop {
@@ -70,9 +64,7 @@ impl Parser {
                         lex::Tkn::KeyWordPub => {
                             // この関数などは、公開する
                             match self.next_tkn(vec!["name", ".."])? {
-                                lex::Tkn::Name(name) => {
-                                    self.build_func::<true>(&name)
-                                }
+                                lex::Tkn::Name(name) => self.build_func::<true>(&name),
                                 unexpect_tkn => {
                                     // 期待したトークンじゃないので、エラー
                                     err::SyntaxErr::unexpect_tkn_after_keyword(
@@ -101,7 +93,7 @@ impl Parser {
                         }
                         t => panic!("{:?}", t),
                     };
-                },
+                }
                 GenFlag::Group2 => {
                     // 関数の中身が空(`{}`)の場合、`one_line_node`を呼ばずに
                     // ここでスコープを閉じる
@@ -133,23 +125,19 @@ impl Parser {
                         self.gen_flag = GenFlag::Group1;
                     }
                     continue;
-                },
+                }
             }
             if self.next_tkn(vec![]).is_err() && self.scope_counter == 0 {
                 return Ok(&self.gen_nodes);
-            } 
+            }
         }
         //Ok(&self.gen_nodes)
     }
 
     pub(super) fn one_line_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let node = match self.current_tkn().clone() {
-            lex::Tkn::CompleSyn => {
-                self.comple_syntax()?
-            }
-            lex::Tkn::Name(name) => {
-                node::Group2Node::Expr(self.build_scope_node(&name)?)
-            }
+            lex::Tkn::CompleSyn => self.comple_syntax()?,
+            lex::Tkn::Name(name) => node::Group2Node::Expr(self.build_scope_node(&name)?),
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
                 if let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])?.clone() {
@@ -165,7 +153,8 @@ impl Parser {
                             let mut ptr_connect = self.expr_define_var(name.to_string())?;
                             ptr_connect.get_assign_node().name = name.to_string();
                             let dst = ptr_connect.get_assign_node().clone().dst;
-                            ptr_connect.get_assign_node().dst = Box::new(node::Expr::ConnectAddr(dst));
+                            ptr_connect.get_assign_node().dst =
+                                Box::new(node::Expr::ConnectAddr(dst));
                             ptr_connect.wrap_group2()
                         }
                     }
@@ -173,14 +162,8 @@ impl Parser {
                     panic!();
                 }
             }
-            lex::Tkn::KeyWordRet => {
-                node::StmtNode::Return(
-                    self.expr_add(true)?
-                ).wrap()
-            }
-            lex::Tkn::KeyWordLoop => {
-                self.make_loop_node()?
-            }
+            lex::Tkn::KeyWordRet => node::StmtNode::Return(self.expr_add(true)?).wrap(),
+            lex::Tkn::KeyWordLoop => self.make_loop_node()?,
             // 条件分岐
             lex::Tkn::KeyWordCond => {
                 let n = self.expr_match()?;
@@ -202,13 +185,9 @@ impl Parser {
     /// 反復処理のノードを作成する関数
     fn make_loop_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // 反復処理の条件式
-        let pattern = match self
-            .next_tkn_ref(vec!["{", ".."])?
-        {
+        let pattern = match self.next_tkn_ref(vec!["{", ".."])? {
             // "{"の場合は条件無し
-            lex::Tkn::LBrace => {
-                None
-            }
+            lex::Tkn::LBrace => None,
             // 条件式あり
             _ => {
                 // 条件に構造体の初期化を使うことはできない
@@ -224,12 +203,7 @@ impl Parser {
         let body = self.gen_block_node()?;
         self.next_tkn(vec!["expr"])?;
 
-        let node = node::Group2Node::Expr(
-            node::Expr::Loop {
-                pattern,
-                body
-            }
-        );
+        let node = node::Group2Node::Expr(node::Expr::Loop { pattern, body });
         Ok(node)
     }
 
@@ -255,9 +229,7 @@ impl Parser {
     }
 
     pub(super) fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
-        let lex::Tkn::Name(name) = self
-            .next_tkn(vec![])? else
-        {
+        let lex::Tkn::Name(name) = self.next_tkn(vec![])? else {
             panic!();
         };
         self.make_preproc(&name)
@@ -276,10 +248,7 @@ impl Parser {
     ///
     /// ## Panics
     /// `name`の次のトークンが数字(`lex::Tkn::Number`)ではない場合panicする
-    fn make_array_assign_node(
-        &mut self,
-        name: &String,
-    ) -> Result<node::Expr, err::ErrKind> {
+    fn make_array_assign_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
         // `index`は数字である必要がある。そうでなければpanicする
         let lex::Tkn::Number(index) = self.next_tkn(vec!["number"])? else {
             panic!("配列のインデックスは数字である必要があります");
@@ -288,16 +257,14 @@ impl Parser {
         self.next_tkn(vec!["="])?;
         let value = self.expr_branch()?;
 
-        Ok(
-            node::AssignVar::new(
-                name,
-                node::Expr::RefArray {
-                    name: name.to_string(),
-                    dst: Box::new(node::Expr::Var(name.to_string())),
-                    index: Box::new(node::Expr::Number(index)),
-                },
-                value,
-            )
-        )
+        Ok(node::AssignVar::new(
+            name,
+            node::Expr::RefArray {
+                name: name.to_string(),
+                dst: Box::new(node::Expr::Var(name.to_string())),
+                index: Box::new(node::Expr::Number(index)),
+            },
+            value,
+        ))
     }
 }

@@ -1,7 +1,5 @@
 use super::{Parser, *};
 
-
-
 /// 関数を定義するノードの生成
 impl Parser {
     /// この関数を呼び出すときは、次のトークンが`(`で無ければ
@@ -18,10 +16,10 @@ impl Parser {
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
         let arg = match self.next_tkn(vec!["(", "<"])? {
-            lex::Tkn::LParen => {
-                self.define_arg_node()?
+            lex::Tkn::LParen => self.define_arg_node()?,
+            lex::Tkn::LAngleBracket => {
+                panic!()
             }
-            lex::Tkn::LAngleBracket => {panic!()},
             _ => panic!(),
         };
 
@@ -30,30 +28,24 @@ impl Parser {
                 let ret_ty = self.define_ty_node()?;
 
                 if self.current_tkn() == &lex::Tkn::LBrace {
-                    Ok(
-                        node::FuncDefine::new(
-                            func_name.clone(),
-                            arg,
-                            ret_ty,
-                            is_public
-                        )
-                    )
+                    Ok(node::FuncDefine::new(
+                        func_name.clone(),
+                        arg,
+                        ret_ty,
+                        is_public,
+                    ))
                 } else {
                     Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace))
                 }
-            },
+            }
             // 戻り値の型が指定されていない場合、組み込みの`int`型を
             // デフォルトの戻り値の型として扱う
-            lex::Tkn::LBrace => {
-                Ok(
-                    node::FuncDefine::new(
-                        func_name.clone(),
-                        arg,
-                        node::TyNode::Ty("int".to_string()),
-                        is_public,
-                    )
-                )
-            },
+            lex::Tkn::LBrace => Ok(node::FuncDefine::new(
+                func_name.clone(),
+                arg,
+                node::TyNode::Ty("int".to_string()),
+                is_public,
+            )),
             t => panic!("{:?}", t),
         }
     }
@@ -73,9 +65,7 @@ impl Parser {
     /// 場合、`node::TyNode::SelfTy(self_name)`へ解決するために使われる
     /// (実際に`Self`が第一引数以外に使われていないかのチェックは、
     /// IRへの変換時に行う)
-    fn define_arg_node(
-        &mut self,
-    ) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
+    fn define_arg_node(&mut self) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
             return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LParen));
         }
@@ -105,8 +95,10 @@ impl Parser {
                 lex::Tkn::RParen => {
                     self.next_tkn(vec![])?;
                     break;
-                },
-                t => {panic!("{:?} {:?}", t, self.next_tkn_ref(vec![])?)},
+                }
+                t => {
+                    panic!("{:?} {:?}", t, self.next_tkn_ref(vec![])?)
+                }
             }
 
             match self.current_tkn() {
@@ -119,7 +111,7 @@ impl Parser {
                         can_create_param = true;
                     } else {
                         panic!();
-                    } 
+                    }
                 }
                 _ => panic!(),
             }

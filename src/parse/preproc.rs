@@ -1,18 +1,15 @@
 use super::*;
 use regex::{Captures, Regex};
 
-
 impl Parser {
     pub(super) fn make_preproc(
         &mut self,
-        proc_name: &String
+        proc_name: &String,
     ) -> Result<node::Group2Node, err::ErrKind> {
         let result = match proc_name.as_str() {
             /*"define" => {},
             "undef" => {},*/
-            "include" => {
-                node::Group2Node::Include(self.build_mod_path()?)
-            },
+            "include" => node::Group2Node::Include(self.build_mod_path()?),
             /*"if" => {},
             "ifdef" => {},
             "ifndef" => {},
@@ -21,8 +18,7 @@ impl Parser {
             "endif" => {},
             "error" => {},*/
             "line" => {
-                let curr_line = 
-                    self.build_err_span().line.to_string();
+                let curr_line = self.build_err_span().line.to_string();
                 node::Group2Node::Line(curr_line)
             }
             "preserve" => {
@@ -36,7 +32,6 @@ impl Parser {
         Ok(result)
     }
 
-
     fn build_mod_path(&mut self) -> Result<node::ModPath, err::ErrKind> {
         enum PathTkn {
             Name,
@@ -48,10 +43,7 @@ impl Parser {
             match self.next_tkn_ref(vec!["name", "::", ".."])? {
                 lex::Tkn::Name(name) => {
                     // 前回のトークンの種類が、無いまたは、"::"の場合だけ実行
-                    if flag
-                        .as_ref()
-                        .is_none_or(|v| matches!(v, PathTkn::PathTkn))
-                    {
+                    if flag.as_ref().is_none_or(|v| matches!(v, PathTkn::PathTkn)) {
                         mod_path.add_path(&name);
                         flag = Some(PathTkn::Name);
                     } else {
@@ -63,10 +55,7 @@ impl Parser {
                     flag = Some(PathTkn::PathTkn);
                 }
                 _ => {
-                    if flag
-                        .as_ref()
-                        .is_some_and(|v| matches!(v, PathTkn::Name))
-                    {
+                    if flag.as_ref().is_some_and(|v| matches!(v, PathTkn::Name)) {
                         break;
                     } else {
                         crate::preproc_err!(self, ExpectedPathSegment);
@@ -143,38 +132,36 @@ impl Parser {
         // クロージャの中では`?`が使えないので、エラーはここに一旦入れておく
         let mut parse_err: Option<err::ErrKind> = None;
 
-        let asm = inline_var.replace_all(value, |caps: &Captures| {
-            if parse_err.is_some() {
-                // すでにエラーが起きているので、これ以上解析しても意味が無い
-                return String::new();
-            }
-
-            let inner = &caps[1];
-
-            match Parser::parse_asm_operand(inner) {
-                Ok(expr) => {
-                    let index = operands.len();
-                    operands.push(expr);
-                    format!("{{{}}}", index)
+        let asm = inline_var
+            .replace_all(value, |caps: &Captures| {
+                if parse_err.is_some() {
+                    // すでにエラーが起きているので、これ以上解析しても意味が無い
+                    return String::new();
                 }
-                Err(e) => {
-                    parse_err = Some(e);
-                    String::new()
+
+                let inner = &caps[1];
+
+                match Parser::parse_asm_operand(inner) {
+                    Ok(expr) => {
+                        let index = operands.len();
+                        operands.push(expr);
+                        format!("{{{}}}", index)
+                    }
+                    Err(e) => {
+                        parse_err = Some(e);
+                        String::new()
+                    }
                 }
-            }
-        }).into_owned();
+            })
+            .into_owned();
 
         if let Some(e) = parse_err {
             return Err(e);
         }
 
-        Ok(node::InlineAsm {
-            asm,
-            operands,
-        })
+        Ok(node::InlineAsm { asm, operands })
     }
 }
-
 
 #[cfg(test)]
 mod inline_asm_tests {
@@ -183,10 +170,7 @@ mod inline_asm_tests {
     /// テスト用に、関数の中に`#asm(...)`ブロックを1つ持つ
     /// プログラムを解析し、`InlineAsm`の一覧を取り出す
     fn gen_inline_asm(asm_body: &str) -> Vec<node::InlineAsm> {
-        let src = format!(
-            "main(): b1 {{ #asm(gas) {{ {} }} }}",
-            asm_body
-        );
+        let src = format!("main(): b1 {{ #asm(gas) {{ {} }} }}", asm_body);
 
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
@@ -277,9 +261,7 @@ mod inline_asm_tests {
 
     #[test]
     fn multiple_lines_each_keep_their_own_operands() {
-        let lines = gen_inline_asm(
-            r#""mov ${a}, ${b}" "add ${c}, ${d}""#
-        );
+        let lines = gen_inline_asm(r#""mov ${a}, ${b}" "add ${c}, ${d}""#);
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].asm, "mov {0}, {1}");
         assert_eq!(lines[1].asm, "add {0}, {1}");

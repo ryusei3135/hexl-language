@@ -1,10 +1,9 @@
-mod proc_fn_info;
 mod expr_node;
 mod member;
+mod proc_fn_info;
 mod scope;
 
 use super::*;
-
 
 impl IR {
     pub fn new() -> Self {
@@ -17,6 +16,8 @@ impl IR {
             pattern_labels: 0,
             jmp_labels: 0,
             expr_counter: 0,
+            // メゾットの処理中`true`
+            this_is_self: false,
             // 関数の情報を初期化
             func_tree: def_tree::FuncTree::new(),
             extern_func_tree: Vec::new(),
@@ -31,9 +32,8 @@ impl IR {
     pub fn builder(
         &mut self,
         nodes: &Vec<node::Group1Node>,
-        #[cfg(not(test))] settings: &crate::cmd_line_args::OptSettings
+        #[cfg(not(test))] settings: &crate::cmd_line_args::OptSettings,
     ) -> Result<Vec<def_tree::FuncDefMetaData>, err::ErrKind> {
-
         // 構造体・列挙型は、定義された場所より前で使われる場合があるので
         // 先に全て登録しておく(前方参照に対応するため)
         for node in nodes {
@@ -67,8 +67,8 @@ impl IR {
                         // (パスの最後のセグメント)を指定した上で
                         // extern_func_treeに登録する
                         let new_setting = settings.new_file(&full_path);
-                        let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData>
-                            = crate::build(&new_setting).unwrap();
+                        let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData> =
+                            crate::build(&new_setting).unwrap();
 
                         // 公開されていない関数は取り込まない
                         extern_fn_tree.retain(|v| v.public);
@@ -88,11 +88,7 @@ impl IR {
                         // 探し直す
                         // (例: `mod::file::func` -> `mod/file.hexl`の
                         //  中にある`func`という関数)
-                        let func_name = path
-                            .path
-                            .last()
-                            .expect("#includeのパスが空です")
-                            .clone();
+                        let func_name = path.path.last().expect("#includeのパスが空です").clone();
                         let parent_path = path.gen_parent_path();
 
                         if !std::path::Path::new(&parent_path).exists() {
@@ -104,8 +100,8 @@ impl IR {
                         }
 
                         let new_setting = settings.new_file(&parent_path);
-                        let extern_fn_tree: Vec<def_tree::FuncDefMetaData>
-                            = crate::build(&new_setting).unwrap();
+                        let extern_fn_tree: Vec<def_tree::FuncDefMetaData> =
+                            crate::build(&new_setting).unwrap();
 
                         // 指定された名前の、公開されている関数だけを
                         // 取り出す(モジュール名は指定しないので、
@@ -156,6 +152,7 @@ impl IR {
     /// - それ以外の変換処理は、トップレベルの関数定義
     ///   (`node::Group1Node::FuncDefine`)と全く同じ流れで行う
     fn expand_struct_methods(&mut self, struct_def: &node::StructDefine) {
+        self.this_is_self = true;
         for method in &struct_def.methods {
             let node::Group1Node::FuncDefine(method_info) = method else {
                 panic!(
@@ -169,7 +166,7 @@ impl IR {
             method_info.self_module_name(&struct_def.name);
 
             // `Self`型を、実際の構造体の型/ポインタ型へ解決する
-            let method_info = self.resolve_self_ty(method_info);
+            //let method_info = self.resolve_self_ty(method_info);
 
             // 関数の情報を登録
             self.entry_func_info(&method_info);
@@ -183,8 +180,9 @@ impl IR {
             self.ir_tree = Vec::new();
             self.id_counter = 0;
         }
+        self.this_is_self = false;
     }
-    
+
     /// 関数のノードに含まれる予約語`Self`を解決する
     ///
     /// - 第一引数の型が`Self`の場合、その関数は「メゾット」として扱い、
@@ -194,7 +192,7 @@ impl IR {
     /// - (第一引数がSelfでない場合、)戻り値の型が`Self`ならば、
     ///   ただの関数として扱い、戻り値の型は自身の構造体の名前の型
     ///   (`node::TyNode::Ty`)として解決する
-    pub(super) fn resolve_self_ty(&self, mut info: node::FuncDefine) -> node::FuncDefine {
+    /*pub(super) fn resolve_self_ty(&self, mut info: node::FuncDefine) -> node::FuncDefine {
         // 第一引数以外にSelfが使われていないかチェックする
         for (index, param) in info.params.iter().enumerate() {
             if index == 0 {
@@ -238,7 +236,7 @@ impl IR {
         }
 
         info
-    }
+    }*/
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
         for stmt in node {
@@ -269,17 +267,15 @@ impl IR {
                         })
                         .collect::<Vec<(String, Vec<usize>)>>();
 
-                    self.ir_tree.push(
-                        inst::Inst::Comple{
-                            name,
-                            lines: asm_lines,
-                        }
-                    );
+                    self.ir_tree.push(inst::Inst::Comple {
+                        name,
+                        lines: asm_lines,
+                    });
                     self.id_counter += 1;
                 }
                 t => println!("gen inst {:?}", t),
             }
-        } 
+        }
         self.id_counter
     }
 
@@ -291,9 +287,7 @@ impl IR {
     fn gen_stmt_ir(&mut self, stmt: node::StmtNode) -> usize {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
-                let func_ret_ty = self.func_ret_ty
-                    .as_ref()
-                    .unwrap();
+                let func_ret_ty = self.func_ret_ty.as_ref().unwrap();
                 let idx = self.gen_expr_ir(expr, &self.size_of(&func_ret_ty));
                 inst::Inst::Ret(idx)
             }
@@ -308,11 +302,11 @@ impl IR {
     fn left_right_pair(
         &mut self,
         node: (Box<node::Expr>, Box<node::Expr>),
-        expect_byte: &types::Size
+        expect_byte: &types::Size,
     ) -> (usize, usize) {
         (
             self.gen_expr_ir(*node.0, &expect_byte),
-            self.gen_expr_ir(*node.1, &expect_byte)
+            self.gen_expr_ir(*node.1, &expect_byte),
         )
     }
 
@@ -330,15 +324,11 @@ impl IR {
             ls: pair.0,
             rs: pair.1,
             kind,
-        }.new()
+        }
+        .new()
     }
 
-
-    fn gen_expr_ir(
-        &mut self, 
-        expr: node::Expr, 
-        expect_byte: &types::Size
-    ) -> usize {
+    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
         self.expr_counter += 1;
         let inst = match expr {
             // ポインタ関係
@@ -351,18 +341,10 @@ impl IR {
                 inst::Inst::Pointer(idx)
             }
 
-            node::Expr::Add(node) => {
-                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Add)
-            }
-            node::Expr::Sub(node) => {
-                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub)
-            }
-            node::Expr::Mul(node) => {
-                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Mul)
-            }
-            node::Expr::Div(node) => {
-                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Div)
-            }
+            node::Expr::Add(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Add),
+            node::Expr::Sub(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub),
+            node::Expr::Mul(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Mul),
+            node::Expr::Div(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Div),
             node::Expr::LessThen(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::LessThen)
             }
@@ -375,19 +357,15 @@ impl IR {
             node::Expr::NotEq(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::NotEq)
             }
-            node::Expr::Number(value) => {
-                inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
-            }
+            node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
             node::Expr::Assign(assign_node) => {
                 // `src/ir/builder/expr_node.rs`
                 self.assign_expr_node(assign_node, &expect_byte)
             }
-            node::Expr::Str(value) => {
-                inst::Inst::Str{
-                    dst: self.id_counter,
-                    value,
-                }
-            } 
+            node::Expr::Str(value) => inst::Inst::Str {
+                dst: self.id_counter,
+                value,
+            },
             // 配列を初期化する
             node::Expr::Array(init_nodes) => {
                 // `src/ir/builder/expr_node.rs`
@@ -403,21 +381,21 @@ impl IR {
                 // `src/ir/builder/expr_node.rs`
                 self.def_var_node(var, &expect_byte)
             }
-            node::Expr::CallFunc(meta_data) => {
-                self.gen_call_func_ir(None, &meta_data)
-            }
+            node::Expr::CallFunc(meta_data) => self.gen_call_func_ir(None, &meta_data),
             node::Expr::Var(name) => {
                 return match self.var_tree.get(&name) {
-                    def_tree::VarType::Local(index) => {
-                        *index
-                    }
+                    def_tree::VarType::Local(index) => *index,
                     def_tree::VarType::Param(param) => {
                         // 引数のノード
                         *param
                     }
                 };
             }
-            node::Expr::Match{pattern, arms, arm_else} => {
+            node::Expr::Match {
+                pattern,
+                arms,
+                arm_else,
+            } => {
                 return self.gen_match_expr_ir(&pattern, &arms, &arm_else);
             }
             node::Expr::Loop { pattern, body } => {
@@ -430,13 +408,15 @@ impl IR {
                 self.enum_variant_node(&name, &variant, &expect_byte)
             }
             // 構造体の初期化: `Name { field: value, .. }`
-            node::Expr::InitStruct { name, mut fields, is_self } => {
+            node::Expr::InitStruct {
+                name,
+                mut fields,
+                is_self,
+            } => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_struct_node(&name, &mut fields, &expect_byte, is_self)
+                self.init_struct_node(&name, &mut fields, &expect_byte)
             }
-            node::Expr::Scope { scope, target } => {
-                self.scope_node(&scope, target)
-            }
+            node::Expr::Scope { scope, target } => self.scope_node(&scope, target),
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
@@ -452,7 +432,7 @@ impl IR {
                         // `src/ir/builder/member.rs`
                         self.member_is_arr_ref(&scope, &name, &index)
                     }
-                    t => panic!("{:?}", t)// 構造体の配列型メンバーの要素にアクセスする
+                    t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
             }
             _ => panic!(),
@@ -491,20 +471,18 @@ impl IR {
 
         // メモリ領域の情報を作成
         // 先頭にどの領域(スタック/静的)かを示し、続けて要素分のバイト数を積む
-        let mem_kind = 
-            if is_static {
-                inst::MemoryKind::Static
-            } else {
-                inst::MemoryKind::Stack
-            };
-        let mem_insts = 
-            inst::MemoryInst::Memory{
-                name: var.name.to_string(),
-                size: elem_size.clone(),
-                src: value_idx,
-                kind: mem_kind,
-                dst: self.ir_tree.len(),
-            };
+        let mem_kind = if is_static {
+            inst::MemoryKind::Static
+        } else {
+            inst::MemoryKind::Stack
+        };
+        let mem_insts = inst::MemoryInst::Memory {
+            name: var.name.to_string(),
+            size: elem_size.clone(),
+            src: value_idx,
+            kind: mem_kind,
+            dst: self.ir_tree.len(),
+        };
         for _ in 0..len {
             //mem_insts.push(inst::MemoryInst::Byte(elem_size.to_bytes()));
         }
@@ -517,7 +495,8 @@ impl IR {
         //  変数を参照した際に即値やレジスタが直接使われてしまい、
         //  スタック/静的領域への書き込みが無視されるバグがあった)
         let var_idx = self.id_counter;
-        self.var_tree.push::<'l'>(&mem::take(&mut var.name), &var_idx, &var.ty);
+        self.var_tree
+            .push::<'l'>(&mem::take(&mut var.name), &var_idx, &var.ty);
 
         inst::Inst::MemoryValue(mem_insts)
     }
@@ -555,7 +534,7 @@ impl IR {
         &mut self,
         pattern: &Option<Box<node::Expr>>,
         arms: &Vec<node::MatchArm>,
-        arm_else: &Option<Vec<node::Group2Node>>
+        arm_else: &Option<Vec<node::Group2Node>>,
     ) -> usize {
         // 各armの条件式を作成する
         // - `pattern`(matchに与えられた値)がある場合は、
@@ -564,9 +543,7 @@ impl IR {
         //   (真偽値/何も与えないパターン)
         let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
             match pattern {
-                Some(target) => node::Expr::Equal(
-                    (target.clone(), Box::new(arm_pattern.clone()))
-                ),
+                Some(target) => node::Expr::Equal((target.clone(), Box::new(arm_pattern.clone()))),
                 None => arm_pattern.clone(),
             }
         };
@@ -628,30 +605,28 @@ impl IR {
     /// 関数のノードを生成するときに、引数を登録
     fn push_param_meta_data(&mut self, params: &Vec<node::ArgsNode>) {
         for (index, param) in params.iter().enumerate() {
-            self.var_tree.push::<'p'>(
-                &param.name,
-                &index,
-                &param.ty
-            );
-            self.ir_tree.push(
-                inst::Inst::Param(
-                    inst::ParamMetaData::new(
-                        param.name.to_string(),
-                        index,
-                        self.ir_tree.len()
-                    )
-                )
-            );
+            self.var_tree.push::<'p'>(&param.name, &index, &param.ty);
+            self.ir_tree
+                .push(inst::Inst::Param(inst::ParamMetaData::new(
+                    param.name.to_string(),
+                    index,
+                    self.ir_tree.len(),
+                    &param.ty,
+                )));
             self.id_counter += 1;
         }
     }
-} 
+}
 
 #[cfg(test)]
 mod self_ty_tests {
     use super::*;
 
-    fn make_func(name: &str, params: Vec<node::ArgsNode>, ret_ty: node::TyNode) -> node::FuncDefine {
+    fn make_func(
+        name: &str,
+        params: Vec<node::ArgsNode>,
+        ret_ty: node::TyNode,
+    ) -> node::FuncDefine {
         node::FuncDefine {
             public: false,
             name: name.to_string(),
@@ -670,8 +645,14 @@ mod self_ty_tests {
         let func = make_func(
             "func",
             vec![
-                node::ArgsNode { name: "self".to_string(), ty: node::TyNode::SelfTy("Name".to_string()) },
-                node::ArgsNode { name: "param".to_string(), ty: node::TyNode::Ty("int".to_string()) },
+                node::ArgsNode {
+                    name: "self".to_string(),
+                    ty: node::TyNode::SelfTy("Name".to_string()),
+                },
+                node::ArgsNode {
+                    name: "param".to_string(),
+                    ty: node::TyNode::Ty("int".to_string()),
+                },
             ],
             node::TyNode::Ty("int".to_string()),
         );
@@ -697,8 +678,14 @@ mod self_ty_tests {
         let func = make_func(
             "invalid",
             vec![
-                node::ArgsNode { name: "param".to_string(), ty: node::TyNode::Ty("int".to_string()) },
-                node::ArgsNode { name: "self".to_string(), ty: node::TyNode::SelfTy("Name".to_string()) },
+                node::ArgsNode {
+                    name: "param".to_string(),
+                    ty: node::TyNode::Ty("int".to_string()),
+                },
+                node::ArgsNode {
+                    name: "self".to_string(),
+                    ty: node::TyNode::SelfTy("Name".to_string()),
+                },
             ],
             node::TyNode::Ty("int".to_string()),
         );
@@ -711,11 +698,7 @@ mod self_ty_tests {
         // `new(): Self` のように第一引数にSelfが無く、戻り値がSelfの場合、
         // 普通の関数として扱い、戻り値は自身の構造体の名前の型になる
         let ir = IR::new();
-        let func = make_func(
-            "new",
-            Vec::new(),
-            node::TyNode::SelfTy("Name".to_string()),
-        );
+        let func = make_func("new", Vec::new(), node::TyNode::SelfTy("Name".to_string()));
 
         let resolved = ir.resolve_self_ty(func);
 
@@ -729,9 +712,10 @@ mod self_ty_tests {
         let ir = IR::new();
         let func = make_func(
             "func2",
-            vec![
-                node::ArgsNode { name: "self".to_string(), ty: node::TyNode::SelfTy("Name".to_string()) },
-            ],
+            vec![node::ArgsNode {
+                name: "self".to_string(),
+                ty: node::TyNode::SelfTy("Name".to_string()),
+            }],
             node::TyNode::SelfTy("Name".to_string()),
         );
 
@@ -768,17 +752,16 @@ mod mem_var_tests {
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
-                inst::Inst::MemoryValue(
-                    inst::MemoryInst::Memory {
-                        name: name,
-                        size: types::Size::DD,
-                        src: 0,
-                        kind: inst::MemoryKind::Stack,
-                        dst: 1,
-                    }
-                )
+                inst::Inst::MemoryValue(inst::MemoryInst::Memory {
+                    name: name,
+                    size: types::Size::DD,
+                    src: 0,
+                    kind: inst::MemoryKind::Stack,
+                    dst: 1,
+                })
             )),
-            "{:?}", body
+            "{:?}",
+            body
         );
     }
 
@@ -807,17 +790,16 @@ mod mem_var_tests {
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
-                inst::Inst::MemoryValue(
-                    inst::MemoryInst::Memory {
-                        name: name,
-                        size: types::Size::DD,
-                        src: 0,
-                        kind: inst::MemoryKind::Static,
-                        dst: 1,
-                    }
-                )
+                inst::Inst::MemoryValue(inst::MemoryInst::Memory {
+                    name: name,
+                    size: types::Size::DD,
+                    src: 0,
+                    kind: inst::MemoryKind::Static,
+                    dst: 1,
+                })
             )),
-            "{:?}", body
+            "{:?}",
+            body
         );
     }
 
@@ -825,29 +807,30 @@ mod mem_var_tests {
     fn check_enum_as_ty_and_variant_access() {
         // 列挙型を型として使い、`Name::Mem`でメンバにアクセスできる
         let body = build_func_body(
-            "enum Color { Red Green Blue } main(): int { a: Color = Color::Green }"
+            "enum Color { Red Green Blue } main(): int { a: Color = Color::Green }",
         );
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
                 inst::Inst::Num { value, .. } if value == "1"
             )),
-            "Color::Green は2番目(index 1)のメンバとして展開される必要がある: {:?}", body
+            "Color::Green は2番目(index 1)のメンバとして展開される必要がある: {:?}",
+            body
         );
     }
 
     #[test]
     fn check_enum_forward_reference() {
         // 列挙型が使われる場所より後に定義されていても解決できる
-        let body = build_func_body(
-            "main(): int { a: Color = Color::Blue } enum Color { Red Green Blue }"
-        );
+        let body =
+            build_func_body("main(): int { a: Color = Color::Blue } enum Color { Red Green Blue }");
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
                 inst::Inst::Num { value, .. } if value == "2"
             )),
-            "{:?}", body
+            "{:?}",
+            body
         );
     }
 
@@ -857,15 +840,19 @@ mod mem_var_tests {
         let body = build_func_body(
             "enum Color { Red Green Blue } struct Point { x: int y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1 y: 2 } }"
         );
-        assert!(body.iter().any(|i| matches!(i, inst::Inst::Num{value, ..} if value == "1")));
-        assert!(body.iter().any(|i| matches!(i, inst::Inst::Struct(m) if m.len() == 2)));
+        assert!(body
+            .iter()
+            .any(|i| matches!(i, inst::Inst::Num{value, ..} if value == "1")));
+        assert!(body
+            .iter()
+            .any(|i| matches!(i, inst::Inst::Struct(m) if m.len() == 2)));
     }
 
     #[test]
     fn check_struct_as_ty_and_init() {
         // 構造体を型として使い、フィールドを初期化できる
         let body = build_func_body(
-            "struct Point { x: int y: int } main(): int { p: Point = Point { x: 1 y: 2 } }"
+            "struct Point { x: int y: int } main(): int { p: Point = Point { x: 1 y: 2 } }",
         );
         assert!(
             body.iter().any(|inst| matches!(
@@ -880,7 +867,8 @@ mod mem_var_tests {
                         inst::MemoryInst::Member { parent, .. } if parent == "y"
                     ))
             )),
-            "{:?}", body
+            "{:?}",
+            body
         );
     }
 }
@@ -912,14 +900,18 @@ mod match_expr_ir_tests {
                 } | {
                     b: int = 0 
                 } 
-            }"
+            }",
         );
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
-                inst::Inst::Expr(inst::ExprInst { kind: inst::ExprKind::Equal, .. })
+                inst::Inst::Expr(inst::ExprInst {
+                    kind: inst::ExprKind::Equal,
+                    ..
+                })
             )),
-            "`a == 10` の比較命令(Equal)が生成される必要がある: {:?}", body
+            "`a == 10` の比較命令(Equal)が生成される必要がある: {:?}",
+            body
         );
     }
 
@@ -941,14 +933,21 @@ mod match_expr_ir_tests {
                         b: int = 0
                     } 
                 } 
-            }"
+            }",
         );
         assert!(
-            body.iter().filter(|inst| matches!(
-                inst,
-                inst::Inst::Expr(inst::ExprInst { kind: inst::ExprKind::Equal, .. })
-            )).count() >= 2,
-            "各armごとに`a`との比較命令(Equal)が生成される必要がある: {:?}", body
+            body.iter()
+                .filter(|inst| matches!(
+                    inst,
+                    inst::Inst::Expr(inst::ExprInst {
+                        kind: inst::ExprKind::Equal,
+                        ..
+                    })
+                ))
+                .count()
+                >= 2,
+            "各armごとに`a`との比較命令(Equal)が生成される必要がある: {:?}",
+            body
         );
     }
 }
@@ -989,32 +988,32 @@ mod struct_method_expand_tests {
         let struct_def = make_struct_with_method(
             "Point",
             "get_num",
-            vec![
-                node::ArgsNode {
-                    name: "self".to_string(),
-                    ty: node::TyNode::SelfTy("Point".to_string()),
-                },
-            ],
+            vec![node::ArgsNode {
+                name: "self".to_string(),
+                ty: node::TyNode::SelfTy("Point".to_string()),
+            }],
             node::TyNode::Ty("int".to_string()),
             vec![node::StmtNode::Return(node::Expr::Number("1".to_string())).wrap()],
         );
 
         let mut ir = IR::new();
-        ir.builder(&vec![node::Group1Node::StructDefine(struct_def)]).unwrap();
+        ir.builder(&vec![node::Group1Node::StructDefine(struct_def)])
+            .unwrap();
 
         // `Point::get_num`として展開され、呼び出せる状態になっている
         let body = ir.test_only_get_method_body("Point", "get_num");
         assert!(
             body.iter().any(|inst| matches!(inst, inst::Inst::Ret(_))),
-            "メゾットの中身がそのままIRに変換されている必要がある: {:?}", body
+            "メゾットの中身がそのままIRに変換されている必要がある: {:?}",
+            body
         );
 
         // メゾットの第一引数(`self`)は、構造体`Point`へのポインタとして
         // 解決されている必要がある
-        let registered = ir.func_tree.get(
-            &"get_num".to_string(),
-            Some(&"Point".to_string()),
-        ).unwrap();
+        let registered = ir
+            .func_tree
+            .get(&"get_num".to_string(), Some(&"Point".to_string()))
+            .unwrap();
         assert_eq!(
             registered.args[0].ty,
             node::TyNode::Pointer {
@@ -1045,17 +1044,14 @@ mod struct_method_expand_tests {
             name: "main".to_string(),
             params: vec![],
             ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![
-                node::StmtNode::Return(
-                    node::Expr::Scope {
-                        scope: vec!["Point".to_string()],
-                        target: Box::new(node::Expr::CallFunc(node::CallInfo {
-                            name: "answer".to_string(),
-                            args: vec![],
-                        })),
-                    }
-                ).wrap()
-            ],
+            body: vec![node::StmtNode::Return(node::Expr::Scope {
+                scope: vec!["Point".to_string()],
+                target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                    name: "answer".to_string(),
+                    args: vec![],
+                })),
+            })
+            .wrap()],
             module: None,
         };
 
@@ -1069,8 +1065,10 @@ mod struct_method_expand_tests {
 
         let body = ir.test_only_get_func_body("main");
         assert!(
-            body.iter().any(|inst| matches!(inst, inst::Inst::CallFunc(_))),
-            "`Point::answer()`の呼び出しが生成される必要がある: {:?}", body
+            body.iter()
+                .any(|inst| matches!(inst, inst::Inst::CallFunc(_))),
+            "`Point::answer()`の呼び出しが生成される必要がある: {:?}",
+            body
         );
     }
 
@@ -1127,12 +1125,10 @@ mod method_call_via_member_tests {
         let method = node::FuncDefine {
             public: true,
             name: "get_num".to_string(),
-            params: vec![
-                node::ArgsNode {
-                    name: "self".to_string(),
-                    ty: node::TyNode::SelfTy("Point".to_string()),
-                },
-            ],
+            params: vec![node::ArgsNode {
+                name: "self".to_string(),
+                ty: node::TyNode::SelfTy("Point".to_string()),
+            }],
             ret_ty: node::TyNode::Ty("int".to_string()),
             body: vec![node::StmtNode::Return(node::Expr::Number("7".to_string())).wrap()],
             module: None,
@@ -1145,23 +1141,30 @@ mod method_call_via_member_tests {
         };
 
         let mut fields = HashMap::new();
-        fields.insert("x".to_string(), Box::new(node::Expr::Number("1".to_string())));
+        fields.insert(
+            "x".to_string(),
+            Box::new(node::Expr::Number("1".to_string())),
+        );
 
         let def_p = node::DefineVar::new(
             &"p".to_string(),
-            node::Expr::InitStruct { name: "Point".to_string(), fields },
+            node::Expr::InitStruct {
+                name: "Point".to_string(),
+                fields,
+            },
             &node::TyNode::Ty("Point".to_string()),
-        ).wrap().wrap_group2();
+        )
+        .wrap()
+        .wrap_group2();
 
-        let call_method = node::StmtNode::Return(
-            node::Expr::Member {
-                scope: vec!["p".to_string()],
-                target: Box::new(node::Expr::CallFunc(node::CallInfo {
-                    name: "get_num".to_string(),
-                    args: vec![],
-                })),
-            }
-        ).wrap();
+        let call_method = node::StmtNode::Return(node::Expr::Member {
+            scope: vec!["p".to_string()],
+            target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                name: "get_num".to_string(),
+                args: vec![],
+            })),
+        })
+        .wrap();
 
         let main_fn = node::FuncDefine {
             public: true,
@@ -1184,8 +1187,10 @@ mod method_call_via_member_tests {
 
         // `self`のアドレスを取得する`GetAddress`命令が生成されている
         assert!(
-            body.iter().any(|inst| matches!(inst, inst::Inst::GetAddress(_))),
-            "`p.get_num()`は暗黙的に`p`のアドレスを渡す必要がある: {:?}", body
+            body.iter()
+                .any(|inst| matches!(inst, inst::Inst::GetAddress(_))),
+            "`p.get_num()`は暗黙的に`p`のアドレスを渡す必要がある: {:?}",
+            body
         );
         // 関数呼び出し命令(`get_num`)が生成されている
         assert!(
@@ -1193,7 +1198,8 @@ mod method_call_via_member_tests {
                 inst,
                 inst::Inst::CallFunc(inst::CallFuncMetaData{name, ..}) if name == "get_num"
             )),
-            "{:?}", body
+            "{:?}",
+            body
         );
     }
 }

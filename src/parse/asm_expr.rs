@@ -22,9 +22,7 @@ impl Parser {
     ///
     /// ## 引数
     /// - src `${}`の中に書かれていた文字列(例: `"x.y"`, `"*p"`)
-    pub(super) fn parse_asm_operand(
-        src: &str
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn parse_asm_operand(src: &str) -> Result<node::Expr, err::ErrKind> {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string())?;
 

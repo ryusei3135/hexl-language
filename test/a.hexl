@@ -1,5 +1,10 @@
 
 _start() {
     ptr: int* = 0xB8000
+
+    i: int = 10
+    loop i < 10 {
+        [ptr * i] = 0x07 
+    }
     [ptr] = 10
 }

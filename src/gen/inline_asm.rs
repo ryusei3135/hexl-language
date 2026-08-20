@@ -9,12 +9,9 @@ impl AsmEmitter {
     /// などを表すIRノードのidxで、通常の式と同じ`extract_operand_text`
     /// を使ってオペランドの文字列(レジスタ名やメモリ参照など)へ変換し、
     /// `{0}`, `{1}`, ... のプ出現順に埋め込む。
-    pub(super) fn deploy_inline_asm(
-        &mut self,
-        name: &String,
-        lines: &Vec<(String, Vec<usize>)>,
-    ) {
-        if self.asm_fmt
+    pub(super) fn deploy_inline_asm(&mut self, name: &String, lines: &Vec<(String, Vec<usize>)>) {
+        if self
+            .asm_fmt
             .inline_asm_list()
             .iter()
             .find(|v| v.as_str() == name.as_str())
@@ -35,10 +32,7 @@ impl AsmEmitter {
 
                 for (index, operand_id) in operand_ids.iter().enumerate() {
                     let operand_text = self.extract_operand_text(operand_id, false);
-                    asm_line = asm_line.replace(
-                        &format!("{{{}}}", index),
-                        &operand_text,
-                    );
+                    asm_line = asm_line.replace(&format!("{{{}}}", index), &operand_text);
                 }
 
                 asm_line.push('\n');

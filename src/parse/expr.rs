@@ -1,39 +1,36 @@
-//! ## 引数 
+//! ## 引数
 //! 1. init_struct
 //!     - これがtrueの場合構造体を初期化するノードを作成できる
 //!     - falseの場合は初期化ノードを作成しない
 
-
 use super::*;
 
+mod cond;
 /// このファイルでしか使われないAPIのモジュール
 mod value_api;
-mod cond;
 
 type ExprResult = Result<node::Expr, err::ErrKind>;
 
-
 impl Parser {
     pub(super) fn expr_define_var(
-        &mut self, 
-        // 呼び出す前にでた、変数や関数などの名前   
-        name: String
+        &mut self,
+        // 呼び出す前にでた、変数や関数などの名前
+        name: String,
     ) -> Result<node::Expr, err::ErrKind> {
-        
         let node = if self
             .next_tkn(vec!["(", "{", ",", "[", ":", "=", "]"])
             .map(|_| true)?
         {
             match &self.current_tkn() {
                 lex::Tkn::Dot | lex::Tkn::ModPathTkn => {
-                    return self.build_scope_node(&name); 
+                    return self.build_scope_node(&name);
                 }
                 lex::Tkn::RBrace => {
                     return Ok(node::Expr::Var(name));
                 }
                 lex::Tkn::LParen => {
                     // 関数の呼び出しノードを生成
-                    let n= self.call_func_expr(&name, true);
+                    let n = self.call_func_expr(&name, true);
                     return n;
                 }
                 lex::Tkn::LBrace => {
@@ -50,37 +47,36 @@ impl Parser {
                         return Ok(node::Expr::Var(name));
                     }
                     self.next_tkn(vec!["="])?;
-                    return Ok(
-                        node::AssignVar::new(
-                            &name,
-                            node::Expr::GetAddress(Box::new(node::Expr::Var(name.to_string()))),
-                            self.expr_branch()?
-                        )
-                    );
+                    return Ok(node::AssignVar::new(
+                        &name,
+                        node::Expr::GetAddress(Box::new(node::Expr::Var(name.to_string()))),
+                        self.expr_branch()?,
+                    ));
                 }
-                _ => {},
+                _ => {}
             }
 
             let ty_node = match &self.current_tkn() {
                 // コロンが来た場合、それは型の定義なので、変数の定義
-                lex::Tkn::Colon => {
-                    self.define_ty_node()?
-                }
+                lex::Tkn::Colon => self.define_ty_node()?,
                 _ => {
                     // define assign var node
-                    return Ok(node::AssignVar::new(&name, node::Expr::Var(name.to_string()), self.expr_branch()?));
+                    return Ok(node::AssignVar::new(
+                        &name,
+                        node::Expr::Var(name.to_string()),
+                        self.expr_branch()?,
+                    ));
                 }
             };
 
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
                 if matches!(self.next_tkn(vec!["="])?, lex::Tkn::Equal) {
-                    return Ok(
-                        node::DefineVar::new(
-                            &name,
-                            node::Expr::ConnectAddr(Box::new(self.expr_branch()?)), 
-                            &ty_node
-                        ).wrap()
-                    );
+                    return Ok(node::DefineVar::new(
+                        &name,
+                        node::Expr::ConnectAddr(Box::new(self.expr_branch()?)),
+                        &ty_node,
+                    )
+                    .wrap());
                 }
             }
 
@@ -92,7 +88,7 @@ impl Parser {
         } else {
             let result = err::SyntaxErr::tkn_is_eof(
                 self.build_err_span(),
-                vec!["(", "{", ",", ":", "]", "="]
+                vec!["(", "{", ",", ":", "]", "="],
             );
             panic!("{:?}", result);
         };
@@ -142,7 +138,7 @@ impl Parser {
             left = match self.current_tkn() {
                 lex::Tkn::Add => {
                     node::Expr::Add(node::Expr::wrap(left, self.expr_mul(init_struct)?))
-                },
+                }
                 lex::Tkn::Sub => {
                     node::Expr::Sub(node::Expr::wrap(left, self.expr_mul(init_struct)?))
                 }
@@ -151,7 +147,6 @@ impl Parser {
         }
         Ok(left)
     }
-
 
     fn expr_mul(&mut self, init_struct: bool) -> ExprResult {
         let mut left = self.expr_value(init_struct)?;
@@ -174,7 +169,6 @@ impl Parser {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
-
             match self.next_tkn(vec![])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
@@ -184,7 +178,7 @@ impl Parser {
                     return self.gen_name_node::<false>(name, init_struct);
                 }
                 // 関数を呼ぶノード
-                lex::Tkn::LParen => {},
+                lex::Tkn::LParen => {}
                 t => panic!(" name {:?} {:?}", name, t),
             }
             // スコープを作成
@@ -196,34 +190,18 @@ impl Parser {
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
-        let v = match self
-            .next_tkn(vec!["[", "*", "number", "string", "name", "(", "{"])?
-        {
+        let v = match self.next_tkn(vec!["[", "*", "number", "string", "name", "(", "{"])? {
             // 変数のアドレスを取得するノード
-            lex::Tkn::LBracket => {
-                self.get_var_addr_node()?
-            }
+            lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
-            lex::Tkn::Mul => {
-                node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?))
-            }
-            lex::Tkn::Number(value) => {
-                node::Expr::Number(value)
-            }
+            lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
+            lex::Tkn::Number(value) => node::Expr::Number(value),
             lex::Tkn::KeyWordSelf => {
-                let self_name = 
-                    self.struct_self_name
-                    .as_ref()
-                    .unwrap()
-                    .to_string();
+                let self_name = self.struct_self_name.as_ref().unwrap().to_string();
                 self.gen_name_node::<true>(self_name, init_struct)?
             }
-            lex::Tkn::Str(value) => {
-                node::Expr::Str(value)
-            }
-            lex::Tkn::Name(name) => {
-                self.gen_name_node::<false>(name, init_struct)?
-            }
+            lex::Tkn::Str(value) => node::Expr::Str(value),
+            lex::Tkn::Name(name) => self.gen_name_node::<false>(name, init_struct)?,
             lex::Tkn::LParen => {
                 let result = self.expr_cmp(init_struct)?;
 
@@ -235,9 +213,7 @@ impl Parser {
                 }
             }
             // 配列リテラル: `{100, 100, 100, 100}`
-            lex::Tkn::LBrace => {
-                self.make_array_node()?
-            }
+            lex::Tkn::LBrace => self.make_array_node()?,
             t => panic!("expr {:?} {:?}", t, self.peek_tkn()),
         };
 
@@ -260,8 +236,11 @@ impl Parser {
 
         if !already_positioned_after_call(&v) {
             match self.current_tkn() {
-                lex::Tkn::Name(_) | lex::Tkn::Number(_) | lex::Tkn::Str(_)
-                    | lex::Tkn::RParen | lex::Tkn::RBracket => {
+                lex::Tkn::Name(_)
+                | lex::Tkn::Number(_)
+                | lex::Tkn::Str(_)
+                | lex::Tkn::RParen
+                | lex::Tkn::RBracket => {
                     self.next_tkn(vec![])?;
                 }
                 // `}` は、構造体初期化(`Name { .. }`)や配列リテラル
@@ -269,10 +248,12 @@ impl Parser {
                 // `self.b`のようなメンバーアクセスの直後に続く`}`は
                 // 呼び出し元のブロック(関数/メゾットの本体など)を
                 // 閉じるトークンなので、消費せずそのまま残す
-                lex::Tkn::RBrace if matches!(v, node::Expr::InitStruct { .. } | node::Expr::Array(..)) => {
+                lex::Tkn::RBrace
+                    if matches!(v, node::Expr::InitStruct { .. } | node::Expr::Array(..)) =>
+                {
                     self.next_tkn(vec![])?;
                 }
-                _ => {},
+                _ => {}
             }
         }
 
@@ -293,11 +274,7 @@ impl Parser {
     /// ## Safety
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
     /// である必要がある
-    pub(super) fn call_func_expr(
-        &mut self,
-        name: &String,
-        init_struct: bool
-    ) -> ExprResult {
+    pub(super) fn call_func_expr(&mut self, name: &String, init_struct: bool) -> ExprResult {
         if !matches!(self.current_tkn(), lex::Tkn::LParen) {
             panic!("call_func_exprを呼び出す際にLParenではない");
         }
@@ -317,11 +294,11 @@ impl Parser {
                     lex::Tkn::RParen => {
                         // 関数の最後の部分に来たので、ループを終了する
                         break;
-                    },
+                    }
                     t => {
                         panic!("{:?}", self.next_tkn_ref(vec![]));
                     }
-                } 
+                }
             }
         } else {
             // 引数がない場合、現在のトークンはまだ`(`のままなので、
@@ -332,15 +309,12 @@ impl Parser {
 
         // ')'をスキップ
         self.next_tkn(vec![])?;
-        Ok(node::Expr::CallFunc(
-            node::CallInfo {
-                name: name.clone(),
-                args
-            }
-        ))
+        Ok(node::Expr::CallFunc(node::CallInfo {
+            name: name.clone(),
+            args,
+        }))
     }
 }
-
 
 #[cfg(test)]
 mod expr_tests {
@@ -359,86 +333,74 @@ mod expr_tests {
     #[test]
     fn check_get_address_var() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes(
-            "main(): b1 { a: int* = [b] }"
-        );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let tkns = gen_nodes("main(): b1 { a: int* = [b] }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             &node.body[0],
             &node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(
-                    node::Expr::GetAddress(Box::new(node::Expr::Var("b".to_string())))
-                ),
+                value: Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
+                    "b".to_string()
+                )))),
                 ty: node::TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string()))
                 }
-            }).wrap_group2()
+            })
+            .wrap_group2()
         );
     }
 
     #[test]
     fn check_call_func_node() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes(
-            "main(): b1 { a(10, a) }"
-        );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let tkns = gen_nodes("main(): b1 { a(10, a) }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             &node.body[0],
-            &node::Expr::CallFunc(
-                node::CallInfo {
-                    name: "a".to_string(),
-                    args: vec![
-                        node::Expr::Number("10".to_string()),
-                        node::Expr::Var("a".to_string()),
-                    ]
-                }
-            ).wrap_group2()
+            &node::Expr::CallFunc(node::CallInfo {
+                name: "a".to_string(),
+                args: vec![
+                    node::Expr::Number("10".to_string()),
+                    node::Expr::Var("a".to_string()),
+                ]
+            })
+            .wrap_group2()
         );
     }
 
     #[test]
     fn check_stack_var_single() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes(
-            "main(): int { a: [int] = 100 }"
-        );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let tkns = gen_nodes("main(): int { a: [int] = 100 }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Number("100".to_string())),
-                ty: node::TyNode::Stack { name: "int".to_string(), len: 1 },
-            }).wrap_group2()
+                ty: node::TyNode::Stack {
+                    name: "int".to_string(),
+                    len: 1
+                },
+            })
+            .wrap_group2()
         );
     }
 
     #[test]
     fn check_stack_var_array() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes(
-            "main(): int { a: [int 4] = {100, 100, 100, 100} }"
-        );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let tkns = gen_nodes("main(): int { a: [int 4] = {100, 100, 100, 100} }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::DefVar(node::DefineVar {
@@ -449,29 +411,33 @@ mod expr_tests {
                     node::Expr::Number("100".to_string()),
                     node::Expr::Number("100".to_string()),
                 ])),
-                ty: node::TyNode::Stack { name: "int".to_string(), len: 4 },
-            }).wrap_group2()
+                ty: node::TyNode::Stack {
+                    name: "int".to_string(),
+                    len: 4
+                },
+            })
+            .wrap_group2()
         );
     }
 
     #[test]
     fn check_static_var_single() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes(
-            "main(): int { a: \"\"[int] = 100 }"
-        );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let tkns = gen_nodes("main(): int { a: \"\"[int] = 100 }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Number("100".to_string())),
-                ty: node::TyNode::Static { name: "int".to_string(), len: 1 },
-            }).wrap_group2()
+                ty: node::TyNode::Static {
+                    name: "int".to_string(),
+                    len: 1
+                },
+            })
+            .wrap_group2()
         );
     }
 
@@ -490,31 +456,22 @@ mod expr_tests {
                 }
               }
             }
-            "
+            ",
         );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::Match {
                 pattern: None,
-                arms: vec![
-                    node::MatchArm {
-                        pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
-                        body: vec![
-                            gen_var_node("hh", "100", "b1"),
-                        ],
-                    }
-                ],
-                arm_else: Some(
-                    vec![
-                        gen_var_node("a", "10", "b1"),
-                    ]
-                ),
-            }.wrap_group2()
+                arms: vec![node::MatchArm {
+                    pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
+                    body: vec![gen_var_node("hh", "100", "b1"),],
+                }],
+                arm_else: Some(vec![gen_var_node("a", "10", "b1"),]),
+            }
+            .wrap_group2()
         );
     }
 
@@ -531,36 +488,25 @@ mod expr_tests {
                 a: int = 10
               }
             }
-            "
+            ",
         );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::Match {
                 pattern: None,
-                arms: vec![
-                    node::MatchArm {
-                        pattern: Box::new(
-                            node::Expr::Equal((
-                                Box::new(node::Expr::Var("a".to_string())),
-                                Box::new(node::Expr::Number("10".to_string())),
-                            ))
-                        ),
-                        body: vec![
-                            gen_var_node("hh", "100", "int"),
-                        ],
-                    }
-                ],
-                arm_else: Some(
-                    vec![
-                        gen_var_node("a", "10", "int"),
-                    ]
-                ),
-            }.wrap_group2()
+                arms: vec![node::MatchArm {
+                    pattern: Box::new(node::Expr::Equal((
+                        Box::new(node::Expr::Var("a".to_string())),
+                        Box::new(node::Expr::Number("10".to_string())),
+                    ))),
+                    body: vec![gen_var_node("hh", "100", "int"),],
+                }],
+                arm_else: Some(vec![gen_var_node("a", "10", "int"),]),
+            }
+            .wrap_group2()
         );
     }
 
@@ -583,13 +529,11 @@ mod expr_tests {
                 }
               }
             }
-            "
+            ",
         );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::Match {
@@ -597,37 +541,26 @@ mod expr_tests {
                 arms: vec![
                     node::MatchArm {
                         pattern: Box::new(node::Expr::Number("10".to_string())),
-                        body: vec![
-                            gen_var_node("hh", "100", "int"),
-                        ],
+                        body: vec![gen_var_node("hh", "100", "int"),],
                     },
                     node::MatchArm {
                         pattern: Box::new(node::Expr::Number("20".to_string())),
-                        body: vec![
-                            gen_var_node("hh", "200", "int"),
-                        ],
+                        body: vec![gen_var_node("hh", "200", "int"),],
                     }
                 ],
-                arm_else: Some(
-                    vec![
-                        gen_var_node("a", "10", "int"),
-                    ]
-                ),
-            }.wrap_group2()
+                arm_else: Some(vec![gen_var_node("a", "10", "int"),]),
+            }
+            .wrap_group2()
         );
     }
 
     #[test]
     fn check_enum_variant_expr() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes(
-            "main(): int { a: Color = Color::Green }"
-        );
-        let node::Group1Node::FuncDefine(ref node)
-            = p.parser(tkns).expect("node is err")[0]
-                else {
-                    panic!("not func");
-                };
+        let tkns = gen_nodes("main(): int { a: Color = Color::Green }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
         assert_eq!(
             node.body[0],
             node::Expr::DefVar(node::DefineVar {
@@ -637,7 +570,8 @@ mod expr_tests {
                     variant: "Green".to_string(),
                 }),
                 ty: node::TyNode::Ty("Color".to_string()),
-            }).wrap_group2()
+            })
+            .wrap_group2()
         );
     }
 }

@@ -6,7 +6,9 @@
 #[macro_export]
 macro_rules! push_jmp_code {
     ($tree:expr, $variant:ident, $value:expr) => {
-        $tree.ir_tree.push(inst::Inst::$variant(format!("L{}", $value)));
+        $tree
+            .ir_tree
+            .push(inst::Inst::$variant(format!("L{}", $value)));
         $tree.id_counter += 1;
     };
 }
@@ -107,14 +109,16 @@ macro_rules! gen_struct_asm {
         let mut struct_txt = String::new();
         let mut add_size = 0;
         for member in $struct_node.clone().iter() {
-            let inst::MemoryInst::Member{ value_idx, size, .. } = member else {
+            let inst::MemoryInst::Member {
+                value_idx, size, ..
+            } = member
+            else {
                 panic!();
             };
 
-            let value = $self.extract_operand_text(
-                &value_idx, 
-                $this_self_ptr
-            ).to_string();
+            let value = $self
+                .extract_operand_text(&value_idx, $this_self_ptr)
+                .to_string();
             // このメンバー分を足した「累積」サイズ
             // (これが、このメンバーの`%rbp`からのオフセットになる)
             add_size += size.to_bytes();
@@ -130,20 +134,15 @@ macro_rules! gen_struct_asm {
                 $self.stk_use_counter + add_size
             };
 
-            let fmted = $self.asm_fmt.get_fmt_struct_member(
-                value,
-                &size,
-                &offset
-            );
+            let fmted = $self.asm_fmt.get_fmt_struct_member(value, &size, &offset);
 
             if $name {
                 // 第一引数(`self`のポインタ)のレジスタを取得し、
                 // `%rbp`をそのレジスタに置き換える
                 // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
-                let self_ptr_reg = $self.asm_fmt.get_fmt_reg(
-                    &$self.asm_fmt.get_fmt_param::<usize>(&0),
-                    &Size::DQ,
-                );
+                let self_ptr_reg = $self
+                    .asm_fmt
+                    .get_fmt_reg(&$self.asm_fmt.get_fmt_param::<usize>(&0), &Size::DQ);
                 struct_txt.push_str(&fmted.replace("%rbp", &self_ptr_reg));
             } else {
                 struct_txt.push_str(&fmted);
@@ -158,7 +157,6 @@ macro_rules! gen_struct_asm {
         return struct_txt;
     };
 }
-
 
 #[macro_export]
 macro_rules! mov_size_fmt {

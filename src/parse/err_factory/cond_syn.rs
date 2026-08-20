@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 pub(in crate::parse) struct MatchErr {
     span: err::Span,
     tkn: lex::Tkn,
@@ -9,24 +7,14 @@ pub(in crate::parse) struct MatchErr {
 
 impl MatchErr {
     pub fn new(span: err::Span, tkn: lex::Tkn) -> Self {
-        Self {
-            span,
-            tkn
-        }
+        Self { span, tkn }
     }
 
     /// スコープが`}`で閉じられているかを確認するAPI
-    pub fn close_scope_to_rbrace(
-        self,
-        target: Option<lex::Tkn>
-    ) -> Result<(), err::ErrKind> {
+    pub fn close_scope_to_rbrace(self, target: Option<lex::Tkn>) -> Result<(), err::ErrKind> {
         if !matches!(self.tkn, lex::Tkn::RBrace) {
             // match構文が`}`で閉じられていない
-            err::SyntaxErr::unenclosed_scope(
-                    self.span,
-                    target
-                )
-                .wrap_in_err()
+            err::SyntaxErr::unenclosed_scope(self.span, target).wrap_in_err()
         } else {
             Ok(())
         }
@@ -42,7 +30,8 @@ impl MatchErr {
                 // 期待したトークン
                 lex::Tkn::Arrow,
                 lex::Tkn::KeyWordCond,
-            ).wrap_in_err()
+            )
+            .wrap_in_err()
         } else {
             Ok(())
         }

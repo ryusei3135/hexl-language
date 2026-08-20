@@ -1,21 +1,16 @@
-use std::collections::HashMap;
-use std::{
-    mem,
-};
 use crate::node;
+use std::collections::HashMap;
+use std::mem;
 
-pub mod inst;
 pub mod builder;
 /// 変数や関数、構造体などの、定義を一時的に
 /// 保存する構造体を提供するモジュール
 pub mod def_tree;
+pub mod inst;
 
 pub mod types;
 
-use crate::{
-    err,
-};
-
+use crate::err;
 
 pub struct IR {
     pub var_tree: def_tree::VarTree,
@@ -25,6 +20,8 @@ pub struct IR {
     ir_tree: Vec<inst::Inst>,
     pattern_labels: usize,
     jmp_labels: usize,
+
+    this_is_self: bool,
     /// 式や文を生成する際に、一番最初のノードの場合のみtrue
     /// 関数を呼ぶノードが変数に戻り値を代入市内債などに使う
     expr_counter: usize,

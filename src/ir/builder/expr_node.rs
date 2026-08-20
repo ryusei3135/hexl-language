@@ -1,11 +1,10 @@
 use super::*;
 
-
 impl IR {
     pub fn assign_expr_node(
-        &mut self, 
-        assign_node: node::AssignVar, 
-        expect_byte: &types::Size
+        &mut self,
+        assign_node: node::AssignVar,
+        expect_byte: &types::Size,
     ) -> inst::Inst {
         let right_expr_idx = self.gen_expr_ir(*assign_node.value, &expect_byte);
         let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
@@ -20,9 +19,11 @@ impl IR {
     pub fn init_array_node(
         &mut self,
         init_nodes: Vec<node::Expr>,
-        expect_byte: &types::Size
+        expect_byte: &types::Size,
     ) -> inst::Inst {
-        let types::Size::Array { size, .. } = expect_byte else {panic!()};
+        let types::Size::Array { size, .. } = expect_byte else {
+            panic!()
+        };
         let mut dsts = Vec::new();
         for node in init_nodes.iter() {
             let dst = self.gen_expr_ir(node.clone(), &size);
@@ -36,7 +37,7 @@ impl IR {
         dst: node::Expr,
         index: node::Expr,
         name: &String,
-        expect_byte: &types::Size
+        expect_byte: &types::Size,
     ) -> inst::Inst {
         let dst = self.gen_expr_ir(dst, &expect_byte);
         inst::Inst::InsertArr {
@@ -49,22 +50,17 @@ impl IR {
     pub fn def_var_node(
         &mut self,
         mut var: node::DefineVar,
-        expect_byte: &types::Size
+        expect_byte: &types::Size,
     ) -> inst::Inst {
         match &var.ty.clone() {
-            node::TyNode::Stack{ .. } => {
+            node::TyNode::Stack { .. } => {
                 // 確保するスタックを増やす
                 self.stack_counter(&var.ty);
                 self.gen_mem_def_var(var)
             }
-            node::TyNode::Static{..} => {
-                self.gen_mem_def_var(var)
-            }
+            node::TyNode::Static { .. } => self.gen_mem_def_var(var),
             node::TyNode::Ty(ref ty_name) => {
-                let value_idx = self.gen_expr_ir(
-                    *var.value,
-                    &self.size_of(&var.ty)
-                );
+                let value_idx = self.gen_expr_ir(*var.value, &self.size_of(&var.ty));
                 // 変数の位置として登録するのは、初期化子の式
                 // (`value_idx`、例えば`Name::new()`を表す`CallFunc`
                 //  ノードそのもの)ではなく、これから生成する`Mov`
@@ -83,8 +79,9 @@ impl IR {
                 // `Mov`自身のindexを登録しておけば、再参照時は
                 // 既に`var_hash_map`へ登録済みのレジスタ/メモリを
                 // 指すようになり、副作用が繰り返されることはない。
-                self.var_tree.push::<'l'>(&var.name, &self.id_counter, &var.ty);
-                inst::Inst::Mov{
+                self.var_tree
+                    .push::<'l'>(&var.name, &self.id_counter, &var.ty);
+                inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
                     size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
                     dst: self.id_counter,
@@ -92,14 +89,12 @@ impl IR {
                 }
             }
             node::TyNode::Pointer { ty_name, .. } => {
-                let value_idx = self.gen_expr_ir(
-                    *var.value,
-                    &self.size_of(&var.ty)
-                );
+                let value_idx = self.gen_expr_ir(*var.value, &self.size_of(&var.ty));
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
-                self.var_tree.push::<'l'>(&var.name, &self.id_counter, &var.ty);
-                inst::Inst::Mov{
+                self.var_tree
+                    .push::<'l'>(&var.name, &self.id_counter, &var.ty);
+                inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
                     size: types::Size::build_ptr_ty(&*ty_name),
                     dst: self.id_counter,
@@ -114,30 +109,35 @@ impl IR {
         &mut self,
         name: &String,
         variant: &String,
-        expect_byte: &types::Size
+        expect_byte: &types::Size,
     ) -> inst::Inst {
-        let enum_def = self.enum_tree
+        let enum_def = self
+            .enum_tree
             .get(&name.to_string())
             .unwrap_or_else(|| panic!("未定義の列挙型です: {}", name));
         let variant_index = enum_def
             .variants
             .iter()
             .position(|v| &v == &variant)
-            .unwrap_or_else(|| panic!(
-                "列挙型 `{}` にメンバ `{}` は存在しません", name, variant
-            ));
+            .unwrap_or_else(|| panic!("列挙型 `{}` にメンバ `{}` は存在しません", name, variant));
         inst::Inst::gen_num(&variant_index.to_string(), &expect_byte, self.id_counter)
     }
 
     pub fn init_struct_node(
         &mut self,
         name: &String,
-        fields: &mut HashMap<String, Box<node::Expr>>, 
+        fields: &mut HashMap<String, Box<node::Expr>>,
         expect_byte: &types::Size,
-        is_self: bool
     ) -> inst::Inst {
-        let struct_def = self.struct_tree
-            .get(&name)
+        // 構造体のメゾットを処理中かつ初期化する構造体が`self`
+        let struct_name = if self.this_is_self {
+            self.var_tree.get_ty_name(name)
+        } else {
+            name.to_string()
+        };
+        let struct_def = self
+            .struct_tree
+            .get(&struct_name)
             .clone()
             .unwrap_or_else(|| panic!("未定義の構造体です: {}", name));
 
@@ -148,11 +148,12 @@ impl IR {
             // 確保するスタックを増やす
             self.stack_counter(&field.ty);
 
-            let field_expr = fields
-                .remove(&field.name)
-                .unwrap_or_else(|| panic!(
-                    "構造体 `{}` の初期化にフィールド `{}` の値がありません", name, field.name
-                ));
+            let field_expr = fields.remove(&field.name).unwrap_or_else(|| {
+                panic!(
+                    "構造体 `{}` の初期化にフィールド `{}` の値がありません",
+                    name, field.name
+                )
+            });
 
             let value_idx = self.gen_expr_ir(*field_expr, &field_size);
             mem_insts.push(inst::MemoryInst::Member {
@@ -161,10 +162,10 @@ impl IR {
                 size: field_size,
             });
         }
-        inst::Inst::Struct{
+        inst::Inst::Struct {
             name: name.to_string(),
             mem: mem_insts,
-            is_self
+            is_self: self.this_is_self && self.var_tree.is_self_ty(&name),
         }
     }
 }

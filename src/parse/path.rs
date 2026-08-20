@@ -1,13 +1,9 @@
 use super::*;
 
-
 impl Parser {
     /// モジュールのノードを作成
     /// name::mod
-    pub(super) fn build_scope_node(
-        &mut self,
-        name: &String
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn build_scope_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.next_tkn_ref(vec!["{"])?, lex::Tkn::LBrace) {
             self.next_tkn(vec![]).unwrap();
             let node = self.struct_init_node::<false>(name);
@@ -28,10 +24,7 @@ impl Parser {
     /// メゾットなどのノードを作成
     /// name.method
     #[inline(always)]
-    pub(super) fn build_member_node(
-        &mut self,
-        name: &String
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn build_member_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
         // "."がないので、何も返さない
         if !matches!(self.next_tkn_ref(vec!["not `.`"])?, lex::Tkn::Dot) {
             return Ok(self.expr_define_var(name.to_string())?);
@@ -39,10 +32,8 @@ impl Parser {
 
         // "."の次のトークンを確認するため一旦"."まで進める
         self.next_tkn(vec!["."])?;
-        let after_dot_is_bracket = matches!(
-            self.next_tkn_ref(vec!["name", "["])?,
-            lex::Tkn::LBracket
-        );
+        let after_dot_is_bracket =
+            matches!(self.next_tkn_ref(vec!["name", "["])?, lex::Tkn::LBracket);
         // まだ"."を消費していない状態(呼び出し時点の位置)に戻す
         self.back_tkn();
 
@@ -70,10 +61,7 @@ impl Parser {
     /// ## Panics
     /// `member`の次のトークンが名前(`lex::Tkn::Name`)、または
     /// その次が数字(`lex::Tkn::Number`)ではない場合panicする
-    fn build_member_array_node(
-        &mut self,
-        name: &String,
-    ) -> Result<node::Expr, err::ErrKind> {
+    fn build_member_array_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
         let lex::Tkn::Name(member) = self.next_tkn(vec!["name"])? else {
             panic!("配列メンバーへのアクセスには名前が必要です");
         };
@@ -97,9 +85,7 @@ impl Parser {
         if matches!(self.next_tkn_ref(vec!["="])?, lex::Tkn::Equal) {
             self.next_tkn(vec!["="])?;
             let value = self.expr_branch()?;
-            return Ok(
-                node::AssignVar::new(name, member_node, value)
-            );
+            return Ok(node::AssignVar::new(name, member_node, value));
         }
 
         // 代入ではなく値の参照なので、"]"を消費せずに返す

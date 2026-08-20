@@ -1,11 +1,10 @@
-use crate::err;
 use super::*;
-
+use crate::err;
 
 mod local {
     /// asciiに対応したテーブルを作成する
     pub fn make_char_table() -> [CharKind; 256] {
-        let mut table: [CharKind; 256] = [ const { CharKind::Other }; 256 ];
+        let mut table: [CharKind; 256] = [const { CharKind::Other }; 256];
 
         table[0x09..=0x0D].fill(CharKind::Space);
         table[0x20] = CharKind::Space;
@@ -22,7 +21,6 @@ mod local {
         table[0x0D] = CharKind::Ln;
         table
     }
-
 
     #[derive(Clone, Debug, PartialEq, Copy)]
     pub enum CharKind {
@@ -43,7 +41,6 @@ mod local {
             }
         }
     }
-
 
     #[derive(Clone, Debug, PartialEq, Copy)]
     pub enum GenFlag {
@@ -95,8 +92,6 @@ mod local {
 
 use local::*;
 
-
-
 pub struct Lexer {
     last_kind: Option<CharKind>,
     gen_flag: Option<GenFlag>,
@@ -110,7 +105,7 @@ impl Lexer {
             last_kind: None,
             gen_flag: None,
             chr_stk: String::new(),
-            gen_tkns: Vec::new()
+            gen_tkns: Vec::new(),
         }
     }
 
@@ -132,7 +127,9 @@ impl Lexer {
             // もし*`last_kind`*がNoneなら、現在の種類同士を比較し、条件をfalseにする
             // もし文字の種類が記号の場合必ず実行する
             let mut consumed = false;
-            if self.last_kind.as_ref().unwrap_or(curr_kind) != curr_kind || curr_kind == &CharKind::Op {
+            if self.last_kind.as_ref().unwrap_or(curr_kind) != curr_kind
+                || curr_kind == &CharKind::Op
+            {
                 // スタック可能か調べ、不可能ならトークンを生成
                 let stk_result = self.check_stkable_chr(curr_kind, &chr);
                 if stk_result != StkResult::Stackable {
@@ -145,8 +142,7 @@ impl Lexer {
                             };
                             self.gen_tkns.push(t);
                         }
-                        Err(_e) => {
-                        }
+                        Err(_e) => {}
                     }
                     self.chr_stk.clear();
                     self.gen_flag = None;
@@ -168,7 +164,7 @@ impl Lexer {
                         (CharKind::Op | CharKind::Other | CharKind::Space, CharKind::Num) => {
                             self.over_write_flag::<true>(GenFlag::Number);
                         }
-                        (_, _) => {},
+                        (_, _) => {}
                     }
                 }
                 // 改行が来たので、lineをインクリメント
@@ -184,9 +180,8 @@ impl Lexer {
         self.check_stkable_chr(&CharKind::Other, &'\0');
 
         if self.gen_flag.is_some() {
-            self.gen_tkns.push(
-                self.gen_tkn(&line_counter, &chr_counter)?
-            );
+            self.gen_tkns
+                .push(self.gen_tkn(&line_counter, &chr_counter)?);
         }
 
         Ok(())
@@ -196,7 +191,7 @@ impl Lexer {
     fn gen_tkn(
         &self,
         line_counter: &usize,
-        chr_counter: &usize
+        chr_counter: &usize,
     ) -> Result<LocatedTkn, err::ErrKind> {
         if let Some(ref flag) = self.gen_flag {
             let tkn = match flag {
@@ -225,46 +220,38 @@ impl Lexer {
                         // "0xZZ" など）のときにパニックしていた。
                         // gen_tkn は Result を返すので、ここはちゃんと
                         // エラーとして伝播させる。
-                        let num = u32::from_str_radix(
-                            self.chr_stk.trim_start_matches("0x"),
-                            16,
-                        ).map_err(|_| {
-                            err::LexErr::ThisNumIsInvalid
-                                .fmt(&line_counter, &chr_counter)
-                        })?;
+                        let num = u32::from_str_radix(self.chr_stk.trim_start_matches("0x"), 16)
+                            .map_err(|_| {
+                                err::LexErr::ThisNumIsInvalid.fmt(&line_counter, &chr_counter)
+                            })?;
                         Tkn::Number(num.to_string())
                     } else {
                         Tkn::Number(self.chr_stk.clone())
                     }
                 }
                 GenFlag::Not => Tkn::Not,
-                GenFlag::Name => {
-                    match self.chr_stk.as_str() {
-                        "ret" => Tkn::KeyWordRet,
-                        "cond" => Tkn::KeyWordCond,
-                        "loop" => Tkn::KeyWordLoop,
-                        "pub" => Tkn::KeyWordPub,
-                        "struct" => Tkn::KeyWordStruct,
-                        "enum" => Tkn::KeyWordEnum,
-                        "const" => Tkn::KeyWordConst,
-                        "Self" => Tkn::KeyWordSelf,
-                        _ => Tkn::Name(self.chr_stk.clone()),
-                    }
-                }
+                GenFlag::Name => match self.chr_stk.as_str() {
+                    "ret" => Tkn::KeyWordRet,
+                    "cond" => Tkn::KeyWordCond,
+                    "loop" => Tkn::KeyWordLoop,
+                    "pub" => Tkn::KeyWordPub,
+                    "struct" => Tkn::KeyWordStruct,
+                    "enum" => Tkn::KeyWordEnum,
+                    "const" => Tkn::KeyWordConst,
+                    "Self" => Tkn::KeyWordSelf,
+                    _ => Tkn::Name(self.chr_stk.clone()),
+                },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),
             };
-            Ok(
-                LocatedTkn {
-                    tkn,
-                    pos: chr_counter.clone(),
-                    line: line_counter.clone(),
-                }
-            )
+            Ok(LocatedTkn {
+                tkn,
+                pos: chr_counter.clone(),
+                line: line_counter.clone(),
+            })
         } else {
             Err(err::ErrKind::SystemErr(err::SystemErr::FlagNotFound))
         }
     }
-
 
     fn redict_kind_using_flag(&self) -> Option<GenFlag> {
         Some(match self.last_kind.unwrap_or(CharKind::Other) {
@@ -312,11 +299,7 @@ impl Lexer {
     /// `StkResult::Stackable`  -> 現在の文字をスタックに積んでよい
     /// `StkResult::GenTkn`     -> トークンを生成し、現在の文字は通常通り積む
     /// `StkResult::Consumed`   -> トークンを生成し、現在の文字は消費済み（積まない）
-    fn check_stkable_chr(
-        &mut self,
-        curr_kind: &CharKind,
-        chr: &char
-    ) -> StkResult {
+    fn check_stkable_chr(&mut self, curr_kind: &CharKind, chr: &char) -> StkResult {
         if let Some(ref last_kind) = self.last_kind {
             match (last_kind, curr_kind) {
                 // 文字と数字は一緒にスタック可能
@@ -331,7 +314,8 @@ impl Lexer {
                 (_, CharKind::Space) | (CharKind::Space, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
                         StkResult::Stackable
-                    } else { // ここはエラーになる可能性あり
+                    } else {
+                        // ここはエラーになる可能性あり
                         if let Some(flag) = self.redict_kind_using_flag() {
                             if self.gen_flag.is_none() {
                                 self.gen_flag = Some(flag);
@@ -433,7 +417,8 @@ impl Lexer {
                     }
                 }
             }
-        } else { // 前回の文字の種類がないので、スタック可能
+        } else {
+            // 前回の文字の種類がないので、スタック可能
             StkResult::Stackable
         }
     }
@@ -458,7 +443,8 @@ impl Lexer {
     /// OW = "over write"
     #[inline(always)]
     fn over_write_flag<const OW: bool>(&mut self, flag: GenFlag) {
-        if OW { // 上書きモード
+        if OW {
+            // 上書きモード
             self.gen_flag = Some(flag);
         } else {
             if self.gen_flag.is_none() {
@@ -467,7 +453,6 @@ impl Lexer {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -484,7 +469,10 @@ mod tests {
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
         assert_eq!(
             tkns,
-            vec![Tkn::Str("hello world!!".to_string()), Tkn::Name("name".to_string())]
+            vec![
+                Tkn::Str("hello world!!".to_string()),
+                Tkn::Name("name".to_string())
+            ]
         );
     }
 

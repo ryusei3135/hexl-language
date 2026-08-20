@@ -1,7 +1,5 @@
 use crate::lex;
 
-
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Span {
     pub line: usize,
@@ -16,7 +14,6 @@ impl Span {
         }
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SystemErr {
@@ -44,7 +41,7 @@ pub enum SyntaxErr {
         syntax: lex::Tkn,
     },
     UnexpectedEOF {
-        expected: Vec<String>
+        expected: Vec<String>,
     },
     UnexpectedTokenAfterKeyword {
         /// 直前にあった予約語（例: "let", "fn", "if"）
@@ -58,18 +55,15 @@ pub enum SyntaxErr {
 
 impl SyntaxErr {
     /// {}でスコープが閉じられていないときのエラー
-    pub fn unenclosed_scope(
-        span: Span,
-        target: Option<lex::Tkn>
-    ) -> ErrKind {
+    pub fn unenclosed_scope(span: Span, target: Option<lex::Tkn>) -> ErrKind {
         ErrKind::SyntaxErr {
             span,
             kind: Self::UnenclosedScope(
                 target
-                .map(|v| UnenclosedScope::Syntax(v))
-                // Noneの場合はScopeになる
-                .or(Some(UnenclosedScope::Scope))
-                .unwrap()
+                    .map(|v| UnenclosedScope::Syntax(v))
+                    // Noneの場合はScopeになる
+                    .or(Some(UnenclosedScope::Scope))
+                    .unwrap(),
             ),
         }
     }
@@ -86,21 +80,18 @@ impl SyntaxErr {
             kind: Self::UnexpectedTkn {
                 found,
                 expected,
-                syntax
-            }
+                syntax,
+            },
         }
     }
     /// 任意のトークンを期待したのに、トークンが
     /// 終了したとき
-    pub fn tkn_is_eof(
-        span: Span,
-        expected: Vec<&'static str>
-    ) -> Result<lex::Tkn, ErrKind> {
+    pub fn tkn_is_eof(span: Span, expected: Vec<&'static str>) -> Result<lex::Tkn, ErrKind> {
         let node = ErrKind::SyntaxErr {
             span,
             kind: Self::UnexpectedEOF {
-                expected: expected.into_iter().map(String::from).collect()
-            }
+                expected: expected.into_iter().map(String::from).collect(),
+            },
         };
         Err(node)
     }
@@ -116,8 +107,8 @@ impl SyntaxErr {
             kind: Self::UnexpectedTokenAfterKeyword {
                 keyword,
                 expected: expected.into_iter().map(String::from).collect(),
-                found: found.clone()
-            }
+                found: found.clone(),
+            },
         };
         Err(node)
     }
@@ -145,17 +136,13 @@ pub enum PreprocErrs {
 
 impl PreprocErrs {
     pub fn build(self, span: Span) -> ErrKind {
-        ErrKind::PreprocErr {
-            kind: self,
-            span
-        } 
+        ErrKind::PreprocErr { kind: self, span }
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum LexErr {
-    ThisNumIsInvalid
+    ThisNumIsInvalid,
 }
 
 impl LexErr {
@@ -168,7 +155,6 @@ impl LexErr {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ErrKind {
     EndTkn,
@@ -176,10 +162,10 @@ pub enum ErrKind {
     SystemErr(SystemErr),
     UnexpectedToken,
     NotFoundTkn(lex::Tkn),
-    SyntaxErr{
+    SyntaxErr {
         /// エラーが発生したソースコード上の位置（行・列など）
         span: Span,
-        kind: SyntaxErr
+        kind: SyntaxErr,
     },
     PreprocErr {
         kind: PreprocErrs,
@@ -190,7 +176,7 @@ pub enum ErrKind {
         kind: LexErr,
         line: usize,
         pos: usize,
-    } 
+    },
 }
 
 impl ErrKind {

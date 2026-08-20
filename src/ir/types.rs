@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Size {
     DB,
@@ -8,11 +7,8 @@ pub enum Size {
     DD,
     DQ,
     Struct(Vec<Box<(String, Size)>>),
-    Pointer{
-        ty:Box<Size>,
-        is_const: bool
-    },
-    Array{size: Box<Size>, len: usize},
+    Pointer { ty: Box<Size>, is_const: bool },
+    Array { size: Box<Size>, len: usize },
 }
 
 impl Size {
@@ -21,24 +17,23 @@ impl Size {
     /// `builder::IR::size_of` を使用する
     pub fn new(ty: &node::TyNode) -> Self {
         match ty {
-            node::TyNode::Ty(ty) => {
-                match ty.as_str() {
-                    "byte" => Self::DB,
-                    "u16" => Self::DW,
-                    "int" => Self::DD,
-                    "u64" => Self::DQ,
-                    t => panic!("未定義の組み込み型です: {}", t),
-                }
-            }
+            node::TyNode::Ty(ty) => match ty.as_str() {
+                "byte" => Self::DB,
+                "u16" => Self::DW,
+                "int" => Self::DD,
+                "u64" => Self::DQ,
+                t => panic!("未定義の組み込み型です: {}", t),
+            },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 Self::new(&node::TyNode::Ty(name.clone()))
             }
-            node::TyNode::Pointer { is_const, ty_name } => {
-                Self::Pointer{
-                    ty: Box::new(Self::new(&*ty_name)),
-                    is_const: is_const.clone()
-                }
+            node::TyNode::Pointer { is_const, ty_name } => Self::Pointer {
+                ty: Box::new(Self::new(&*ty_name)),
+                is_const: is_const.clone(),
+            },
+            node::TyNode::SelfTy(name) => {
+                Self::DQ
             }
             _ => panic!(),
         }
@@ -73,9 +68,7 @@ impl Size {
             Self::DD => 4,
             Self::DQ => 8,
             Self::Array { size, len } => size.to_bytes() * len,
-            Self::Pointer { ty, .. } => {
-                (*ty).to_bytes()
-            }
+            Self::Pointer { ty, .. } => (*ty).to_bytes(),
             Self::Struct(struct_size) => {
                 let mut size_counter = 0;
                 for mem in struct_size.iter() {
@@ -88,14 +81,13 @@ impl Size {
     }
 }
 
-
 /// 構造体のバイトサイズを取得する関数
 /// アセンブリ言語を生成する際に、サイズが必要だから
 pub fn get_struct_size(struct_node: &Vec<inst::MemoryInst>) -> usize {
     let mut size_counter = 0;
     for member in struct_node.iter() {
         match &member {
-            inst::MemoryInst::Member{size, ..} => {
+            inst::MemoryInst::Member { size, .. } => {
                 size_counter += size.to_bytes();
             }
             _ => panic!(),
@@ -126,21 +118,17 @@ impl IR {
                     let fields = struct_def
                         .fields
                         .iter()
-                        .map(|field| {
-                            Box::new((field.name.clone(), self.size_of(&field.ty)))
-                        })
+                        .map(|field| Box::new((field.name.clone(), self.size_of(&field.ty))))
                         .collect();
                     return types::Size::Struct(fields);
                 }
 
                 panic!("未定義の型です: {}", name);
             }
-            node::TyNode::Pointer { is_const, ty_name } => {
-                types::Size::Pointer{
-                    ty: Box::new(self.size_of(ty_name)),
-                    is_const: is_const.clone()
-                }
-            }
+            node::TyNode::Pointer { is_const, ty_name } => types::Size::Pointer {
+                ty: Box::new(self.size_of(ty_name)),
+                is_const: is_const.clone(),
+            },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
                 let size = self.size_of(&node::TyNode::Ty(name.clone()));
@@ -148,7 +136,7 @@ impl IR {
                 if len >= &1 {
                     types::Size::Array {
                         size: Box::new(size),
-                        len: *len
+                        len: *len,
                     }
                 } else {
                     size
@@ -157,10 +145,7 @@ impl IR {
             node::TyNode::RefTy(inner) => self.size_of(inner),
             // `Self`はIRへ変換する前に、実際の構造体の型
             // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
-            node::TyNode::SelfTy(name) => panic!(
-                "内部エラー: `Self`型(構造体`{}`)がIR変換の前に解決されていません",
-                name
-            ),
+            node::TyNode::SelfTy(name) => self.size_of(&node::TyNode::Ty(name.to_string())),
         }
     }
 }

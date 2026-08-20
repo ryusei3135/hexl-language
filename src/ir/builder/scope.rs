@@ -1,12 +1,7 @@
 use super::*;
 
-
 impl IR {
-    pub fn scope_node(
-        &mut self, 
-        scope: &Vec<String>, 
-        target: Box<node::Expr>
-    ) -> inst::Inst {
+    pub fn scope_node(&mut self, scope: &Vec<String>, target: Box<node::Expr>) -> inst::Inst {
         if let node::Expr::CallFunc(mut call_func_node) = *target {
             if self.expr_counter != 1 {
                 // `self.struct_tree.get(..)` は `&self` の借用を返すため、
@@ -30,7 +25,10 @@ impl IR {
                     let self_idx = self.id_counter;
                     self.id_counter += 1;
 
-                    self.ir_tree.push(inst::Inst::GetPtr { size, stk: self_idx });
+                    self.ir_tree.push(inst::Inst::GetPtr {
+                        size,
+                        stk: self_idx,
+                    });
                     let self_idx = self.id_counter;
                     self.id_counter += 1;
 

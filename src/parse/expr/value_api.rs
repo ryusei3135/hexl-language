@@ -2,14 +2,13 @@
 
 use super::*;
 
-
 impl Parser {
     /// 変数のアドレス取得などのノードを作成
     /// 呼び出し元では、lex::Tkn::LBracket
-    pub(super) fn get_var_addr_node(
-        &mut self
-    ) -> Result<node::Expr, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn_ref(vec!["name"])? else {panic!()};
+    pub(super) fn get_var_addr_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+        let lex::Tkn::Name(name) = self.next_tkn_ref(vec!["name"])? else {
+            panic!()
+        };
         let result = self.expr_add(true)?;
         let node = match self.current_tkn().clone() {
             lex::Tkn::LBracket => {
@@ -25,13 +24,10 @@ impl Parser {
                     index: Box::new(node::Expr::Number(index)),
                 }
             }
-            _ => {
-                node::Expr::GetAddress(Box::new(result))
-            }
+            _ => node::Expr::GetAddress(Box::new(result)),
         };
         Ok(node)
     }
-
 
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が
     /// あった場合呼び出される、関数やモジュールの指定メンバー
@@ -39,9 +35,9 @@ impl Parser {
     pub(super) fn gen_name_node<const T: bool>(
         &mut self,
         name: String,
-        init_struct: bool
+        init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
-        // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す 
+        // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す
         if !init_struct {
             return Ok(node::Expr::Var(name));
         }
@@ -64,7 +60,9 @@ impl Parser {
             // 列挙型のメンバへのアクセス: `Name::Mem`
             lex::Tkn::ModPathTkn => {
                 self.next_tkn(vec!["name"])?;
-                let lex::Tkn::Name(mem_name) = self.next_tkn(vec!["name"])?.clone() else {panic!();};
+                let lex::Tkn::Name(mem_name) = self.next_tkn(vec!["name"])?.clone() else {
+                    panic!();
+                };
                 if matches!(self.next_tkn_ref(vec![])?, lex::Tkn::LParen) {
                     self.next_tkn(vec!["("])?;
                     node::Expr::Scope {
@@ -72,19 +70,20 @@ impl Parser {
                         target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
                     }
                 } else {
-                    node::Expr::EnumVariant { name, variant: mem_name }
+                    node::Expr::EnumVariant {
+                        name,
+                        variant: mem_name,
+                    }
                 }
             }
-            _ => node::Expr::Var(name)
+            _ => node::Expr::Var(name),
         };
         Ok(node)
     }
 
     /// 配列リテラルのノードを作成する
     /// これは配列を初期化するノード
-    pub(super) fn make_array_node(
-        &mut self
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
         let mut items = Vec::<node::Expr>::new();
 
         if !matches!(self.next_tkn_ref(vec!["not `}`"])?, lex::Tkn::RBrace) {

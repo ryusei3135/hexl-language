@@ -1,19 +1,18 @@
 //! アセンブリ言語のフォーマット関係
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::gen;
 use crate::ir;
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Reg {
-   pub db: Vec<String>,
-   pub dw: Vec<String>,
-   pub dd: Vec<String>,
-   pub dq: Vec<String>,
+    pub db: Vec<String>,
+    pub dw: Vec<String>,
+    pub dd: Vec<String>,
+    pub dq: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -31,7 +30,7 @@ pub struct Func {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FuncArgsReg {
-    pub fmt: HashMap<String, Vec<usize>>
+    pub fmt: HashMap<String, Vec<usize>>,
 }
 
 /// 構造体のフォーマット
@@ -46,7 +45,7 @@ pub struct OpSizeFmt {
     pub db: String,
     pub dw: String,
     pub dd: String,
-    pub dq: String
+    pub dq: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -73,7 +72,6 @@ pub struct AsmFormat {
     pub func: Func,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AsmInfos {
     // アセンブリ言語の設定ファイル
@@ -96,7 +94,12 @@ impl AsmSetting {
         // フォーマットするアセンブリコードの情報が入ったファイルの名前を取得
         let file_name = || -> &str {
             if let Some(name) = &inline_name {
-                self.settings.iter().find(|v| &v.name == name).unwrap().file.as_str()
+                self.settings
+                    .iter()
+                    .find(|v| &v.name == name)
+                    .unwrap()
+                    .file
+                    .as_str()
             } else {
                 self.settings[self.default].file.as_str()
             }
@@ -104,26 +107,17 @@ impl AsmSetting {
 
         let asm_fmt_file_name = format!("asm_fmts/{}", file_name());
 
-        serde_yaml::from_str(
-            &fs::read_to_string(
-                &asm_fmt_file_name
-            )
-            .expect(&asm_fmt_file_name)
-        ).unwrap()
+        serde_yaml::from_str(&fs::read_to_string(&asm_fmt_file_name).expect(&asm_fmt_file_name))
+            .unwrap()
     }
 
     pub fn get_inline_asm_list(&self) -> Vec<String> {
-        self.settings
-            .clone()
-            .into_iter()
-            .map(|v| v.name)
-            .collect()
+        self.settings.clone().into_iter().map(|v| v.name).collect()
     }
 }
 
 pub fn load_setting() -> AsmSetting {
-    let setting = fs::read_to_string("asm.yaml")
-        .expect("not found asm setting file 'asm.yaml'");
+    let setting = fs::read_to_string("asm.yaml").expect("not found asm setting file 'asm.yaml'");
     serde_yaml::from_str(&setting).unwrap()
 
     //let default_format = fs::read_to_string(data.get_default_asm_file()).unwrap();
@@ -136,16 +130,11 @@ pub fn gen_asm_text(
     mut tree: ir::def_tree::FuncTree,
     extern_funcs: &Vec<ir::inst::Inst>,
     global_funcs: &Vec<String>,
-    inline_name: &Option<String>
+    inline_name: &Option<String>,
 ) -> String {
     let asm_settings = load_setting();
 
     let asm_fmt = asm_settings.get_asm_fmt(inline_name);
     let mut writer = gen::AsmEmitter::new(asm_settings, asm_fmt);
-    writer.to_asm_text(
-        &mut tree,
-        &inline_name,
-        &extern_funcs,
-        &global_funcs
-    )
+    writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
 }

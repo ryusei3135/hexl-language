@@ -1,12 +1,11 @@
 use super::*;
 
-
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
     pub(super) fn init_def_fn_info(&mut self, info: &node::FuncDefine) {
         // `Self`型を、実際の構造体の型/ポインタ型へ解決する
-        let info = self.resolve_self_ty(info.clone());
+        //let info = self.resolve_self_ty(info.clone());
 
         // 関数の情報を登録
         self.entry_func_info(&info);
@@ -42,9 +41,8 @@ impl IR {
         self.func_ret_ty = Some(info.ret_ty.clone());
         // メゾットの場合、`info.module`に自身が属する構造体の名前が
         // 入っているので、そのままモジュール名として登録する
-        self.define_meta_data.push(
-            def_tree::FuncDefMetaData::new(&info, info.module.as_ref())
-        );
+        self.define_meta_data
+            .push(def_tree::FuncDefMetaData::new(&info, info.module.as_ref()));
         // 公開する関数を登録
         if info.public {
             self.public_func_tree.push(info.name.to_string());
@@ -56,52 +54,47 @@ impl IR {
     /// アセンブリ言語を出力する際にだけ使う
     pub(super) fn make_extern_func_inst(&mut self, fn_tree: &Vec<def_tree::FuncDefMetaData>) {
         for func in fn_tree {
-            self.extern_funcs.push(
-                inst::Inst::ExternFunc(func.name.clone())
-            );
+            self.extern_funcs
+                .push(inst::Inst::ExternFunc(func.name.clone()));
         }
     }
 
     pub(super) fn gen_call_func_ir(
         &mut self,
         module_name: Option<&String>,
-        meta_data: &node::CallInfo
+        meta_data: &node::CallInfo,
     ) -> inst::Inst {
         // 関数の定義を取得
         let defined_func_data = {
             if let Some(def_data) = self.func_tree.get(&meta_data.name, module_name) {
                 def_data
             } else {
-                let result = self.extern_func_tree
-                    .iter()
-                    .find(|v| {
-                        v.name.as_str() == meta_data.name.as_str()
-                            && v.module() == module_name
-                    });
-                    if let Some(def_data) = result {
-                        def_data.gen(self.stk_counter)
-                    } else {
-                        panic!();
-                    }
+                let result = self.extern_func_tree.iter().find(|v| {
+                    v.name.as_str() == meta_data.name.as_str() && v.module() == module_name
+                });
+                if let Some(def_data) = result {
+                    def_data.gen(self.stk_counter)
+                } else {
+                    panic!();
                 }
-            };
+            }
+        };
         let def_args = defined_func_data.args.clone();
         // 関数のノードを作成
-        let mut func_meta_data
-            = inst::CallFuncMetaData::new(
-                meta_data.name.clone(),
-                if self.expr_counter == 1 {
-                    IS_NOT_ASSIGN_EXPR
-                } else {
-                    IS_ASSIGN_EXPR
-                },
-                // 確保するスタックのサイズを渡す
-                if self.stk_counter != 0 {
-                    Some(self.stk_counter)
-                } else {
-                    None
-                }
-            );
+        let mut func_meta_data = inst::CallFuncMetaData::new(
+            meta_data.name.clone(),
+            if self.expr_counter == 1 {
+                IS_NOT_ASSIGN_EXPR
+            } else {
+                IS_ASSIGN_EXPR
+            },
+            // 確保するスタックのサイズを渡す
+            if self.stk_counter != 0 {
+                Some(self.stk_counter)
+            } else {
+                None
+            },
+        );
 
         for (index, _) in meta_data.args.iter().enumerate() {
             let expr_arg = meta_data.args.get(index).unwrap().clone();

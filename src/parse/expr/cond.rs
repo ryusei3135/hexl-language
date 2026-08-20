@@ -1,11 +1,8 @@
 use super::*;
 
-
 impl Parser {
     /// 最初にキーワードのcondが来る必要がある
-    pub(in crate::parse) fn expr_match(
-        &mut self
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
         if !matches!(self.current_tkn(), lex::Tkn::KeyWordCond) {
@@ -46,7 +43,7 @@ impl Parser {
                 self.next_tkn(vec![])?;
                 return self.build_else_arm_node(&cond_expr, arms);
             }
-            // if 
+            // if
             let pattern = self.expr_cmp(STRUCT_NOT_INIT)?;
             println!(" >> {:?}", pattern);
 
@@ -72,7 +69,7 @@ impl Parser {
         }
 
         // 式の終了
-        self.next_tkn(vec!["}"])?;//}
+        self.next_tkn(vec!["}"])?; //}
 
         let node = node::Expr::Match {
             pattern: cond_expr,
@@ -101,13 +98,10 @@ impl Parser {
         let body = self.gen_block_node()?;
         // }
         self.next_tkn(vec![])?;
-        self.tkn_checker()
-            .close_scope_to_rbrace(None)?;
+        self.tkn_checker().close_scope_to_rbrace(None)?;
         // 条件分岐を閉じる`}`
         self.tkn_checker()
-            .close_scope_to_rbrace(
-                Some(lex::Tkn::KeyWordCond)
-            )?;
+            .close_scope_to_rbrace(Some(lex::Tkn::KeyWordCond))?;
         //}
         self.next_tkn(vec![])?;
         let node = node::Expr::Match {
@@ -125,7 +119,10 @@ impl Parser {
     fn is_bool_expr(expr: &node::Expr) -> bool {
         matches!(
             expr,
-            node::Expr::LessThen(_) | node::Expr::GreaterThen(_) | node::Expr::Equal(_) | node::Expr::NotEq(_)
+            node::Expr::LessThen(_)
+                | node::Expr::GreaterThen(_)
+                | node::Expr::Equal(_)
+                | node::Expr::NotEq(_)
         )
     }
 
@@ -138,10 +135,7 @@ impl Parser {
     /// }
     /// ```
     /// これは `if` / `else` と同じ意味を持つ
-    fn expr_match_bool(
-        &mut self,
-        cond: node::Expr
-    ) -> Result<node::Expr, err::ErrKind> {
+    fn expr_match_bool(&mut self, cond: node::Expr) -> Result<node::Expr, err::ErrKind> {
         println!(">> {:?}", self.current_tkn());
         // match expr {
         // {
@@ -153,8 +147,7 @@ impl Parser {
         let body = self.gen_block_node()?;
         // }
         // } | {
-        self.tkn_checker()
-            .close_scope_to_rbrace(None)?;
+        self.tkn_checker().close_scope_to_rbrace(None)?;
         // |
         if !matches!(self.next_tkn(vec!["|"])?, lex::Tkn::Or) {
             return Err(err::ErrKind::UnexpectedToken);
@@ -167,19 +160,16 @@ impl Parser {
         // それ以外のときの処理
         let else_body = self.gen_block_node()?;
         // }
-        self.tkn_checker()
-            .close_scope_to_rbrace(None)?;
+        self.tkn_checker().close_scope_to_rbrace(None)?;
         // 式の終了
         self.next_tkn(vec![])?;
 
         Ok(node::Expr::Match {
             pattern: None,
-            arms: vec![
-                node::MatchArm {
-                    pattern: Box::new(cond),
-                    body,
-                }
-            ],
+            arms: vec![node::MatchArm {
+                pattern: Box::new(cond),
+                body,
+            }],
             arm_else: Some(else_body),
         })
     }

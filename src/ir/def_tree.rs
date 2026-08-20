@@ -1,10 +1,9 @@
 use super::*;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum VarType {
-    Local(usize),// 変数の値や式のidx
-    Param(usize),//これは、左から何番目の引数かを保存
+    Local(usize), // 変数の値や式のidx
+    Param(usize), //これは、左から何番目の引数かを保存
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -22,7 +21,6 @@ impl VarMetaData {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
     pub hash: HashMap<String, VarMetaData>,
@@ -34,7 +32,7 @@ impl VarTree {
             hash: HashMap::new(),
         }
     }
-    
+
     /// ## K
     /// - `usize`の場合 local変数
     /// - 'l' = local
@@ -46,28 +44,30 @@ impl VarTree {
         var_ty: &node::TyNode,
     ) {
         let var = match K {
-            'l' => {
-                VarType::Local(*var_index)
-            }
-            'p' => {
-                VarType::Param(*var_index)
-            }
+            'l' => VarType::Local(*var_index),
+            'p' => VarType::Param(*var_index),
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
-        self.hash.insert(var_name.clone(), VarMetaData::new(&var, &var_ty));
+        self.hash
+            .insert(var_name.clone(), VarMetaData::new(&var, &var_ty));
     }
 
     pub fn get_ty_name(&self, name: &String) -> String {
         match &self.hash.get(name).unwrap().size {
             node::TyNode::Ty(name) => name.to_string(),
-            node::TyNode::Pointer { ty_name, .. } => {
-                match &**ty_name {
-                    node::TyNode::Ty(name) => name.to_string(),
-                    _ => panic!(),
-                }
+            node::TyNode::Pointer { ty_name, .. } => match &**ty_name {
+                node::TyNode::Ty(name) => name.to_string(),
+                _ => panic!(),
             },
+            node::TyNode::SelfTy(name) => name.to_string(),
             t => panic!("{:?}", t),
         }
+    }
+
+    pub fn is_self_ty(&self, name: &String) -> bool {
+        self.hash
+            .get(name)
+            .is_some_and(|v| matches!(v.size, node::TyNode::SelfTy(_)))
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
@@ -76,16 +76,15 @@ impl VarTree {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructTree {
-    tree: HashMap<String, node::StructDefine>
+    tree: HashMap<String, node::StructDefine>,
 }
 
 impl StructTree {
     pub fn new() -> Self {
         Self {
-            tree: HashMap::new()
+            tree: HashMap::new(),
         }
     }
 
@@ -103,14 +102,10 @@ impl StructTree {
         &self,
         // 構造体の名前
         name: &String,
-        field_name: &String
+        field_name: &String,
     ) -> usize {
         let mut byte_counter = 0;
-        for member in self.tree.get(name)
-            .expect(name)
-            .fields
-            .iter() 
-        {
+        for member in self.tree.get(name).expect(name).fields.iter() {
             byte_counter += types::Size::new(&member.ty).to_bytes();
             if member.name == field_name.as_str() {
                 return byte_counter;
@@ -120,7 +115,6 @@ impl StructTree {
         panic!();
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncDefInfo {
@@ -134,19 +128,16 @@ pub struct FuncDefInfo {
 
 impl FuncDefInfo {
     pub fn first_param_is_self(&self) -> bool {
+        println!("{:?}", self.args);
         self.args
             .get(0)
-            .is_some_and(
-                |f| {
-                    matches!(f.ty, node::TyNode::SelfTy(..))
-                }
-            )
+            .is_some_and(|f| matches!(f.ty, node::TyNode::SelfTy(..)))
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FuncTree{
-    pub func: HashMap<String, FuncDefInfo>
+pub struct FuncTree {
+    pub func: HashMap<String, FuncDefInfo>,
 }
 
 impl FuncTree {
@@ -193,12 +184,10 @@ impl FuncTree {
                 ret_ty: Some(ret_ty.clone()),
                 public: meta_data.public,
                 stk_size,
-            }
+            },
         );
     }
 }
-
-
 
 #[derive(Clone, Debug)]
 pub struct FuncDefMetaData {
@@ -215,10 +204,7 @@ impl FuncDefMetaData {
     /// moduleは自分自身がどのモジュールに属しているか
     /// Noneの場合は、#includeで関数の名前ごと指定しているか
     /// 自分のファイルの中にあるかのどちらか
-    pub fn new(
-        info: &node::FuncDefine,
-        module: Option<&String>
-    ) -> Self {
+    pub fn new(info: &node::FuncDefine, module: Option<&String>) -> Self {
         Self {
             module: module.map(|v| v.clone()),
             name: info.name.clone(),
@@ -245,7 +231,7 @@ impl FuncDefMetaData {
             body: Vec::new(),
             ret_ty: self.ret_ty.clone(),
             public: true,
-            stk_size 
+            stk_size,
         }
     }
 }

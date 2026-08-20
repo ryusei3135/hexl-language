@@ -13,7 +13,7 @@ impl Parser {
         self.struct_self_name = Some(name.to_string());
 
         match self.next_tkn(vec!["{"])? {
-            lex::Tkn::LBrace => {},
+            lex::Tkn::LBrace => {}
             t => panic!("{:?}", t),
         }
 
@@ -27,7 +27,7 @@ impl Parser {
     /// 構造体を初期化する式を生成
     pub(super) fn struct_init_node<const T: bool>(
         &mut self,
-        name: &String
+        name: &String,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
             panic!("typdef::strct_init_node {:?}", self.current_tkn());
@@ -40,9 +40,7 @@ impl Parser {
 
         loop {
             let name: String = match &self.current_tkn() {
-                lex::Tkn::Name(name) => {
-                    name.to_string()
-                }
+                lex::Tkn::Name(name) => name.to_string(),
                 lex::Tkn::RBrace => {
                     break;
                 }
@@ -50,12 +48,17 @@ impl Parser {
             };
             // :じゃないとエラー
             if !matches!(self.next_tkn(vec![":"])?, lex::Tkn::Colon) {
-                panic!("{:?} {:?} name {:?}", self.current_tkn(), self.next_tkn_ref(vec![])?, name);    
+                panic!(
+                    "{:?} {:?} name {:?}",
+                    self.current_tkn(),
+                    self.next_tkn_ref(vec![])?,
+                    name
+                );
             }
             fields.insert(
                 name,
                 // 構造体を初期化する
-                Box::new(self.expr_cmp(true)?)
+                Box::new(self.expr_cmp(true)?),
             );
 
             match self.current_tkn() {
@@ -66,13 +69,11 @@ impl Parser {
                 t => panic!("{:?}", t),
             }
         }
-        Ok(
-            node::Expr::InitStruct{
-                is_self: T,
-                name: name.to_string(),
-                fields: fields.clone()
-            }
-        )
+        Ok(node::Expr::InitStruct {
+            is_self: T,
+            name: name.to_string(),
+            fields: fields.clone(),
+        })
     }
 
     /// `enum name { mem, mem2 }` を解析する
@@ -83,7 +84,7 @@ impl Parser {
         };
 
         match self.next_tkn(vec!["{"])? {
-            lex::Tkn::LBrace => {},
+            lex::Tkn::LBrace => {}
             t => panic!("{:?}", t),
         }
 
@@ -127,14 +128,12 @@ impl Parser {
                                 lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
                                     self.back_tkn();
                                 }
-                                t => {
-                                    err::SyntaxErr::unexpect_tkn_after_keyword(
-                                        self.build_err_span(),
-                                        lex::Tkn::Colon,
-                                        vec![",", "}"],
-                                        t
-                                    )?
-                                }
+                                t => err::SyntaxErr::unexpect_tkn_after_keyword(
+                                    self.build_err_span(),
+                                    lex::Tkn::Colon,
+                                    vec![",", "}"],
+                                    t,
+                                )?,
                             }
                             continue;
                         }
@@ -147,13 +146,12 @@ impl Parser {
                             // 呼ばずにそのまま本体無しとして扱う
                             if self.current_tkn() != &lex::Tkn::RBrace {
                                 'method_body: loop {
-
                                     let node = self.one_line_node()?;
-            
+
                                     if let node::Group1Node::FuncDefine(ref mut func) = method {
                                         func.body.push(node);
                                     }
-           
+
                                     if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                                         self.advance_tkn().unwrap();
                                         break 'method_body;
@@ -210,7 +208,7 @@ impl Parser {
     /// 列挙型のメンバ定義を解析する
     /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace` を指す
     fn define_enum_variants(
-        &mut self
+        &mut self,
     ) -> Result<(Vec<String>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
             return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace));
@@ -268,9 +266,7 @@ impl Parser {
     /// これにより、型として予約語`Self`が使われたとき、
     /// `node::TyNode::SelfTy(self_name)`へ解決できる。
     /// メゾットの外(トップレベルの関数など)では`None`を渡す。
-    pub(super) fn define_ty_node(
-        &mut self,
-    ) -> Result<node::TyNode, err::ErrKind> {
+    pub(super) fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
@@ -284,7 +280,7 @@ impl Parser {
                     self.struct_self_name
                         .as_ref()
                         .expect("`Self`は構造体/列挙型のメゾット内でのみ使用できます")
-                        .clone()
+                        .clone(),
                 ))
             }
             lex::Tkn::Name(name) => {
@@ -292,22 +288,21 @@ impl Parser {
                     lex::Tkn::LAngleBracket => panic!(),
                     // ポインタの型
                     lex::Tkn::Mul => {
-                        let is_const = 
-                            matches!(self.next_tkn_ref(vec!["const"])?,lex::Tkn::KeyWordConst);
+                        let is_const =
+                            matches!(self.next_tkn_ref(vec!["const"])?, lex::Tkn::KeyWordConst);
                         self.next_tkn(vec![])?;
-                        
+
                         node::TyNode::Pointer {
                             is_const,
-                            ty_name: Box::new(node::TyNode::Ty(name.clone()))
+                            ty_name: Box::new(node::TyNode::Ty(name.clone())),
                         }
                     }
                     _ => {
                         // ジェネリクスに定義ずみの型がある
-                        if let Some(generics) = self.other_stk
+                        if let Some(generics) = self
+                            .other_stk
                             .iter()
-                            .find(
-                                |v| v.0 == name && &v.1 == &StkInfo::Generics
-                            )
+                            .find(|v| v.0 == name && &v.1 == &StkInfo::Generics)
                         {
                             node::TyNode::make_ref_ty(&generics.0)
                         } else {
@@ -318,9 +313,7 @@ impl Parser {
                 Ok(ty)
             }
             // スタック領域: `[ty]` / `[ty 4]`
-            lex::Tkn::LBracket => {
-                self.define_mem_ty_node(false)
-            }
+            lex::Tkn::LBracket => self.define_mem_ty_node(false),
             // 静的領域: `""[ty]` / `""[ty 4]`
             lex::Tkn::Str(ref s) if s.is_empty() => {
                 if !matches!(self.next_tkn(vec!["["])?, lex::Tkn::LBracket) {
@@ -369,7 +362,6 @@ impl Parser {
     }
 }
 
-
 #[cfg(test)]
 mod ty_tests {
     use super::*;
@@ -377,9 +369,7 @@ mod ty_tests {
 
     fn build(value: &str) -> Vec<node::Group1Node> {
         let mut lex = lex::Lexer::new();
-        let _ = lex
-            .analy(&value.to_string())
-            .unwrap();
+        let _ = lex.analy(&value.to_string()).unwrap();
         let mut parse = Parser::new();
         parse.parser(lex.gen_tkns.clone()).unwrap().clone()
     }
@@ -388,68 +378,69 @@ mod ty_tests {
     fn test_struct() {
         assert_eq!(
             &build("struct Name { name: ty name2: ty }"),
-            &vec![
-                node::StructDefine::new(
-                    "Name".to_string(),
-                    vec![
-                        node::StructField::make_field("name", "ty"),
-                        node::StructField::make_field("name2", "ty")
-                    ],
-                    Vec::new()
-                )
-            ]
+            &vec![node::StructDefine::new(
+                "Name".to_string(),
+                vec![
+                    node::StructField::make_field("name", "ty"),
+                    node::StructField::make_field("name2", "ty")
+                ],
+                Vec::new()
+            )]
         );
     }
 
     #[test]
     fn struct_init() {
-        let mut func = 
-            node::FuncDefine::new(
-                "main".to_string(), 
-                Vec::new(), 
-                node::TyNode::Ty("int".to_string()),
-                false
-            );
+        let mut func = node::FuncDefine::new(
+            "main".to_string(),
+            Vec::new(),
+            node::TyNode::Ty("int".to_string()),
+            false,
+        );
         let map: HashMap<String, Box<node::Expr>> = [
-            ("name".to_string(), Box::new(node::Expr::Number("1".to_string()))),
-            ("name2".to_string(), Box::new(node::Expr::Number("1".to_string())))
-        ].into_iter().collect();
+            (
+                "name".to_string(),
+                Box::new(node::Expr::Number("1".to_string())),
+            ),
+            (
+                "name2".to_string(),
+                Box::new(node::Expr::Number("1".to_string())),
+            ),
+        ]
+        .into_iter()
+        .collect();
         let node::Group1Node::FuncDefine(ref mut f) = func else {
             panic!();
         };
-        f.add(node::Group2Node::Expr(node::Expr::InitStruct { name: "Name".to_string(), fields: map}));
+        f.add(node::Group2Node::Expr(node::Expr::InitStruct {
+            name: "Name".to_string(),
+            fields: map,
+        }));
         assert_eq!(
             &build("main(): int { Name { name: 1 name2: 1 } }"),
-            &vec![
-                func
-            ]
+            &vec![func]
         );
     }
 
     #[test]
     fn struct_method() {
-        let mut f = 
-            vec![node::FuncDefine::new(
-                "new".to_string(),
-                Vec::new(),
-                node::TyNode::Ty("ty".to_string()),
-                false
-            )];
+        let mut f = vec![node::FuncDefine::new(
+            "new".to_string(),
+            Vec::new(),
+            node::TyNode::Ty("ty".to_string()),
+            false,
+        )];
         let node::Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
         };
         func.self_module_name(&"Name".to_string());
         assert_eq!(
             &build("struct Name { a: int new(): ty {}}"),
-            &vec![
-                node::StructDefine::new(
-                    "Name".to_string(),
-                    vec![
-                        node::StructField::make_field("a", "int"),
-                    ],
-                    f
-                )
-            ]
+            &vec![node::StructDefine::new(
+                "Name".to_string(),
+                vec![node::StructField::make_field("a", "int"),],
+                f
+            )]
         );
     }
 
@@ -462,7 +453,7 @@ mod ty_tests {
                 a: int \
                 new(): Self {} \
                 func(self: Self, param: int): int {ret 0} \
-            }"
+            }",
         );
         let node::Group1Node::StructDefine(struct_def) = &nodes[0] else {
             panic!("構造体が定義されていません: {:?}", nodes);
@@ -478,10 +469,7 @@ mod ty_tests {
             panic!();
         };
         assert_eq!(func.name, "func");
-        assert_eq!(
-            func.params[0].ty,
-            node::TyNode::SelfTy("Name".to_string())
-        );
+        assert_eq!(func.params[0].ty, node::TyNode::SelfTy("Name".to_string()));
         assert_eq!(func.params[0].name, "self");
         assert_eq!(func.params[1].name, "param");
         assert_eq!(func.params[1].ty, node::TyNode::Ty("int".to_string()));
@@ -491,12 +479,10 @@ mod ty_tests {
     fn enum_node() {
         assert_eq!(
             &build("enum Name {A B}"),
-            &vec![
-                node::EnumDefine::new(
-                    "Name".to_string(), 
-                    vec!["A".to_string(), "B".to_string()]
-                )
-            ]
+            &vec![node::EnumDefine::new(
+                "Name".to_string(),
+                vec!["A".to_string(), "B".to_string()]
+            )]
         );
     }
 }

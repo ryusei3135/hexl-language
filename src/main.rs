@@ -1,14 +1,13 @@
-mod lex;
-mod gen;
-mod err;
-mod parse;
-mod node;
-mod ir;
-mod macros;
 mod asm_setting;
+mod err;
+mod gen;
+mod ir;
+mod lex;
+mod macros;
+mod node;
+mod parse;
 
-use std::{fs, env, io};
-
+use std::{env, fs, io};
 
 // ファイルやオプション管理
 pub mod cmd_line_args {
@@ -18,7 +17,7 @@ pub mod cmd_line_args {
         FmtAsm,
         SetFile,
     }
-    
+
     pub struct OptSettings {
         pub fmt_name: Option<String>,
         pub file_name: Option<String>,
@@ -45,18 +44,11 @@ pub mod cmd_line_args {
         }
 
         /// 値を渡す、フラグがすでに立っているなら成功
-        pub fn set_value(
-            &mut self,
-            value: String
-        ) -> Result<(), err::ErrKind> {
+        pub fn set_value(&mut self, value: String) -> Result<(), err::ErrKind> {
             if let Some(flag) = self.opt_flags.take() {
                 let _ = match flag {
-                    OptFlags::FmtAsm => {
-                        self.fmt_name.insert(value)
-                    }
-                    OptFlags::SetFile => {
-                        self.file_name.insert(value)
-                    }
+                    OptFlags::FmtAsm => self.fmt_name.insert(value),
+                    OptFlags::SetFile => self.file_name.insert(value),
                 };
                 Ok(())
             } else {
@@ -66,10 +58,7 @@ pub mod cmd_line_args {
 
         /// フラグを立てる
         /// もしフラグがすでに立っている場合はエラーになる
-        pub fn set_flag(
-            &mut self,
-            flag_name: OptFlags
-        ) -> Result<(), err::ErrKind> {
+        pub fn set_flag(&mut self, flag_name: OptFlags) -> Result<(), err::ErrKind> {
             if self.opt_flags.is_none() {
                 let _ = self.opt_flags.insert(flag_name);
                 Ok(())
@@ -91,7 +80,7 @@ pub mod cmd_line_args {
                     let _ = settings.set_value(opt.clone());
                     continue;
                 }
-                _ => {},
+                _ => {}
             }
 
             match opt.as_str() {
@@ -108,7 +97,6 @@ pub mod cmd_line_args {
     }
 }
 
-
 /// もらった情報で、データを生成
 /// ## 戻り値
 /// 関数の戻り値は呼び出し元に現在の公開されている
@@ -117,44 +105,28 @@ pub fn build(
     settings: &cmd_line_args::OptSettings,
 ) -> io::Result<Vec<ir::def_tree::FuncDefMetaData>> {
     // 初期化
-    let content = fs::read_to_string(
-        &settings
-            .file_name
-            .as_ref()
-            .unwrap()
-        )
-        .expect(
-            format!(
-                "file >> {:?}",
-                settings
-                    .file_name
-                    .as_ref()
-                    .unwrap()
-            )
-            .as_str()
-        );
-
+    let content = fs::read_to_string(&settings.file_name.as_ref().unwrap())
+        .expect(format!("file >> {:?}", settings.file_name.as_ref().unwrap()).as_str());
 
     let mut lexer = lex::Lexer::new();
     let mut parser = parse::Parser::new();
     let mut ir_builder = ir::IR::new();
     // アセンブリ言語のデータを作成
-    let _ = lexer.analy(&content).map_err(|v| v.lex_err()); 
+    let _ = lexer.analy(&content).map_err(|v| v.lex_err());
 
-    let nodes = parser
-        .parser(lexer.gen_tkns.clone())
-        .unwrap();
+    let nodes = parser.parser(lexer.gen_tkns.clone()).unwrap();
     let func_def_meta_data = ir_builder
         .builder(
             &nodes,
-            #[cfg(not(test))] &settings
+            #[cfg(not(test))]
+            &settings,
         )
         .unwrap();
     let asm_text = asm_setting::gen_asm_text(
         ir_builder.func_tree,
         &ir_builder.extern_funcs,
         &ir_builder.public_func_tree,
-        &settings.fmt_name
+        &settings.fmt_name,
     );
     // 出力先のアセンブリ言語のファイル
     let asm_file = settings

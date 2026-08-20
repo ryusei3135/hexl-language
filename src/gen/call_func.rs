@@ -1,10 +1,8 @@
 mod assign_var;
 mod mem_ir;
 
-
 use super::*;
 use crate::ir;
-
 
 impl AsmEmitter {
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する
@@ -12,19 +10,29 @@ impl AsmEmitter {
     /// `gen/asm_emitter.rs`の`extract_operand_text`から、関数呼び出しの
     /// 結果を値として使う(戻り値を任意のレジスタへ代入する)際にも
     /// 使われるため`pub(super)`にしている
-    pub(super) fn emit_call_func(
-        &mut self,
-        meta_data: &inst::CallFuncMetaData
-    ) -> String {
+    pub(super) fn emit_call_func(&mut self, meta_data: &inst::CallFuncMetaData) -> String {
         // 生成するアセンブリコード
         let mut call_func = String::new();
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数のレジスタを取得
-            let param_reg = self.asm_fmt.get_fmt_param::<usize>(&index);
+            let param_reg = self.asm_fmt.get_fmt_param::<String>(
+                &index, 
+                self.curr_inst[*param]
+                    .get_param_ty()
+                    .unwrap()
+            );
             // 引数のレジスタと値のidを挿入
-            let param_asm = self.format_line("mov", Some(&param_reg), &param, None, false);
-            call_func.push_str(&param_asm);
+            let src1_idx = if let Some(struct_idx) = self.resolve_struct_idx(param) {
+                struct_idx
+            } else {
+                *param
+            };
+            let asm = self.asm_fmt
+                .get_opcode_tmpl("mov")
+                .replace("{dst}", &param_reg)
+                .replace("{src1}", &self.extract_operand_text(&src1_idx, false));
+            call_func.push_str(&asm);
         }
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&meta_data.name));
         call_func
@@ -51,10 +59,12 @@ impl AsmEmitter {
         self.stk_use_counter = 0;
         if func_meta_data.1.stk_size != 0 {
             // 予約されたサイズ分確保する
-            self.asm_text.push_str(&self.asm_fmt.gen_stack_frame(func_meta_data.1.stk_size));
+            self.asm_text
+                .push_str(&self.asm_fmt.gen_stack_frame(func_meta_data.1.stk_size));
         } else {
             if &func_meta_data.0 != "_start" {
-                self.asm_text.push_str(self.asm_fmt.func_frame_fmt().as_str());
+                self.asm_text
+                    .push_str(self.asm_fmt.func_frame_fmt().as_str());
             }
         }
 
@@ -85,19 +95,15 @@ impl AsmEmitter {
 
                     // 式の結果を置いたレジスタを使用中として記録する
                     self.used_reg.mark_used(&self.reg_idx);
-                    self.last_inst_idx.push(
-                        (expr.dst, self.reg_idx)
-                    );
+                    self.last_inst_idx.push((expr.dst, self.reg_idx));
                     self.reg_idx += 1;
                 }
-                inst::Inst::Num{ .. } => {
-                }
-                inst::Inst::InitArr(_) => {
-                },
+                inst::Inst::Num { .. } => {}
+                inst::Inst::InitArr(_) => {}
                 inst::Inst::Block(name) => {
                     self.asm_text.push_str(&format!("{}:\n", name));
                 }
-                inst::Inst::Comple{name, lines} => {
+                inst::Inst::Comple { name, lines } => {
                     if let Some(asm_name) = asm_fmt_name {
                         if name.as_str() == asm_name.as_str() {
                             self.deploy_inline_asm(&name, &lines);
@@ -124,12 +130,7 @@ impl AsmEmitter {
                     );
 
                     if is_mem_write {
-                        self.write_mem(
-                            name, 
-                            &dst, 
-                            &value, 
-                            this_is_self
-                        );
+                        self.write_mem(name, &dst, &value, this_is_self);
                     } else {
                         // 通常の変数への再代入(`b = 10`など)
                         self.update_value_info(&name, &value);
@@ -140,17 +141,9 @@ impl AsmEmitter {
                         // であれば、専用のフォーマット(`get_ptr`)で
                         // アドレスのオペランドを組み立てる
                         let text = if self.get_var_ty(&name).is_pointer().is_some() {
-                            self.assign_value_ty_is_ptr(
-                                current_reg,
-                                value,
-                                this_is_self
-                            )
+                            self.assign_value_ty_is_ptr(current_reg, value, this_is_self)
                         } else {
-                            self.assign_value_is_not_ptr(
-                                current_reg,
-                                value,
-                                this_is_self
-                            )
+                            self.assign_value_is_not_ptr(current_reg, value, this_is_self)
                         };
 
                         if self.expr_vars.iter().find(|v| v == &name).is_some() {
@@ -160,185 +153,30 @@ impl AsmEmitter {
                     }
                 }
                 inst::Inst::Ret(idx) => {
-                    let ret_asm = self.format_line(
-                        "mov",
-                        Some(&0),
-                        &idx,
-                        None,
-                        this_is_self
-                    );
+                    let ret_asm = self.format_line("mov", Some(&0), &idx, None, this_is_self);
                     self.asm_text.push_str(&ret_asm);
-                    self.asm_text.push_str(
-                        self.asm_fmt
-                        .func_frame_end()
-                        .as_str()
-                    );
+                    self.asm_text
+                        .push_str(self.asm_fmt.func_frame_end().as_str());
                     self.asm_text.push_str("ret\n");
                 }
-                inst::Inst::Mov { name, size, dst, src } => {
-                    if self.data_map.iter().find(|v| &v.0 == src).is_some() {
-                        // 子のノードがstaticりょいきの値なので、変数名だけ登録する
-                        self.insert_var_info(
-                            &name.as_ref().unwrap(),
-                            asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
-                        );
-                    } else {
-                        self.reg_idx += 1;
-                        // レジスタに置く変数
-                        let reg = self.reg_idx.clone();
-                        // このレジスタを使用中として記録する
-                        self.used_reg.mark_used(&reg);
-                        // ポインタ型の変数へ数値リテラル(`ptr: int* = 0`の
-                        // ような`0`=NULL初期化など)を代入する場合は、
-                        // アドレスを求める`lea`(="address")命令ではなく、
-                        // ポインタのサイズ(64bit)に合わせた`movq`で
-                        // そのまま即値をレジスタへ書き込む
-                        let is_literal_num = matches!(
-                            self.curr_inst[*src],
-                            inst::Inst::Num { .. }
-                        );
-
-                        let formated = if size.is_pointer().is_some() && is_literal_num {
-                            let dst_reg = self.asm_fmt.get_fmt_reg(&reg, &Size::DQ);
-                            let value_operand = self.extract_operand_text(&src, this_is_self);
-                            let text = self.asm_fmt
-                                .get_opcode_tmpl("mov")
-                                .replace("{dst}", &dst_reg)
-                                .replace("{src1}", &value_operand);
-                            self.asm_fmt.fmt_mnemonic_resize("mov", &text, &Size::DQ)
-                        } else {
-                            // メモリのポインタか、値かで、ニーモニックが変わる
-                            let mnemonic = if size.is_pointer().is_some() {
-                                // ポインタの場合
-                                "address"
-                            } else {
-                                // 普通の場合
-                                "mov"
-                            };
-                            self.format_line(
-                                mnemonic, 
-                                Some(&reg), 
-                                &src, 
-                                None, 
-                                this_is_self
-                            )
-                        };
-
-                        self.asm_text.push_str(&formated);
-
-                        if let Some(var_name) = name {
-                            self.insert_var_info(
-                                &var_name, 
-                                asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
-                            );
-                            let current_reg = self.reg_idx;
-
-                            if self.expr_vars.iter().find(|v| v.as_str() == var_name.as_str()).is_some() {
-                                self.update_value_reg(&var_name, &current_reg);
-                            }
-                        }
-                    }
-                }// メモリに配置されている値の生成
-                inst::Inst::MemoryValue(memory_value) => {
-                    match memory_value {
-                        inst::MemoryInst::Memory { name, size, src, kind, dst } => {
-                            if kind == &inst::MemoryKind::Static {
-                                println!("src/gen/call_func/MemoryValue");
-                                let value = self.extract_operand_text(
-                                    &src.last().unwrap(), 
-                                    this_is_self
-                                );
-                                let label_name = format!("M{}", self.data_idx.to_string());
-                                let fmt_data = self.asm_fmt
-                                    .get_static_num_fmt(
-                                        &value, 
-                                        &label_name, 
-                                        &size
-                                    );
-                                self.data_sec_text.push_str(&fmt_data);
-                                self.data_map.push((*dst, label_name));
-                                self.data_idx += 1;
-                                // 子のノードがstaticりょいきの値なので、変数名だけ登録する
-                                self.insert_var_info(
-                                    &name,
-                                    asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
-                                );
-                            } else {
-                                // スタック領域のローカル変数を作成する
-                                //
-                                // `dst`が新しく確保するローカル変数のスロット
-                                // ではなく、`self`(メソッドの第一引数として
-                                // 渡されるポインタ、`%rdi`など)や`[p]`のような
-                                // 既存のメモリを指している場合(例:
-                                // `ret Self { c: {0, 1, 2} }`のように構造体
-                                // リテラルの配列フィールドを構築する場合)は、
-                                // 独立したローカルの一時領域(`%rbp`基準)を
-                                // 新しく確保するのではなく、そのメモリへ
-                                // 直接書き込む必要がある。
-                                // 以前はここで`dst`を全く見ずに常に`%rbp`
-                                // 決め打ちでオペランドを組み立てていたため、
-                                // このようなケースでも誤ってローカルの
-                                // 一時領域に書き込まれてしまっていた。
-                                let base = match &self.curr_inst[*dst] {
-                                    inst::Inst::Pointer(..)
-                                    | inst::Inst::Param(..)
-                                    | inst::Inst::GetPtr { .. } => {
-                                        self.extract_operand_text(&dst, this_is_self)
-                                    }
-                                    _ => "%rbp".to_string(),
-                                };
-
-                                let mut txt = String::new();
-                                for idx in src.iter() {
-                                    let value = self
-                                        .extract_operand_text(
-                                            &idx, 
-                                            this_is_self
-                                        );
-                                    // スタックの場所を更新
-                                    // (この変数のオフセットは、これまで使用した
-                                    //  スタックのサイズ`stk_use_counter`に、
-                                    //  この変数のサイズを足したもの)
-                                    self.stk_use_counter += size.to_bytes();
-                                    let s = &self.asm_fmt.fmt_ref_operand(
-                                        &base,
-                                        &self.stk_use_counter,
-                                    );
-
-                                    let mov_line = self.asm_fmt
-                                    .get_opcode_tmpl("mov")
-                                    .replace("{dst}", &s)
-                                    .replace("{src1}", value.as_str());
-                                    txt.push_str(
-                                        self.asm_fmt
-                                        .fmt_mnemonic_resize(
-                                            "mov", 
-                                            &mov_line, 
-                                            &size
-                                        )
-                                        .as_str()
-                                    );
-                                }
-                                self.insert_var_info(
-                                    &name, 
-                                    asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst)
-                                );
-                                self.asm_text.push_str(txt.as_str());
-                            }
-                        }
-                        _ => panic!(),
-                    }
+                inst::Inst::Mov {
+                    name,
+                    size,
+                    dst,
+                    src,
+                } => {
+                    self.mov_value_ir(size, dst, src, &name, this_is_self);
+                } // メモリに配置されている値の生成
+                inst::Inst::MemoryValue(mem_value) => {
+                    // call_func/mem_ir.rs
+                    self.mem_value_ir(mem_value, this_is_self);
                 }
                 inst::Inst::Param(param) => {
-                    // 引数に使うレジスタを取得する 
-                    let reg_num = self.asm_fmt.get_fmt_param::<usize>(&param.num);
+                    // 引数に使うレジスタを取得する
+                    let reg_num = self.asm_fmt.get_fmt_param::<usize>(&param.num, Size::DQ);
                     self.insert_var_info(
                         &param.name,
-                        asm_emitter::VarIndexInfo::new(
-                            &reg_num, 
-                            &Size::DQ, 
-                            &param.dst
-                        )
+                        asm_emitter::VarIndexInfo::new(&reg_num, &Size::DQ, &param.dst),
                     );
                 }
                 inst::Inst::CallFunc(meta_data) => {
@@ -346,6 +184,12 @@ impl AsmEmitter {
                     if meta_data.parent == ir::IS_NOT_ASSIGN_EXPR {
                         let asm_text = self.emit_call_func(&meta_data);
                         self.asm_text.push_str(asm_text.as_str());
+                    }
+                }
+                inst::Inst::Struct { mem, is_self, .. } => {
+                    if *is_self {
+                        let ini_struct_asm = self.emit_struct_ini_asm(mem.to_vec(), this_is_self);
+                        self.asm_text.push_str(&ini_struct_asm);
                     }
                 }
                 t => println!("call func >> gen {:?}", t),

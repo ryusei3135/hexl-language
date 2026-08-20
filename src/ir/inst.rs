@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind {
     Add,
@@ -24,13 +23,10 @@ pub struct ExprInst {
 }
 
 impl ExprInst {
-    pub fn new(
-        self
-    ) -> Inst {
+    pub fn new(self) -> Inst {
         Inst::Expr(self)
     }
 }
-
 
 /// 引数の定義の情報
 #[derive(Clone, Debug, PartialEq)]
@@ -42,18 +38,19 @@ pub struct ParamMetaData {
     pub num: usize,
     /// 値があるindex
     pub dst: usize,
+    pub ty: types::Size,
 }
 
 impl ParamMetaData {
-    pub fn new(name: String, num: usize, dst: usize) -> Self {
-        Self {
-            name,
-            num,
-            dst
+    pub fn new(name: String, num: usize, dst: usize, ty: &node::TyNode) -> Self {
+        Self { 
+            name, 
+            num, 
+            dst, 
+            ty: types::Size::new(&ty) 
         }
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallFuncMetaData {
@@ -71,11 +68,7 @@ pub struct CallFuncMetaData {
 }
 
 impl CallFuncMetaData {
-    pub fn new(
-        name: String, 
-        start_expr: bool, 
-        stk_capacity: Option<usize>
-    ) -> Self {
+    pub fn new(name: String, start_expr: bool, stk_capacity: Option<usize>) -> Self {
         Self {
             path: Vec::new(),
             public: false,
@@ -98,13 +91,12 @@ impl CallFuncMetaData {
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryKind {
     Stack,
-    Static
+    Static,
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryInst {
-    Member{
+    Member {
         parent: String,
         value_idx: usize,
         size: types::Size,
@@ -114,7 +106,7 @@ pub enum MemoryInst {
         size: types::Size,
         src: Vec<usize>,
         kind: MemoryKind,
-        dst: usize
+        dst: usize,
     },
     Byte(usize),
 }
@@ -133,22 +125,24 @@ pub enum Inst {
     Expr(ExprInst),
     Block(String),
     Jmp(String),
-    ExpectJmp(String),// ジャンプする場所
-    Mov{
+    ExpectJmp(String), // ジャンプする場所
+    Mov {
         name: Option<String>,
         size: types::Size,
         dst: ValueId,
         src: ValueId,
     },
     /// 構造体のメンバーにアクセスする
-    RefStruct{
+    RefStruct {
         /// 構造体のアドレスがある、場所
         src: String,
         /// 指定された、メンバーの場所
         size: usize,
     },
-    Stacks { size: usize },
-    Num{
+    Stacks {
+        size: usize,
+    },
+    Num {
         dst: ValueId,
         value: String,
         size: types::Size,
@@ -170,7 +164,7 @@ pub enum Inst {
         /// inlineアセンブラの各行: `(プレースホルダー入りの文字列, オペランドのidx)`
         lines: Vec<(String, Vec<usize>)>,
     },
-    AssignVar{
+    AssignVar {
         name: String,
         /// 代入先のノードがあるindex
         dst: usize,
@@ -178,7 +172,11 @@ pub enum Inst {
     },
     Param(ParamMetaData),
     Ret(ValueId),
-    Struct{ name: String, mem: Vec<MemoryInst>, is_self: bool },
+    Struct {
+        name: String,
+        mem: Vec<MemoryInst>,
+        is_self: bool,
+    },
     MemoryValue(MemoryInst),
 }
 
@@ -188,6 +186,17 @@ impl Inst {
             Self::Pointer(..) => true,
             Self::GetAddress(..) => true,
             _ => false,
+        }
+    }
+
+    pub fn get_param_ty(&self) -> Option<types::Size> {
+        match &self {
+            inst::Inst::Param(p) => Some(p.clone().ty),
+            inst::Inst::GetAddress(idx) => Some(types::Size::DQ),
+            t => {
+                panic!("{:?}", t);
+                None
+            }
         }
     }
 
@@ -210,12 +219,12 @@ impl Inst {
             }
             types::Size::Array { size, .. } => {
                 Self::gen_num(&value, &size, dst);
-            },
+            }
             types::Size::Pointer { .. } => {
                 value.parse::<u64>().unwrap();
             }
         }
-        Self::Num{
+        Self::Num {
             dst,
             value: value.to_string(),
             size: size.clone(),
