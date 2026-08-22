@@ -16,7 +16,7 @@ impl AsmEmitter {
                 panic!();
             };
 
-            let mut value = self
+            let value = self
                 .extract_operand_text(&value_idx, this_is_self)
                 .to_string();
             if value.is_empty() {

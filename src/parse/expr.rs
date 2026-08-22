@@ -295,7 +295,7 @@ impl Parser {
                         // 関数の最後の部分に来たので、ループを終了する
                         break;
                     }
-                    t => {
+                    _ => {
                         panic!("{:?}", self.next_tkn_ref(vec![]));
                     }
                 }

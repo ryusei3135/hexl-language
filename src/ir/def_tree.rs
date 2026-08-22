@@ -145,7 +145,6 @@ pub struct FuncDefInfo {
 
 impl FuncDefInfo {
     pub fn first_param_is_self(&self) -> bool {
-        println!("{:?}", self.args);
         self.args
             .get(0)
             .is_some_and(|f| matches!(f.ty, node::TyNode::SelfTy(..)))

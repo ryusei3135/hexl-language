@@ -53,17 +53,6 @@ impl MngAsmFmt {
         }
     }
 
-    pub fn fmt_pointer(&self, src: &String, size: &Size) -> String {
-        let ptr_asm = self
-            .fmt
-            .op
-            .get("address")
-            .unwrap()
-            .template
-            .replace("{src1}", &src);
-        self.fmt_mnemonic_resize("lea", &ptr_asm, size)
-    }
-
     pub fn fmt_ref_operand(&self, reg: &String, size: &usize) -> String {
         self.fmt
             .fmt

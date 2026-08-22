@@ -193,13 +193,12 @@ impl Inst {
     pub fn get_param_ty(&self) -> Option<types::Size> {
         match &self {
             inst::Inst::Param(p) => Some(p.clone().ty),
-            inst::Inst::GetAddress(idx) => Some(types::Size::DQ),
+            inst::Inst::GetAddress(..) => Some(types::Size::DQ),
             inst::Inst::Num { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory{ size, .. }) => Some(size.clone()),
             t => {
                 panic!("{:?}", t);
-                None
             }
         }
     }

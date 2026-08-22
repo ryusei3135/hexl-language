@@ -32,7 +32,7 @@ impl Size {
                 ty: Box::new(Self::new(&*ty_name)),
                 is_const: is_const.clone(),
             },
-            node::TyNode::SelfTy(name) => {
+            node::TyNode::SelfTy(..) => {
                 Self::DQ
             }
             _ => panic!(),
@@ -76,25 +76,10 @@ impl Size {
                 }
                 size_counter
             }
-            _ => panic!(),
         }
     }
 }
 
-/// 構造体のバイトサイズを取得する関数
-/// アセンブリ言語を生成する際に、サイズが必要だから
-pub fn get_struct_size(struct_node: &Vec<inst::MemoryInst>) -> usize {
-    let mut size_counter = 0;
-    for member in struct_node.iter() {
-        match &member {
-            inst::MemoryInst::Member { size, .. } => {
-                size_counter += size.to_bytes();
-            }
-            _ => panic!(),
-        }
-    }
-    size_counter
-}
 
 impl IR {
     /// 型からサイズを求める

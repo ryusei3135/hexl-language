@@ -242,7 +242,7 @@ impl Parser {
                             methods.push(self.func_node(&name, pub_flag.clone())?);
                         }
                         // `,`を省略して改行だけで次のメンバーへ続く場合
-                        lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {}
+                        lex::Tkn::KeyWordPub => {}
                         t => panic!("{:?}", t),
                     }
                     pub_flag = false;

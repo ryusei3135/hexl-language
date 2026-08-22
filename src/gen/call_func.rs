@@ -221,7 +221,7 @@ impl AsmEmitter {
                         self.asm_text.push_str(&ini_struct_asm);
                     }
                 }*/
-                t => println!("call func >> gen {:?}", t),
+                _ => {},
             }
         }
         // retがない場合つけたす

@@ -273,7 +273,7 @@ impl IR {
                     });
                     self.id_counter += 1;
                 }
-                t => println!("gen inst {:?}", t),
+                _ => {},
             }
         }
         self.id_counter
@@ -377,7 +377,7 @@ impl IR {
                 self.ref_array_node(*dst, *index, &name, &expect_byte)
             }
             // ポインタの中身
-            node::Expr::DefVar(mut var) => {
+            node::Expr::DefVar(var) => {
                 // `src/ir/builder/expr_node.rs`
                 self.def_var_node(var, &expect_byte)
             }
@@ -411,7 +411,7 @@ impl IR {
             node::Expr::InitStruct {
                 name,
                 mut fields,
-                is_self,
+                ..
             } => {
                 // `src/ir/builder/expr_node.rs`
                 self.init_struct_node(&name, &mut fields, &expect_byte)
@@ -435,7 +435,6 @@ impl IR {
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
             }
-            _ => panic!(),
         };
 
         self.ir_tree.push(inst);

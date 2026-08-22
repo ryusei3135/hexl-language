@@ -74,11 +74,6 @@ impl UsedRegManager {
         }
     }
 
-    /// 指定したレジスタの使用中の記録を解除する
-    pub fn mark_unused(&mut self, reg: &usize) {
-        self.used.retain(|used_reg| used_reg != reg);
-    }
-
     /// 現在使用中のレジスタ番号を、使用され始めた順(昇順)に取得する
     pub fn used_regs(&self) -> Vec<usize> {
         let mut regs = self.used.clone();
@@ -159,7 +154,6 @@ impl AsmEmitter {
 
         // エントリーポイントを先頭に配置
         if let Some(ref mut meta_data) = func_tree.func.remove_entry("_start") {
-            println!("{:?}", meta_data);
             self.build_func_process(meta_data, &asm_fmt_name);
         }
 
@@ -198,17 +192,6 @@ impl AsmEmitter {
                 panic!();
             }
         }
-    }
-
-    /// 静的領域の変数がどんなラベルで登録されているかを取得する
-    #[inline(always)]
-    pub(super) fn get_static_var_name(&mut self, name: &String) -> String {
-        let index = self
-            .var_hash_map
-            .get(name)
-            .expect(&format!("this -> {}", name))
-            .index;
-        self.extract_operand_text(&index, false).to_string()
     }
 
     pub fn get_var_ty(&self, name: &String) -> Size {
@@ -426,7 +409,7 @@ impl AsmEmitter {
             }
             inst::Inst::Block(name) => name.to_string(),
             inst::Inst::ExpectJmp(name) => name.to_string(),
-            inst::Inst::Struct { mem, is_self, .. } => self.emit_struct_ini_asm(mem, in_self_ptr),
+            inst::Inst::Struct { mem, .. } => self.emit_struct_ini_asm(mem, in_self_ptr),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
                 self.ref_mem_value_txt(&kind, &size, &parent_id)
@@ -514,7 +497,6 @@ impl AsmEmitter {
             .replace("{src1}", &self.extract_operand_text(&expr.ls, false))
             .replace("{src2}", &self.extract_operand_text(&expr.rs, false))
             .to_string();
-        println!("asm_emitter.rs false argas");
 
         // どちらかのオペランドがメモリ上の値(スタック/静的領域の変数)を
         // 参照している場合、そのサイズに合わせてニーモニックへ

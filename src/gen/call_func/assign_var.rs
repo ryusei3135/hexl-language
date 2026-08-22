@@ -78,7 +78,7 @@ impl AsmEmitter {
         let dst_reg = self.asm_fmt.get_fmt_reg(&current_reg, &Size::DQ);
 
         let ptr_operand = match &self.curr_inst[*value] {
-            inst::Inst::GetPtr { size, stk } => {
+            inst::Inst::GetPtr { size, .. } => {
                 self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), &size)
             }
             _ => self.extract_operand_text(value, this_is_self),

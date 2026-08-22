@@ -14,6 +14,5 @@ mod typedef;
 
 use crate::{err, lex, node};
 use stmt::*;
-use tkn_mnger::*;
 
 pub use stmt::Parser;
