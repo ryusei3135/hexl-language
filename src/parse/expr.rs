@@ -423,7 +423,7 @@ mod expr_tests {
     #[test]
     fn check_static_var_single() {
         let mut p = parse::Parser::new();
-        let tkns = gen_nodes("main(): int { a: \"\"[int] = 100 }");
+        let tkns = gen_nodes("main(): int { a: static[int] = 100 }");
         let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
             panic!("not func");
         };

@@ -9,7 +9,13 @@ impl IR {
                 *param
             }
         };
-        let size = self.struct_tree.get_pos(
+        let pos = self.struct_tree.get_pos(
+            // 変数の名前で登録されている変数の型を取得する
+            // （変数）の名前の文字列
+            &self.var_tree.get_ty_name(scope.last().unwrap()),
+            &name,
+        );
+        let size = self.struct_tree.get_mem_size(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
             &self.var_tree.get_ty_name(scope.last().unwrap()),
@@ -18,6 +24,7 @@ impl IR {
         inst::Inst::RefStruct {
             src: scope.last().unwrap().to_string(),
             size,
+            pos,
         }
     }
 
@@ -92,7 +99,8 @@ impl IR {
 
         inst::Inst::RefStruct {
             src: var_name,
-            size: field_pos + index_num * elem_size,
+            size: types::Size::new(&field_ty),
+            pos: field_pos + index_num * elem_size,
         }
     }
 }

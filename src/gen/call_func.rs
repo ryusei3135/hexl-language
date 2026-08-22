@@ -28,8 +28,23 @@ impl AsmEmitter {
             } else {
                 *param
             };
+
+            // 引数が`Inst::GetAddress`(構造体のポインタを`self`として
+            // 渡す場合など、`a.add()`の`self`に相当する`GetAddress(Var(a))`)
+            // の場合、渡すべきなのは変数`a`の「値」ではなく「アドレス」
+            // である。これを常に`mov`で組み立てると、アドレスを計算せず
+            // 値をそのままレジスタへコピーしてしまう
+            // (`mov 位置(%rbp), %rdi`のような誤ったコード)。
+            // アドレスを求める場合は`mov`ではなく`lea`
+            // (テンプレート上のキーは`address`)を使う必要がある。
+            let opcode = if self.curr_inst[*param].is_pointer() {
+                "address"
+            } else {
+                "mov"
+            };
+
             let asm = self.asm_fmt
-                .get_opcode_tmpl("mov")
+                .get_opcode_tmpl(opcode)
                 .replace("{dst}", &param_reg)
                 .replace("{src1}", &self.extract_operand_text(&src1_idx, false));
             call_func.push_str(&asm);
@@ -124,9 +139,23 @@ impl AsmEmitter {
                     // そのメモリへ直接値を書き込む必要がある
                     // - `Inst::Pointer`: `[b] = 20`(ポインタの参照先)
                     // - `Inst::InsertArr`: `[arr 0] = 10`(配列の要素)
+                    // - `Inst::RefStruct`: `a.[c 0] = 10`(構造体の
+                    //   メンバー、あるいはそのメンバーが配列の場合の
+                    //   要素へのアクセス)
+                    //
+                    // 以前は`RefStruct`がここに含まれておらず、
+                    // `a.[c 0] = 10`のような構造体メンバーへの代入が
+                    // 「通常の変数への再代入」として扱われてしまって
+                    // いた。その結果、`a`自身が保持しているポインタを
+                    // 指す先のメモリ(`"位置"(%rcx)`)に値を書き込む
+                    // のではなく、ポインタを保持しているレジスタ自体
+                    // (`%ecx`)を書き換える`mov $10, %ecx`という
+                    // 誤ったコードが生成されていた。
                     let is_mem_write = matches!(
                         self.curr_inst[*dst],
-                        inst::Inst::Pointer(..) | inst::Inst::InsertArr { .. }
+                        inst::Inst::Pointer(..)
+                            | inst::Inst::InsertArr { .. }
+                            | inst::Inst::RefStruct { .. }
                     );
 
                     if is_mem_write {
@@ -186,12 +215,12 @@ impl AsmEmitter {
                         self.asm_text.push_str(asm_text.as_str());
                     }
                 }
-                inst::Inst::Struct { mem, is_self, .. } => {
+                /*inst::Inst::Struct { mem, is_self, .. } => {
                     if *is_self {
                         let ini_struct_asm = self.emit_struct_ini_asm(mem.to_vec(), this_is_self);
                         self.asm_text.push_str(&ini_struct_asm);
                     }
-                }
+                }*/
                 t => println!("call func >> gen {:?}", t),
             }
         }

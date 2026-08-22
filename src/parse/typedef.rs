@@ -314,8 +314,8 @@ impl Parser {
             }
             // スタック領域: `[ty]` / `[ty 4]`
             lex::Tkn::LBracket => self.define_mem_ty_node(false),
-            // 静的領域: `""[ty]` / `""[ty 4]`
-            lex::Tkn::Str(ref s) if s.is_empty() => {
+            // 静的領域: `static[ty]` / `static[ty 4]`
+            lex::Tkn::KeyWordStatic => {
                 if !matches!(self.next_tkn(vec!["["])?, lex::Tkn::LBracket) {
                     panic!("静的領域の定義には`[`が必要です");
                 }

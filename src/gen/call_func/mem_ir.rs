@@ -10,6 +10,81 @@ impl AsmEmitter {
         name: &Option<String>,
         this_is_self: bool,
     ) {
+        // `a: Name = Name::new()`のように、構造体を返す関数の戻り値を
+        // ローカル変数へ束縛する場合。
+        //
+        // `Name::new()`のようなコンストラクタ呼び出しは(`ir/builder/
+        // scope.rs`によって)呼び出し元があらかじめ確保したスタック領域の
+        // アドレスを暗黙の第一引数として渡し、呼び出し先はそのアドレスへ
+        // 直接構造体を書き込む規約になっている。そのため、呼び出し後に
+        // 戻り値(そのアドレス自身)を改めて別のレジスタへコピーする必要は
+        // なく、変数`a`は「呼び出し時に渡したのと同じ`%rbp`相対の
+        // メモリ位置」をそのまま指すべきである。
+        //
+        // 以前はここが他の(スカラーな)`Mov`と同じ経路を通っていたため、
+        // 戻り値を32bitレジスタへコピーする誤ったコードが生成され、
+        // 以降の構造体メンバーへのアクセスも`%rbp`ではなくそのレジスタ
+        // 経由の間接参照になってしまっていた。
+        if let types::Size::Struct(_) = size {
+            // 呼び出し自体(`lea`+`call`)は副作用として`self.asm_text`へ
+            // 積まれる。戻り値のオペランド文字列自体は構造体には
+            // 使えないので捨てる
+            let _ = self.extract_operand_text(src, this_is_self);
+            if let inst::Inst::Struct { mem, is_self, .. } = self.curr_inst[*src].clone() {
+                // `emit_struct_ini_asm`はメンバーを書き込みながら
+                // `self.stk_use_counter`を進めていくため、呼び出し後
+                // では構造体自身の先頭オフセット(`%rbp`から見た位置)が
+                // 分からなくなってしまう。呼び出し前の値を控えておき、
+                // それをこの変数の実体の位置として登録する
+                let struct_stk_offset = self.stk_use_counter;
+                let ini_asm = 
+                    self.emit_struct_ini_asm(mem, is_self);
+                self.asm_text.push_str(
+                    ini_asm.as_str()
+                );
+                // 登録する変数名は`Inst::Struct`自身が持つ`name`
+                // (構造体の型名、例:`Name`)ではなく、この`Mov`が
+                // 束縛しようとしている変数名(`a: Name = Name { .. }`
+                // の`a`、関数の引数として受け取った`name`)である
+                // 必要がある。以前はここで`if let`のパターンにより
+                // `name`がシャドーイングされ、型名を変数名として
+                // 誤って登録してしまっていた
+                if let Some(var_name) = name {
+                    self.insert_var_info(
+                        var_name,
+                        asm_emitter::VarIndexInfo::new_stack(
+                            &struct_stk_offset,
+                            &size,
+                            dst,
+                        ),
+                    );
+                }
+                return ();
+            }
+
+            let inst::Inst::CallFunc(meta_data) = self.curr_inst[*src].clone() else {
+                panic!("構造体を返す初期化式はコンストラクタ呼び出しである必要があります: {:?}", self.curr_inst[*src]);
+            };
+            let self_arg_idx = *meta_data
+                .params
+                .get(0)
+                .expect("構造体を返す関数は暗黙のselfポインタ引数を持つ必要があります");
+            let inst::Inst::GetAddress(mem_idx) = self.curr_inst[self_arg_idx].clone() else {
+                panic!("システムエラー: 暗黙のselfポインタ引数がGetAddressではありません");
+            };
+            let inst::Inst::GetPtr { stk, .. } = self.curr_inst[mem_idx].clone() else {
+                panic!("システムエラー: 暗黙のselfポインタ引数の参照先がGetPtrではありません");
+            };
+
+            if let Some(var_name) = name {
+                self.insert_var_info(
+                    var_name,
+                    asm_emitter::VarIndexInfo::new_stack(&stk, &size, dst),
+                );
+            }
+            return;
+        }
+
         if self.data_map.iter().find(|v| &v.0 == src).is_some() {
             // 子のノードがstaticりょいきの値なので、変数名だけ登録する
             self.insert_var_info(

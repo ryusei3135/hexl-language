@@ -38,7 +38,7 @@ add(a: int, b: int) {
 
 _start(): int {
     func2(10)
-    a: ""[int] = 30
+    a: static[int] = 30
     b::add_1(10)
     s: Name = Name {
         name: 10

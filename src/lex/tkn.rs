@@ -40,6 +40,7 @@ pub enum Tkn {
     KeyWordStruct,
     KeyWordEnum,
     KeyWordConst,
+    KeyWordStatic,
     /// `Self` (メゾット内で自身の構造体を表す予約語)
     KeyWordSelf,
 }

@@ -22,12 +22,24 @@ impl IR {
                     // 確保したスタックのノードをirに追加、targetの
                     // 引数の値に、自分自身のポインタを入れる、
                     self.ir_tree.push(inst::Inst::Stacks { size });
-                    let self_idx = self.id_counter;
                     self.id_counter += 1;
 
+                    // `GetPtr.stk`は`%rbp`からの「バイトオフセット」として
+                    // `gen`側でそのまま使われる(`fmt_ref_operand("%rbp", &stk)`)。
+                    // 以前はここに`self.id_counter`(命令が生成された順番を
+                    // 表すID)を渡してしまっていたため、実際のスタック上の
+                    // 位置とは無関係な値がオフセットとして出力され、
+                    // `lea -0(%rbp), %rdi`のようにたまたま小さい数字に
+                    // なった場合だけ「それらしく」見える壊れたアセンブリが
+                    // 生成されていた。
+                    // 直前の`for field in &struct_info.fields`ループで
+                    // `self.stack_counter(&field.ty)`によりこの構造体の
+                    // サイズ分を`self.stk_counter`へ積み終えているため、
+                    // ここでの`self.stk_counter`が、この構造体が実際に
+                    // 置かれる`%rbp`からの正しい累積オフセットになる
                     self.ir_tree.push(inst::Inst::GetPtr {
                         size,
-                        stk: self_idx,
+                        stk: self.stk_counter,
                     });
                     let self_idx = self.id_counter;
                     self.id_counter += 1;

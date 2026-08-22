@@ -6,6 +6,7 @@ mod asm_emitter;
 mod call_func;
 mod inline_asm;
 mod mng_fmt;
+mod emit_fn_name;
 
 use crate::ir::{def_tree, inst, types::Size};
 use std::collections::HashMap;

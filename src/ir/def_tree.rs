@@ -114,6 +114,23 @@ impl StructTree {
 
         panic!();
     }
+
+    pub fn get_mem_size(
+        &self,
+        name: &String,
+        field_name: &String,
+    ) -> types::Size {
+        let ty = self.tree
+            .get(name)
+            .unwrap()
+            .fields
+            .iter()
+            .find(|v| &v.name == field_name)
+            .unwrap()
+            .ty
+            .clone();
+        types::Size::new(&ty)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

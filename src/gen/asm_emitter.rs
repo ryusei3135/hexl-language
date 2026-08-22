@@ -8,9 +8,23 @@ use crate::ir::types;
 
 #[derive(Debug, Clone)]
 pub struct VarIndexInfo {
+    /// `is_stack`が`false`の場合はレジスタ番号(従来通り)、
+    /// `true`の場合は`%rbp`からのバイトオフセットを表す
     pub reg: usize,
     pub size: types::Size,
     pub index: usize,
+    /// `true`の場合、この変数の実体は(ポインタをレジスタに保持するのではなく)
+    /// `%rbp`相対のメモリ上に直接置かれている
+    ///
+    /// `a: Name = Name::new()`のように、構造体を返すコンストラクタの
+    /// 戻り値をローカル変数へ束縛する場合に使う。この場合、呼び出し先の
+    /// 関数は既に呼び出し元が確保したスタック位置(`%rbp`基準)へ直接
+    /// 構造体を書き込んでいるため、戻り値をわざわざ別のレジスタへ
+    /// コピーする必要はなく、変数`a`はそのメモリ位置をそのまま指すべき。
+    /// (以前はここを常にレジスタとして扱っていたため、戻り値の
+    ///  ポインタを一旦別レジスタへコピーし、構造体の読み書きの際も
+    ///  `%rbp`ではなくそのレジスタ経由の間接参照になってしまっていた)
+    pub is_stack: bool,
 }
 
 impl VarIndexInfo {
@@ -19,6 +33,17 @@ impl VarIndexInfo {
             reg: *reg,
             size: size.clone(),
             index: *index,
+            is_stack: false,
+        }
+    }
+
+    /// `%rbp`からのオフセット(`offset`)に直接置かれている変数として登録する
+    pub fn new_stack(offset: &usize, size: &types::Size, index: &usize) -> Self {
+        Self {
+            reg: *offset,
+            size: size.clone(),
+            index: *index,
+            is_stack: true,
         }
     }
 }
@@ -134,6 +159,7 @@ impl AsmEmitter {
 
         // エントリーポイントを先頭に配置
         if let Some(ref mut meta_data) = func_tree.func.remove_entry("_start") {
+            println!("{:?}", meta_data);
             self.build_func_process(meta_data, &asm_fmt_name);
         }
 
@@ -224,13 +250,36 @@ impl AsmEmitter {
         let mut formated = if let Some(struct_idx) = self.resolve_struct_idx(src1) {
             // 構造体の生成
             let mut txt = self.extract_operand_text(&struct_idx, this_is_self);
-            txt.push_str(
+
+            // 構造体を`ret`する行は、構造体の「値」ではなく、それが
+            // 置かれているメモリの「アドレス」を戻り値のレジスタへ
+            // 返す必要がある。
+            // - メゾット内(`this_is_self`)の場合、構造体は`self`
+            //   ポインタ(呼び出し規約上の第一引数のレジスタ、
+            //   `%rdi`など)が指す先に直接書き込まれているため、
+            //   返すアドレスも`%rbp`ではなくこの`self`ポインタで
+            //   なければならない。またアドレスを求める処理なので、
+            //   `mov`ではなく`lea`(テンプレート上のキーは`address`)
+            //   を使う必要がある。
+            //   以前はここが常に`opcode`(呼び出し元から渡された
+            //   `"mov"`)と`%rbp`決め打ちだったため、`self`のポインタ
+            //   を無視した`mov %rbp, %rax`という誤ったコードが
+            //   生成されてしまっていた。
+            let ret_line = if this_is_self {
+                let self_ptr_reg = self.asm_fmt.get_fmt_param::<String>(&0, Size::DQ);
+                let line = self
+                    .asm_fmt
+                    .get_opcode_tmpl("address")
+                    .replace("{dst}", &self.get_reg(dst, &Size::DQ))
+                    .replace("{src1}", &self_ptr_reg);
+                self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
+            } else {
                 self.asm_fmt
                     .get_opcode_tmpl(opcode)
                     .replace("{dst}", &self.get_reg(dst, &Size::DQ))
                     .replace("{src1}", "%rbp")
-                    .as_str(),
-            );
+            };
+            txt.push_str(&ret_line);
             txt
         } else {
             // `address`(=`lea`)はアドレス(ポインタ)を求める命令なので、
@@ -382,9 +431,9 @@ impl AsmEmitter {
                 // `asm_emitter/operand_txt/`に記述
                 self.ref_mem_value_txt(&kind, &size, &parent_id)
             }
-            inst::Inst::RefStruct { src, size } => {
+            inst::Inst::RefStruct { src, pos, .. } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.ref_struct_txt(&src, &size)
+                self.ref_struct_txt(&src, &pos)
             }
             inst::Inst::GetAddress(index) => self.extract_operand_text(&index.clone(), in_self_ptr),
             // 配列リテラル自体を値として参照する場合

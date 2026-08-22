@@ -238,6 +238,7 @@ impl Lexer {
                     "struct" => Tkn::KeyWordStruct,
                     "enum" => Tkn::KeyWordEnum,
                     "const" => Tkn::KeyWordConst,
+                    "static" => Tkn::KeyWordStatic,
                     "Self" => Tkn::KeyWordSelf,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },

@@ -65,20 +65,55 @@ impl AsmEmitter {
     }
 
     /// 構造体を参照するコードを作成
-    pub(super) fn ref_struct_txt(&mut self, src: &str, size: &usize) -> String {
-        self.asm_fmt.fmt_ref_operand(
-            &self.asm_fmt.get_fmt_reg(
-                &self.var_hash_map.get(&src.to_string()).expect(&src).reg,
-                &Size::DQ,
-            ),
-            &size,
-        )
+    pub(super) fn ref_struct_txt(
+        &mut self, 
+        src: &str, 
+        size: &usize
+    ) -> String {
+        println!("{:?}", self.var_hash_map);
+        let var_info = self
+            .var_hash_map
+            .get(&src.to_string())
+            .expect(&src);
+
+        if var_info.is_stack {
+            // `src`(構造体変数自身)が、ポインタをレジスタに持つのでは
+            // なく`%rbp`相対のメモリに直接置かれている場合
+            // (`a: Name = Name::new()`のように構造体を直接ローカル
+            //  変数として初期化した場合など)。
+            // このとき`var_info.reg`には`%rbp`からの構造体先頭の
+            // オフセットが入っているので、そこにメンバーのオフセット
+            // (`size`)を足した位置を直接`%rbp`相対で参照する
+            // (レジスタを経由した間接参照`(%rcx)`にはしない)
+            let offset = var_info.reg + size;
+            self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), &offset)
+        } else {
+            self.asm_fmt.fmt_ref_operand(
+                &self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DQ),
+                &size,
+            )
+        }
     }
 
     pub(super) fn gen_mov_code(&mut self, name: &Option<String>, src: &usize) -> String {
         let Some(var_name) = name else {
             panic!();
         };
+
+        let var = self
+            .var_hash_map
+            .get(&*var_name)
+            .unwrap_or_else(|| panic!("this var is not found -> {}", var_name));
+
+        if var.is_stack {
+            // `a: Name = Name::new()`のように、構造体が`%rbp`相対の
+            // メモリに直接置かれている変数の場合。
+            // レジスタは経由せず、`%rbp`からのオフセットをそのまま
+            // オペランドの文字列として返す(呼び出し元がこれを
+            // `lea`の`{src1}`として使えば構造体のアドレスに、
+            // そのまま使えば構造体の先頭位置になる)
+            return self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), &var.reg);
+        }
 
         // ポインタ型の変数はアドレス(常に8byte)を保持するため、
         // 32bitレジスタ(`%ecx`など)ではなく64bitレジスタ
@@ -87,11 +122,7 @@ impl AsmEmitter {
         //  `Pointer`を通ってこの関数まで辿り着くため、ここで
         //  正しいレジスタ幅を選ばないと`(%ecx)`のような不正な
         //  間接参照になってしまう)
-        let (reg_num, is_ptr) = if let Some(var) = self.var_hash_map.get(&*var_name) {
-            (var.reg, var.size.is_pointer().is_some())
-        } else {
-            panic!("this var is not found -> {}", name.as_ref().unwrap());
-        };
+        let (reg_num, is_ptr) = (var.reg, var.size.is_pointer().is_some());
         let size = if is_ptr { Size::DQ } else { Size::DD };
 
         if let Some(static_var) = self.data_map.iter().find(|v| &v.0 == src) {

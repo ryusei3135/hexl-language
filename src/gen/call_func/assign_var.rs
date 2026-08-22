@@ -30,9 +30,28 @@ impl AsmEmitter {
             .replace("{dst}", &dst_operand)
             .replace("{src1}", &value_operand);
 
-        text = self
-            .asm_fmt
-            .fmt_mnemonic_resize("mov", &text, &self.get_var_ty(&name));
+        // ニーモニックのサイズ調整に使う型。
+        //
+        // `[ptr] = 20`/`[arr 0] = 10`のケースでは、`name`(ポインタ/
+        // 配列の変数名)の型(`Pointer{ty}`/`Array{size,..}`)がそのまま
+        // 書き込む値のサイズを表しているため、`get_var_ty(&name)`で
+        // 問題なかった。
+        //
+        // しかし`a.[c 0] = 10`(`Inst::RefStruct`)のケースでは、`name`は
+        // メンバーではなく構造体変数自体(`a`)の名前であり、その型は
+        // `Size::Struct(..)`になる。これは`fmt_mnemonic_resize`が
+        // 扱えるサイズ(DB/DW/DD/DQ/Array/Pointer)ではないためパニックして
+        // しまう。この場合は変数の型ではなく、実際に書き込む値
+        // (`Inst::Num`)自身が持つサイズを使う必要がある。
+        let mnemonic_size = match &self.curr_inst[*dst] {
+            inst::Inst::RefStruct { .. } => match &self.curr_inst[*value] {
+                inst::Inst::Num { size, .. } => size.clone(),
+                _ => self.get_var_ty(&name),
+            },
+            _ => self.get_var_ty(&name),
+        };
+
+        text = self.asm_fmt.fmt_mnemonic_resize("mov", &text, &mnemonic_size);
         self.asm_text.push_str(&text);
     }
 
