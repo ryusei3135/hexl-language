@@ -50,7 +50,7 @@ impl Parser {
         if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx) {
             Ok(value.tkn.clone())
         } else {
-            err::SyntaxErr::tkn_is_eof(self.build_err_span(), expected)
+            crate::syntax_err!(self.build_err_span(), err::SyntaxErrKind::TknIsEof { expected })
         }
     }
 
@@ -62,7 +62,7 @@ impl Parser {
         if let Some(value) = self.tkns.as_ref().unwrap().get(self.idx + 1) {
             Ok(value.tkn.clone())
         } else {
-            err::SyntaxErr::tkn_is_eof(self.build_err_span(), expected)
+            crate::syntax_err!(self.build_err_span(), err::SyntaxErrKind::TknIsEof { expected })
         }
     }
 

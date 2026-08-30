@@ -1,28 +1,40 @@
 use super::*;
 
 impl IR {
-    pub fn member_is_var(&mut self, scope: &Vec<String>, name: &String) -> inst::Inst {
-        let _ = match self.var_tree.get(&scope.last().unwrap()) {
+    pub fn member_is_var(
+        &mut self, 
+        scope: &Vec<String>, 
+        name: &String
+    ) -> inst::Inst {
+        /*match self.var_tree.get(&scope.last().unwrap()) {
             def_tree::VarType::Local(index) => *index,
             def_tree::VarType::Param(param) => {
                 // 引数のノード
                 *param
             }
-        };
-        let pos = self.struct_tree.get_pos(
+        };*/
+        let member_name = scope
+            .last()
+            .unwrap()
+            .to_string();
+        let pos: usize = self.struct_tree.get_pos(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
-            &self.var_tree.get_ty_name(scope.last().unwrap()),
+            &self.var_tree
+                .get_ty_name(&member_name),
             &name,
         );
-        let size = self.struct_tree.get_mem_size(
-            // 変数の名前で登録されている変数の型を取得する
-            // （変数）の名前の文字列
-            &self.var_tree.get_ty_name(scope.last().unwrap()),
-            &name,
-        );
+        let size: types::Size = self
+            .struct_tree
+            .get_mem_size(
+                // 変数の名前で登録されている変数の型を取得する
+                // （変数）の名前の文字列
+                &self.var_tree
+                    .get_ty_name(&member_name),
+                &name,
+            );
         inst::Inst::RefStruct {
-            src: scope.last().unwrap().to_string(),
+            src: member_name,
             size,
             pos,
         }
@@ -52,7 +64,7 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
         );
 
-        self.gen_call_func_ir(Some(&struct_name), &call_info)
+        self.gen_call_fn_ir(Some(&struct_name), &call_info)
     }
 
     pub fn member_is_arr_ref(
@@ -99,7 +111,7 @@ impl IR {
 
         inst::Inst::RefStruct {
             src: var_name,
-            size: types::Size::new(&field_ty),
+            size: types::Size::new(&field_ty).unwrap(),
             pos: field_pos + index_num * elem_size,
         }
     }

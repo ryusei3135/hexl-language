@@ -67,11 +67,13 @@ impl Parser {
                                 lex::Tkn::Name(name) => self.build_func::<true>(&name),
                                 unexpect_tkn => {
                                     // 期待したトークンじゃないので、エラー
-                                    err::SyntaxErr::unexpect_tkn_after_keyword(
+                                    crate::syntax_err!(
                                         self.build_err_span(),
-                                        lex::Tkn::KeyWordPub,
-                                        vec!["struct", "enum", "name"],
-                                        &unexpect_tkn,
+                                        err::SyntaxErrKind::UnexpectTknAfterKeyword {
+                                            keyword: lex::Tkn::KeyWordPub,
+                                            expected: vec!["struct", "enum", "name"],
+                                            found: unexpect_tkn,
+                                        }
                                     )
                                 }
                             }?;

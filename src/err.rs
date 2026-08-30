@@ -1,9 +1,21 @@
 use crate::lex;
+use std::fmt;
 
-#[derive(Clone, Debug, PartialEq)]
+pub mod syntax_err;
+pub mod opt;
+pub mod undef;
+pub mod lex_err;
+pub use syntax_err::*;
+
+// ---------------------------------------------------------------------
+// 位置情報
+// ---------------------------------------------------------------------
+
+/// 解析対象のソースコード上の位置(何行目の何文字目か)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
     pub line: usize,
-    pos: usize,
+    pub pos: usize,
 }
 
 impl Span {
@@ -13,186 +25,126 @@ impl Span {
             pos: *pos,
         }
     }
+
+    /// 位置情報が存在しない(取得できない)場合に使う
+    pub fn unknown() -> Self {
+        Self { line: 0, pos: 0 }
+    }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum SystemErr {
-    FlagNotFound,
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}行目 {}文字目", self.line, self.pos)
+    }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum UnenclosedScope {
-    Scope,
-    Syntax(lex::Tkn),
+/// エラーが「どこで(`Span`)」「どの関数で」発生したかをまとめた情報。
+///
+/// すべてのエラーの種類([`SyntaxErrKind`]・[`CondErrKinds`]・
+/// [`PreprocErrs`])は、必ずこの`ErrLoc`とセットで保持される。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ErrLoc {
+    /// 解析していたソースコード上の位置
+    pub span: Span,
+    /// エラーを発生させた(パーサー側の)関数の名前
+    ///
+    /// [`func_name!`]マクロによって、モジュールパス付きの
+    /// フルパス(例: `parse::expr::cond::expr_match`)が入る。
+    pub func_name: String,
 }
 
-/// 構文エラーを管理する
-#[derive(Clone, Debug, PartialEq)]
-pub enum SyntaxErr {
-    Expected(char),
-    Unexpected(lex::Tkn),
-    DoubleTokenErr(lex::Tkn),
-    UnenclosedScope(UnenclosedScope),
-    UnexpectedTkn {
-        /// 期待されたのに無かったトークン
-        found: lex::Tkn,
-        /// 期待したトークン
-        expected: lex::Tkn,
-        syntax: lex::Tkn,
-    },
-    UnexpectedEOF {
-        expected: Vec<String>,
-    },
-    UnexpectedTokenAfterKeyword {
-        /// 直前にあった予約語（例: "let", "fn", "if"）
-        keyword: lex::Tkn,
-        /// 本来期待されていたトークンの説明（例: "an identifier", "an expression"）
-        expected: Vec<String>,
-        /// 実際に解析された不正なトークン
-        found: lex::Tkn,
-    },
+impl ErrLoc {
+    pub fn new(span: Span, func_name: String) -> Self {
+        Self { span, func_name }
+    }
 }
 
-impl SyntaxErr {
-    /// {}でスコープが閉じられていないときのエラー
-    pub fn unenclosed_scope(span: Span, target: Option<lex::Tkn>) -> ErrKind {
-        ErrKind::SyntaxErr {
-            span,
-            kind: Self::UnenclosedScope(
-                target
-                    .map(|v| UnenclosedScope::Syntax(v))
-                    // Noneの場合はScopeになる
-                    .or(Some(UnenclosedScope::Scope))
-                    .unwrap(),
-            ),
+impl fmt::Display for ErrLoc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({}関数)", self.span, self.func_name)
+    }
+}
+
+/// 呼び出された場所を囲む関数の名前を、モジュールパス付きで取得するマクロ。
+///
+/// Rustの標準機能だけでは「今実行中の関数名」を直接取得できないため、
+/// ローカル関数`f`を定義し、その`type_name`から関数名を逆算するという
+/// 定番のテクニックを使っている。
+#[macro_export]
+macro_rules! func_name {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
         }
-    }
-
-    pub fn unexpected_tkn(
-        span: Span,
-        found: lex::Tkn,
-        expected: lex::Tkn,
-        // どの構文でのエラーか
-        syntax: lex::Tkn,
-    ) -> ErrKind {
-        ErrKind::SyntaxErr {
-            span,
-            kind: Self::UnexpectedTkn {
-                found,
-                expected,
-                syntax,
-            },
-        }
-    }
-    /// 任意のトークンを期待したのに、トークンが
-    /// 終了したとき
-    pub fn tkn_is_eof(span: Span, expected: Vec<&'static str>) -> Result<lex::Tkn, ErrKind> {
-        let node = ErrKind::SyntaxErr {
-            span,
-            kind: Self::UnexpectedEOF {
-                expected: expected.into_iter().map(String::from).collect(),
-            },
-        };
-        Err(node)
-    }
-    /// 期待したトークンと違うものが来た時のエラー
-    pub fn unexpect_tkn_after_keyword(
-        span: Span,
-        keyword: lex::Tkn,
-        expected: Vec<&str>,
-        found: &lex::Tkn,
-    ) -> Result<(), ErrKind> {
-        let node = ErrKind::SyntaxErr {
-            span,
-            kind: Self::UnexpectedTokenAfterKeyword {
-                keyword,
-                expected: expected.into_iter().map(String::from).collect(),
-                found: found.clone(),
-            },
-        };
-        Err(node)
-    }
+        let name = type_name_of(f);
+        // 末尾の"::f"を取り除き、関数名だけを残す
+        name.strip_suffix("::f").unwrap_or(name).to_string()
+    }};
 }
 
-/// プリプロセッサ関係のエラーコード
-#[derive(Clone, Debug, PartialEq)]
-pub enum PreprocErrs {
-    // #asm
-    ExpectedLParenAfterAsm,
-    ExpectedRParenAfterAsm,
-    NotFoundAsmName,
 
-    // #asm の `${...}` 内の式
-    EmptyAsmOperand,
-    UnexpectedTokenInAsmOperand,
-    ExpectedMemberNameInAsmOperand,
-    ExpectedRParenInAsmOperand,
-    ExpectedRBracketInAsmOperand,
-    UnexpectedTrailingTokenInAsmOperand,
+// ---------------------------------------------------------------------
+// 集約されたエラー
+// ---------------------------------------------------------------------
 
-    // #include
-    ExpectedPathSegment,
-}
-
-impl PreprocErrs {
-    pub fn build(self, span: Span) -> ErrKind {
-        ErrKind::PreprocErr { kind: self, span }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum LexErr {
-    ThisNumIsInvalid,
-}
-
-impl LexErr {
-    pub fn fmt(self, line: &usize, pos: &usize) -> ErrKind {
-        ErrKind::LexErrs {
-            kind: self,
-            line: line.clone(),
-            pos: pos.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
+/// `parse`クレート全体で使う、集約されたエラー型。
+#[derive(Debug, Clone, PartialEq)]
 pub enum ErrKind {
-    EndTkn,
-    OptErr,
-    SystemErr(SystemErr),
-    UnexpectedToken,
+    /// 見つかるべきトークンが見つからなかった(簡易版)
     NotFoundTkn(lex::Tkn),
-    SyntaxErr {
-        /// エラーが発生したソースコード上の位置（行・列など）
-        span: Span,
-        kind: SyntaxErr,
-    },
-    PreprocErr {
-        kind: PreprocErrs,
-        span: Span,
-    },
-    MissingTknAfter(Option<lex::Tkn>),
-    LexErrs {
-        kind: LexErr,
-        line: usize,
-        pos: usize,
-    },
+    /// 予期しないトークンだった(簡易版、詳細情報なし)
+    UnexpectedToken,
+    /// トークン管理・式解析など、構文解析全般のエラー
+    Syntax(SyntaxErr),
+    /// プリプロセッサ特有のエラー
+    Preproc(PreprocErrDetail),
 }
 
-impl ErrKind {
-    /// エラーのバリアントを`Result`のエラーで包む
-    pub fn wrap_in_err(self) -> Result<(), Self> {
-        Err(self)
+impl fmt::Display for ErrKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFoundTkn(t) => write!(f, "`{:?}`が見つかりません", t),
+            Self::UnexpectedToken => write!(f, "予期しないトークンです"),
+            Self::Syntax(e) => write!(f, "{}", e),
+            Self::Preproc(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl std::error::Error for ErrKind {}
+
+impl From<SyntaxErr> for ErrKind {
+    fn from(e: SyntaxErr) -> Self {
+        ErrKind::Syntax(e)
+    }
+}
+
+impl From<PreprocErrDetail> for ErrKind {
+    fn from(e: PreprocErrDetail) -> Self {
+        ErrKind::Preproc(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_includes_position_and_func_name() {
+        let e = ErrKind::Syntax(SyntaxErr {
+            kind: SyntaxErrKind::TknIsEofInExpr,
+            loc: ErrLoc::new(Span::new(&3, &10), "expr_value".to_string()),
+        });
+        let msg = e.to_string();
+        assert!(msg.contains("3行目"));
+        assert!(msg.contains("10文字目"));
+        assert!(msg.contains("expr_value"));
     }
 
-    pub fn lex_err(&self) {
-        if let Self::LexErrs { kind, line, pos } = self {
-            match &kind {
-                LexErr::ThisNumIsInvalid => {
-                    println!("this num is invalid");
-                    println!("line `{}`, pos `{}`", line, pos);
-                }
-            }
-        }
+    #[test]
+    fn cond_err_kind_message() {
+        let kind = CondErrKinds::CondElseNotFound;
+        assert_eq!(kind.to_string(), "`cond`式に`|`(else)が見つかりません");
     }
 }

@@ -4,10 +4,10 @@ mod gen;
 mod ir;
 mod lex;
 mod macros;
-mod node;
 mod parse;
 
 use std::{env, fs, io};
+pub use parse::node;
 
 // ファイルやオプション管理
 pub mod cmd_line_args {
@@ -44,7 +44,7 @@ pub mod cmd_line_args {
         }
 
         /// 値を渡す、フラグがすでに立っているなら成功
-        pub fn set_value(&mut self, value: String) -> Result<(), err::ErrKind> {
+        pub fn set_value(&mut self, value: String) -> Result<(), err::opt::OptErrs> {
             if let Some(flag) = self.opt_flags.take() {
                 let _ = match flag {
                     OptFlags::FmtAsm => self.fmt_name.insert(value),
@@ -52,18 +52,18 @@ pub mod cmd_line_args {
                 };
                 Ok(())
             } else {
-                Err(err::ErrKind::OptErr)
+                Err(err::opt::OptErrs::OptFlags)
             }
         }
 
         /// フラグを立てる
         /// もしフラグがすでに立っている場合はエラーになる
-        pub fn set_flag(&mut self, flag_name: OptFlags) -> Result<(), err::ErrKind> {
+        pub fn set_flag(&mut self, flag_name: OptFlags) -> Result<(), err::opt::OptErrs> {
             if self.opt_flags.is_none() {
                 let _ = self.opt_flags.insert(flag_name);
                 Ok(())
             } else {
-                Err(err::ErrKind::OptErr)
+                Err(err::opt::OptErrs::OptFlags)
             }
         }
     }
@@ -112,7 +112,7 @@ pub fn build(
     let mut parser = parse::Parser::new();
     let mut ir_builder = ir::IR::new();
     // アセンブリ言語のデータを作成
-    let _ = lexer.analy(&content).map_err(|v| v.lex_err());
+    let _ = lexer.analy(&content).unwrap();
 
     let nodes = parser.parser(lexer.gen_tkns.clone()).unwrap();
     let func_def_meta_data = ir_builder

@@ -470,6 +470,7 @@ impl AsmEmitter {
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "mul",
             inst::ExprKind::Div => "div",
+            inst::ExprKind::Surplus => "sur",
             inst::ExprKind::LessThen => "cmp_l",
             inst::ExprKind::GreaterThen => "cmp_g",
             inst::ExprKind::Equal => "cmp_e",
@@ -484,6 +485,7 @@ impl AsmEmitter {
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "mul",
             inst::ExprKind::Div => "div",
+            inst::ExprKind::Surplus => "sur",
             inst::ExprKind::LessThen
             | inst::ExprKind::GreaterThen
             | inst::ExprKind::NotEq
@@ -512,14 +514,15 @@ impl AsmEmitter {
             formated = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &formated, &size);
         }
 
-        if let Some(ref name) = self.reserved_label_name.take() {
-            // ラベルの予約があるかつフォーマット中の文字列に"{label}"
-            // がない場合はシステムエラー
-            if formated.find("{label}").is_some() {
-                formated.replace("{label}", name)
-            } else {
-                panic!("system err");
-            }
+        if self.reserved_label_name.is_some() && formated.contains("{label}") {
+            // 実際に`{label}`を使うテンプレートの場合のみ予約を消費する。
+            // (以前は`Option::take`を無条件に呼んでいたため、`{label}`を
+            //  含まない中間の式(例: `n % 15`の剰余計算)を先に処理した
+            //  際に、まだ使われていないラベルの予約が捨てられてしまい、
+            //  本来ラベルを埋め込むべき比較式の`{label}`が置換されない
+            //  まま出力される、という不具合があった)
+            let name = self.reserved_label_name.take().unwrap();
+            formated.replace("{label}", &name)
         } else {
             formated
         }

@@ -1,5 +1,5 @@
 //! ## 引数
-//! 1. init_struct
+//! 1. ini_struct
 //!     - これがtrueの場合構造体を初期化するノードを作成できる
 //!     - falseの場合は初期化ノードを作成しない
 
@@ -9,7 +9,6 @@ mod cond;
 /// このファイルでしか使われないAPIのモジュール
 mod value_api;
 
-type ExprResult = Result<node::Expr, err::ErrKind>;
 
 impl Parser {
     pub(super) fn expr_define_var(
@@ -81,16 +80,21 @@ impl Parser {
             }
 
             if self.current_tkn() == &lex::Tkn::Equal {
-                node::DefineVar::new(&name, self.expr_branch()?, &ty_node).wrap()
+                node::DefineVar::new(
+                    &name, 
+                    self.expr_branch()?, 
+                    &ty_node
+                ).wrap()
             } else {
-                panic!(">> :{:?}", self.current_tkn());
+                crate::syntax_err!(
+                    self.build_err_span(),
+                    err::SyntaxErrKind::UnexpectTknInExpr {
+                        found: self.current_tkn().clone(),
+                    }
+                )?
             }
         } else {
-            let result = err::SyntaxErr::tkn_is_eof(
-                self.build_err_span(),
-                vec!["(", "{", ",", ":", "]", "="],
-            );
-            panic!("{:?}", result);
+            crate::syntax_err!(self.build_err_span(), err::SyntaxErrKind::TknIsEofInExpr)?
         };
 
         Ok(node)
@@ -106,22 +110,25 @@ impl Parser {
         }
     }
 
-    pub(super) fn expr_cmp(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
-        let mut left = self.expr_add(init_struct)?;
+    pub(super) fn expr_cmp(
+        &mut self, 
+        ini_struct: bool
+    ) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_add(ini_struct)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::LAngleBracket => {
-                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_add(ini_struct)?))
                 }
                 lex::Tkn::RAngleBracket => {
-                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_add(ini_struct)?))
                 }
                 lex::Tkn::EqEq => {
-                    node::Expr::Equal(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                    node::Expr::Equal(node::Expr::wrap(left, self.expr_add(ini_struct)?))
                 }
                 lex::Tkn::NotEq => {
-                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_add(ini_struct)?))
                 }
                 _ => break,
             };
@@ -130,17 +137,20 @@ impl Parser {
         Ok(left)
     }
 
-    pub(super) fn expr_add(&mut self, init_struct: bool) -> ExprResult {
-        let mut left = self.expr_mul(init_struct)?;
+    pub(super) fn expr_add(
+        &mut self, 
+        ini_struct: bool
+    ) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_mul(ini_struct)?;
 
         // expr_mulですでにトークンを進めているので現在のトークンを参照
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Add => {
-                    node::Expr::Add(node::Expr::wrap(left, self.expr_mul(init_struct)?))
+                    node::Expr::Add(node::Expr::wrap(left, self.expr_mul(ini_struct)?))
                 }
                 lex::Tkn::Sub => {
-                    node::Expr::Sub(node::Expr::wrap(left, self.expr_mul(init_struct)?))
+                    node::Expr::Sub(node::Expr::wrap(left, self.expr_mul(ini_struct)?))
                 }
                 _ => break,
             };
@@ -148,16 +158,22 @@ impl Parser {
         Ok(left)
     }
 
-    fn expr_mul(&mut self, init_struct: bool) -> ExprResult {
-        let mut left = self.expr_value(init_struct)?;
+    fn expr_mul(
+        &mut self, 
+        ini_struct: bool
+    ) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_value(ini_struct)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Mul => {
-                    node::Expr::Mul(node::Expr::wrap(left, self.expr_value(init_struct)?))
+                    node::Expr::Mul(node::Expr::wrap(left, self.expr_value(ini_struct)?))
                 }
                 lex::Tkn::Div => {
-                    node::Expr::Div(node::Expr::wrap(left, self.expr_value(init_struct)?))
+                    node::Expr::Div(node::Expr::wrap(left, self.expr_value(ini_struct)?))
+                }
+                lex::Tkn::Surplus => {
+                    node::Expr::Surplus(node::Expr::wrap(left, self.expr_value(ini_struct)?))
                 }
                 _ => break,
             };
@@ -165,17 +181,20 @@ impl Parser {
         Ok(left)
     }
 
-    fn expr_value(&mut self, init_struct: bool) -> ExprResult {
+    fn expr_value(
+        &mut self, 
+        ini_struct: bool
+    ) -> Result<node::Expr, err::ErrKind> {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
             match self.next_tkn(vec![])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
-                    return self.gen_name_node::<false>(name, init_struct);
+                    return self.gen_name_node::<false>(name, ini_struct);
                 }
                 lex::Tkn::RBrace => {
-                    return self.gen_name_node::<false>(name, init_struct);
+                    return self.gen_name_node::<false>(name, ini_struct);
                 }
                 // 関数を呼ぶノード
                 lex::Tkn::LParen => {}
@@ -186,7 +205,7 @@ impl Parser {
                 return self.build_scope_node(&name);
             }
             // 前回のトークンが名前かつ(なので、関数を呼び出すノードを作成する
-            return self.call_func_expr(&name, init_struct);
+            return self.call_func_expr(&name, ini_struct);
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
@@ -194,20 +213,32 @@ impl Parser {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
-            lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
+            lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(ini_struct)?)),
             lex::Tkn::Number(value) => node::Expr::Number(value),
             lex::Tkn::KeyWordSelf => {
-                let self_name = self.struct_self_name.as_ref().unwrap().to_string();
-                self.gen_name_node::<true>(self_name, init_struct)?
+                let self_name = self
+                    .struct_self_name
+                    .as_ref()
+                    .unwrap()
+                    .to_string();
+                // `expr/value_api.rs`
+                self.gen_name_node::<true>(self_name, ini_struct)?
             }
             lex::Tkn::Str(value) => node::Expr::Str(value),
-            lex::Tkn::Name(name) => self.gen_name_node::<false>(name, init_struct)?,
+            lex::Tkn::Name(name) => {
+                self.gen_name_node::<false>(name, ini_struct)?
+            }
             lex::Tkn::LParen => {
-                let result = self.expr_cmp(init_struct)?;
+                let result = self.expr_cmp(ini_struct)?;
 
                 if self.current_tkn() == &lex::Tkn::LParen {
                     dbg!(self.current_tkn());
-                    Err(err::ErrKind::UnexpectedToken)?
+                    crate::syntax_err!(
+                        self.build_err_span(),
+                        err::SyntaxErrKind::UnexpectTknInExpr {
+                            found: self.current_tkn().clone(),
+                        }
+                    )?
                 } else {
                     result
                 }
@@ -265,7 +296,7 @@ impl Parser {
     /// ## Args
     /// - name
     ///     関数の名前
-    /// - init_struct
+    /// - ini_struct
     ///     これがtrueの場合のみ構造体を初期化するノードを作成可能
     ///
     /// ## Panics
@@ -274,7 +305,11 @@ impl Parser {
     /// ## Safety
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
     /// である必要がある
-    pub(super) fn call_func_expr(&mut self, name: &String, init_struct: bool) -> ExprResult {
+    pub(super) fn call_func_expr(
+        &mut self, 
+        name: &String, 
+        ini_struct: bool
+    ) -> Result<node::Expr, err::ErrKind> {
         if !matches!(self.current_tkn(), lex::Tkn::LParen) {
             panic!("call_func_exprを呼び出す際にLParenではない");
         }
@@ -285,7 +320,7 @@ impl Parser {
         if !matches!(self.next_tkn_ref(vec!["not `)`"])?, lex::Tkn::RParen) {
             loop {
                 // 引数の式を取得
-                args.push(self.expr_cmp(init_struct)?);
+                args.push(self.expr_cmp(ini_struct)?);
 
                 match self.current_tkn() {
                     lex::Tkn::Comma => {

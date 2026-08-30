@@ -3,7 +3,10 @@ use super::*;
 impl Parser {
     /// モジュールのノードを作成
     /// name::mod
-    pub(super) fn build_scope_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn build_scope_node(
+        &mut self, 
+        name: &String
+    ) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.next_tkn_ref(vec!["{"])?, lex::Tkn::LBrace) {
             self.next_tkn(vec![]).unwrap();
             let node = self.struct_init_node::<false>(name);

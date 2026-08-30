@@ -1,12 +1,40 @@
 use super::*;
 
 impl IR {
+    /// `gen_expr_ir`とほぼ同じ処理を行うが、式が`Point.new()`のような
+    /// 構造体を返すスコープ呼び出し(`node::Expr::Scope`)だった場合、
+    /// この式の結果を格納する予定の変数名(`var_name`)を`scope_node`に
+    /// そのまま渡す。これにより、構造体の初期化のために確保する
+    /// 一時的なスタック領域が、コンパイラ内部の合成名(`__self_N`)
+    /// ではなく、`var_name`(元の変数名)で`var_tree`に登録される
+    /// (詳細は`src/ir/builder/scope.rs`の`scope_node`を参照)。
+    ///
+    /// `Point.new()`以外の式(数値や別の関数呼び出しなど)の場合は、
+    /// 通常通り`gen_expr_ir`にそのまま委譲する
+    fn gen_named_expr_ir(
+        &mut self,
+        var_name: &String,
+        expr: node::Expr,
+        expect_byte: &types::Size,
+    ) -> usize {
+        if let node::Expr::Scope { scope, target } = expr {
+            self.expr_counter += 1;
+            let inst = self.scope_node(&scope, target, Some(var_name));
+            self.ir_tree.push(inst);
+            self.id_counter += 1;
+            self.id_counter - 1
+        } else {
+            self.gen_expr_ir(expr, expect_byte)
+        }
+    }
+
     pub fn assign_expr_node(
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
     ) -> inst::Inst {
-        let right_expr_idx = self.gen_expr_ir(*assign_node.value, &expect_byte);
+        let right_expr_idx =
+            self.gen_named_expr_ir(&assign_node.name, *assign_node.value, &expect_byte);
         let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
 
         inst::Inst::AssignVar {
@@ -60,7 +88,12 @@ impl IR {
             }
             node::TyNode::Static { .. } => self.gen_mem_def_var(var),
             node::TyNode::Ty(ref ty_name) => {
-                let value_idx = self.gen_expr_ir(*var.value, &self.size_of(&var.ty));
+                // `var.value`が`Point.new()`のような構造体を返す
+                // スコープ呼び出しの場合、`var.name`(元の変数名)を
+                // `gen_named_expr_ir`経由で`scope_node`に渡すことで、
+                // `__self_N`のような合成名を作らせないようにする
+                let value_idx =
+                    self.gen_named_expr_ir(&var.name, *var.value, &self.size_of(&var.ty));
                 // 変数の位置として登録するのは、初期化子の式
                 // (`value_idx`、例えば`Name::new()`を表す`CallFunc`
                 //  ノードそのもの)ではなく、これから生成する`Mov`
@@ -89,7 +122,10 @@ impl IR {
                 }
             }
             node::TyNode::Pointer { ty_name, .. } => {
-                let value_idx = self.gen_expr_ir(*var.value, &self.size_of(&var.ty));
+                // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
+                // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
+                let value_idx =
+                    self.gen_named_expr_ir(&var.name, *var.value, &self.size_of(&var.ty));
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
                 self.var_tree

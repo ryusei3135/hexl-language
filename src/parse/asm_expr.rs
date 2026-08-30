@@ -24,14 +24,14 @@ impl Parser {
     /// - src `${}`の中に書かれていた文字列(例: `"x.y"`, `"*p"`)
     pub(super) fn parse_asm_operand(src: &str) -> Result<node::Expr, err::ErrKind> {
         let mut lexer = lex::Lexer::new();
-        lexer.analy(&src.to_string())?;
+        lexer.analy(&src.to_string()).unwrap();
 
         if lexer.gen_tkns.is_empty() {
             // `${}`のように、中身が空だった場合。
             // トークンが1つも無いので、`build_err_span`が前提とする
             // 「現在位置の1つ前のトークン」が存在せず使えないため、
             // 位置情報無し(0, 0)のエラーを直接組み立てる
-            return Err(err::PreprocErrs::EmptyAsmOperand.build(err::Span::new(&0, &0)));
+            return Err(crate::preproc_err_at!(err::Span::new(&0, &0), EmptyAsmOperand));
         }
 
         let mut parser = Parser::new();

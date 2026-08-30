@@ -220,6 +220,7 @@ impl MngAsmFmt {
             Size::DW => &self.reg_fmt.dw,
             Size::DD => &self.reg_fmt.dd,
             Size::DQ => &self.reg_fmt.dq,
+            Size::Pointer{..} => &self.reg_fmt.dq,
             _ => panic!(),
         };
         self.fmt

@@ -53,7 +53,7 @@ impl IR {
             self.expr_counter = 0;
             match node {
                 node::Group1Node::FuncDefine(info) => {
-                    self.init_def_fn_info(&info);
+                    self.ini_def_fn_info(&info);
                 }
                 #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
@@ -162,81 +162,26 @@ impl IR {
             };
 
             // メゾットのモジュール名を、自身が属する構造体の名前にする
-            let mut method_info = method_info.clone();
-            method_info.self_module_name(&struct_def.name);
+            //let mut method_info = method_info.clone();
+            //method_info.self_module_name(&struct_def.name);
 
             // `Self`型を、実際の構造体の型/ポインタ型へ解決する
             //let method_info = self.resolve_self_ty(method_info);
 
             // 関数の情報を登録
-            self.entry_func_info(&method_info);
+            self.entry_fn_info(&method_info);
 
             self.push_param_meta_data(&method_info.params);
             self.gen_inst(&method_info.body.clone());
 
             // 関数の処理内容をpush
-            self.push_func_ir_tree(&method_info);
+            self.push_fn_ir_tree(&method_info);
             // 使うデータを初期化
             self.ir_tree = Vec::new();
             self.id_counter = 0;
         }
         self.this_is_self = false;
     }
-
-    /// 関数のノードに含まれる予約語`Self`を解決する
-    ///
-    /// - 第一引数の型が`Self`の場合、その関数は「メゾット」として扱い、
-    ///   第一引数の型を、自身の構造体を指す**ポインタ型**に変換する
-    ///   (呼び出し側は構造体のポインタをこの引数に渡すことになる)
-    /// - 第一引数以外の引数の型に`Self`が使われている場合はエラー(panic)
-    /// - (第一引数がSelfでない場合、)戻り値の型が`Self`ならば、
-    ///   ただの関数として扱い、戻り値の型は自身の構造体の名前の型
-    ///   (`node::TyNode::Ty`)として解決する
-    /*pub(super) fn resolve_self_ty(&self, mut info: node::FuncDefine) -> node::FuncDefine {
-        // 第一引数以外にSelfが使われていないかチェックする
-        for (index, param) in info.params.iter().enumerate() {
-            if index == 0 {
-                continue;
-            }
-            if let node::TyNode::SelfTy(struct_name) = &param.ty {
-                panic!(
-                    "`Self`型は第一引数(`self`)以外の引数には使用できません: \
-                    関数`{}`の引数`{}` (構造体`{}`)",
-                    info.name, param.name, struct_name
-                );
-            }
-        }
-
-        // 第一引数の型がSelfの場合、構造体のポインタとして扱う
-        let has_self_param = matches!(
-            info.params.first().map(|p| &p.ty),
-            Some(node::TyNode::SelfTy(_))
-        );
-
-        if has_self_param {
-            let node::TyNode::SelfTy(struct_name) = info.params[0].ty.clone() else {
-                unreachable!()
-            };
-            let self_ptr_ty = node::TyNode::Pointer {
-                is_const: false,
-                ty_name: Box::new(node::TyNode::Ty(struct_name)),
-            };
-            info.params[0].ty = self_ptr_ty.clone();
-
-            // 戻り値の型がSelfなら、`self`と同じポインタ型として解決する
-            // (例: `func2(self: Self): Self { ret self }`)
-            if matches!(info.ret_ty, node::TyNode::SelfTy(_)) {
-                info.ret_ty = self_ptr_ty;
-            }
-        } else if let node::TyNode::SelfTy(struct_name) = &info.ret_ty {
-            // メゾットではない(第一引数がSelfではない)が、戻り値の型がSelf
-            // -> 普通の関数として定義し、戻り値は自身の構造体の名前の型になる
-            // (例: `new(): Self { ret Self { .. } }`)
-            info.ret_ty = node::TyNode::Ty(struct_name.clone());
-        }
-
-        info
-    }*/
 
     fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
         for stmt in node {
@@ -261,7 +206,18 @@ impl IR {
                             let operand_ids = line
                                 .operands
                                 .into_iter()
-                                .map(|expr| self.gen_expr_ir(expr, &types::Size::DD))
+                                .map(|expr| {
+                                    let ty: types::Size = if let node::Expr::Var(ref var_name) = expr {
+                                        let ty_node = self.var_tree
+                                            .get_ty_node(&var_name)
+                                            .unwrap();
+                                        types::Size::new(&ty_node)
+                                            .unwrap()
+                                    } else {
+                                        types::Size::DD
+                                    };
+                                    self.gen_expr_ir(expr, &ty)
+                                })
                                 .collect::<Vec<usize>>();
                             (line.asm, operand_ids)
                         })
@@ -280,7 +236,9 @@ impl IR {
     }
 
     fn stack_counter(&mut self, size: &node::TyNode) {
-        self.stk_counter += types::Size::new(size).to_bytes();
+        self.stk_counter += types::Size::new(size)
+            .unwrap()
+            .to_bytes();
     }
 
     /// 文のノードを生成
@@ -328,7 +286,11 @@ impl IR {
         .new()
     }
 
-    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
+    fn gen_expr_ir(
+        &mut self, 
+        expr: node::Expr, 
+        expect_byte: &types::Size
+    ) -> usize {
         self.expr_counter += 1;
         let inst = match expr {
             // ポインタ関係
@@ -345,6 +307,7 @@ impl IR {
             node::Expr::Sub(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub),
             node::Expr::Mul(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Mul),
             node::Expr::Div(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Div),
+            node::Expr::Surplus(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Surplus),
             node::Expr::LessThen(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::LessThen)
             }
@@ -381,8 +344,11 @@ impl IR {
                 // `src/ir/builder/expr_node.rs`
                 self.def_var_node(var, &expect_byte)
             }
-            node::Expr::CallFunc(meta_data) => self.gen_call_func_ir(None, &meta_data),
+            node::Expr::CallFunc(meta_data) => self.gen_call_fn_ir(None, &meta_data),
             node::Expr::Var(name) => {
+                // `src/ir/ty_checker/var_ty.rs`
+                self.check_var_ty(&name, &expect_byte);
+
                 return match self.var_tree.get(&name) {
                     def_tree::VarType::Local(index) => *index,
                     def_tree::VarType::Param(param) => {
@@ -416,7 +382,13 @@ impl IR {
                 // `src/ir/builder/expr_node.rs`
                 self.init_struct_node(&name, &mut fields, &expect_byte)
             }
-            node::Expr::Scope { scope, target } => self.scope_node(&scope, target),
+            // ここでは対応する「元の変数名」が分からない文脈
+            // (関数の引数や構造体フィールドの初期化式など)から
+            // 呼ばれているので`None`を渡す。`let`/代入経由で呼ばれる
+            // 場合は`def_var_node`/`assign_expr_node`が
+            // `gen_named_expr_ir`経由で`scope_node`を直接呼び出し、
+            // 変数名を渡している(`src/ir/builder/expr_node.rs`)
+            node::Expr::Scope { scope, target } => self.scope_node(&scope, target, None),
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
@@ -599,21 +571,6 @@ impl IR {
             .unwrap()
             .body
             .clone()
-    }
-
-    /// 関数のノードを生成するときに、引数を登録
-    fn push_param_meta_data(&mut self, params: &Vec<node::ArgsNode>) {
-        for (index, param) in params.iter().enumerate() {
-            self.var_tree.push::<'p'>(&param.name, &index, &param.ty);
-            self.ir_tree
-                .push(inst::Inst::Param(inst::ParamMetaData::new(
-                    param.name.to_string(),
-                    index,
-                    self.ir_tree.len(),
-                    &param.ty,
-                )));
-            self.id_counter += 1;
-        }
     }
 }
 

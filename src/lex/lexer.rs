@@ -62,6 +62,7 @@ mod local {
         LBracket,
         RBracket,
         Not,
+        Surplus,
 
         CompleSyn,
 
@@ -109,7 +110,7 @@ impl Lexer {
         }
     }
 
-    pub fn analy(&mut self, content: &String) -> Result<(), err::ErrKind> {
+    pub fn analy(&mut self, content: &String) -> Result<(), err::lex_err::LexErrs> {
         self.gen_tkns = Vec::new();
         self.chr_stk = String::new();
         self.last_kind = None;
@@ -192,7 +193,7 @@ impl Lexer {
         &self,
         line_counter: &usize,
         chr_counter: &usize,
-    ) -> Result<LocatedTkn, err::ErrKind> {
+    ) -> Result<LocatedTkn, err::lex_err::LexErrs> {
         if let Some(ref flag) = self.gen_flag {
             let tkn = match flag {
                 GenFlag::Add => Tkn::Add,
@@ -206,6 +207,7 @@ impl Lexer {
                 GenFlag::RBrace => Tkn::RBrace,
                 GenFlag::Comma => Tkn::Comma,
                 GenFlag::Colon => Tkn::Colon,
+                GenFlag::Surplus => Tkn::Surplus,
                 GenFlag::Or => Tkn::Or,
                 GenFlag::Dot => Tkn::Dot,
                 GenFlag::LAngleBracket => Tkn::LAngleBracket,
@@ -220,10 +222,9 @@ impl Lexer {
                         // "0xZZ" など）のときにパニックしていた。
                         // gen_tkn は Result を返すので、ここはちゃんと
                         // エラーとして伝播させる。
-                        let num = u32::from_str_radix(self.chr_stk.trim_start_matches("0x"), 16)
-                            .map_err(|_| {
-                                err::LexErr::ThisNumIsInvalid.fmt(&line_counter, &chr_counter)
-                            })?;
+                        let Ok(num) = u32::from_str_radix(self.chr_stk.trim_start_matches("0x"), 16) else {
+                            return crate::lex_err!(err::Span::new(line_counter, chr_counter), NumIsInvalid);
+                        };
                         Tkn::Number(num.to_string())
                     } else {
                         Tkn::Number(self.chr_stk.clone())
@@ -239,6 +240,7 @@ impl Lexer {
                     "enum" => Tkn::KeyWordEnum,
                     "const" => Tkn::KeyWordConst,
                     "static" => Tkn::KeyWordStatic,
+                    "mut" => Tkn::KeyWordMut,
                     "Self" => Tkn::KeyWordSelf,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
@@ -250,7 +252,7 @@ impl Lexer {
                 line: line_counter.clone(),
             })
         } else {
-            Err(err::ErrKind::SystemErr(err::SystemErr::FlagNotFound))
+            crate::lex_err!(err::Span::new(line_counter, chr_counter), FlagNotFound)
         }
     }
 
@@ -283,6 +285,7 @@ impl Lexer {
             Some('|') => GenFlag::Or,
             Some('.') => GenFlag::Dot,
             Some('!') => GenFlag::Not,
+            Some('%') => GenFlag::Surplus,
             _ => return self.get_value_by_flag_ty(chr, StkResult::GenTkn),
         };
         self.over_write_flag::<true>(sym_flag);

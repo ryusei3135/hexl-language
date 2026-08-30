@@ -82,7 +82,10 @@ op:
     template: "{space}mov {src1}, {dst}\n{space}imul {src2}, {dst}\n"
   div:
     len: 2
-    template: "{space}mov {src1}, %eax\n{space}cltd\n{space}mov {src2}, %ecx\n{space}idiv %ecx\n{space}mov %eax, {dst}\n"
+    template: "{space}mov {src1}, %rax\n{space}cltd\n{space}mov {src2}, %ecx\n{space}idiv %ecx\n{space}mov %rax, {dst}\n"
+  sur:
+    len: 2
+    template: "{space}mov {src1}, %rdx\n{space}cltd\n{space}mov {src2}, %rcx\n{space}idiv %rcx\n{space}mov %rdx, {dst}\n"
   mov:
     len: 2
     template: "{space}mov {src1}, {dst}\n"

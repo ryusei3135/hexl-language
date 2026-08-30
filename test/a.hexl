@@ -1,10 +1,36 @@
 
-_start() {
-    ptr: int* = 0xB8000
-
-    i: int = 10
-    loop i < 10 {
-        [ptr * i] = 0x07 
+print(msg: byte*, len: int) {
+    #asm(gcc_x64) {
+        "mov $1, %rax"
+        "mov $1, %rdi"
+        "mov ${msg}, %rsi"
+        "mov $${len}, %rdx"
+        "syscall"
     }
-    [ptr] = 10
+}
+
+
+fizzbuzz(n: int) {
+    cond {
+        n % 15 == 0 => {
+            print("fb", 2)
+        }
+        n % 3 == 0 => {
+            print("fz", 2)
+        }
+        n % 5 == 0 => {
+            print("bz", 2)
+        }
+        | => {
+            print("n", 1)
+        }
+    }
+}
+
+_start() {
+    i: int = 1
+    loop i < 10 {
+        fizzbuzz(i)
+        i = i + 1
+    }
 }

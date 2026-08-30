@@ -57,6 +57,9 @@ impl VarTree {
             node::TyNode::Ty(name) => name.to_string(),
             node::TyNode::Pointer { ty_name, .. } => match &**ty_name {
                 node::TyNode::Ty(name) => name.to_string(),
+                // `Self*`/`Self*mut`のように、`Self`を指す
+                // ポインタ型の場合も、実際の構造体名を返す
+                node::TyNode::SelfTy(name) => name.to_string(),
                 _ => panic!(),
             },
             node::TyNode::SelfTy(name) => name.to_string(),
@@ -64,10 +67,26 @@ impl VarTree {
         }
     }
 
-    pub fn is_self_ty(&self, name: &String) -> bool {
+    #[inline(always)]
+    pub fn get_ty_node(
+        &self, 
+        var_name: &String
+    ) -> Option<node::TyNode> {
         self.hash
-            .get(name)
-            .is_some_and(|v| matches!(v.size, node::TyNode::SelfTy(_)))
+            .get(var_name)
+            .map(|var| var.size.clone())
+    }
+
+    /// 指定された変数が`Self`型、または`Self`を指すポインタ型
+    /// (`Self*` / `Self*mut`)かどうかを判定する
+    pub fn is_self_ty(&self, name: &String) -> bool {
+        self.hash.get(name).is_some_and(|v| match &v.size {
+            node::TyNode::SelfTy(_) => true,
+            node::TyNode::Pointer { ty_name, .. } => {
+                matches!(**ty_name, node::TyNode::SelfTy(_))
+            }
+            _ => false,
+        })
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
@@ -106,7 +125,9 @@ impl StructTree {
     ) -> usize {
         let mut byte_counter = 0;
         for member in self.tree.get(name).expect(name).fields.iter() {
-            byte_counter += types::Size::new(&member.ty).to_bytes();
+            byte_counter += types::Size::new(&member.ty)
+                .unwrap()
+                .to_bytes();
             if member.name == field_name.as_str() {
                 return byte_counter;
             }
@@ -129,7 +150,7 @@ impl StructTree {
             .unwrap()
             .ty
             .clone();
-        types::Size::new(&ty)
+        types::Size::new(&ty).unwrap()
     }
 }
 
@@ -144,10 +165,16 @@ pub struct FuncDefInfo {
 }
 
 impl FuncDefInfo {
+    /// 第一引数が`Self`型、または`Self`を指すポインタ型
+    /// (`self: Self` / `self: Self*` / `self: Self*mut`)かどうかを判定する
     pub fn first_param_is_self(&self) -> bool {
-        self.args
-            .get(0)
-            .is_some_and(|f| matches!(f.ty, node::TyNode::SelfTy(..)))
+        self.args.get(0).is_some_and(|f| match &f.ty {
+            node::TyNode::SelfTy(..) => true,
+            node::TyNode::Pointer { ty_name, .. } => {
+                matches!(**ty_name, node::TyNode::SelfTy(..))
+            }
+            _ => false,
+        })
     }
 }
 

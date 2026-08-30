@@ -6,6 +6,7 @@ pub enum ExprKind {
     Sub,
     Mul,
     Div,
+    Surplus,
     LessThen,
     GreaterThen,
     Equal,
@@ -42,12 +43,17 @@ pub struct ParamMetaData {
 }
 
 impl ParamMetaData {
-    pub fn new(name: String, num: usize, dst: usize, ty: &node::TyNode) -> Self {
+    pub fn new(
+        name: String, 
+        num: usize, 
+        dst: usize, 
+        ty: &node::TyNode
+    ) -> Self {
         Self { 
             name, 
             num, 
             dst, 
-            ty: types::Size::new(&ty) 
+            ty: types::Size::new(&ty).unwrap()
         }
     }
 }
@@ -197,6 +203,8 @@ impl Inst {
             inst::Inst::Num { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory{ size, .. }) => Some(size.clone()),
+            inst::Inst::Mov { size, .. } => Some(size.clone()),
+            inst::Inst::Str {..} => Some(types::Size::Pointer {is_const:false, ty: Box::new(types::Size::DB)}),
             t => {
                 panic!("{:?}", t);
             }

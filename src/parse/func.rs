@@ -113,7 +113,7 @@ impl Parser {
                         panic!();
                     }
                 }
-                _ => panic!(),
+                t => panic!("{:?}", t),
             }
         }
 

@@ -7,7 +7,9 @@ pub mod builder;
 /// 保存する構造体を提供するモジュール
 pub mod def_tree;
 pub mod inst;
+mod param;
 
+mod ty_checker;
 pub mod types;
 
 use crate::err;

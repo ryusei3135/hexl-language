@@ -15,28 +15,31 @@ impl Size {
     /// 組み込みの型(byte/u16/int/u64)のみを解決する
     /// 構造体や列挙型などのユーザー定義の型を解決する場合は
     /// `builder::IR::size_of` を使用する
-    pub fn new(ty: &node::TyNode) -> Self {
-        match ty {
-            node::TyNode::Ty(ty) => match ty.as_str() {
-                "byte" => Self::DB,
-                "u16" => Self::DW,
-                "int" => Self::DD,
-                "u64" => Self::DQ,
-                t => panic!("未定義の組み込み型です: {}", t),
-            },
-            // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
-                Self::new(&node::TyNode::Ty(name.clone()))
+    pub fn new(
+        ty: &node::TyNode
+    ) -> Result<Self, err::undef::UndefKind> {
+        let size_ty = match ty {
+            node::TyNode::Ty(ref ty_name) => {
+                embe_ty_sort(ty_name)?
             }
-            node::TyNode::Pointer { is_const, ty_name } => Self::Pointer {
-                ty: Box::new(Self::new(&*ty_name)),
+            // スタック/静的領域の型は、要素の型と同じサイズを持つ
+            node::TyNode::Stack { name, .. }
+            | node::TyNode::Static { name, .. } => {
+                Self::new(&node::TyNode::Ty(name.clone()))?
+            }
+            node::TyNode::Pointer {
+                is_const, 
+                ty_name 
+            } => Self::Pointer {
+                ty: Box::new(Self::new(&*ty_name)?),
                 is_const: is_const.clone(),
             },
             node::TyNode::SelfTy(..) => {
                 Self::DQ
             }
             _ => panic!(),
-        }
+        };
+        Ok(size_ty)
     }
 
     pub fn is_pointer(&self) -> Option<Size> {
@@ -50,7 +53,7 @@ impl Size {
     /// ポインタ型を作成する
     pub fn build_ptr_ty(ty: &node::TyNode) -> Self {
         Self::Pointer {
-            ty: Box::new(Self::new(&ty)),
+            ty: Box::new(Self::new(&ty).unwrap()),
             is_const: false,
         }
     }
@@ -78,8 +81,28 @@ impl Size {
             }
         }
     }
+
+    #[inline(always)]
+    pub fn wrap_ok<E>(self) -> Result<Self, E> {
+        Ok(self)
+    }
 }
 
+#[inline(always)]
+fn embe_ty_sort(
+    ty_name: &String
+) -> Result<Size, err::undef::UndefKind> {
+    match ty_name.as_str() {
+        "byte" => Size::DB,
+        "u16" => Size::DW,
+        "int" => Size::DD,
+        "u64" => Size::DQ,
+        ty_name => {
+            return Err(err::undef::UndefKind::UndefVarTy);
+        }
+    }
+    .wrap_ok::<err::undef::UndefKind>()
+}
 
 impl IR {
     /// 型からサイズを求める
@@ -91,7 +114,7 @@ impl IR {
         match ty {
             node::TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {
-                    return types::Size::new(ty);
+                    return types::Size::new(ty).unwrap();
                 }
 
                 if self.enum_tree.contains_key(name) {

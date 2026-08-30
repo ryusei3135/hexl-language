@@ -2,7 +2,9 @@ use super::*;
 
 impl Parser {
     /// 最初にキーワードのcondが来る必要がある
-    pub(in crate::parse) fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) fn expr_match(
+        &mut self
+    ) -> Result<node::Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
         if !matches!(self.current_tkn(), lex::Tkn::KeyWordCond) {
@@ -28,7 +30,7 @@ impl Parser {
 
         // {
         if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            return Err(err::ErrKind::UnexpectedToken);
+            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
         }
 
         let mut arms = Vec::new();
@@ -52,7 +54,7 @@ impl Parser {
             self.tkn_checker().is_arrow_tkn()?;
             // {
             if !matches!(self.next_tkn(vec!["{"])?, lex::Tkn::LBrace) {
-                return Err(err::ErrKind::UnexpectedToken);
+                crate::cond_err!(self.build_err_span(), CondExprPatternLBrace)?
             }
             self.next_tkn(vec![])?;
             // ここでアーム本体を解析
@@ -91,7 +93,7 @@ impl Parser {
         self.tkn_checker().is_arrow_tkn()?;
         // {
         if !matches!(self.next_tkn(vec!["{"])?, lex::Tkn::LBrace) {
-            return Err(err::ErrKind::UnexpectedToken);
+            crate::cond_err!(self.build_err_span(), CondElseLBrace)?
         }
         self.next_tkn(vec![])?;
         // ここでアーム本体を解析
@@ -135,12 +137,15 @@ impl Parser {
     /// }
     /// ```
     /// これは `if` / `else` と同じ意味を持つ
-    fn expr_match_bool(&mut self, cond: node::Expr) -> Result<node::Expr, err::ErrKind> {
+    fn expr_match_bool(
+        &mut self, 
+        cond: node::Expr
+    ) -> Result<node::Expr, err::ErrKind> {
         println!(">> {:?}", self.current_tkn());
         // match expr {
         // {
         if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            return Err(err::ErrKind::UnexpectedToken);
+            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
         }
         self.next_tkn(vec![])?;
         // trueのときの処理
@@ -150,11 +155,11 @@ impl Parser {
         self.tkn_checker().close_scope_to_rbrace(None)?;
         // |
         if !matches!(self.next_tkn(vec!["|"])?, lex::Tkn::Or) {
-            return Err(err::ErrKind::UnexpectedToken);
+            crate::cond_err!(self.build_err_span(), CondElseNotFound)?
         }
         // {
         if !matches!(self.next_tkn(vec!["{"])?, lex::Tkn::LBrace) {
-            return Err(err::ErrKind::UnexpectedToken);
+            crate::cond_err!(self.build_err_span(), CondElseLBrace)?
         }
         self.next_tkn(vec![])?;
         // それ以外のときの処理

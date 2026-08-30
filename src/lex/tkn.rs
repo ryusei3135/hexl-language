@@ -11,6 +11,8 @@ pub enum Tkn {
     RBrace,
     Comma,
     Colon,
+    // %
+    Surplus,
     Or,
     Dot,
     LAngleBracket,
@@ -41,6 +43,7 @@ pub enum Tkn {
     KeyWordEnum,
     KeyWordConst,
     KeyWordStatic,
+    KeyWordMut,
     /// `Self` (メゾット内で自身の構造体を表す予約語)
     KeyWordSelf,
 }

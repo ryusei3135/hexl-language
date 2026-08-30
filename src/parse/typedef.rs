@@ -128,11 +128,13 @@ impl Parser {
                                 lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
                                     self.back_tkn();
                                 }
-                                t => err::SyntaxErr::unexpect_tkn_after_keyword(
+                                t => crate::syntax_err!(
                                     self.build_err_span(),
-                                    lex::Tkn::Colon,
-                                    vec![",", "}"],
-                                    t,
+                                    err::SyntaxErrKind::UnexpectTknAfterKeyword {
+                                        keyword: lex::Tkn::Colon,
+                                        expected: vec![",", "}"],
+                                        found: t.clone(),
+                                    }
                                 )?,
                             }
                             continue;
@@ -258,6 +260,26 @@ impl Parser {
         Ok((variants, methods))
     }
 
+    fn ptr_ty_node(&mut self, ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
+        let is_const = match self.next_tkn_ref(vec!["const", "mut"]).unwrap() {
+            lex::Tkn::KeyWordMut => {
+                self.advance_tkn();
+                true
+            }
+            lex::Tkn::KeyWordConst => {
+                self.advance_tkn();
+                false
+            }
+            _ => false,
+        };
+        self.next_tkn(vec![])?;
+
+        Ok(node::TyNode::Pointer {
+            is_const,
+            ty_name: Box::new(ty)
+        })
+    }
+
     /// 型のノードを作成する
     ///
     /// ## self_name
@@ -276,26 +298,25 @@ impl Parser {
             lex::Tkn::KeyWordSelf => {
                 // `Self`の次のトークンへ進める
                 self.next_tkn(vec![])?;
-                Ok(node::TyNode::SelfTy(
+                let ty = node::TyNode::SelfTy(
                     self.struct_self_name
                         .as_ref()
                         .expect("`Self`は構造体/列挙型のメゾット内でのみ使用できます")
                         .clone(),
-                ))
+                );
+                match self.current_tkn() {
+                    lex::Tkn::Mul => {
+                        Ok(self.ptr_ty_node(ty)?)
+                    }
+                    _ => Ok(ty),
+                }
             }
             lex::Tkn::Name(name) => {
                 let ty = match self.next_tkn(vec!["<", "*"])? {
                     lex::Tkn::LAngleBracket => panic!(),
                     // ポインタの型
                     lex::Tkn::Mul => {
-                        let is_const =
-                            matches!(self.next_tkn_ref(vec!["const"])?, lex::Tkn::KeyWordConst);
-                        self.next_tkn(vec![])?;
-
-                        node::TyNode::Pointer {
-                            is_const,
-                            ty_name: Box::new(node::TyNode::Ty(name.clone())),
-                        }
+                        self.ptr_ty_node(node::TyNode::Ty(name.clone())).unwrap()
                     }
                     _ => {
                         // ジェネリクスに定義ずみの型がある

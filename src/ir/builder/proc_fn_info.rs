@@ -3,25 +3,23 @@ use super::*;
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
-    pub(super) fn init_def_fn_info(&mut self, info: &node::FuncDefine) {
-        // `Self`型を、実際の構造体の型/ポインタ型へ解決する
-        //let info = self.resolve_self_ty(info.clone());
-
+    pub(super) fn ini_def_fn_info(&mut self, info: &node::FuncDefine) {
         // 関数の情報を登録
-        self.entry_func_info(&info);
+        self.entry_fn_info(&info);
 
+        // `ir/param.rs`
         self.push_param_meta_data(&info.params);
         self.gen_inst(&info.body.clone());
 
         // 関数の処理内容をpush
-        self.push_func_ir_tree(&info);
+        self.push_fn_ir_tree(&info);
         // 使うデータを初期化
         self.ir_tree = Vec::new();
         self.id_counter = 0;
     }
 
     /// 関数の情報を関数ツリーに登録
-    pub(super) fn push_func_ir_tree(&mut self, info: &node::FuncDefine) {
+    pub(super) fn push_fn_ir_tree(&mut self, info: &node::FuncDefine) {
         // 関数のデータをpush
         self.func_tree.add(
             // 関数の処理
@@ -37,7 +35,7 @@ impl IR {
 
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
-    pub(super) fn entry_func_info(&mut self, info: &node::FuncDefine) {
+    pub(super) fn entry_fn_info(&mut self, info: &node::FuncDefine) {
         self.func_ret_ty = Some(info.ret_ty.clone());
         // メゾットの場合、`info.module`に自身が属する構造体の名前が
         // 入っているので、そのままモジュール名として登録する
@@ -59,7 +57,7 @@ impl IR {
         }
     }
 
-    pub(super) fn gen_call_func_ir(
+    pub(super) fn gen_call_fn_ir(
         &mut self,
         module_name: Option<&String>,
         meta_data: &node::CallInfo,
@@ -97,7 +95,11 @@ impl IR {
         );
 
         for (index, _) in meta_data.args.iter().enumerate() {
-            let expr_arg = meta_data.args.get(index).unwrap().clone();
+            let expr_arg = meta_data
+                .args
+                .get(index)
+                .unwrap()
+                .clone();
             let ty = self.size_of(&def_args[index].ty).clone();
             let idx = self.gen_expr_ir(expr_arg, &ty);
             func_meta_data.insert_param_parent_id(idx);

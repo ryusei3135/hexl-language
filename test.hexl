@@ -4,6 +4,7 @@
 
 struct Name {
     name: int
+    aa: int
 }
 
 
@@ -42,6 +43,7 @@ _start(): int {
     b::add_1(10)
     s: Name = Name {
         name: 10
+        aa: 10
     }
     add(s.name, a)
     add(a, 0)

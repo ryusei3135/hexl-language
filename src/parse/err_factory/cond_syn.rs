@@ -14,7 +14,7 @@ impl MatchErr {
     pub fn close_scope_to_rbrace(self, target: Option<lex::Tkn>) -> Result<(), err::ErrKind> {
         if !matches!(self.tkn, lex::Tkn::RBrace) {
             // match構文が`}`で閉じられていない
-            err::SyntaxErr::unenclosed_scope(self.span, target).wrap_in_err()
+            crate::syntax_err!(self.span, err::SyntaxErrKind::UnenclosedScope { target })
         } else {
             Ok(())
         }
@@ -23,15 +23,16 @@ impl MatchErr {
     pub fn is_arrow_tkn(self) -> Result<(), err::ErrKind> {
         if !matches!(self.tkn, lex::Tkn::Arrow) {
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
-            err::SyntaxErr::unexpected_tkn(
+            crate::syntax_err!(
                 self.span,
-                // 今のトークン
-                self.tkn,
-                // 期待したトークン
-                lex::Tkn::Arrow,
-                lex::Tkn::KeyWordCond,
+                err::SyntaxErrKind::UnexpectedTkn {
+                    // 今のトークン
+                    found: self.tkn,
+                    // 期待したトークン
+                    expected: lex::Tkn::Arrow,
+                    context: lex::Tkn::KeyWordCond,
+                }
             )
-            .wrap_in_err()
         } else {
             Ok(())
         }

@@ -12,15 +12,6 @@ macro_rules! push_jmp_code {
         $tree.id_counter += 1;
     };
 }
-
-/// プリプロセッサの構文エラーの戻り値を生成
-#[macro_export]
-macro_rules! preproc_err {
-    ($self:tt, $name:ident) => {
-        return Err(err::PreprocErrs::$name.build($self.build_err_span()));
-    };
-}
-
 /// src/lex/pathで使う
 #[macro_export]
 macro_rules! scope_node {

@@ -201,6 +201,7 @@ pub enum Expr {
     Sub((Box<Expr>, Box<Expr>)),
     Mul((Box<Expr>, Box<Expr>)),
     Div((Box<Expr>, Box<Expr>)),
+    Surplus((Box<Expr>, Box<Expr>)),
     LessThen((Box<Expr>, Box<Expr>)),
     GreaterThen((Box<Expr>, Box<Expr>)),
     /// `==` 値の等価比較
