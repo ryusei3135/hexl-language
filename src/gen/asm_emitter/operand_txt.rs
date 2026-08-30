@@ -5,7 +5,7 @@ use super::*;
 impl AsmEmitter {
     pub(super) fn param_ref(&mut self, param_name: &String) -> String {
         let var_info = self.var_hash_map.get(&param_name.to_string()).unwrap();
-        let reg = self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DD);
+        let reg = self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DQ);  // ← 常に4byte(DQ)決め打ち
 
         if let Some(ty) = var_info.size.is_pointer() {
             self.asm_fmt.fmt_ref_operand(&reg, &ty.to_bytes())

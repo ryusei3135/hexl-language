@@ -60,7 +60,7 @@ impl Size {
 
     /// 組み込み型かどうかを判定する
     pub fn is_builtin_ty_name(name: &str) -> bool {
-        matches!(name, "byte" | "u16" | "int" | "u64")
+        matches!(name, "byte" | "i16" | "int" | "i64")
     }
 
     /// このサイズがバイト単位で何バイトかを返す
@@ -94,9 +94,9 @@ fn embe_ty_sort(
 ) -> Result<Size, err::undef::UndefKind> {
     match ty_name.as_str() {
         "byte" => Size::DB,
-        "u16" => Size::DW,
+        "i16" => Size::DW,
         "int" => Size::DD,
-        "u64" => Size::DQ,
+        "i64" => Size::DQ,
         ty_name => {
             return Err(err::undef::UndefKind::UndefVarTy);
         }

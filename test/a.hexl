@@ -1,16 +1,16 @@
 
-print(msg: byte*const, len: int) {
+print(msg: byte*const, len: i64) {
     #asm(gcc_x64) {
         "mov $1, %rax"
         "mov $1, %rdi"
         "mov ${msg}, %rsi"
-        "mov ${len}, %edx"
+        "mov ${len}, %rdx"
         "syscall"
     }
 }
 
 
-fizzbuzz(n: int) {
+fizzbuzz(n: i64) {
     cond {
         n % 15 == 0 => {
             print("fb", 2)
@@ -28,7 +28,7 @@ fizzbuzz(n: int) {
 }
 
 _start() {
-    i: int = 1
+    i: i64 = 1
     loop i < 10 {
         fizzbuzz(i)
         i = i + 1

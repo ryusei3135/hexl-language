@@ -282,7 +282,7 @@ impl AsmEmitter {
             let dst_size = if opcode == "address" {
                 &Size::DQ
             } else {
-                &Size::DD
+                &Size::DQ
             };
             self.asm_fmt
                 .get_opcode_tmpl(opcode)
@@ -303,7 +303,7 @@ impl AsmEmitter {
         } else if self.check_node_is_struct(&src1) {
             formated = self
                 .asm_fmt
-                .fmt_mnemonic_resize("mov", &formated, &Size::DD);
+                .fmt_mnemonic_resize("mov", &formated, &Size::DQ);
         } else if let Some(size) = self.check_node_is_memory_value(&src1) {
             formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &size);
         }
@@ -396,7 +396,7 @@ impl AsmEmitter {
                 let size = if var_info.size.is_pointer().is_some() {
                     Size::DQ
                 } else {
-                    Size::DD
+                    Size::DQ
                 };
                 self.asm_fmt.get_fmt_reg(&var_info.reg, &size)
             }
@@ -443,7 +443,7 @@ impl AsmEmitter {
                 if call_func_info.parent == crate::ir::IS_ASSIGN_EXPR {
                     let call_asm = self.emit_call_func(&call_func_info);
                     self.asm_text.push_str(&call_asm);
-                    self.asm_fmt.get_fmt_reg(&0, &Size::DD)
+                    self.asm_fmt.get_fmt_reg(&0, &Size::DQ)
                 } else {
                     String::new()
                 }
@@ -462,7 +462,7 @@ impl AsmEmitter {
             t => {
                 if let Some(result) = self.last_inst_idx.iter().find(|i| &i.0 == parent_id) {
                     // レジスタの文字列を取得
-                    self.asm_fmt.get_fmt_reg(&result.1, &Size::DD)
+                    self.asm_fmt.get_fmt_reg(&result.1, &Size::DQ)
                 } else {
                     panic!("{:?}", t);
                 }
@@ -506,7 +506,7 @@ impl AsmEmitter {
         let dst_text = if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
             Self::insert_fmt_reg_placeholder(&self.reg_idx)
         } else {
-            self.get_reg(Some(&self.reg_idx), &Size::DD)
+            self.get_reg(Some(&self.reg_idx), &Size::DQ)
         };
 
         let mut formated = self
@@ -540,7 +540,7 @@ impl AsmEmitter {
         // サイズ(メモリ上の値でなければDD)を使って実際のレジスタ名へ
         // 展開する。
         if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
-            let size = resolved_size.unwrap_or(Size::DD);
+            let size = resolved_size.unwrap_or(Size::DQ);
             formated = self.replace_insert_fmt_reg(&formated, &size);
         }
 
