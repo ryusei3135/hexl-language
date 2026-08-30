@@ -230,6 +230,27 @@ impl MngAsmFmt {
             .to_string()
     }
 
+    /// 確保されているレジスタの本数
+    pub fn reg_count(&self) -> usize {
+        self.reg_fmt.dq.len()
+    }
+
+    /// `(レジスタ番号, レジスタ名)`のペアを、確保されている
+    /// 全レジスタ・全サイズ分列挙する。
+    ///
+    /// インラインアセンブラのテキストに直接書かれているレジスタ
+    /// (`%rax`など、オペランドのプレースホルダーではなく
+    /// ハードコードされている物)を検出するために使う。
+    pub fn all_reg_names(&self) -> Vec<(usize, String)> {
+        let mut result = Vec::new();
+        for reg_idx in 0..self.reg_count() {
+            for size in [Size::DQ, Size::DD, Size::DW, Size::DB] {
+                result.push((reg_idx, self.get_fmt_reg(&reg_idx, &size)));
+            }
+        }
+        result
+    }
+
     pub fn inline_asm_list(&self) -> Vec<String> {
         self.asm_setting.as_ref().unwrap().get_inline_asm_list()
     }

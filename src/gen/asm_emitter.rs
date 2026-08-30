@@ -1,10 +1,27 @@
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
 mod struct_ir;
+mod insert_fmt_reg;
 
 use super::*;
 use crate::asm_setting;
 use crate::ir::types;
+
+/// 演算結果を格納するレジスタの「適切なサイズ」が、テンプレートを
+/// 組み立てる時点ではまだ決まらない演算子の一覧。
+///
+/// `*`(Mul)/`/`(Div)/`%`(Surplus)は`idiv`/`imul`を使うため、結果を
+/// 格納するレジスタのサイズが、オペランドがメモリ上の値かどうかを
+/// 見て初めて確定する(`format_expr_inst`内の`check_node_is_memory_value`
+/// による判定より後)。そのため、テンプレートを組み立てる時点では
+/// レジスタの「番号」だけを埋め込んでおき([`AsmEmitter::replace_insert_fmt_reg`]
+/// を参照)、サイズが確定してから改めて実際のレジスタ名へ展開し直す
+/// 必要がある。
+pub(super) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind] = &[
+    inst::ExprKind::Mul,
+    inst::ExprKind::Div,
+    inst::ExprKind::Surplus,
+];
 
 #[derive(Debug, Clone)]
 pub struct VarIndexInfo {
@@ -13,17 +30,6 @@ pub struct VarIndexInfo {
     pub reg: usize,
     pub size: types::Size,
     pub index: usize,
-    /// `true`の場合、この変数の実体は(ポインタをレジスタに保持するのではなく)
-    /// `%rbp`相対のメモリ上に直接置かれている
-    ///
-    /// `a: Name = Name::new()`のように、構造体を返すコンストラクタの
-    /// 戻り値をローカル変数へ束縛する場合に使う。この場合、呼び出し先の
-    /// 関数は既に呼び出し元が確保したスタック位置(`%rbp`基準)へ直接
-    /// 構造体を書き込んでいるため、戻り値をわざわざ別のレジスタへ
-    /// コピーする必要はなく、変数`a`はそのメモリ位置をそのまま指すべき。
-    /// (以前はここを常にレジスタとして扱っていたため、戻り値の
-    ///  ポインタを一旦別レジスタへコピーし、構造体の読み書きの際も
-    ///  `%rbp`ではなくそのレジスタ経由の間接参照になってしまっていた)
     pub is_stack: bool,
 }
 
@@ -492,13 +498,31 @@ impl AsmEmitter {
             | inst::ExprKind::Equal => "cmp",
         };
 
+        // `DEFERRED_REG_FMT_OPS`に含まれる演算子(`*`/`/`/`%`)は、
+        // 結果を格納するレジスタの適切なサイズがまだ決まっていないため、
+        // ひとまず番号だけのプレースホルダーを埋め込んでおく。
+        // それ以外の演算子は、これまで通りその場でDD(32bit)として
+        // レジスタ名を確定させる。
+        let dst_text = if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
+            Self::insert_fmt_reg_placeholder(&self.reg_idx)
+        } else {
+            self.get_reg(Some(&self.reg_idx), &Size::DD)
+        };
+
         let mut formated = self
             .asm_fmt
             .get_opcode_tmpl(key)
-            .replace("{dst}", &self.get_reg(Some(&self.reg_idx), &Size::DD))
+            .replace("{dst}", &dst_text)
             .replace("{src1}", &self.extract_operand_text(&expr.ls, false))
             .replace("{src2}", &self.extract_operand_text(&expr.rs, false))
             .to_string();
+
+        // どちらかのオペランドがメモリ上の値(スタック/静的領域の変数)を
+        // 参照している場合、そのサイズを採用する。そうでなければ、
+        // これまで通り既定のDD(32bit)を使う。
+        let resolved_size = self
+            .check_node_is_memory_value(&expr.ls)
+            .or_else(|| self.check_node_is_memory_value(&expr.rs));
 
         // どちらかのオペランドがメモリ上の値(スタック/静的領域の変数)を
         // 参照している場合、そのサイズに合わせてニーモニックへ
@@ -506,12 +530,18 @@ impl AsmEmitter {
         // (テンプレートは通常「一旦movでdstに値を置いてから演算する」
         //  という2行構成になっているため、両方のニーモニックを
         //  調整する必要がある)
-        if let Some(size) = self
-            .check_node_is_memory_value(&expr.ls)
-            .or_else(|| self.check_node_is_memory_value(&expr.rs))
-        {
-            formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, &size);
-            formated = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &formated, &size);
+        if let Some(ref size) = resolved_size {
+            formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, size);
+            formated = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &formated, size);
+        }
+
+        // `DEFERRED_REG_FMT_OPS`に含まれる演算子の場合、先ほど番号
+        // だけ埋め込んでおいたプレースホルダーを、ここで確定した
+        // サイズ(メモリ上の値でなければDD)を使って実際のレジスタ名へ
+        // 展開する。
+        if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
+            let size = resolved_size.unwrap_or(Size::DD);
+            formated = self.replace_insert_fmt_reg(&formated, &size);
         }
 
         if self.reserved_label_name.is_some() && formated.contains("{label}") {

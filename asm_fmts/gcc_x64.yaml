@@ -4,16 +4,38 @@ reg:
     - cl
     - dl
     - bl
+    - spl
+    - bpl
+    - sil
+    - dil
+    - r8b
+    - r9b
+    - r10b
+    - r11b
+    - r12b
+    - r13b
+    - r14b
+    - r15b
   dw:
     - ax
     - cx
     - dx
+    - bx
     - si
     - di
+    - r8w
+    - r9w
+    - r10w
+    - r11w
+    - r12w
+    - r13w
+    - r14w
+    - r15w
   dd:
     - eax
     - ecx
     - edx
+    - ebx
     - esi
     - edi
     - r8d
@@ -28,6 +50,7 @@ reg:
     - rax
     - rcx
     - rdx
+    - rbx
     - rsi
     - rdi
     - r8
@@ -41,8 +64,8 @@ reg:
 
 args:
   fmt:
-    linux: [4, 3, 2, 1, 5, 6]
-    win: [1, 2, 5, 6]
+    linux: [5, 4, 2, 1, 7, 8]
+    win: [1, 2, 6, 7]
 
 section: ".{name}\n"
 
@@ -82,10 +105,10 @@ op:
     template: "{space}mov {src1}, {dst}\n{space}imul {src2}, {dst}\n"
   div:
     len: 2
-    template: "{space}mov {src1}, %rax\n{space}cltd\n{space}mov {src2}, %ecx\n{space}idiv %ecx\n{space}mov %rax, {dst}\n"
+    template: "{space}mov {src1}, %{0}\n{space}cltd\n{space}mov {src2}, %{1}\n{space}idiv %{1}\n{space}mov %{0}, {dst}\n"
   sur:
     len: 2
-    template: "{space}mov {src1}, %rdx\n{space}cltd\n{space}mov {src2}, %rcx\n{space}idiv %rcx\n{space}mov %rdx, {dst}\n"
+    template: "{space}mov {src1}, %{2}\n{space}cltd\n{space}mov {src2}, %{1}\n{space}idiv %{1}\n{space}mov %{2}, {dst}\n"
   mov:
     len: 2
     template: "{space}mov {src1}, {dst}\n"

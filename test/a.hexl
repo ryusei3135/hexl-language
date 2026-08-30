@@ -1,10 +1,10 @@
 
-print(msg: byte*, len: int) {
+print(msg: byte*const, len: int) {
     #asm(gcc_x64) {
         "mov $1, %rax"
         "mov $1, %rdi"
         "mov ${msg}, %rsi"
-        "mov $${len}, %rdx"
+        "mov ${len}, %edx"
         "syscall"
     }
 }

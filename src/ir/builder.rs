@@ -519,41 +519,57 @@ impl IR {
             }
         };
 
-        // 条件分岐の塊を作成
-        let end_label = if arms.len() == 1 {
-            // アセンブリコードを生成するときに作成するラベル
-            self.jmp_labels = self.pattern_labels + 1;
-            crate::push_jmp_code!(self, ExpectJmp, self.jmp_labels);
-            // 条件が一つだけの場合]
-            // 条件式の生成
-            let cond = build_cond(&arms[0].pattern);
-            self.gen_expr_ir(cond, &types::Size::DD);
-            //self.push_jmp_code(self.pattern_labels);
-            self.jmp_labels.clone() + 1
-        } else {
-            // 条件が複数の場合
-            for arm in arms.clone() {
-                crate::push_jmp_code!(self, ExpectJmp, self.pattern_labels);
-                let cond = build_cond(&arm.pattern);
-                self.gen_expr_ir(cond, &types::Size::DD);
-            }
-            arms.len() + 1
-        };
+        // 各アームの本体に対応する、一意なラベル番号を先にまとめて
+        // 発番しておく。
+        //
+        // (以前は`ExpectJmp`側に`self.pattern_labels`を、
+        //  `Block`側に`self.jmp_labels`をそのまま使い、しかも
+        //  どちらもループの中で一度もインクリメントしていなかった
+        //  ため、全てのアームが同じラベル名(例: `L0`)を共有して
+        //  しまい、`jz`の飛び先も本体のラベルも区別できなくなる
+        //  バグがあった)
+        let arm_labels: Vec<usize> = arms
+            .iter()
+            .map(|_| {
+                let label = self.pattern_labels;
+                self.pattern_labels += 1;
+                label
+            })
+            .collect();
 
-        // elseの処理を作成
+        // 全アームの処理が終わった後にジャンプする、一意な終了ラベル
+        let end_label = self.pattern_labels;
+        self.pattern_labels += 1;
+
+        // 各アームの条件式(一致すれば、対応するアームのラベルへジャンプする)
+        for (arm, label) in arms.iter().zip(arm_labels.iter()) {
+            crate::push_jmp_code!(self, ExpectJmp, label);
+            let cond = build_cond(&arm.pattern);
+            self.gen_expr_ir(cond, &types::Size::DD);
+        }
+
+        // どの条件にも一致しなかった場合の処理(else)
+        // (elseが無い場合でも、そのまま素通りして終了ラベルへ進む)
         if let Some(arm) = arm_else.clone() {
             self.gen_inst(&arm);
+        }
+        crate::push_jmp_code!(self, Jmp, &end_label);
+
+        // 各アームの処理内容を作成する
+        for (arm, label) in arms.iter().zip(arm_labels.iter()) {
+            // このアーム専用のラベル(条件が一致した場合の飛び先)
+            crate::push_jmp_code!(self, Block, label);
+            self.gen_inst(&arm.body);
+            // 処理が終わったら、他のアームへ流れ込まないよう
+            // 終了ラベルへジャンプする
+            // (以前はここが無く、あるアームの処理が終わると
+            //  そのまま次のアームの処理へ流れ込んでしまっていた)
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
-        // 処理内容の作成
-        for arm in arms {
-            // 自分のラベルを作成
-            crate::push_jmp_code!(self, Block, self.jmp_labels);
-            self.gen_inst(&arm.body);
-        }
+
         // 条件が終了したときにジャンプする場所を指定
         crate::push_jmp_code!(self, Block, end_label);
-        return self.id_counter - 1;
+        self.id_counter - 1
     }
 
     #[cfg(test)]
