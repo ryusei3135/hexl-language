@@ -1,0 +1,10 @@
+[package]
+name = "print"
+version = "0.1.0"
+edition = "2024"
+
+build = "build.rs"
+
+[lib]
+name = "print"
+path = "src/lib.rs"

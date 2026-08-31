@@ -2,7 +2,7 @@ target/
 target
 Cargo.lock
 .nvim.lua
-*.s
+test.s
 *.out
 test/
 test

@@ -47,7 +47,7 @@ impl Parser {
             }
             // if
             let pattern = self.expr_cmp(STRUCT_NOT_INIT)?;
-            println!(" >> {:?}", pattern);
+            print::cprint!(" >> %s", pattern.clone());
 
             // => 構文エラーを返す
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー

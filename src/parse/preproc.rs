@@ -22,7 +22,7 @@ impl Parser {
                 node::Group2Node::Line(curr_line)
             }
             "preserve" => {
-                println!("{}", proc_name);
+                print::cprint!("%s", proc_name.clone());
                 panic!();
             }
             "asm" => self.build_asm_ast()?,
