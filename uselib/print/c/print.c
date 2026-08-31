@@ -177,12 +177,7 @@ static void sys_write(const char *buf, int len)
 
 static void sys_write(const char *buf, int len)
 {
-    while (len > 0) {
-        long ret = linux_sys_write(buf, (long)len);
-        if (ret <= 0) break;       /* エラーまたは EOF          */
-        buf += ret;
-        len -= (int)ret;
-    }
+    linux_sys_write(buf, (long)len);
 }
 
 #endif /* _WIN32 */
