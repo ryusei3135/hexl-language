@@ -16,11 +16,40 @@ enum OpKind {
 }
 
 #[repr(C)]
+enum ResultKind {
+    Ok,
+    ERR,
+}
+
+#[repr(C)]
 struct CharOpt {
     value: u8,
     kind: OpKind,
 }
 
+#[repr(C)]
+union V {
+    pub ok: char,
+    pub err: *const char
+}
+
+#[repr(C)]
+struct CharResult {
+    pub value: V,
+    pub kind: ResultKind,
+}
+
+impl CharResult {
+    fn get_result_ok_value(&self) -> Result<char, *const char> {
+        unsafe {
+            if matches!(self.kind, ResultKind::Ok) {
+                return Ok(self.value.ok);
+            } else {
+                return Err(self.value.err);
+            }
+        }
+    }
+}
 
 unsafe extern "C" {
     // C
@@ -30,7 +59,11 @@ unsafe extern "C" {
     fn match_chr(this: *mut Parser, chr: u8) -> u8;
     fn match_chr_2(this: *mut Parser, chr: u8) -> u8;
     fn unmatch_bump(this: *mut Parser, chr: u8) -> u8;
+
+    fn parse_class_char(this: *mut Parser) -> CharResult;
 }
+
+
 
 #[link(name = "regex", kind = "static")]
 unsafe extern "C" {
@@ -296,13 +329,13 @@ impl Parser {
                     );
                     continue;
                 }
-                let c1 = self.parse_class_char()?;
+                let c1 = parse_class_char(self).get_result_ok_value().unwrap();
                 if IsBoolean!(match_chr(self, b'-'))
                     && matches!(peek2(self).kind, OpKind::SOME)
                     && peek2(self).value != b']'
                 {
                     bump(self); // '-'
-                    let c2 = self.parse_class_char()?;
+                    let c2 = parse_class_char(self).get_result_ok_value().unwrap();
                     ranges.push((c1, c2));
                 } else {
                     ranges.push((c1, c1));
@@ -312,23 +345,23 @@ impl Parser {
         }
     }
 
-    fn parse_class_char(&mut self) -> Result<char, RegexError> {
-        unsafe {
-            if matches!(bump(self).kind, OpKind::NONE) {
-                return Err(RegexError("'[' に対応する ']' がありません".into()));
-            }
-            match peek(self).value {
-                b'\\' => {
-                    if matches!(bump(self).kind, OpKind::NONE) {
-                        return Err(RegexError("末尾がバックスラッシュで終わっています".into()));
-                    }
-                    // c/all.h
-                    Ok(change_byte_chr(self) as char)
-                }
-                c => Ok(c as char)
-            }
-        }
-    }
+    // fn parse_class_char(&mut self) -> Result<char, RegexError> {
+    //     unsafe {
+    //         if matches!(bump(self).kind, OpKind::NONE) {
+    //             return Err(RegexError("'[' に対応する ']' がありません".into()));
+    //         }
+    //         match peek(self).value {
+    //             b'\\' => {
+    //                 if matches!(bump(self).kind, OpKind::NONE) {
+    //                     return Err(RegexError("末尾がバックスラッシュで終わっています".into()));
+    //                 }
+    //                 // c/all.h
+    //                 Ok(change_byte_chr(self) as char)
+    //             }
+    //             c => Ok(c as char)
+    //         }
+    //     }
+    // }
 }
 
 // fn shorthand_class_ranges(kind: u8) -> Vec<(char, char)> {

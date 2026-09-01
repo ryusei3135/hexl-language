@@ -57,3 +57,27 @@ char unmatch_bump(Parser *this, char chr) {
         return 1;
     return 0;
 }
+
+
+#define ResultErrGen(msg)\
+    CharResult result = {msg, Err};\
+    return result;
+
+#define ResultOkGen(c)\
+    CharResult result = {c, Ok};\
+    return result;
+
+CharResult parse_class_char(Parser *this) {
+    if (bump(this).kind == None) {
+        ResultErrGen("'[' に対応する ']' がありません");
+    }
+
+    char c = peek(this).value;
+    if (c == '\\') {
+        if (bump(this).kind == None) {
+            ResultErrGen("'[' に対応する ']' がありません");
+        }
+        ResultOkGen(change_byte_chr(this));
+    }
+    ResultOkGen(c);
+}
