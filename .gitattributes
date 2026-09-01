@@ -10,5 +10,8 @@
 *.asm linguist-language=Assembly
 
 # 明示的にソースコードとして扱う
-src/** linguist-detectable=true
-uselib/** linguist-detectable=true
+*.c linguist-detectable=true
+*.h linguist-detectable=true
+*.py linguist-detectable=true
+*.s linguist-detectable=true
+*.rs linguist-detectable=true
