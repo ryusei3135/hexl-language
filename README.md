@@ -4,8 +4,6 @@
   <img src="hexl_lang.png" width="128" />
 </p>
 
-[![Top Langs](https://vercel.app)](https://github.com/ryusei3135/hexl-language)
-
 # Hexl(Hexadecimal Language) - 自作プログラミング言語 / Custom Programming Language
 Hexlはrustで実装されたプログラミング言語であり
 字句解析・構文解析・AST・コンパイラを自前で実装しており、
