@@ -11,6 +11,7 @@ fn main() {
 
     Command::new("python3")
         .arg(&build_py)
+        .arg("x64")
         .status()
         .expect("failed to execute build.py");
 

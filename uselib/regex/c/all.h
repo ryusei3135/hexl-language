@@ -29,3 +29,6 @@ typedef struct CharOpt CharOpt;
 // asm/chr.s
 char change_byte_chr(volatile Parser *);
 int is_byte_digit(char);
+
+// asm/range.s
+char* shorthand_class_ranges(char);

@@ -36,6 +36,30 @@ unsafe extern "C" {
 unsafe extern "C" {
     // Asm
     fn change_byte_chr(this: *mut Parser) -> u8;
+
+    fn shorthand_class_ranges(chr: u8) -> *const u8;
+}
+
+fn get_class_ranges(chr: u8) -> &'static [[u8; 2]] {
+    unsafe {
+        let ptr = shorthand_class_ranges(chr);
+        if ptr.is_null() {
+            return &[];
+        }
+
+        // 1. 先頭の1バイト（行数）を読み取る
+        let row_count = *ptr as usize;
+        if row_count == 255 {
+            return &[];
+        }
+
+        // 3. ポインタを1バイト進めて、行数データを「スキップ」する
+        // これにより、[0番目を消す] のと同じ状態になります
+        let data_ptr = ptr.add(1) as *const [u8; 2];
+
+        // 4. スキップした位置から、正しい行数分の2次元スライスを構築する
+        std::slice::from_raw_parts(data_ptr, row_count)
+    }
 }
 
 macro_rules! IsBoolean {
@@ -265,7 +289,11 @@ impl Parser {
                         } else {
                             panic!()
                         };
-                    ranges.extend(shorthand_class_ranges(kind));
+                    ranges.extend(
+                        get_class_ranges(kind).iter().map(|range| {
+                            (range[0] as char, range[1] as char)
+                        })
+                    );
                     continue;
                 }
                 let c1 = self.parse_class_char()?;
@@ -303,11 +331,11 @@ impl Parser {
     }
 }
 
-fn shorthand_class_ranges(kind: u8) -> Vec<(char, char)> {
-    match kind {
-        b'd' => vec![('0', '9')],
-        b'w' => vec![('a', 'z'), ('A', 'Z'), ('0', '9'), ('_', '_')],
-        b's' => vec![(' ', ' '), ('\t', '\t'), ('\n', '\n'), ('\r', '\r')],
-        _ => vec![],
-    }
-}
+// fn shorthand_class_ranges(kind: u8) -> Vec<(char, char)> {
+//     match kind {
+//         b'd' => vec![('0', '9')],
+//         b'w' => vec![('a', 'z'), ('A', 'Z'), ('0', '9'), ('_', '_')],
+//         b's' => vec![(' ', ' '), ('\t', '\t'), ('\n', '\n'), ('\r', '\r')],
+//         _ => vec![],
+//     }
+// }

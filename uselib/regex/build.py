@@ -1,10 +1,11 @@
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 SRC_C = ROOT / "c"
-SRC_A = ROOT / "asm"
 BUILD = ROOT
+SRC_A = ROOT / "asm/x64" if sys.argv[2] == "x64" else "asm/arm64"
 
 BUILD.mkdir(exist_ok=True)
 
@@ -12,10 +13,9 @@ print("ROOT =", ROOT)
 print("SRC  =", SRC_C)
 print("BUILD =", BUILD)
 
-c_files = list(SRC_C.rglob("*.c"))
-asm_files = list(SRC_A.rglob("*.s"))
+file_lists = [list(SRC_C.rglob("*.c")), list(SRC_A.rglob("*.s"))]
 
-[[print("  ", f) for f in files] for files in [asm_files, c_files]]
+[[print("  ", f) for f in files] for files in file_lists]
 
 objects = []
 
@@ -35,8 +35,7 @@ def files_com(file_list):
 
         objects.append(obj)
 
-files_com(c_files)
-files_com(asm_files)
+[files_com(f) for f in file_lists]
 
 print("Objects:")
 [print("  ", obj) for obj in objects]

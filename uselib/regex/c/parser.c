@@ -4,11 +4,11 @@
 
 CharOpt peek(Parser *this) {
     OpKind kind = Some;
-    if (this->chars_len >= this->pos)
+    if (this->pos >= this->chars_len)
         kind = None;
 
     CharOpt opt = {
-        this->chars[this->pos],
+        kind == Some ? this->chars[this->pos] : 0,
         kind
     };
     return opt;
@@ -16,11 +16,11 @@ CharOpt peek(Parser *this) {
 
 CharOpt peek2(Parser *this) {
     OpKind kind = Some;
-    if (this->chars_len >= this->pos + 1)
+    if (this->pos + 1 >= this->chars_len)
         kind = None;
 
     CharOpt opt = {
-        this->chars[this->pos + 1],
+        kind == Some ? this->chars[this->pos + 1] : 0,
         kind
     };
     return opt;
