@@ -139,6 +139,14 @@ pub fn build(
 }
 
 fn main() -> io::Result<()> {
+    let re = regex::Regex::new(r"(abc)").unwrap();
+
+        let result = re.replace_all("$jdabc", |caps: &regex::Captures| {
+            println!("group1 = {:?}", &caps[1]);
+            "TEST".to_string()
+        });
+
+        println!("{}", result);
     let args: Vec<String> = env::args().collect();
     // オプションなどの設定
     let settings = cmd_line_args::mng_opt_cmd(&args);

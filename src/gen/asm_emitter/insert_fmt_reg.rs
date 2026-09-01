@@ -27,7 +27,7 @@ impl AsmEmitter {
                         .get_fmt_reg(&inner.parse::<usize>().unwrap(), size)
                 )
             })
-            .into_owned()
+            .to_owned()
     }
     
     /// レジスタの「番号」だけを一時的に埋め込むための、目印付きの

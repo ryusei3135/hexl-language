@@ -1,0 +1,5 @@
+target
+build
+*.lock
+*.o
+*.a

@@ -1,5 +1,5 @@
 [package]
-name = "print"
+name = "regex"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,5 +9,5 @@ build = "build.rs"
 cc = "1.0"
 
 [lib]
-name = "print"
+name = "regex"
 path = "src/lib.rs"

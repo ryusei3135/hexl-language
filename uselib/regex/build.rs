@@ -1,5 +1,3 @@
-
-
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -10,6 +8,7 @@ fn main() {
     );
 
     let build_py = manifest_dir.join("build.py");
+
     Command::new("python3")
         .arg(&build_py)
         .status()
@@ -20,8 +19,9 @@ fn main() {
         manifest_dir.display()
     );
 
-    println!("cargo:rustc-link-lib=static=print");
-    println!("cargo:rustc-link-search=native=uselib/print");
+    println!("cargo:rustc-link-lib=static=regex");
+    println!("cargo:rustc-link-search=native=uselib/regex");
+
     println!("cargo:rerun-if-changed=src/c");
     println!("cargo:rerun-if-changed=src/asm");
 }

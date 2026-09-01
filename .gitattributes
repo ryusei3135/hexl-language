@@ -12,6 +12,5 @@
 
 # 明示的にソースコードとして扱う
 src/** linguist-detectable=true
-uselib/print/src/** linguist-detectable=true
-uselib/print/c/** linguist-detectable=true
-uselib/print/asm/** linguist-detectable=true
+uselib/print/** linguist-detectable=true
+uselib/regex/** linguist-detectable=true

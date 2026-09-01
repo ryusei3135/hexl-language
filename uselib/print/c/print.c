@@ -3,7 +3,6 @@
  * ══════════════════════════════════════════════════════════════════════════
  * 外部ライブラリ不使用・インラインアセンブラ版 可変引数 println
  * 対応OS : Linux x86-64 / Windows x86-64
- * 対応CC : GCC / Clang / MinGW  (MSVC x64 はインラインアセンブラ非対応)
  *
  * コンパイル:
  *   Linux  : gcc  -O2 -Wall -Wextra -o demo  println.c
