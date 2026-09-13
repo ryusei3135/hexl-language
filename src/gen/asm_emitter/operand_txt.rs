@@ -3,6 +3,8 @@
 use super::*;
 
 impl AsmEmitter {
+    /// 引数を参照するアセンブリコードの一部
+    /// を生成する
     pub(super) fn param_ref(
         &mut self, 
         param_name: &String
@@ -26,7 +28,7 @@ impl AsmEmitter {
             )
         }
     }
-
+    /// 文字列のメモリ参照を生成する
     pub(super) fn string_mem_ref(
         &mut self, 
         parent_id: &usize
@@ -242,5 +244,25 @@ impl AsmEmitter {
                 &assign_reg, 
                 &head_offset.unwrap()
             )
+    }
+
+    /// 二行のアセンブリコードのニーモニックを、式のサイズに応じて調整する
+    #[inline(always)]
+    pub fn fmt_one_expr_mnemo_resize(
+        &self,
+        mut formated: String,
+        resolved_size: &Size,
+        mnemonic: &str,
+    ) -> String {
+        formated = self.asm_fmt.fmt_mnemonic_resize(
+            "mov", 
+            &formated, 
+            &resolved_size
+        );
+        self.asm_fmt.fmt_mnemonic_resize(
+            mnemonic, 
+            &formated, 
+            &resolved_size
+        )
     }
 }

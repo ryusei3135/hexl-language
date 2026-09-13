@@ -160,37 +160,19 @@ impl AsmEmitter {
                     if let Some(free_reg)
                         = self.find_free_reg(&literal_regs)
                     {
-                        // --- 2-a. 空いているレジスタが見つかった場合 ---
-                        // 値をそちらへ移し、以後はそのレジスタをこの
-                        // 変数の正式な保持場所として扱う(恒久的な移動)
-                        let src = self.asm_fmt
-                            .get_fmt_reg(reg, &size);
-                        let dst = self.asm_fmt
-                            .get_fmt_reg(&free_reg, &size);
-                        let mut mov_asm = self
-                            .asm_fmt
-                            .get_opcode_tmpl("mov")
-                            .replace("{dst}", &dst)
-                            .replace("{src1}", &src);
-                        mov_asm = self.asm_fmt
-                            .fmt_mnemonic_resize(
-                                "mov",
-                                &mov_asm,
-                                &size
-                            );
-                        self.asm_text.push_str(&mov_asm);
-
-                        self.update_value_reg(&var_name, &free_reg);
+                        self.mov_register_val_to_reg(
+                            free_reg, 
+                            &size, 
+                            var_name, 
+                            *reg
+                        );
                     } else {
-                        // --- 2-b. 空いているレジスタがない場合 ---
-                        // インラインアセンブラの前後でこのレジスタの値を
-                        // スタックに退避/復元する(一時的な退避)
-                        let reg_name = self.asm_fmt
-                            .get_fmt_reg(reg, &Size::DQ);
-                        let push_asm = self.asm_fmt
-                            .get_push(&reg_name);
-                        self.asm_text.push_str(&push_asm);
-                        stacked_regs.push(*reg);
+                        self.mov_register_val_to_stack(
+                            &size, 
+                            var_name, 
+                            &reg,
+                            &mut stacked_regs
+                        );
                     }
                 }
             }
@@ -207,6 +189,62 @@ impl AsmEmitter {
         } else {
             panic!();
         }
+    }
+
+    /// 一回しか呼び出されないからinline
+    /// 
+    /// インラインアセンブラでレジスタを使うため
+    /// 空いているレジスタに値を移す
+    #[inline(always)]
+    fn mov_register_val_to_reg(
+        &mut self,
+        free_reg: usize,
+        size: &Size,
+        var_name: String,
+        reg: usize,
+    ) {
+        // --- 2-a. 空いているレジスタが見つかった場合 ---
+        // 変数の正式な保持場所として扱う(恒久的な移動)
+        let src = self.asm_fmt
+            .get_fmt_reg(&reg, &size);
+        let dst = self.asm_fmt
+            .get_fmt_reg(&free_reg, &size);
+        let mut mov_asm = self
+            .asm_fmt
+            .get_opcode_tmpl("mov")
+            .replace("{dst}", &dst)
+            .replace("{src1}", &src);
+        mov_asm = self.asm_fmt
+            .fmt_mnemonic_resize(
+                "mov",
+                &mov_asm,
+                &size
+            );
+        self.asm_text.push_str(&mov_asm);
+
+        self.update_value_reg(&var_name, &free_reg);
+    }
+
+    /// 一回しか呼び出されないからinline
+    /// 
+    /// レジスタが空いていない場合に、スタックに退避する
+    #[inline(always)]
+    fn mov_register_val_to_stack(
+        &mut self,
+        size: &Size,
+        var_name: String,
+        reg: &usize,
+        stacked_regs: &mut Vec<usize>,
+    ) {
+        // --- 2-b. 空いているレジスタがない場合 ---
+        // インラインアセンブラの前後でこのレジスタの値を
+        // スタックに退避/復元する(一時的な退避)
+        let reg_name = self.asm_fmt
+            .get_fmt_reg(reg, &Size::DQ);
+        let push_asm = self.asm_fmt
+            .get_push(&reg_name);
+        self.asm_text.push_str(&push_asm);
+        stacked_regs.push(*reg);
     }
 
     #[inline(always)]

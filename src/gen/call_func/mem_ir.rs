@@ -184,9 +184,14 @@ impl AsmEmitter {
                             .get_opcode_tmpl("mov")
                             .replace("{dst}", &s)
                             .replace("{src1}", value.as_str());
+                        let store_size = if size.is_pointer().is_some() {
+                            Size::DQ
+                        } else {
+                            size.clone()
+                        };
                         txt.push_str(
                             self.asm_fmt
-                                .fmt_mnemonic_resize("mov", &mov_line, &size)
+                                .fmt_mnemonic_resize("mov", &mov_line, &store_size)
                                 .as_str(),
                         );
                     }

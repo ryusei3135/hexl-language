@@ -354,6 +354,46 @@ impl AsmEmitter {
         )
     }
 
+    /// IRの値IDから、その式が生成する値の型をたどって取得する。
+    pub(super) fn get_expr_ty(&self, node_idx: &usize) -> Size {
+        match &self.curr_inst[*node_idx] {
+            inst::Inst::Expr(expr) => self.get_expr_ty(&expr.ls),
+            inst::Inst::Pointer(inner) => match self.get_expr_ty(inner) {
+                Size::Pointer { ty, .. } => *ty,
+                ty => ty,
+            },
+            inst::Inst::GetAddress(..) => Size::DQ,
+            inst::Inst::InsertArr { name, .. } => {
+                let size = self
+                    .var_hash_map
+                    .get(name)
+                    .unwrap_or_else(|| panic!("array variable not found: {}", name))
+                    .size
+                    .clone();
+                match size {
+                    Size::Array { size, .. } => *size,
+                    Size::Pointer { ty, .. } => *ty,
+                    ty => ty,
+                }
+            }
+            inst::Inst::AssignVar { value, .. } => self.get_expr_ty(value),
+            inst::Inst::InitArr(ids) => {
+                let size = ids
+                    .first()
+                    .map(|id| self.get_expr_ty(id))
+                    .unwrap_or(Size::Void);
+                Size::Array {
+                    size: Box::new(size),
+                    len: ids.len(),
+                }
+            }
+            inst::Inst::CallFunc(..) => Size::DQ,
+            node => node
+                .get_param_ty()
+                .unwrap_or_else(|| panic!("cannot determine expression type: {:?}", node)),
+        }
+    }
+
     /// `idx`が(直接、あるいは`GetAddress`/`Pointer`でラップされた先に)
     /// `Inst::Struct`を指している場合、その`Inst::Struct`自身のidxを返す。
     /// `format_line`が構造体の生成を特別扱いする際、ラップされた
@@ -567,7 +607,7 @@ impl AsmEmitter {
 
     pub(super) fn format_expr_inst(
         &mut self, 
-        expr: &inst::ExprInst
+        expr: &inst::ExprInst,
     ) -> String {
         let key = match expr.kind {
             inst::ExprKind::Add => "add",
@@ -596,31 +636,42 @@ impl AsmEmitter {
             | inst::ExprKind::Equal => "cmp",
         };
 
+        let resolved_size: Size = self.get_expr_ty(&expr.ls);
+        let wrap_size = resolved_size.wrap_dst_size();
+
         let dst_text = if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
             Self::insert_fmt_reg_placeholder(&self.reg_idx)
         } else {
-            self.get_reg(Some(&self.reg_idx), &Size::DQ)
+            self.get_reg(
+                Some(&self.reg_idx), 
+                &resolved_size
+            )
         };
 
-        let resolved_size = self
-            .check_node_is_mem_val(&expr.ls)
-            .or_else(|| self.check_node_is_mem_val(&expr.rs));
         let mut formated = self
             .asm_fmt
             .get_opcode_tmpl(key)
             .replace("{dst}", &dst_text)
-            .replace("{src1}", &self.extract_operand_text(&expr.ls, &resolved_size))
-            .replace("{src2}", &self.extract_operand_text(&expr.rs, &resolved_size))
+            .replace("{src1}", &self.extract_operand_text(
+                    &expr.ls, 
+                    &wrap_size
+                )
+            )
+            .replace("{src2}", &self.extract_operand_text(
+                    &expr.rs, 
+                    &wrap_size
+                )
+            )
             .to_string();
 
-        if let Some(ref size) = resolved_size {
-            formated = self.asm_fmt.fmt_mnemonic_resize("mov", &formated, size);
-            formated = self.asm_fmt.fmt_mnemonic_resize(mnemonic, &formated, size);
-        }
-
+        formated = self.fmt_one_expr_mnemo_resize(
+            formated.to_string(), 
+            &resolved_size, 
+            mnemonic
+        );
+    
         if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
-            let size = resolved_size.unwrap_or(Size::DQ);
-            formated = self.replace_insert_fmt_reg(&formated, &size);
+            formated = self.replace_insert_fmt_reg(&formated, &resolved_size);
         }
 
         // サイズがSelfでない場合
