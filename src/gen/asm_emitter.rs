@@ -4,7 +4,7 @@ mod struct_ir;
 mod insert_fmt_reg;
 
 use super::*;
-use crate::asm_setting::{self, ValueFmt};
+use crate::asm_setting;
 use crate::ir::types;
 
 /// 演算結果を格納するレジスタの「適切なサイズ」が、テンプレートを

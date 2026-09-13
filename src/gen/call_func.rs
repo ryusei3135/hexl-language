@@ -2,7 +2,7 @@ mod assign_var;
 mod mem_ir;
 
 use super::*;
-use crate::ir::{self, types};
+use crate::ir;
 
 impl AsmEmitter {
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する

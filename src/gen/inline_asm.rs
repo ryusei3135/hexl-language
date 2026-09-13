@@ -1,5 +1,5 @@
 use crate::gen::asm_emitter::VarIndexInfo;
-use crate::ir::def_tree::{VarMetaData, VarTree};
+//use crate::ir::def_tree::{VarMetaData, VarTree};
 
 use super::*;
 

@@ -11,16 +11,16 @@ pub struct Parser {
     pub group_count: usize,
 }
 
-#[repr(C)]
+/*#[repr(C)]
 pub enum OpKind {
-    NONE,
-    SOME,
-}
+    IsNone,
+    IsSome,
+}*/
 
 #[repr(C)]
 pub enum ResultKind {
-    Ok,
-    Err,
+    IsOk,
+    IsErr,
 }
 
 #[repr(C)]
@@ -46,21 +46,6 @@ unsafe extern "C" {
     pub fn ini_nodes() -> *mut Nodes;
     pub fn nodes_drop(n: *mut Nodes);
 
-    // 修正: parse_new は C 側では `Parser *`（ヒープ確保した構造体への
-    // ポインタ）を返す実装になっている。しかし以前の宣言は
-    // `-> Parser` (32byte の構造体を値で返す) になっていた。
-    // x86-64 SysV ABI では 16byte を超える構造体を値で返す場合、
-    // 呼び出し側が確保したバッファへの隠しポインタを第1引数(RDI)として
-    // 渡し、呼ばれた側がそこへ書き込む規約 (sret) になる。
-    // Rust 側はこの規約で RDI に確保済みバッファのアドレスを積んで
-    // 呼ぶが、C 側の実装はそれを知らず、素直に第1引数を
-    // `pattern`、第2引数を `len` として読んでしまうため、本来の
-    // pattern ポインタと len がまるごとズレて渡り、Rust 側の
-    // `parser` 変数は一切書き込まれず未初期化のままになっていた。
-    // 以降 parser.chars / chars_len / pos はすべて不定値になり、
-    // 環境によって free(不正なポインタ) や index out of bounds
-    // パニックなど、再現性の低いクラッシュを引き起こしていた。
-    // ini_nodes と同様、ポインタ返却として扱うのが正しい。
     pub fn parse_new(pattern: *const u8, len: i64) -> *mut Parser;
     pub fn parse_alt(p: *mut Parser, n: *mut Nodes) -> NodeResult;
     pub fn parser_drop(p: *mut Parser);
@@ -112,8 +97,8 @@ impl Regex {
             parser_drop(parser);
 
             let root = match result.kind {
-                ResultKind::Ok => result.v.ok,
-                ResultKind::Err => {
+                ResultKind::IsOk => result.v.ok,
+                ResultKind::IsErr => {
                     // Regex を作らずに抜けるので、確保済みの nodes は
                     // ここで解放しないとリークする。
                     let msg = cstr_to_string(result.v.err);
@@ -212,12 +197,14 @@ impl Regex {
 /// `parse_class_char` / `parse_bound` などの Err メッセージは全て C 文字列リテラルなので、
 /// ここで一箇所にまとめて安全に扱う。
 unsafe fn cstr_to_string(ptr: *const u8) -> String {
-    if ptr.is_null() {
-        return String::from("不明なエラーです");
+    unsafe {
+        if ptr.is_null() {
+            return String::from("不明なエラーです");
+        }
+        CStr::from_ptr(ptr as *const i8)
+            .to_string_lossy()
+            .into_owned()
     }
-    CStr::from_ptr(ptr as *const i8)
-        .to_string_lossy()
-        .into_owned()
 }
 
 /// `Regex::replace_all` に渡せる「置換の仕方」を表すトレイト。
