@@ -36,10 +36,16 @@ impl AsmEmitter {
                 inst::Inst::Num { size, .. } => size.clone(),
                 _ => self.get_var_ty(&name),
             },
+            inst::Inst::Pointer(..)
+            | inst::Inst::InsertArr { .. } => self.get_expr_ty(dst),
             _ => self.get_var_ty(&name),
         };
 
-        text = self.asm_fmt.fmt_mnemonic_resize("mov", &text, &mnemonic_size);
+        text = self.asm_fmt.fmt_memory_mnemonic_resize(
+            "mov",
+            &text,
+            &mnemonic_size,
+        );
         self.asm_text.push_str(&text);
     }
 

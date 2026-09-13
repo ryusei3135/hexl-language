@@ -51,6 +51,11 @@ impl MngAsmFmt {
         param_idx: &usize, 
         size: Size
     ) -> R {
+        if TypeId::of::<R>() != TypeId::of::<usize>()
+            && TypeId::of::<R>() != TypeId::of::<String>() {
+            panic!("この型は無効です,")
+        }
+
         if TypeId::of::<R>() == TypeId::of::<String>()
         {
             let result: Box<dyn Any> = Box::new(
@@ -64,14 +69,12 @@ impl MngAsmFmt {
                 .ok()
                 .map(|b| *b)
                 .unwrap()
-        } else if TypeId::of::<R>() == TypeId::of::<usize>() {
+        } else {
             let result: Box<dyn Any> = Box::new(self.param_fmt[*param_idx]);
             result.downcast::<R>()
                 .ok()
                 .map(|b| *b)
                 .unwrap()
-        } else {
-            panic!("この型は無効です,")
         }
     }
 
@@ -154,8 +157,38 @@ impl MngAsmFmt {
         value: &String,
         size: &types::Size,
     ) -> String {
-        if let types::Size::Pointer { ty, .. } = size {
-            return self.fmt_mnemonic_resize(mnemonic, value, ty);
+        self.fmt_mnemonic_resize_inner(mnemonic, value, size, false)
+    }
+
+    /// メモリを読み書きする命令は、フォーマット設定に関係なく
+    /// オペランドのサイズをニーモニックへ付ける。
+    pub fn fmt_memory_mnemonic_resize(
+        &self,
+        mnemonic: &str,
+        value: &String,
+        size: &types::Size,
+    ) -> String {
+        self.fmt_mnemonic_resize_inner(mnemonic, value, size, true)
+    }
+
+    fn fmt_mnemonic_resize_inner(
+        &self,
+        mnemonic: &str,
+        value: &String,
+        size: &types::Size,
+        is_memory_access: bool,
+    ) -> String {
+        if is_memory_access == false && self.fmt.fmt.mnemonic_size == false {
+            return value.clone();
+        }
+
+        if matches!(size, types::Size::Pointer { .. }) {
+            return self.fmt_mnemonic_resize_inner(
+                mnemonic,
+                value,
+                &types::Size::DQ,
+                is_memory_access,
+            );
         }
 
         let s_fmt = match &size {
@@ -165,7 +198,12 @@ impl MngAsmFmt {
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
             types::Size::Pointer { .. } => unreachable!(),
             types::Size::Array { size, .. } => {
-                return self.fmt_mnemonic_resize(&mnemonic, &value, &size);
+                return self.fmt_mnemonic_resize_inner(
+                    mnemonic,
+                    value,
+                    size,
+                    is_memory_access,
+                );
             }
             t => panic!("{:?}", t),
         };

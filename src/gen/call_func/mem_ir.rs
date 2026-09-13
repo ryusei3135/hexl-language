@@ -191,7 +191,7 @@ impl AsmEmitter {
                         };
                         txt.push_str(
                             self.asm_fmt
-                                .fmt_mnemonic_resize("mov", &mov_line, &store_size)
+                                .fmt_memory_mnemonic_resize("mov", &mov_line, &store_size)
                                 .as_str(),
                         );
                     }

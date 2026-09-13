@@ -57,9 +57,15 @@ pub struct ValueFmt {
     pub global: String,
     pub data: DataFmt,
     pub op_size: OpSizeFmt,
+    #[serde(default = "default_mnemonic_size")]
+    pub mnemonic_size: bool,
     pub ref_stack: String,
     pub frame: String,
     pub frame_end: String,
+}
+
+fn default_mnemonic_size() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -65,12 +65,13 @@ impl AsmEmitter {
                 .get_opcode_tmpl(opcode)
                 .replace("{dst}", &param_reg)
                 .replace("{src1}", &src1_text);
-            asm = self.asm_fmt
-                .fmt_mnemonic_resize(
-                    opcode, 
-                    &asm, 
-                    &resize_size
-                );
+            asm = if self.check_node_is_mem_val(param).is_some() {
+                self.asm_fmt
+                    .fmt_memory_mnemonic_resize(opcode, &asm, &resize_size)
+            } else {
+                self.asm_fmt
+                    .fmt_mnemonic_resize(opcode, &asm, &resize_size)
+            };
             call_func.push_str(&asm);
         }
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&meta_data.name));

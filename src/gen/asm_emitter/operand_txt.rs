@@ -111,10 +111,7 @@ impl AsmEmitter {
         name: &Option<String>, 
         src: &usize
     ) -> String {
-        let Some(var_name) = name else {
-            panic!()
-        };
-
+        let var_name = name.clone().unwrap();
         let var = self
             .var_hash_map
             .get(&*var_name)
@@ -131,7 +128,7 @@ impl AsmEmitter {
         let (reg_num, is_ptr, var_size) =
             (var.reg, var.size.is_pointer().is_some(), var.size.clone());
         let size = if is_ptr { Size::DQ } else { var_size };
-        if !is_ptr {
+        if is_ptr == false {
             if let Some(static_var) = self.data_map
                 .iter()
                 .find(|v| &v.0 == src) 
@@ -187,9 +184,7 @@ impl AsmEmitter {
             "%rbp".to_string()
         };
 
-        let Some(first_id) = ids.first() else {
-            panic!("空の配列リテラルはサポートされていません");
-        };
+        let first_id = ids.first().unwrap();
 
         // 配列の要素のサイズは先頭の要素から求める
         // (配列の要素は全て同じ型/サイズであることが前提)
@@ -227,7 +222,7 @@ impl AsmEmitter {
 
             txt.push_str(
                 self.asm_fmt
-                    .fmt_mnemonic_resize("mov", &mov_line, &size)
+                    .fmt_memory_mnemonic_resize("mov", &mov_line, &size)
                     .as_str(),
             );
         }
@@ -253,16 +248,30 @@ impl AsmEmitter {
         mut formated: String,
         resolved_size: &Size,
         mnemonic: &str,
+        is_memory_access: bool,
     ) -> String {
-        formated = self.asm_fmt.fmt_mnemonic_resize(
-            "mov", 
-            &formated, 
-            &resolved_size
-        );
-        self.asm_fmt.fmt_mnemonic_resize(
-            mnemonic, 
-            &formated, 
-            &resolved_size
-        )
+        if is_memory_access {
+            formated = self.asm_fmt.fmt_memory_mnemonic_resize(
+                "mov",
+                &formated,
+                resolved_size,
+            );
+            self.asm_fmt.fmt_memory_mnemonic_resize(
+                mnemonic,
+                &formated,
+                resolved_size,
+            )
+        } else {
+            formated = self.asm_fmt.fmt_mnemonic_resize(
+                "mov",
+                &formated,
+                resolved_size,
+            );
+            self.asm_fmt.fmt_mnemonic_resize(
+                mnemonic,
+                &formated,
+                resolved_size,
+            )
+        }
     }
 }

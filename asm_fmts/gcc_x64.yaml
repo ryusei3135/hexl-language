@@ -83,6 +83,7 @@ fmt:
     dw: w
     dd: l
     dq: q
+  mnemonic_size: true
   ref_stack: "-{size}({src})"
   frame: "{space}push %rbp\n{space}mov %rsp, %rbp\n"
   frame_end: "{space}leave\n"

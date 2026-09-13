@@ -17,7 +17,7 @@ use crate::ir::types;
 /// レジスタの「番号」だけを埋め込んでおき([`AsmEmitter::replace_insert_fmt_reg`]
 /// を参照)、サイズが確定してから改めて実際のレジスタ名へ展開し直す
 /// 必要がある。
-pub(super) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind] = &[
+pub(super) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
     inst::ExprKind::Mul,
     inst::ExprKind::Div,
     inst::ExprKind::Surplus,
@@ -344,14 +344,14 @@ impl AsmEmitter {
         } else {
             return None;
         };
-        Some(
+        let resized = if self.check_node_is_mem_val(src1).is_some() {
             self.asm_fmt
-                .fmt_mnemonic_resize(
-                    mnemonic, 
-                    formated, 
-                    &resize
-                )
-        )
+                .fmt_memory_mnemonic_resize(mnemonic, &formated, &resize)
+        } else {
+            self.asm_fmt
+                .fmt_mnemonic_resize(mnemonic, &formated, &resize)
+        };
+        Some(resized)
     }
 
     /// IRの値IDから、その式が生成する値の型をたどって取得する。
@@ -424,7 +424,7 @@ impl AsmEmitter {
     /// これは`mov`命令に付けるサイズ接尾辞(`movl`など)を
     /// 決定するために使う。
     #[inline(always)]
-    fn check_node_is_mem_val(
+    pub(in crate::gen) fn check_node_is_mem_val(
         &self, 
         node_idx: &usize
     ) -> Option<Size> {
@@ -664,10 +664,13 @@ impl AsmEmitter {
             )
             .to_string();
 
+        let is_memory_access = self.check_node_is_mem_val(&expr.ls).is_some()
+            || self.check_node_is_mem_val(&expr.rs).is_some();
         formated = self.fmt_one_expr_mnemo_resize(
             formated.to_string(), 
             &resolved_size, 
-            mnemonic
+            mnemonic,
+            is_memory_access,
         );
     
         if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {

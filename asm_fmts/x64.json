@@ -30,7 +30,8 @@
   "fmt": {
 	"reg": "{}",
 	"num": "{}",
-    "string": "{name}: db {}"
+    "string": "{name}: db {}",
+    "mnemonic_size": false
   },
   "op": {
         "add": {

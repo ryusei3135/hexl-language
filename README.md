@@ -50,6 +50,8 @@ gcc 生成したアセンブリソースコード -nostdlib
 - enum
 - static
 - Self
+- mut
+- jmp
 
 ### プロプロセッサ
 - #include
