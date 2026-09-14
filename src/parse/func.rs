@@ -102,23 +102,16 @@ impl Parser {
             // 下の`,`の分岐、またはループを抜ける`)`の分岐のいずれかを
             // 通っているはず)なので、ここが`false`になるのはパーサー
             // 自体のバグ
-            if !can_create_param {
+            if can_create_param == false {
                 unreachable!("define_arg_node: 引数リストの内部状態が不正です");
             }
             match self.next_tkn(vec!["name", ")"])? {
                 lex::Tkn::Name(name) => {
-                    // 引数が不変か
-                    let is_mut = matches!(
-                        self.next_tkn_ref(vec!["mut"])?, 
-                        lex::Tkn::KeyWordMut
-                    );
-                    if is_mut {
-                        self.next_tkn(vec![])?;
-                    }
+                    let is_mut: bool = self.args_is_mut(&name)?;
                     // 直前の`if !can_create_param`のチェックを通過して
                     // いるため、ここでは常に`true`(同上、パーサー自体の
                     // バグでない限り到達しない)
-                    if !can_create_param {
+                    if can_create_param == false {
                         unreachable!("define_arg_node: 引数リストの内部状態が不正です");
                     }
                     self.next_tkn(vec![])?;
@@ -152,7 +145,7 @@ impl Parser {
                     break;
                 }
                 lex::Tkn::Comma => {
-                    if !can_create_param {
+                    if can_create_param == false {
                         can_create_param = true;
                     } else {
                         // `,`の前に引数が無い(先頭が`,`、または`,,`)

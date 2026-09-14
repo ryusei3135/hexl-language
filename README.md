@@ -67,7 +67,7 @@ gcc 生成したアセンブリソースコード -nostdlib
 ```
 d: int = 5
 a: [int] = 10
-b: ""[int] = 10
+b: static[int] = 10
 c: [int 4] = {1, 2, 3, 4}
 ```
 - [メモリ関連の仕様](./documents/mem.md)

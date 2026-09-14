@@ -12,6 +12,7 @@ mod preproc;
 /// 構造体、列挙型のノードを作成するAPIを提供
 mod typedef;
 pub mod node;
+mod mut_var;
 
 use crate::{err, lex};
 use stmt::*;

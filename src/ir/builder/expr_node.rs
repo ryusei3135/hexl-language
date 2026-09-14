@@ -8,9 +8,6 @@ impl IR {
     /// 一時的なスタック領域が、コンパイラ内部の合成名(`__self_N`)
     /// ではなく、`var_name`(元の変数名)で`var_tree`に登録される
     /// (詳細は`src/ir/builder/scope.rs`の`scope_node`を参照)。
-    ///
-    /// `Point.new()`以外の式(数値や別の関数呼び出しなど)の場合は、
-    /// 通常通り`gen_expr_ir`にそのまま委譲する
     fn gen_named_expr_ir(
         &mut self,
         var_name: &String,
@@ -21,8 +18,8 @@ impl IR {
         if let node::Expr::Scope { scope, target } = expr {
             self.expr_counter += 1;
             let inst = self.scope_node(
-                &scope, 
-                target, 
+                &scope,
+                target,
                 Some(var_name), 
                 &is_mut
             );
@@ -39,7 +36,11 @@ impl IR {
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
         is_mut: &bool,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
+        if is_mut == &false {
+            CompileErr::assign_to_imm_var(&assign_node.name)?;
+        }
+
         let right_expr_idx: usize =
             self.gen_named_expr_ir(
                 &assign_node.name, 
@@ -52,11 +53,11 @@ impl IR {
             &expect_byte
         );
 
-        inst::Inst::AssignVar {
+        Ok(inst::Inst::AssignVar {
             name: assign_node.name.to_string(),
             dst: dst_idx,
             value: right_expr_idx,
-        }
+        })
     }
 
     pub fn init_array_node(
@@ -104,10 +105,6 @@ impl IR {
             }
             node::TyNode::Static { .. } => self.gen_mem_def_var(var),
             node::TyNode::Ty(ref ty_name) => {
-                // `var.value`が`Point.new()`のような構造体を返す
-                // スコープ呼び出しの場合、`var.name`(元の変数名)を
-                // `gen_named_expr_ir`経由で`scope_node`に渡すことで、
-                // `__self_N`のような合成名を作らせないようにする
                 let value_idx =
                     self.gen_named_expr_ir(
                         &var.name, 

@@ -1,3 +1,5 @@
+use crate::cmd_line_args;
+
 use super::*;
 
 
@@ -68,5 +70,43 @@ impl IR {
             self.extern_func_tree.append(&mut extern_fn_tree);
         }
         Ok(())
+    }
+
+    #[inline(always)]
+    pub fn inline_proc(
+        &mut self,
+        lines: &Vec<node::InlineAsm>,
+        name: &String,
+    ) {
+        let asm_lines = lines
+            .into_iter()
+            .map(|line| {
+                let operand_ids = line
+                    .operands
+                    .clone()
+                    .into_iter()
+                    .map(|expr| {
+                        let ty: types::Size = 
+                        if let node::Expr::Var(ref var_name) = expr {
+                            let ty_node = self.var_tree
+                                .get_ty_node(&var_name)
+                                .unwrap();
+                            types::Size::new(&ty_node)
+                                .unwrap()
+                        } else {
+                            types::Size::DD
+                        };
+                        self.gen_expr_ir(expr, &ty)
+                    })
+                    .collect::<Vec<usize>>();
+                (line.asm.clone(), operand_ids)
+            })
+            .collect::<Vec<(String, Vec<usize>)>>();
+
+        self.ir_tree.push(inst::Inst::Comple {
+            name: name.to_string(),
+            lines: asm_lines,
+        });
+        self.id_counter += 1;
     }
 }

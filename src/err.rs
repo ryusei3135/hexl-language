@@ -6,6 +6,8 @@ pub mod opt;
 pub mod undef;
 pub mod lex_err;
 pub use syntax_err::*;
+pub mod compile;
+pub use compile::*;
 
 // ---------------------------------------------------------------------
 // 位置情報
@@ -95,6 +97,7 @@ pub enum ErrKind {
     NotFoundTkn(lex::Tkn),
     /// 予期しないトークンだった(簡易版、詳細情報なし)
     UnexpectedToken,
+    CompileErr(CompileErr),
     /// トークン管理・式解析など、構文解析全般のエラー
     Syntax(SyntaxErr),
     /// プリプロセッサ特有のエラー
@@ -108,6 +111,7 @@ impl fmt::Display for ErrKind {
             Self::UnexpectedToken => write!(f, "予期しないトークンです"),
             Self::Syntax(e) => write!(f, "{}", e),
             Self::Preproc(e) => write!(f, "{}", e),
+            Self::CompileErr(e) => write!(f, "{:?}", e),
         }
     }
 }

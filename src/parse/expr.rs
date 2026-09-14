@@ -55,27 +55,11 @@ impl Parser {
                 _ => {}
             }
 
-            let is_mut = match &self.current_tkn() {
-                lex::Tkn::KeyWordMut => {
-                    self.advance_tkn().unwrap();
-                    true
-                }
-                lex::Tkn::KeyWordConst => {
-                    self.advance_tkn().unwrap();
-                    false
-                }
-                // コロンが来た場合、それは型の定義なので、変数の定義
-                lex::Tkn::Colon => false,
-                _ => {
-                    // define assign var node
-                    return Ok(node::AssignVar::new(
-                        &name,
-                        node::Expr::Var(name.to_string()),
-                        self.expr_branch()?,
-                    ));
-                }
-            };
-
+            let result = self.assign_expr_is_mut(&name);
+            if result.is_err() {
+                return result.err().unwrap();
+            }
+            let is_mut = result.unwrap();
             let ty_node = self.define_ty_node()?;
 
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
@@ -278,7 +262,7 @@ impl Parser {
             }
         }
 
-        if !already_positioned_after_call(&v) {
+        if already_positioned_after_call(&v) == false {
             match self.current_tkn() {
                 lex::Tkn::Name(_)
                 | lex::Tkn::Number(_)

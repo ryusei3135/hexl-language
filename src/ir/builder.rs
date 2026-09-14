@@ -4,6 +4,7 @@ mod proc_fn_info;
 mod scope;
 mod preproc;
 
+use crate::err::*;
 use super::*;
 
 impl IR {
@@ -125,39 +126,7 @@ impl IR {
                 }
                 // inlineアセンブラ
                 node::Group2Node::CompleSyntax((name, lines)) => {
-                    // それぞれの行にある`${...}`由来の式を、通常の式と
-                    // 同様にIRへ変換する。構造体のメンバーやポインタの
-                    // 参照/アドレス取得なども、既存の式の生成処理
-                    // (`gen_expr_ir`)がそのまま扱えるので、ここでは
-                    // 各オペランドを順番に渡すだけでよい
-                    let asm_lines = lines
-                        .into_iter()
-                        .map(|line| {
-                            let operand_ids = line
-                                .operands
-                                .into_iter()
-                                .map(|expr| {
-                                    let ty: types::Size = if let node::Expr::Var(ref var_name) = expr {
-                                        let ty_node = self.var_tree
-                                            .get_ty_node(&var_name)
-                                            .unwrap();
-                                        types::Size::new(&ty_node)
-                                            .unwrap()
-                                    } else {
-                                        types::Size::DD
-                                    };
-                                    self.gen_expr_ir(expr, &ty)
-                                })
-                                .collect::<Vec<usize>>();
-                            (line.asm, operand_ids)
-                        })
-                        .collect::<Vec<(String, Vec<usize>)>>();
-
-                    self.ir_tree.push(inst::Inst::Comple {
-                        name,
-                        lines: asm_lines,
-                    });
-                    self.id_counter += 1;
+                    self.inline_proc(&lines, &name);
                 }
                 _ => {},
             }
@@ -254,7 +223,7 @@ impl IR {
             node::Expr::Assign(assign_node) => {
                 let is_mut = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
-                self.assign_expr_node(assign_node, &expect_byte, &is_mut)
+                self.assign_expr_node(assign_node, &expect_byte, &is_mut).unwrap()
             }
             node::Expr::Str(value) => inst::Inst::Str {
                 dst: self.id_counter,

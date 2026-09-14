@@ -8,7 +8,7 @@ struct Name {
 }
 
 
-add(a: int, b: int) {
+add(a mut: int, b: int) {
     c: byte* = "hello world\n"
     d: byte* = "tomato\n"
 
