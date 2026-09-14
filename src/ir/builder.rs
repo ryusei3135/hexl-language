@@ -486,12 +486,16 @@ impl IR {
 
         // ループする条件の作成
         if let Some(expr) = pattern {
-            crate::push_jmp_code!(self, ExpectJmp, &self.pattern_labels);
+            // 条件式の生成中に内側の制御構文がラベルを発番しても、
+            // 条件ジャンプの飛び先が変わらないよう先に予約する。
+            let condition = self.pattern_labels;
+            self.pattern_labels += 1;
+            crate::push_jmp_code!(self, ExpectJmp, &condition);
             let _ = self.gen_expr_ir(*expr, &types::Size::DD);
             // もし条件がfalseならendまでジャンプ
             crate::push_jmp_code!(self, Jmp, &end);
             // 条件がtrueのときジャンプする場所
-            crate::push_jmp_code!(self, Block, &self.pattern_labels);
+            crate::push_jmp_code!(self, Block, &condition);
         }
         self.gen_inst(&body);
         crate::push_jmp_code!(self, Jmp, &start);
@@ -848,6 +852,7 @@ mod mem_var_tests {
 mod match_expr_ir_tests {
     use super::*;
     use crate::{lex, parse};
+    use std::collections::HashSet;
 
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
         let mut lexer = lex::Lexer::new();
@@ -919,6 +924,35 @@ mod match_expr_ir_tests {
                 >= 2,
             "各armごとに`a`との比較命令(Equal)が生成される必要がある: {:?}",
             body
+        );
+    }
+
+    #[test]
+    fn match_arm_block_labels_are_unique() {
+        let body = build_func_body(
+            "main(): int {
+                cond true {
+                    1 => { a: int = 1 }
+                    2 => { a: int = 2 }
+                    | => { a: int = 0 }
+                }
+            }",
+        );
+
+        let labels: Vec<String> = body
+            .iter()
+            .filter_map(|instruction| match instruction {
+                inst::Inst::Block(label) => Some(label.clone()),
+                _ => None,
+            })
+            .collect();
+        let unique_labels: HashSet<&String> = labels.iter().collect();
+
+        assert_eq!(
+            labels.len(),
+            unique_labels.len(),
+            "matchのアーム本体ラベルが重複している: {:?}",
+            labels
         );
     }
 }

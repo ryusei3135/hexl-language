@@ -16,19 +16,19 @@ add(a: int, b: int) {
         cond {
             a > 5 => {
                 #asm(gcc_x64) {
-                    "{space}mov $1, %eax"
-                    "{space}mov $1, %edi"
-                    "{space}lea ${c}, %rsi"
-                    "{space}mov $12, %edx"
+                    "{space}movl $1, %eax"
+                    "{space}movl $1, %edi"
+                    "{space}leaq (${c}), %rsi"
+                    "{space}movl $12, %edx"
                     "{space}syscall"
                 }
             }
             | => {
                 #asm(gcc_x64) {
-                    "{space}mov $1, %eax"
-                    "{space}mov $1, %edi"
-                    "{space}lea ${d}, %rsi"
-                    "{space}mov $7, %edx"
+                    "{space}movl $1, %eax"
+                    "{space}movl $1, %edi"
+                    "{space}leaq (${d}), %rsi"
+                    "{space}movl $7, %edx"
                     "{space}syscall"
                 }
             }
@@ -48,8 +48,8 @@ _start(): int {
     add(s.name, a)
     add(a, 0)
     #asm(gcc_x64) {
-        "{space}mov $60, %eax"
-        "{space}mov $0, %edi"
+        "{space}movl $60, %eax"
+        "{space}movl $0, %edi"
         "syscall"
     }
     ret 0
