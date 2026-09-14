@@ -16,10 +16,16 @@ impl IR {
         var_name: &String,
         expr: node::Expr,
         expect_byte: &types::Size,
+        is_mut: &bool,
     ) -> usize {
         if let node::Expr::Scope { scope, target } = expr {
             self.expr_counter += 1;
-            let inst = self.scope_node(&scope, target, Some(var_name));
+            let inst = self.scope_node(
+                &scope, 
+                target, 
+                Some(var_name), 
+                &is_mut
+            );
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
@@ -32,10 +38,19 @@ impl IR {
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
+        is_mut: &bool,
     ) -> inst::Inst {
-        let right_expr_idx =
-            self.gen_named_expr_ir(&assign_node.name, *assign_node.value, &expect_byte);
-        let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
+        let right_expr_idx: usize =
+            self.gen_named_expr_ir(
+                &assign_node.name, 
+                *assign_node.value, 
+                &expect_byte,
+                &is_mut 
+            );
+        let dst_idx = self.gen_expr_ir(
+            *assign_node.dst, 
+            &expect_byte
+        );
 
         inst::Inst::AssignVar {
             name: assign_node.name.to_string(),
@@ -79,6 +94,7 @@ impl IR {
         &mut self,
         mut var: node::DefineVar,
         expect_byte: &types::Size,
+        is_mut: &bool,
     ) -> inst::Inst {
         match &var.ty.clone() {
             node::TyNode::Stack { .. } => {
@@ -93,27 +109,19 @@ impl IR {
                 // `gen_named_expr_ir`経由で`scope_node`に渡すことで、
                 // `__self_N`のような合成名を作らせないようにする
                 let value_idx =
-                    self.gen_named_expr_ir(&var.name, *var.value, &self.size_of(&var.ty));
-                // 変数の位置として登録するのは、初期化子の式
-                // (`value_idx`、例えば`Name::new()`を表す`CallFunc`
-                //  ノードそのもの)ではなく、これから生成する`Mov`
-                // 自身のindex(`self.id_counter`、下の`dst`と同じ値)
-                // でなければならない。
-                //
-                // `value_idx`をそのまま登録してしまうと、後で
-                // `a.add()`のように`self`のアドレスとして変数`a`が
-                // 再度参照された際、`GetAddress(Var("a"))`が
-                // `value_idx`（＝`CallFunc`ノード自身）を直接指す
-                // ことになる。アセンブリ生成時、`GetAddress`は
-                // 参照先をそのまま`extract_operand_text`で解決する
-                // ため、`CallFunc`ノードの「未評価の関数呼び出し」
-                // が再度実行されてしまい、`call new`が二重に
-                // 生成されるバグの原因になっていた。
-                // `Mov`自身のindexを登録しておけば、再参照時は
-                // 既に`var_hash_map`へ登録済みのレジスタ/メモリを
-                // 指すようになり、副作用が繰り返されることはない。
+                    self.gen_named_expr_ir(
+                        &var.name, 
+                        *var.value, 
+                        &self.size_of(&var.ty),
+                        &is_mut
+                    );
                 self.var_tree
-                    .push::<'l'>(&var.name, &self.id_counter, &var.ty);
+                    .push::<'l'>(
+                        &var.name, 
+                        &self.id_counter, 
+                        &var.ty,
+                        &is_mut,
+                    );
                 inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
                     size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
@@ -125,11 +133,21 @@ impl IR {
                 // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
                 // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
                 let value_idx =
-                    self.gen_named_expr_ir(&var.name, *var.value, &self.size_of(&var.ty));
+                    self.gen_named_expr_ir(
+                        &var.name, 
+                        *var.value, 
+                        &self.size_of(&var.ty), 
+                        &is_mut
+                    );
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
                 self.var_tree
-                    .push::<'l'>(&var.name, &self.id_counter, &var.ty);
+                    .push::<'l'>(
+                        &var.name, 
+                        &self.id_counter, 
+                        &var.ty, 
+                        &is_mut
+                    );
                 inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
                     size: types::Size::build_ptr_ty(&*ty_name),

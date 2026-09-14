@@ -4,6 +4,16 @@
 ## [Unreleased]
 
 
+## [0.9.0] - 2026-09-14
+
+### Added
+- `[ir/def_tree.rs]`に`VarMetaData::is_mut`を追加
+
+### Changed
+- `[ir/builder.rs]`のIncludeの処理を`[ir/builder/preproc.rs]`に移動
+
+
+
 ## [0.8.12] - 2026-09-13
 
 ### Fixed

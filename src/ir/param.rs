@@ -8,7 +8,12 @@ impl IR {
         params: &Vec<node::ArgsNode>
     ) {
         for (index, param) in params.iter().enumerate() {
-            self.var_tree.push::<'p'>(&param.name, &index, &param.ty);
+            self.var_tree.push::<'p'>(
+                &param.name, 
+                &index, 
+                &param.ty, 
+                &param.is_mut
+            );
             self.ir_tree
                 .push(inst::Inst::Param(inst::ParamMetaData::new(
                     param.name.to_string(),

@@ -93,7 +93,7 @@ impl Parser {
                 GenFlag::Group2 => {
                     // 関数の中身が空(`{}`)の場合、`one_line_node`を呼ばずに
                     // ここでスコープを閉じる
-                    if self.current_tkn() == &lex::Tkn::RBrace {
+                    if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                         self.scope_counter -= 1;
                         if self.next_tkn(vec![])
                             .is_err() 
@@ -120,7 +120,7 @@ impl Parser {
                         ),
                     }
 
-                    if self.current_tkn() == &lex::Tkn::RBrace {
+                    if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                         self.scope_counter -= 1;
                         if self.next_tkn(vec![]).is_err() {
                             return Ok(&self.gen_nodes);
@@ -143,7 +143,9 @@ impl Parser {
     ) -> Result<node::Group2Node, err::ErrKind> {
         let node = match self.current_tkn().clone() {
             lex::Tkn::CompleSyn => self.comple_syntax()?,
-            lex::Tkn::Name(name) => node::Group2Node::Expr(self.build_scope_node(&name)?),
+            lex::Tkn::Name(name) => {
+                node::Group2Node::Expr(self.build_scope_node(&name)?)
+            }
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
                 let tkn = self.next_tkn(vec!["name"])?;
@@ -232,7 +234,7 @@ impl Parser {
             }
         };
         // "{"をスキップ
-        if self.current_tkn() != &lex::Tkn::LBrace {
+        if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
             return crate::syntax_err!(
                 self.build_err_span(),
                 err::SyntaxErrKind::ExpectedKind {
@@ -258,7 +260,7 @@ impl Parser {
 
         // ブロックが空(`{}`)の場合、`one_line_node`を呼ばずに
         // そのまま空のブロックを返す
-        if self.current_tkn() == &lex::Tkn::RBrace {
+        if matches!(self.current_tkn(), lex::Tkn::RBrace) {
             return Ok(block);
         }
 
@@ -266,7 +268,7 @@ impl Parser {
             let node = self.one_line_node()?;
             block.push(node);
 
-            if self.current_tkn() == &lex::Tkn::RBrace {
+            if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                 break;
             }
         }

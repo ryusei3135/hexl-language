@@ -10,13 +10,19 @@ pub enum VarType {
 pub struct VarMetaData {
     pub attribute: VarType,
     pub size: node::TyNode,
+    pub is_mut: bool,
 }
 
 impl VarMetaData {
-    pub fn new(attribute: &VarType, size: &node::TyNode) -> Self {
+    pub fn new(
+        attribute: &VarType, 
+        size: &node::TyNode,
+        is_mut: &bool   
+    ) -> Self {
         Self {
             attribute: attribute.clone(),
             size: size.clone(),
+            is_mut: *is_mut,
         }
     }
 }
@@ -42,6 +48,7 @@ impl VarTree {
         var_name: &String,
         var_index: &usize,
         var_ty: &node::TyNode,
+        is_mut: &bool,
     ) {
         let var = match K {
             'l' => VarType::Local(*var_index),
@@ -49,7 +56,10 @@ impl VarTree {
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
         self.hash
-            .insert(var_name.clone(), VarMetaData::new(&var, &var_ty));
+            .insert(
+                var_name.clone(), 
+                VarMetaData::new(&var, &var_ty, &is_mut)
+            );
     }
 
     pub fn get_ty_name(&self, name: &String) -> String {
@@ -65,6 +75,11 @@ impl VarTree {
             node::TyNode::SelfTy(name) => name.to_string(),
             t => panic!("{:?}", t),
         }
+    }
+
+    #[inline(always)]
+    pub fn is_mut(&self, name: &String) -> bool {
+        self.hash.get(name).unwrap().is_mut
     }
 
     #[inline(always)]

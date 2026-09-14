@@ -107,6 +107,14 @@ impl Parser {
             }
             match self.next_tkn(vec!["name", ")"])? {
                 lex::Tkn::Name(name) => {
+                    // 引数が不変か
+                    let is_mut = matches!(
+                        self.next_tkn_ref(vec!["mut"])?, 
+                        lex::Tkn::KeyWordMut
+                    );
+                    if is_mut {
+                        self.next_tkn(vec![])?;
+                    }
                     // 直前の`if !can_create_param`のチェックを通過して
                     // いるため、ここでは常に`true`(同上、パーサー自体の
                     // バグでない限り到達しない)
@@ -118,6 +126,7 @@ impl Parser {
                     args_params.push(node::ArgsNode {
                         name: name.clone(),
                         ty,
+                        is_mut,
                     });
                     can_create_param = false;
                 }

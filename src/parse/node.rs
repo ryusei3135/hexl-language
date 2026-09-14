@@ -52,6 +52,7 @@ impl TyNode {
 pub struct ArgsNode {
     pub name: String,
     pub ty: TyNode,
+    pub is_mut: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -146,14 +147,21 @@ pub struct DefineVar {
     pub name: String,
     pub value: Box<Expr>,
     pub ty: TyNode,
+    pub is_mut: bool,
 }
 
 impl DefineVar {
-    pub fn new(name: &String, value: Expr, ty: &TyNode) -> Self {
+    pub fn new(
+        name: &String, 
+        value: Expr, 
+        ty: &TyNode,
+        is_mut: &bool
+    ) -> Self {
         Self {
             name: name.to_string(),
             value: Box::new(value),
             ty: ty.clone(),
+            is_mut: *is_mut,
         }
     }
 
@@ -371,13 +379,16 @@ pub enum Group1Node {
     Line(String),
 }
 
+
+
+
 #[cfg(test)]
 pub fn gen_var_node(name: &str, value: &str, ty: &str) -> Group2Node {
-    Group2Node::Expr(Expr::DefVar(DefineVar {
-        name: name.to_string(),
-        value: Box::new(Expr::Number(value.to_string())),
-        ty: TyNode::Ty(ty.to_string()),
-    }))
+    Group2Node::Expr(Expr::DefVar(DefineVar::new::<true>(
+        name.to_string(),
+        Box::new(Expr::Number(value.to_string())),
+        &TyNode::Ty(ty.to_string()),
+    )))
 }
 
 #[cfg(test)]

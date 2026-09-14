@@ -55,9 +55,17 @@ impl Parser {
                 _ => {}
             }
 
-            let ty_node = match &self.current_tkn() {
+            let is_mut = match &self.current_tkn() {
+                lex::Tkn::KeyWordMut => {
+                    self.advance_tkn().unwrap();
+                    true
+                }
+                lex::Tkn::KeyWordConst => {
+                    self.advance_tkn().unwrap();
+                    false
+                }
                 // コロンが来た場合、それは型の定義なので、変数の定義
-                lex::Tkn::Colon => self.define_ty_node()?,
+                lex::Tkn::Colon => false,
                 _ => {
                     // define assign var node
                     return Ok(node::AssignVar::new(
@@ -68,12 +76,15 @@ impl Parser {
                 }
             };
 
+            let ty_node = self.define_ty_node()?;
+
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
                 if matches!(self.next_tkn(vec!["="])?, lex::Tkn::Equal) {
                     return Ok(node::DefineVar::new(
                         &name,
                         node::Expr::ConnectAddr(Box::new(self.expr_branch()?)),
                         &ty_node,
+                        &is_mut,
                     )
                     .wrap());
                 }
@@ -83,7 +94,8 @@ impl Parser {
                 node::DefineVar::new(
                     &name, 
                     self.expr_branch()?, 
-                    &ty_node
+                    &ty_node,
+                    &is_mut,
                 ).wrap()
             } else {
                 crate::syntax_err!(
@@ -157,6 +169,7 @@ impl Parser {
         }
         Ok(left)
     }
+
 
     fn expr_mul(
         &mut self, 

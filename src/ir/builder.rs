@@ -2,6 +2,7 @@ mod expr_node;
 mod member;
 mod proc_fn_info;
 mod scope;
+mod preproc;
 
 use super::*;
 
@@ -56,70 +57,7 @@ impl IR {
                 }
                 #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
-                    // まずパスの全セグメントをファイルパスとして解釈する
-                    // (例: `mod::file2` -> `mod/file2.hexl`)
-                    let full_path = path.gen_path();
-
-                    if std::path::Path::new(&full_path).exists() {
-                        // ファイルとして存在する場合は、そのファイルが
-                        // 公開(pub)している関数を全て、モジュール名
-                        // (パスの最後のセグメント)を指定した上で
-                        // extern_func_treeに登録する
-                        let new_setting = settings.new_file(&full_path);
-                        let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData> =
-                            crate::build(&new_setting).unwrap();
-
-                        // 公開されていない関数は取り込まない
-                        extern_fn_tree.retain(|v| v.public);
-
-                        // 関数にモジュールの名前を追加
-                        let module_name = path.path.last().unwrap();
-                        extern_fn_tree
-                            .iter_mut()
-                            .for_each(|v| v.add_self_module_name(module_name));
-
-                        self.make_extern_func_inst(&extern_fn_tree);
-                        self.extern_func_tree.extend(extern_fn_tree);
-                    } else {
-                        // 全セグメントでのパスが存在しない場合、最後の
-                        // セグメントはファイル名ではなく「関数名」と
-                        // みなし、その手前までをファイルパスとして
-                        // 探し直す
-                        // (例: `mod::file::func` -> `mod/file.hexl`の
-                        //  中にある`func`という関数)
-                        let func_name = path.path.last().expect("#includeのパスが空です").clone();
-                        let parent_path = path.gen_parent_path();
-
-                        if !std::path::Path::new(&parent_path).exists() {
-                            panic!(
-                                "#includeで指定されたファイルが見つかりません: {} (\
-                                関数名として`{}`も試しましたが、ファイル{}も見つかりませんでした)",
-                                full_path, func_name, parent_path
-                            );
-                        }
-
-                        let new_setting = settings.new_file(&parent_path);
-                        let extern_fn_tree: Vec<def_tree::FuncDefMetaData> =
-                            crate::build(&new_setting).unwrap();
-
-                        // 指定された名前の、公開されている関数だけを
-                        // 取り出す(モジュール名は指定しないので、
-                        // そのまま`func()`のように呼び出せる)
-                        let mut extern_fn_tree: Vec<def_tree::FuncDefMetaData> = extern_fn_tree
-                            .into_iter()
-                            .filter(|v| v.public && v.name == func_name)
-                            .collect();
-
-                        if extern_fn_tree.is_empty() {
-                            panic!(
-                                "#includeで指定された関数が見つかりません: {}::{}",
-                                parent_path, func_name
-                            );
-                        }
-
-                        self.make_extern_func_inst(&extern_fn_tree);
-                        self.extern_func_tree.append(&mut extern_fn_tree);
-                    }
+                    self.include_proc(path, settings)?;
                 }
                 node::Group1Node::StructDefine(info) => {
                     // 構造体の情報を登録
@@ -159,13 +97,6 @@ impl IR {
                     struct_def.name, method
                 );
             };
-
-            // メゾットのモジュール名を、自身が属する構造体の名前にする
-            //let mut method_info = method_info.clone();
-            //method_info.self_module_name(&struct_def.name);
-
-            // `Self`型を、実際の構造体の型/ポインタ型へ解決する
-            //let method_info = self.resolve_self_ty(method_info);
 
             // 関数の情報を登録
             self.entry_fn_info(&method_info);
@@ -321,8 +252,9 @@ impl IR {
             }
             node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
             node::Expr::Assign(assign_node) => {
+                let is_mut = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
-                self.assign_expr_node(assign_node, &expect_byte)
+                self.assign_expr_node(assign_node, &expect_byte, &is_mut)
             }
             node::Expr::Str(value) => inst::Inst::Str {
                 dst: self.id_counter,
@@ -340,8 +272,9 @@ impl IR {
             }
             // ポインタの中身
             node::Expr::DefVar(var) => {
+                let is_mut = var.is_mut;
                 // `src/ir/builder/expr_node.rs`
-                self.def_var_node(var, &expect_byte)
+                self.def_var_node(var, &expect_byte, &is_mut)
             }
             node::Expr::CallFunc(meta_data) => self.gen_call_fn_ir(None, &meta_data),
             node::Expr::Var(name) => {
@@ -387,7 +320,7 @@ impl IR {
             // 場合は`def_var_node`/`assign_expr_node`が
             // `gen_named_expr_ir`経由で`scope_node`を直接呼び出し、
             // 変数名を渡している(`src/ir/builder/expr_node.rs`)
-            node::Expr::Scope { scope, target } => self.scope_node(&scope, target, None),
+            node::Expr::Scope { scope, target } => self.scope_node(&scope, target, None, &false),
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
@@ -420,7 +353,10 @@ impl IR {
     /// - `name: [ty] = 100` のように長さの指定が無い場合は要素数1
     /// - `name: [ty 4] = {100, 100, 100, 100}` のように配列リテラルが
     ///   与えられた場合は、要素ごとに値を生成する
-    fn gen_mem_def_var(&mut self, mut var: node::DefineVar) -> inst::Inst {
+    fn gen_mem_def_var(
+        &mut self, 
+        mut var: node::DefineVar
+    ) -> inst::Inst {
         let (ref ty_name, len, is_static) = match &var.ty {
             node::TyNode::Stack { name, len } => (name.clone(), *len, false),
             node::TyNode::Static { name, len } => (name.clone(), *len, true),
@@ -466,7 +402,12 @@ impl IR {
         //  スタック/静的領域への書き込みが無視されるバグがあった)
         let var_idx = self.id_counter;
         self.var_tree
-            .push::<'l'>(&mem::take(&mut var.name), &var_idx, &var.ty);
+            .push::<'l'>(
+                &mem::take(&mut var.name),
+                &var_idx, 
+                &var.ty, 
+                &var.is_mut
+            );
 
         inst::Inst::MemoryValue(mem_insts)
     }

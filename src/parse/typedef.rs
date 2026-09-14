@@ -260,7 +260,10 @@ impl Parser {
         Ok((variants, methods))
     }
 
-    fn ptr_ty_node(&mut self, ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
+    fn ptr_ty_node(
+        &mut self, 
+        ty: node::TyNode
+    ) -> Result<node::TyNode, err::ErrKind> {
         let is_const = match self.next_tkn_ref(vec!["const", "mut"]).unwrap() {
             lex::Tkn::KeyWordMut => {
                 self.advance_tkn();
@@ -315,7 +318,8 @@ impl Parser {
                 let ty = match self.next_tkn(vec!["<", "*"])? {
                     lex::Tkn::LAngleBracket => panic!(),
                     // ポインタの型
-                    lex::Tkn::Mul => {
+                    // var: *.. の `*`
+                    lex::Tkn::Mul => { 
                         self.ptr_ty_node(node::TyNode::Ty(name.clone())).unwrap()
                     }
                     _ => {
