@@ -197,6 +197,7 @@ impl Inst {
     }
 
     pub fn get_param_ty(&self) -> Option<types::Size> {
+        println!("ここでは、文字列の範囲していが直書き、あとで修正");
         match &self {
             inst::Inst::Param(p) => Some(p.clone().ty),
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),
@@ -204,7 +205,15 @@ impl Inst {
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory{ size, .. }) => Some(size.clone()),
             inst::Inst::Mov { size, .. } => Some(size.clone()),
-            inst::Inst::Str {..} => Some(types::Size::Pointer {is_const:false, ty: Box::new(types::Size::DB)}),
+            inst::Inst::Str {value,..} => {
+                Some(
+                    types::Size::Pointer {
+                        is_const:false, 
+                        ty: Box::new(types::Size::DB),
+                        range: Some((0, value.len())),
+                    }
+                )
+            }
             t => {
                 panic!("{:?}", t);
             }

@@ -264,6 +264,12 @@ impl Parser {
         &mut self, 
         ty: node::TyNode
     ) -> Result<node::TyNode, err::ErrKind> {
+        let range = if matches!(self.next_tkn_ref(vec![])?, lex::Tkn::LParen) {
+            // ポインタの範囲指定がある場合、`(start, end)`を読み込む
+            Some((0, 0))
+        } else {
+            None
+        };
         let is_const = match self.next_tkn_ref(vec!["const", "mut"]).unwrap() {
             lex::Tkn::KeyWordMut => {
                 self.advance_tkn();
@@ -279,7 +285,8 @@ impl Parser {
 
         Ok(node::TyNode::Pointer {
             is_const,
-            ty_name: Box::new(ty)
+            ty_name: Box::new(ty),
+            range
         })
     }
 

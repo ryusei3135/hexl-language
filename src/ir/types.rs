@@ -7,7 +7,11 @@ pub enum Size {
     DD,
     DQ,
     Struct(Vec<Box<(String, Size)>>),
-    Pointer { ty: Box<Size>, is_const: bool },
+    Pointer { 
+        ty: Box<Size>, 
+        is_const: bool,
+        range: Option<(usize, usize)>,
+    },
     Array { size: Box<Size>, len: usize },
     Void,
 }
@@ -30,10 +34,12 @@ impl Size {
             }
             node::TyNode::Pointer {
                 is_const, 
-                ty_name 
+                ty_name ,
+                range,
             } => Self::Pointer {
                 ty: Box::new(Self::new(&*ty_name)?),
                 is_const: is_const.clone(),
+                range: range.clone(),
             },
             node::TyNode::SelfTy(..) => {
                 Self::DQ
@@ -52,10 +58,14 @@ impl Size {
     }
 
     /// ポインタ型を作成する
-    pub fn build_ptr_ty(ty: &node::TyNode) -> Self {
+    pub fn build_ptr_ty(
+        ty: &node::TyNode, 
+        range: Option<(usize, usize)>
+    ) -> Self {
         Self::Pointer {
             ty: Box::new(Self::new(&ty).unwrap()),
             is_const: false,
+            range,
         }
     }
 
@@ -140,9 +150,14 @@ impl IR {
 
                 panic!("未定義の型です: {}", name);
             }
-            node::TyNode::Pointer { is_const, ty_name } => types::Size::Pointer {
+            node::TyNode::Pointer { 
+                is_const, 
+                ty_name ,
+                range,
+            } => types::Size::Pointer {
                 ty: Box::new(self.size_of(ty_name)),
                 is_const: is_const.clone(),
+                range: range.clone(),
             },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {

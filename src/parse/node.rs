@@ -11,6 +11,7 @@ pub enum TyNode {
         /// 不変ポインタの場合true
         is_const: bool,
         ty_name: Box<TyNode>,
+        range: Option<(usize, usize)>,
     },
     /// 参照の変数
     RefTy(Box<TyNode>),

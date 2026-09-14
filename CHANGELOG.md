@@ -11,6 +11,7 @@
 - `[parse/mut_var.rs]`を追加
 - コンパイルエラーを追加
 - 不変変数と可変変数を追加
+- 境界付きポインタを追加
 
 ### Changed
 - `[ir/builder.rs]`のIncludeの処理を`[ir/builder/preproc.rs]`に移動

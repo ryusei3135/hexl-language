@@ -1,6 +1,17 @@
 use super::*;
 
 impl IR {
+    fn get_ast_len(
+        &self, 
+        ast: &node::Expr
+    ) -> Option<usize> {
+        match ast {
+            node::Expr::Str(value) => Some(value.len()),
+            node::Expr::Array(values) => Some(values.len()),
+            _ => None,
+        }
+    }
+
     /// `gen_expr_ir`とほぼ同じ処理を行うが、式が`Point.new()`のような
     /// 構造体を返すスコープ呼び出し(`node::Expr::Scope`)だった場合、
     /// この式の結果を格納する予定の変数名(`var_name`)を`scope_node`に
@@ -65,8 +76,9 @@ impl IR {
         init_nodes: Vec<node::Expr>,
         expect_byte: &types::Size,
     ) -> inst::Inst {
-        let types::Size::Array { size, .. } = expect_byte else {
-            panic!()
+        let size = match expect_byte {
+            types::Size::Array { size, .. } => size,
+            _ => panic!("配列の初期化には配列型が必要です"),
         };
         let mut dsts = Vec::new();
         for node in init_nodes.iter() {
@@ -126,13 +138,20 @@ impl IR {
                     src: value_idx,
                 }
             }
-            node::TyNode::Pointer { ty_name, .. } => {
+            node::TyNode::Pointer {
+                ty_name,
+                mut range,
+                ..
+            } => {
                 // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
                 // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
+                let val = *var.value;
+                let base_range = self.get_ast_len(&val).unwrap();
+
                 let value_idx =
                     self.gen_named_expr_ir(
                         &var.name, 
-                        *var.value, 
+                        val, 
                         &self.size_of(&var.ty), 
                         &is_mut
                     );
@@ -145,9 +164,21 @@ impl IR {
                         &var.ty, 
                         &is_mut
                     );
+
+                if range.is_none() {
+                    range = Some((0, base_range));
+                } else {
+                    // ポインタの範囲指定がある場合、指定された範囲と初期値の長さが一致するか確認する
+                    if range.unwrap().1 != base_range {
+                        CompileErr::ptr_range_len_mismatch(
+                            range.unwrap(), 
+                            base_range
+                        ).unwrap();
+                    }
+                }
                 inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
-                    size: types::Size::build_ptr_ty(&*ty_name),
+                    size: types::Size::build_ptr_ty(&*ty_name, range.clone()),
                     dst: self.id_counter,
                     src: value_idx,
                 }
