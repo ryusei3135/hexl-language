@@ -197,6 +197,7 @@ impl AssignVar {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
+    RangeNode((String, String)),
     /// ポインタ関係
     GetAddress(Box<Expr>),
     ConnectAddr(Box<Expr>),
@@ -385,10 +386,11 @@ pub enum Group1Node {
 
 #[cfg(test)]
 pub fn gen_var_node(name: &str, value: &str, ty: &str) -> Group2Node {
-    Group2Node::Expr(Expr::DefVar(DefineVar::new::<true>(
-        name.to_string(),
-        Box::new(Expr::Number(value.to_string())),
+    Group2Node::Expr(Expr::DefVar(DefineVar::new(
+        &name.to_string(),
+        Expr::Number(value.to_string()),
         &TyNode::Ty(ty.to_string()),
+        &true
     )))
 }
 

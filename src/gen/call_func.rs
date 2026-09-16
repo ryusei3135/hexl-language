@@ -11,7 +11,7 @@ impl AsmEmitter {
     /// 結果を値として使う(戻り値を任意のレジスタへ代入する)際にも
     /// 使われるため`pub(super)`にしている
     pub(super) fn emit_call_func(
-        &mut self, 
+        &mut self,
         meta_data: &inst::CallFuncMetaData
     ) -> String {
         // 生成するアセンブリコード
@@ -85,7 +85,7 @@ impl AsmEmitter {
     /// - func_meta_data
     /// - asm_fmt_name
     ///     出力するアセンブリ言語のフォーマットの名前
-    pub(super) fn build_func_process(
+    pub(super) fn build_fn_process(
         &mut self,
         fn_meta_data: &mut (String, def_tree::FuncDefInfo),
         asm_fmt_name: &Option<String>,
@@ -120,30 +120,16 @@ impl AsmEmitter {
         for node in self.curr_inst.clone().iter() {
             match &node {
                 inst::Inst::ExpectJmp(name) => {
-                    // 次のフォーマットに使うラベルの名前を予約する
-                    if self.reserved_label_name.is_none() {
-                        self.reserved_label_name = Some(name.to_string());
-                    } else {
-                        // 予約するラベルの名前は予約するときにNoneで無ければいけない
-                        panic!("system err");
-                    }
+                    // build_fn_proc.rs
+                    self.expect_jmp(name);
                 }
                 inst::Inst::Str { dst, value } => {
-                    let label_name = format!("M{}", self.data_idx.to_string());
-                    let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
-                    self.data_sec_text.push_str(&fmt_data);
-                    self.data_map.push((*dst, label_name));
-                    self.data_idx += 1;
+                    // build_fn_proc.rs
+                    self.gen_str_asm(dst, value);
                 }
                 inst::Inst::Expr(expr) => {
-                    let asm = self.format_expr_inst(&expr);
-
-                    self.asm_text.push_str(&asm);
-
-                    // 式の結果を置いたレジスタを使用中として記録する
-                    self.used_reg.mark_used(&self.reg_idx);
-                    self.last_inst_idx.push((expr.dst, self.reg_idx));
-                    self.reg_idx += 1;
+                    // build_fn_proc.rs
+                    self.gen_expr_asm(expr);
                 }
                 inst::Inst::Num { .. } => {}
                 inst::Inst::InitArr(_) => {}
@@ -151,17 +137,11 @@ impl AsmEmitter {
                     self.asm_text.push_str(&format!("{}:\n", name));
                 }
                 inst::Inst::Comple { name, lines } => {
-                    if let Some(asm_name) = asm_fmt_name {
-                        if name.as_str() == asm_name.as_str() {
-                            self.deploy_inline_asm(&name, &lines);
-                        } else {
-                            panic!("unmatch asm name");
-                        }
-                    } else {
-                        self.deploy_inline_asm(&name, &lines);
-                    }
+                    // build_fn_proc.rs
+                    self.gen_complie_asm(name, lines, asm_fmt_name);
                 }
                 inst::Inst::Jmp(name) => {
+                    // build_fn_proc.rs
                     self.asm_text.push_str(&format!("jmp {}\n", name));
                 }
                 inst::Inst::AssignVar { name, dst, value } => {
@@ -174,66 +154,12 @@ impl AsmEmitter {
                     // - `Inst::RefStruct`: `a.[c 0] = 10`(構造体の
                     //   メンバー、あるいはそのメンバーが配列の場合の
                     //   要素へのアクセス)
-                    let is_mem_write = matches!(
-                        self.curr_inst[*dst],
-                        inst::Inst::Pointer(..)
-                            | inst::Inst::InsertArr { .. }
-                            | inst::Inst::RefStruct { .. }
-                    );
-                    
-                    if is_mem_write {
-                        self.write_mem(
-                            name, 
-                            &dst, 
-                            &value, 
-                            &Some(self.get_var_ty(&name))
-                        );
-                    } else {
-                        // 通常の変数への再代入(`b = 10`など)
-                        self.update_value_info(&name, &value);
-
-                        let current_reg = self.reg_idx;
-                        let s: SelfPtrInfo = if this_is_self {
-                            None
-                        } else {
-                            self.get_var_ty(&name).wrap_dst_size()
-                        };
-
-                        // 代入先の変数の型(サイズ)を確認し、ポインタ型
-                        // であれば、専用のフォーマット(`get_ptr`)で
-                        // アドレスのオペランドを組み立てる
-                        let text = if self.get_var_ty(&name).is_pointer().is_some() {
-                            self.assign_val_ty_is_ptr(current_reg, value, &s)
-                        } else {
-                            self.assign_val_is_not_ptr(current_reg, value, &s)
-                        };
-
-                        if self.expr_vars
-                            .iter()
-                            .find(|v| v == &name)
-                            .is_some() 
-                        {
-                            self.update_value_reg(&name, &current_reg);
-                        }
-                        self.asm_text.push_str(&text);
-                    }
+                    // build_fn_proc.rs
+                    self.gen_assign_var_asm(name, dst, value, &this_is_self);
                 }
                 inst::Inst::Ret(idx) => {
-                    let ret_asm = self.format_line(
-                        "mov", 
-                        Some(&0), 
-                        &idx, 
-                        None, 
-                        &fn_ret_ty
-                    );
-                    self.asm_text.push_str(&ret_asm);
-                    self.asm_text
-                        .push_str(
-                            self.asm_fmt
-                                .func_frame_end()
-                                .as_str()
-                            );
-                    self.asm_text.push_str("ret\n");
+                    // build_fn_proc.rs
+                    self.gen_ret_asm(&fn_ret_ty, &idx);
                 }
                 inst::Inst::Mov {
                     name,
@@ -281,3 +207,139 @@ impl AsmEmitter {
 }
 
 
+
+
+impl AsmEmitter {
+    #[inline(always)]
+    pub(super) fn expect_jmp(&mut self, name: &String) {
+        // 次のフォーマットに使うラベルの名前を予約する
+        if self.reserved_label_name.is_none() {
+            self.reserved_label_name = Some(name.to_string());
+        } else {
+            // 予約するラベルの名前は予約するときにNoneで無ければいけない
+            panic!("system err");
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn gen_str_asm(
+        &mut self, 
+        dst: &usize, 
+        value: &String
+    ) {
+        let label_name = format!("M{}", self.data_idx.to_string());
+        let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
+        self.data_sec_text.push_str(&fmt_data);
+        self.data_map.push((*dst, label_name));
+        self.data_idx += 1;
+    }
+
+    #[inline(always)]
+    pub(super) fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
+        let asm = self.format_expr_inst(&expr);
+
+        self.asm_text.push_str(&asm);
+
+        // 式の結果を置いたレジスタを使用中として記録する
+        self.used_reg.mark_used(&self.reg_idx);
+        self.last_inst_idx.push((expr.dst, self.reg_idx));
+        self.reg_idx += 1;
+    }
+
+    #[inline(always)]
+    pub(super) fn gen_complie_asm(
+        &mut self, 
+        name: &String, 
+        lines: &Vec<(String, Vec<usize>)>, 
+        asm_fmt_name: &Option<String>
+    ) {
+        if let Some(asm_name) = asm_fmt_name {
+            if name.as_str() == asm_name.as_str() {
+                self.deploy_inline_asm(&name, &lines);
+            } else {
+                panic!("unmatch asm name");
+            }
+        } else {
+            self.deploy_inline_asm(&name, &lines);
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn gen_assign_var_asm(
+        &mut self,
+        name: &String,
+        dst: &usize,
+        value: &usize,
+        this_is_self: &bool,
+    ) {
+        let is_mem_write = matches!(
+            self.curr_inst[*dst],
+            inst::Inst::Pointer(..)
+                | inst::Inst::InsertArr { .. }
+                | inst::Inst::RefStruct { .. }
+        );
+        
+        if is_mem_write {
+            self.write_mem(
+                name, 
+                &dst, 
+                &value, 
+                &Some(self.get_var_ty(&name))
+            );
+        } else {
+            // 通常の変数への再代入(`b = 10`など)
+            self.update_value_info(&name, &value);
+
+            let current_reg = self.reg_idx;
+            let s: SelfPtrInfo = if *this_is_self {
+                None
+            } else {
+                self.get_var_ty(&name).wrap_dst_size()
+            };
+
+            // 代入先の変数の型(サイズ)を確認し、ポインタ型
+            // であれば、専用のフォーマット(`get_ptr`)で
+            // アドレスのオペランドを組み立てる
+            let text = if self.get_var_ty(&name)
+                .is_pointer()
+                .is_some() 
+            {
+                self.assign_val_ty_is_ptr(current_reg, value, &s)
+            } else {
+                self.assign_val_is_not_ptr(current_reg, value, &s)
+            };
+
+            if self.expr_vars
+                .iter()
+                .find(|v| v == &name)
+                .is_some() 
+            {
+                self.update_value_reg(&name, &current_reg);
+            }
+            self.asm_text.push_str(&text);
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn gen_ret_asm(
+        &mut self, 
+        fn_ret_ty: &SelfPtrInfo,
+        idx: &usize,
+    ) {
+        let ret_asm = self.format_line(
+            "mov", 
+            Some(&0), 
+            &idx, 
+            None, 
+            &fn_ret_ty
+        );
+        self.asm_text.push_str(&ret_asm);
+        self.asm_text
+            .push_str(
+                self.asm_fmt
+                    .func_frame_end()
+                    .as_str()
+                );
+        self.asm_text.push_str("ret\n");
+    }
+}

@@ -5,7 +5,9 @@ use std::collections::HashMap;
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
-    pub(super) fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(super) fn struct_node(
+        &mut self
+    ) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])? else {
             panic!("構造体の名前が必要です");
         };
@@ -29,7 +31,7 @@ impl Parser {
         &mut self,
         name: &String,
     ) -> Result<node::Expr, err::ErrKind> {
-        if self.current_tkn() != &lex::Tkn::LBrace {
+        if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
             panic!("typdef::strct_init_node {:?}", self.current_tkn());
         }
 
@@ -266,7 +268,7 @@ impl Parser {
     ) -> Result<node::TyNode, err::ErrKind> {
         let range = if matches!(self.next_tkn_ref(vec![])?, lex::Tkn::LParen) {
             // ポインタの範囲指定がある場合、`(start, end)`を読み込む
-            Some((0, 0))
+            Some((0usize, 0usize))
         } else {
             None
         };
@@ -286,7 +288,7 @@ impl Parser {
         Ok(node::TyNode::Pointer {
             is_const,
             ty_name: Box::new(ty),
-            range
+            range: range
         })
     }
 
@@ -298,7 +300,9 @@ impl Parser {
     /// これにより、型として予約語`Self`が使われたとき、
     /// `node::TyNode::SelfTy(self_name)`へ解決できる。
     /// メゾットの外(トップレベルの関数など)では`None`を渡す。
-    pub(super) fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    pub(super) fn define_ty_node(
+        &mut self
+    ) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
@@ -324,6 +328,11 @@ impl Parser {
             lex::Tkn::Name(name) => {
                 let ty = match self.next_tkn(vec!["<", "*"])? {
                     lex::Tkn::LAngleBracket => panic!(),
+                    // 境界付きポインタ
+                    lex::Tkn::LBracket => {
+                        self.advance_tkn().unwrap();
+                        self.make_range_node(node::TyNode::Ty(name.clone()))?
+                    }
                     // ポインタの型
                     // var: *.. の `*`
                     lex::Tkn::Mul => { 
@@ -344,6 +353,13 @@ impl Parser {
                 };
                 Ok(ty)
             }
+            // 旧記法の静的領域: `""[ty]` / `""[ty 4]`
+            lex::Tkn::Str(value) if value.is_empty() => {
+                if !matches!(self.next_tkn(vec!["["] )?, lex::Tkn::LBracket) {
+                    panic!("静的領域の定義には`[`が必要です");
+                }
+                self.define_mem_ty_node(true)
+            }
             // スタック領域: `[ty]` / `[ty 4]`
             lex::Tkn::LBracket => self.define_mem_ty_node(false),
             // 静的領域: `static[ty]` / `static[ty 4]`
@@ -354,6 +370,13 @@ impl Parser {
                 self.define_mem_ty_node(true)
             }
             t => panic!("unexpect ty token: {:?}", t),
+        }
+    }
+
+    /// 境界付きポインタのノードの処理
+    fn range_ptr_node(&mut self) {
+        if !matches!(self.current_tkn(), lex::Tkn::Mul) {
+            panic!();
         }
     }
 
@@ -445,6 +468,7 @@ mod ty_tests {
             panic!();
         };
         f.add(node::Group2Node::Expr(node::Expr::InitStruct {
+            is_self: false,
             name: "Name".to_string(),
             fields: map,
         }));

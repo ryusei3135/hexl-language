@@ -166,12 +166,12 @@ impl AsmEmitter {
             .func
             .remove_entry("_start") 
         {
-            self.build_func_process(meta_data, &asm_fmt_name);
+            self.build_fn_process(meta_data, &asm_fmt_name);
         }
 
         for mut func_meta_data in func_tree.func.drain() {
             // == アセンブリ言語の生成 ==
-            self.build_func_process(&mut func_meta_data, &asm_fmt_name);
+            self.build_fn_process(&mut func_meta_data, &asm_fmt_name);
             // == データの初期化 ==
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;

@@ -303,7 +303,11 @@ impl Lexer {
     /// `StkResult::Stackable`  -> 現在の文字をスタックに積んでよい
     /// `StkResult::GenTkn`     -> トークンを生成し、現在の文字は通常通り積む
     /// `StkResult::Consumed`   -> トークンを生成し、現在の文字は消費済み（積まない）
-    fn check_stkable_chr(&mut self, curr_kind: &CharKind, chr: &char) -> StkResult {
+    fn check_stkable_chr(
+        &mut self, 
+        curr_kind: &CharKind, 
+        chr: &char
+    ) -> StkResult {
         if let Some(ref last_kind) = self.last_kind {
             match (last_kind, curr_kind) {
                 // 文字と数字は一緒にスタック可能

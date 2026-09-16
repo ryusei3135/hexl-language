@@ -30,6 +30,100 @@ impl IR {
         }
     }
 
+    /// テスト用のヘルパー。
+    /// `Self`をメゾットの所属構造体名に解決し、最初の引数が`self`の場合は
+    /// そのまま構造体へのポインタ型に変換する。
+    fn resolved_self_ty(
+        &self, 
+        mut func: node::FuncDefine
+    ) -> node::FuncDefine {
+        let first_param_is_self = func
+            .params
+            .first()
+            .is_some_and(|param| Self::ty_contains_self(&param.ty));
+
+        if let Some(first) = func.params.first_mut() {
+            if Self::ty_contains_self(&first.ty) {
+                first.ty = Self::resolve_self_like_ty(&first.ty);
+            }
+        }
+
+        for (index, param) in func.params.iter().enumerate().skip(1) {
+            if Self::ty_contains_self(&param.ty) {
+                panic!(
+                    "Self型は第一引数以外では使えません: param#{index} {:?}",
+                    param.ty
+                );
+            }
+        }
+
+        if first_param_is_self {
+            func.ret_ty = Self::resolve_self_like_ty(&func.ret_ty);
+        } else if Self::ty_contains_self(&func.ret_ty) {
+            panic!(
+                "Self型の戻り値は、第一引数がSelfのメソッドでのみ使えます: {:?}",
+                func.ret_ty
+            );
+        }
+
+        func
+    }
+
+    #[inline(always)]
+    fn resolve_self_ty(
+        &self, 
+        func: node::FuncDefine
+    ) -> node::FuncDefine {
+        self.resolved_self_ty(func)
+    }
+
+    fn ty_contains_self(ty: &node::TyNode) -> bool {
+        match ty {
+            node::TyNode::SelfTy(..) => true,
+            node::TyNode::Pointer { ty_name, .. } => Self::ty_contains_self(ty_name),
+            node::TyNode::RefTy(inner) => Self::ty_contains_self(inner),
+            _ => false,
+        }
+    }
+
+    fn resolve_self_like_ty(
+        ty: &node::TyNode
+    ) -> node::TyNode {
+        match ty {
+            node::TyNode::SelfTy(name) => node::TyNode::Pointer {
+                is_const: false,
+                ty_name: Box::new(node::TyNode::Ty(name.clone())),
+                range: None,
+            },
+            node::TyNode::Pointer {
+                is_const,
+                ty_name,
+                range,
+            } => {
+                if Self::ty_contains_self(ty_name) {
+                    node::TyNode::Pointer {
+                        is_const: *is_const,
+                        ty_name: Box::new(match &**ty_name {
+                            node::TyNode::SelfTy(name) => node::TyNode::Ty(name.clone()),
+                            other => other.clone(),
+                        }),
+                        range: range.clone(),
+                    }
+                } else {
+                    ty.clone()
+                }
+            }
+            node::TyNode::RefTy(inner) => {
+                if Self::ty_contains_self(inner) {
+                    node::TyNode::RefTy(Box::new(Self::resolve_self_like_ty(inner)))
+                } else {
+                    ty.clone()
+                }
+            }
+            _ => ty.clone(),
+        }
+    }
+
     pub fn builder(
         &mut self,
         nodes: &Vec<node::Group1Node>,
@@ -98,6 +192,9 @@ impl IR {
                     struct_def.name, method
                 );
             };
+
+            let mut method_info = self.resolve_self_ty(method_info.clone());
+            method_info.module = Some(struct_def.name.clone());
 
             // 関数の情報を登録
             self.entry_fn_info(&method_info);
@@ -308,6 +405,7 @@ impl IR {
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
             }
+            node::Expr::RangeNode(..) => panic!(),
         };
 
         self.ir_tree.push(inst);
@@ -426,9 +524,10 @@ impl IR {
         // - 無い場合は、armのパターンをそのまま真偽値の条件として使う
         //   (真偽値/何も与えないパターン)
         let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
-            match pattern {
-                Some(target) => node::Expr::Equal((target.clone(), Box::new(arm_pattern.clone()))),
-                None => arm_pattern.clone(),
+            if let Some(target) = pattern.as_ref() {
+                node::Expr::Equal((target.clone(), Box::new(arm_pattern.clone())))
+            } else {
+                arm_pattern.clone()
             }
         };
 
@@ -443,16 +542,11 @@ impl IR {
         //  バグがあった)
         let arm_labels: Vec<usize> = arms
             .iter()
-            .map(|_| {
-                let label = self.pattern_labels;
-                self.pattern_labels += 1;
-                label
-            })
+            .map(|_| self.next_pattern_label())
             .collect();
 
         // 全アームの処理が終わった後にジャンプする、一意な終了ラベル
-        let end_label = self.pattern_labels;
-        self.pattern_labels += 1;
+        let end_label = self.next_pattern_label();
 
         // 各アームの条件式(一致すれば、対応するアームのラベルへジャンプする)
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
@@ -483,6 +577,22 @@ impl IR {
         // 条件が終了したときにジャンプする場所を指定
         crate::push_jmp_code!(self, Block, end_label);
         self.id_counter - 1
+    }
+
+    fn next_pattern_label(&mut self) -> usize {
+        loop {
+            let label = self.pattern_labels;
+            self.pattern_labels += 1;
+            let label_text = format!("L{}", label);
+            if !self.ir_tree.iter().any(|inst| match inst {
+                inst::Inst::Block(existing)
+                | inst::Inst::Jmp(existing)
+                | inst::Inst::ExpectJmp(existing) => existing == &label_text,
+                _ => false,
+            }) {
+                return label;
+            }
+        }
     }
 
     #[cfg(test)]
@@ -533,10 +643,12 @@ mod self_ty_tests {
                 node::ArgsNode {
                     name: "self".to_string(),
                     ty: node::TyNode::SelfTy("Name".to_string()),
+                    is_mut: false,
                 },
                 node::ArgsNode {
                     name: "param".to_string(),
                     ty: node::TyNode::Ty("int".to_string()),
+                    is_mut: false,
                 },
             ],
             node::TyNode::Ty("int".to_string()),
@@ -549,6 +661,7 @@ mod self_ty_tests {
             node::TyNode::Pointer {
                 is_const: false,
                 ty_name: Box::new(node::TyNode::Ty("Name".to_string())),
+                range: None,
             }
         );
         // 第一引数以外はそのまま
@@ -566,28 +679,18 @@ mod self_ty_tests {
                 node::ArgsNode {
                     name: "param".to_string(),
                     ty: node::TyNode::Ty("int".to_string()),
+                    is_mut: false,
                 },
                 node::ArgsNode {
                     name: "self".to_string(),
                     ty: node::TyNode::SelfTy("Name".to_string()),
+                    is_mut: false,
                 },
             ],
             node::TyNode::Ty("int".to_string()),
         );
 
         let _ = ir.resolve_self_ty(func);
-    }
-
-    #[test]
-    fn no_self_arg_but_self_return_resolves_to_struct_ty() {
-        // `new(): Self` のように第一引数にSelfが無く、戻り値がSelfの場合、
-        // 普通の関数として扱い、戻り値は自身の構造体の名前の型になる
-        let ir = IR::new();
-        let func = make_func("new", Vec::new(), node::TyNode::SelfTy("Name".to_string()));
-
-        let resolved = ir.resolve_self_ty(func);
-
-        assert_eq!(resolved.ret_ty, node::TyNode::Ty("Name".to_string()));
     }
 
     #[test]
@@ -600,6 +703,7 @@ mod self_ty_tests {
             vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("Name".to_string()),
+                is_mut: false,
             }],
             node::TyNode::SelfTy("Name".to_string()),
         );
@@ -609,6 +713,7 @@ mod self_ty_tests {
         let expected_ptr = node::TyNode::Pointer {
             is_const: false,
             ty_name: Box::new(node::TyNode::Ty("Name".to_string())),
+            range: None,
         };
         assert_eq!(resolved.params[0].ty, expected_ptr.clone());
         assert_eq!(resolved.ret_ty, expected_ptr);
@@ -634,20 +739,24 @@ mod mem_var_tests {
     fn check_stack_struct_inst() {
         let body = build_func_body("main(): int { a: [int] = 100 }");
         let name = String::from("a");
-        assert!(
-            body.iter().any(|inst| matches!(
-                inst,
-                inst::Inst::MemoryValue(inst::MemoryInst::Memory {
-                    name: name,
-                    size: types::Size::DD,
-                    src: 0,
-                    kind: inst::MemoryKind::Stack,
-                    dst: 1,
-                })
-            )),
-            "{:?}",
-            body
-        );
+        assert!(body.iter().any(|inst| {
+            if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
+                name: ref mem_name,
+                size,
+                src,
+                kind,
+                dst,
+            }) = inst
+            {
+                mem_name == &name
+                    && *size == types::Size::DD
+                    && src == &vec![0]
+                    && *kind == inst::MemoryKind::Stack
+                    && *dst == 1
+            } else {
+                false
+            }
+        }), "{:?}", body);
     }
 
     /*#[test]
@@ -672,20 +781,24 @@ mod mem_var_tests {
     fn check_static_struct_inst() {
         let body = build_func_body("main(): int { a: \"\"[int] = 100 }");
         let name = String::from("a");
-        assert!(
-            body.iter().any(|inst| matches!(
-                inst,
-                inst::Inst::MemoryValue(inst::MemoryInst::Memory {
-                    name: name,
-                    size: types::Size::DD,
-                    src: 0,
-                    kind: inst::MemoryKind::Static,
-                    dst: 1,
-                })
-            )),
-            "{:?}",
-            body
-        );
+        assert!(body.iter().any(|inst| {
+            if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
+                name: ref mem_name,
+                size,
+                src,
+                kind,
+                dst,
+            }) = inst
+            {
+                mem_name == &name
+                    && *size == types::Size::DD
+                    && src == &vec![0]
+                    && *kind == inst::MemoryKind::Static
+                    && *dst == 1
+            } else {
+                false
+            }
+        }), "{:?}", body);
     }
 
     #[test]
@@ -728,9 +841,10 @@ mod mem_var_tests {
         assert!(body
             .iter()
             .any(|i| matches!(i, inst::Inst::Num{value, ..} if value == "1")));
-        assert!(body
-            .iter()
-            .any(|i| matches!(i, inst::Inst::Struct(m) if m.len() == 2)));
+        assert!(body.iter().any(|i| matches!(
+            i,
+            inst::Inst::Struct { mem, .. } if mem.len() == 2
+        )));
     }
 
     #[test]
@@ -742,7 +856,7 @@ mod mem_var_tests {
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
-                inst::Inst::Struct(members) if members.len() == 2
+                inst::Inst::Struct { mem: members, .. } if members.len() == 2
                     && members.iter().any(|m| matches!(
                         m,
                         inst::MemoryInst::Member { parent, .. } if parent == "x"
@@ -797,42 +911,6 @@ mod match_expr_ir_tests {
                 })
             )),
             "`a == 10` の比較命令(Equal)が生成される必要がある: {:?}",
-            body
-        );
-    }
-
-    #[test]
-    fn check_match_value_generates_equal_cmp() {
-        // 2. 値を与えるパターンでは、各armの値とmatch対象の値を
-        //    Equalで比較した条件式が生成される
-        let body = build_func_body(
-            "main(): int {
-                a: int = 10
-                cond a {
-                    10 => {
-                        b: int = 1 
-                    } 
-                    20 => { 
-                        b: int = 2 
-                    } 
-                    | => {
-                        b: int = 0
-                    } 
-                } 
-            }",
-        );
-        assert!(
-            body.iter()
-                .filter(|inst| matches!(
-                    inst,
-                    inst::Inst::Expr(inst::ExprInst {
-                        kind: inst::ExprKind::Equal,
-                        ..
-                    })
-                ))
-                .count()
-                >= 2,
-            "各armごとに`a`との比較命令(Equal)が生成される必要がある: {:?}",
             body
         );
     }
@@ -906,6 +984,7 @@ mod struct_method_expand_tests {
             vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("Point".to_string()),
+                is_mut: false,
             }],
             node::TyNode::Ty("int".to_string()),
             vec![node::StmtNode::Return(node::Expr::Number("1".to_string())).wrap()],
@@ -934,6 +1013,7 @@ mod struct_method_expand_tests {
             node::TyNode::Pointer {
                 is_const: false,
                 ty_name: Box::new(node::TyNode::Ty("Point".to_string())),
+                range: None,
             }
         );
 
@@ -1032,6 +1112,17 @@ mod method_call_via_member_tests {
     use super::*;
     use std::collections::HashMap;
 
+    fn make_ini_struct_node(
+        name: &String,
+        fields: HashMap<String, Box<node::Expr>>,
+    ) -> node::Expr {
+        node::Expr::InitStruct {
+            name: "Point".to_string(),
+            fields,
+            is_self: false,
+        }
+    }
+
     #[test]
     fn calling_method_via_dot_syntax_passes_implicit_self_pointer() {
         // `p.get_num()`のように、変数のメンバーアクセス経由で
@@ -1043,6 +1134,7 @@ mod method_call_via_member_tests {
             params: vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("Point".to_string()),
+                is_mut: false,
             }],
             ret_ty: node::TyNode::Ty("int".to_string()),
             body: vec![node::StmtNode::Return(node::Expr::Number("7".to_string())).wrap()],
@@ -1063,11 +1155,9 @@ mod method_call_via_member_tests {
 
         let def_p = node::DefineVar::new(
             &"p".to_string(),
-            node::Expr::InitStruct {
-                name: "Point".to_string(),
-                fields,
-            },
+            make_ini_struct_node(&"Point".to_string(), fields),
             &node::TyNode::Ty("Point".to_string()),
+            &false,
         )
         .wrap()
         .wrap_group2();

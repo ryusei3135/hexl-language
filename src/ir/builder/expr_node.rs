@@ -169,7 +169,7 @@ impl IR {
                     range = Some((0, base_range));
                 } else {
                     // ポインタの範囲指定がある場合、指定された範囲と初期値の長さが一致するか確認する
-                    if range.unwrap().1 != base_range {
+                    if range.unwrap() != (0, base_range) {
                         CompileErr::ptr_range_len_mismatch(
                             range.unwrap(), 
                             base_range
@@ -220,7 +220,7 @@ impl IR {
         let struct_def = self
             .struct_tree
             .get(&struct_name)
-            .clone()
+            .cloned()
             .unwrap_or_else(|| panic!("未定義の構造体です: {}", name));
 
         let mut mem_insts = Vec::with_capacity(struct_def.fields.len());

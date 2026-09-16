@@ -1,7 +1,10 @@
 use super::*;
 
 impl Lexer {
-    pub(super) fn join_sym_tkn(&mut self, curr_tkn: &LocatedTkn) -> Option<Tkn> {
+    pub(super) fn join_sym_tkn(
+        &mut self, 
+        curr_tkn: &LocatedTkn
+    ) -> Option<Tkn> {
         match &curr_tkn.tkn {
             Tkn::Colon => {
                 let tkn = match &self.gen_tkns.last()?.tkn {
@@ -33,6 +36,14 @@ impl Lexer {
                 };
                 self.gen_tkns.pop();
                 Some(tkn)
+            }
+            Tkn::Dot => {
+                if matches!(self.gen_tkns.last()?.tkn, Tkn::Dot) {
+                    self.gen_tkns.pop();
+                    Some(Tkn::RangeTkn)
+                } else {
+                    None
+                }
             }
             _ => None,
         }

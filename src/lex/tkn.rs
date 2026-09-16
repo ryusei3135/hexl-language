@@ -34,6 +34,7 @@ pub enum Tkn {
     Str(String),
 
     ModPathTkn,
+    RangeTkn,
 
     KeyWordRet,
     KeyWordCond,

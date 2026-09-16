@@ -229,7 +229,7 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&mut self, name: &String, module_name: Option<&String>) -> Option<FuncDefInfo> {
+    pub fn get(&self, name: &String, module_name: Option<&String>) -> Option<FuncDefInfo> {
         self.func.get(&Self::make_key(name, module_name)).cloned()
     }
 
