@@ -919,11 +919,12 @@ mod match_expr_ir_tests {
     fn match_arm_block_labels_are_unique() {
         let body = build_func_body(
             "main(): int {
-                cond true {
+                cond 1 {
                     1 => { a: int = 1 }
                     2 => { a: int = 2 }
                     | => { a: int = 0 }
                 }
+                ret 1
             }",
         );
 

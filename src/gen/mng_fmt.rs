@@ -344,7 +344,11 @@ impl MngAsmFmt {
             (Size::DD, &self.reg_fmt.dd),
             (Size::DQ, &self.reg_fmt.dq),
         ] {
-            for (reg_num, register) in registers.iter().enumerate() {
+            for (reg_num, register) 
+                in registers
+                    .iter()
+                    .enumerate() 
+            {
                 let formatted = self.fmt.fmt.reg.replace("{}", register);
                 if formatted == operand {
                     return self.get_fmt_reg(&reg_num, size);

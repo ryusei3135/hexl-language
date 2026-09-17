@@ -390,7 +390,7 @@ pub fn gen_var_node(name: &str, value: &str, ty: &str) -> Group2Node {
         &name.to_string(),
         Expr::Number(value.to_string()),
         &TyNode::Ty(ty.to_string()),
-        &true
+        &false
     )))
 }
 

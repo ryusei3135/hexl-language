@@ -5,7 +5,9 @@ use super::*;
 impl Parser {
     /// 変数のアドレス取得などのノードを作成
     /// 呼び出し元では、lex::Tkn::LBracket
-    pub(super) fn get_var_addr_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn get_var_addr_node(
+        &mut self
+    ) -> Result<node::Expr, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn_ref(vec!["name"])? else {
             panic!()
         };
@@ -83,7 +85,9 @@ impl Parser {
 
     /// 配列リテラルのノードを作成する
     /// これは配列を初期化するノード
-    pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn make_array_node(
+        &mut self
+    ) -> Result<node::Expr, err::ErrKind> {
         let mut items = Vec::<node::Expr>::new();
 
         if !matches!(self.next_tkn_ref(vec!["not `}`"])?, lex::Tkn::RBrace) {

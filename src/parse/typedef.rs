@@ -266,13 +266,32 @@ impl Parser {
         &mut self, 
         ty: node::TyNode
     ) -> Result<node::TyNode, err::ErrKind> {
-        let range = if matches!(self.next_tkn_ref(vec![])?, lex::Tkn::LParen) {
+        let range = if matches!(
+            self.next_tkn_ref(vec![])?, 
+            lex::Tkn::LParen
+        ) {
             // ポインタの範囲指定がある場合、`(start, end)`を読み込む
             Some((0usize, 0usize))
         } else {
             None
         };
-        let is_const = match self.next_tkn_ref(vec!["const", "mut"]).unwrap() {
+        let is_const = self.is_const_ptr();
+        self.next_tkn(vec![])?;
+
+        Ok(node::TyNode::Pointer {
+            is_const,
+            ty_name: Box::new(ty),
+            range: range
+        })
+    }
+
+    #[inline(always)]
+    fn is_const_ptr(
+        &mut self
+    ) -> bool {
+        match self.next_tkn_ref(
+            vec!["const", "mut"]
+        ).unwrap() {
             lex::Tkn::KeyWordMut => {
                 self.advance_tkn();
                 true
@@ -282,14 +301,7 @@ impl Parser {
                 false
             }
             _ => false,
-        };
-        self.next_tkn(vec![])?;
-
-        Ok(node::TyNode::Pointer {
-            is_const,
-            ty_name: Box::new(ty),
-            range: range
-        })
+        }
     }
 
     /// 型のノードを作成する
@@ -331,7 +343,7 @@ impl Parser {
                     // 境界付きポインタ
                     lex::Tkn::LBracket => {
                         self.advance_tkn().unwrap();
-                        self.make_range_node(node::TyNode::Ty(name.clone()))?
+                        self.make_range_ptr_node(node::TyNode::Ty(name.clone()))?
                     }
                     // ポインタの型
                     // var: *.. の `*`

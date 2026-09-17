@@ -47,7 +47,6 @@ impl Parser {
             }
             // if
             let pattern = self.expr_cmp(STRUCT_NOT_INIT)?;
-            print::cprint!(" >> %s", pattern.clone());
 
             // => 構文エラーを返す
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
@@ -141,7 +140,6 @@ impl Parser {
         &mut self, 
         cond: node::Expr
     ) -> Result<node::Expr, err::ErrKind> {
-        println!(">> {:?}", self.current_tkn());
         // match expr {
         // {
         if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
