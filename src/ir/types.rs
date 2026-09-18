@@ -44,6 +44,12 @@ impl Size {
             node::TyNode::SelfTy(..) => {
                 Self::DQ
             }
+            // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
+            // サイズとしては内側の型と全く同じものとして扱う
+            node::TyNode::ConstractMust(ty)
+            | node::TyNode::ConstractOf(ty) => {
+                Self::new(&ty.unwrap_ty())?
+            }
             _ => panic!(),
         };
         Ok(size_ty)

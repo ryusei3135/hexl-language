@@ -35,6 +35,28 @@ impl ConstractTy {
     pub fn unwrap_ty(&self) -> TyNode {
         (*self.ty).clone()
     }
+
+    /// `must`側から見た契約の名前
+    /// (`must`が指定されていない場合は`of`の名前を使う)
+    #[inline(always)]
+    pub fn must_name(&self) -> Option<&String> {
+        self.must.as_ref().or(self.of.as_ref())
+    }
+
+    /// `of`側から見た契約の名前
+    /// (`of`が指定されていない場合は`must`の名前を使う)
+    #[inline(always)]
+    pub fn of_name(&self) -> Option<&String> {
+        self.of.as_ref().or(self.must.as_ref())
+    }
+
+    /// エラーメッセージ用に、契約の名前を文字列化する
+    pub fn name_or_anon<'a>(name: Option<&'a String>) -> &'a str {
+        match name {
+            Some(name) => name.as_str(),
+            None => "(名前なし)",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -88,6 +110,43 @@ impl TyNode {
             Self::ConstractMust(ty) | Self::ConstractOf(ty) => {
                 ty.unwrap_ty().get_ty_str_name()
             }
+        }
+    }
+
+    /// `must`の契約が付いた型なら、その契約の情報を返す
+    #[inline(always)]
+    pub fn as_constract_must(&self) -> Option<&ConstractTy> {
+        match self {
+            Self::ConstractMust(ty) => Some(ty),
+            _ => None,
+        }
+    }
+
+    /// `of`の契約が付いた型なら、その契約の情報を返す
+    #[inline(always)]
+    pub fn as_constract_of(&self) -> Option<&ConstractTy> {
+        match self {
+            Self::ConstractOf(ty) => Some(ty),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_constract_must(&self) -> bool {
+        self.as_constract_must().is_some()
+    }
+
+    #[inline(always)]
+    pub fn is_constract_of(&self) -> bool {
+        self.as_constract_of().is_some()
+    }
+
+    /// 契約(`must`/`of`)が付いている場合は、その内側の型を返す
+    /// 付いていない場合は自分自身をそのまま返す
+    pub fn unwrap_constract(&self) -> TyNode {
+        match self {
+            Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty(),
+            t => t.clone(),
         }
     }
 }

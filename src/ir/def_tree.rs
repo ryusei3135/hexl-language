@@ -73,6 +73,10 @@ impl VarTree {
                 _ => panic!(),
             },
             node::TyNode::SelfTy(name) => name.to_string(),
+            // 契約(`must`/`of`)が付いた型は、内側の型の名前を返す
+            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
+                ty.unwrap_ty().get_ty_str_name()
+            }
             t => panic!("{:?}", t),
         }
     }
@@ -80,6 +84,25 @@ impl VarTree {
     #[inline(always)]
     pub fn is_mut(&self, name: &String) -> bool {
         self.hash.get(name).unwrap().is_mut
+    }
+
+    /// 既に登録されている変数の型だけを上書きする
+    ///
+    /// 契約(`must`/`of`)が付いた変数は、値の生成自体は
+    /// 内側の型として行うため、登録後に契約付きの型へ戻すのに使う
+    /// (`src/ir/builder/expr_node.rs`の`def_var_node`)
+    pub fn overwrite_ty(&mut self, var_name: &String, ty: &node::TyNode) {
+        if let Some(var) = self.hash.get_mut(var_name) {
+            var.size = ty.clone();
+        }
+    }
+
+    /// 指定された変数が`must`の契約を持つかどうか
+    #[inline(always)]
+    pub fn is_constract_must(&self, var_name: &String) -> bool {
+        self.hash
+            .get(var_name)
+            .is_some_and(|var| var.size.is_constract_must())
     }
 
     #[inline(always)]

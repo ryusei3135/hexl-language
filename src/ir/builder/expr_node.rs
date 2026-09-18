@@ -48,6 +48,12 @@ impl IR {
         expect_byte: &types::Size,
         is_mut: &bool,
     ) -> Result<inst::Inst, err::ErrKind> {
+        // `must`の契約を持つ変数は、`mut`かどうかに関わらず
+        // 再代入できない(契約が別の値にすり替わってしまうため)
+        if self.var_tree.is_constract_must(&assign_node.name) {
+            CompileErr::assign_to_must_var(&assign_node.name)?;
+        }
+
         if is_mut == &false {
             CompileErr::assign_to_imm_var(&assign_node.name)?;
         }
@@ -110,6 +116,22 @@ impl IR {
         is_mut: &bool,
     ) -> inst::Inst {
         match &var.ty.clone() {
+            node::TyNode::ConstractMust(constract)
+            | node::TyNode::ConstractOf(constract) => {
+                let constract_ty = var.ty.clone();
+                let var_name = var.name.clone();
+
+                let mut inner_var = var.clone();
+                inner_var.ty = constract.unwrap_ty();
+
+                let inst = self.def_var_node(
+                    inner_var, 
+                    expect_byte, 
+                    is_mut
+                );
+                self.var_tree.overwrite_ty(&var_name, &constract_ty);
+                inst
+            }
             node::TyNode::Stack { .. } => {
                 // 確保するスタックを増やす
                 self.stack_counter(&var.ty);
@@ -202,7 +224,11 @@ impl IR {
             .iter()
             .position(|v| &v == &variant)
             .unwrap_or_else(|| panic!("列挙型 `{}` にメンバ `{}` は存在しません", name, variant));
-        inst::Inst::gen_num(&variant_index.to_string(), &expect_byte, self.id_counter)
+        inst::Inst::gen_num(
+            &variant_index.to_string(), 
+            &expect_byte, 
+            self.id_counter
+        )
     }
 
     pub fn init_struct_node(

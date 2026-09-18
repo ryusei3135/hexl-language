@@ -396,7 +396,10 @@ impl Parser {
     /// - `[ty N]` -> len == N
     ///
     /// 呼び出し終了時は、`]`の次のトークンを指す
-    fn define_mem_ty_node(&mut self, is_static: bool) -> Result<node::TyNode, err::ErrKind> {
+    fn define_mem_ty_node(
+        &mut self, 
+        is_static: bool
+    ) -> Result<node::TyNode, err::ErrKind> {
         let ty_name = self.next_tkn(vec!["name"])?.unwrap_name();
 
         let len = match self.next_tkn(vec!["number", "]"])? {
@@ -405,7 +408,10 @@ impl Parser {
                     .parse::<usize>()
                     .expect("配列の長さは数値である必要があります");
 
-                if !matches!(self.next_tkn(vec!["not `]`"])?, lex::Tkn::RBracket) {
+                if !matches!(
+                    self.next_tkn(vec!["not `]`"])?, 
+                    lex::Tkn::RBracket
+                ) {
                     panic!("`]`が必要です");
                 }
                 len

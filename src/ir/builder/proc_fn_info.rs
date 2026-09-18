@@ -1,25 +1,6 @@
 use super::*;
 
 impl IR {
-    fn check_contract_arg(
-        &self, 
-        expected_ty: &node::TyNode, 
-        arg: &node::Expr
-    ) {
-        if !matches!(expected_ty, node::TyNode::ConstractOf(_)) {
-            return;
-        }
-
-        let actual_ty = match arg {
-            node::Expr::Var(name) => self.var_tree.get_ty_node(name),
-            _ => None,
-        };
-
-        if !matches!(actual_ty, Some(node::TyNode::ConstractMust(_))) {
-            CompileErr::contract_of_requires_must().unwrap();
-        }
-    }
-
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
     pub(super) fn ini_def_fn_info(&mut self, info: &node::FuncDefine) {
@@ -55,6 +36,11 @@ impl IR {
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
     pub(super) fn entry_fn_info(&mut self, info: &node::FuncDefine) {
+        // `must`の契約を持つ変数が、関数の中で必ず一度は
+        // 関数へ渡されているかを確認する
+        // (`src/ir/ty_checker/constract.rs`)
+        self.check_must_var_used(&info);
+
         self.func_ret_ty = Some(info.ret_ty.clone());
         // メゾットの場合、`info.module`に自身が属する構造体の名前が
         // 入っているので、そのままモジュール名として登録する
@@ -118,7 +104,13 @@ impl IR {
 
         for (index, _) in meta_data.args.iter().enumerate() {
             let expr_arg = meta_data.args.get(index).unwrap().clone();
-            self.check_contract_arg(&def_args[index].ty, &expr_arg);
+            // 契約(`must`/`of`)のチェック
+            // (`src/ir/ty_checker/constract.rs`)
+            self.check_constract_arg(
+                &meta_data.name, 
+                &def_args[index], 
+                &expr_arg
+            );
             let ty = self.size_of(&def_args[index].ty).clone();
             let idx = self.gen_expr_ir(expr_arg, &ty);
             func_meta_data.insert_param_parent_id(idx);
