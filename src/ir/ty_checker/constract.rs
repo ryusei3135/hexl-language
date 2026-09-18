@@ -14,7 +14,7 @@ impl IR {
     ///
     /// - 引数の型が`of`なのに、渡された値が`must`でない -> エラー
     /// - 渡された値が`must`なのに、引数の型が`of`でない -> エラー
-    /// - どちらも契約を持つが、名前が一致しない -> エラー
+    /// - `must`の渡し先が呼び出し先と一致しない -> エラー
     pub(crate) fn check_constract_arg(
         &self,
         fn_name: &String,
@@ -28,14 +28,14 @@ impl IR {
         let param_of = param.ty.as_constract_of();
 
         match (param_of, arg_must) {
-            // 両方に契約がある場合は、名前が一致しているかを見る
-            (Some(of), Some(must)) => {
-                if must.must_name() != of.of_name() {
+            // `must=func`は、実際に値を渡す関数を指定する
+            (Some(_of), Some(must)) => {
+                if must.must_name().is_some_and(|name| name != fn_name) {
                     CompileErr::constract_name_mismatch(
                         fn_name,
                         &param.name,
                         node::ConstractTy::name_or_anon(must.must_name()),
-                        node::ConstractTy::name_or_anon(of.of_name()),
+                        fn_name,
                     )
                     .unwrap();
                 }
@@ -64,11 +64,22 @@ impl IR {
 
     /// 式が変数を指している場合、その変数の型を返す
     /// (`&var`や`*var`のように、間接的に指している場合も辿る)
-    fn expr_ty_node(&self, expr: &node::Expr) -> Option<node::TyNode> {
+    fn expr_ty_node(
+        &self, 
+        expr: &node::Expr
+    ) -> Option<node::TyNode> {
         match expr {
-            node::Expr::Var(name) => self.var_tree.get_ty_node(name),
+            node::Expr::Var(name) => {
+                self.var_tree.get_ty_node(name)
+            }
+            node::Expr::CallFunc(call) => self
+                .func_tree
+                .get(&call.name, None)
+                .and_then(|func| func.ret_ty),
             node::Expr::GetAddress(target)
-            | node::Expr::ConnectAddr(target) => self.expr_ty_node(target),
+            | node::Expr::ConnectAddr(target) => {
+                self.expr_ty_node(target)
+            }
             _ => None,
         }
     }
@@ -79,7 +90,10 @@ impl IR {
     /// 渡した先の引数が本当に`of`かどうか(名前が一致するか)は、
     /// IRを生成する時点で`check_constract_arg`が確認するので、
     /// ここでは「そもそも関数に渡されているか」だけを見る
-    pub(crate) fn check_must_var_used(&self, func: &node::FuncDefine) {
+    pub(crate) fn check_must_var_used(
+        &self, 
+        func: &node::FuncDefine
+    ) {
         let mut must_vars: Vec<MustVar> = Vec::new();
 
         // 引数として受け取った`must`の値も、この関数の中で
@@ -97,7 +111,11 @@ impl IR {
 
         for var in must_vars.iter() {
             if !var.used {
-                CompileErr::constract_must_not_used(&func.name, &var.name).unwrap();
+                CompileErr::constract_must_not_used(
+                    &func.name, 
+                    &var.name
+                )
+                .unwrap();
             }
         }
     }
@@ -206,7 +224,9 @@ impl IR {
 
     /// 引数の式が指している変数の名前を返す
     /// (`&var`や`*var`のように包まれていても中身を辿る)
-    fn arg_var_name(arg: &node::Expr) -> Option<&String> {
+    fn arg_var_name(
+        arg: &node::Expr
+    ) -> Option<&String> {
         match arg {
             node::Expr::Var(name) => Some(name),
             node::Expr::GetAddress(target)
@@ -215,7 +235,10 @@ impl IR {
         }
     }
 
-    fn mark_used(name: &String, must_vars: &mut Vec<MustVar>) {
+    fn mark_used(
+        name: &String, 
+        must_vars: &mut Vec<MustVar>
+    ) {
         if let Some(var) = must_vars.iter_mut().find(|var| &var.name == name) {
             var.used = true;
         }

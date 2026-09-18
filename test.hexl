@@ -47,7 +47,7 @@ add(a mut: int, b: int) {
 }
 
 _start(): int {
-    a: int must=func5 = func4()
+    h: int must=func5 = func4()
     func2(10)
     a: static[int] = 30
     b::add_1(10)
@@ -55,7 +55,7 @@ _start(): int {
         name: 10
         aa: 10
     }
-    func5(a)
+    func5(h)
     add(s.name, a)
     add(a, 0)
     #asm(gcc_x64) {

@@ -65,16 +65,19 @@ impl VarTree {
     pub fn get_ty_name(&self, name: &String) -> String {
         match &self.hash.get(name).unwrap().size {
             node::TyNode::Ty(name) => name.to_string(),
-            node::TyNode::Pointer { ty_name, .. } => match &**ty_name {
-                node::TyNode::Ty(name) => name.to_string(),
-                // `Self*`/`Self*mut`のように、`Self`を指す
-                // ポインタ型の場合も、実際の構造体名を返す
-                node::TyNode::SelfTy(name) => name.to_string(),
-                _ => panic!(),
-            },
+            node::TyNode::Pointer { ty_name, .. } => {
+                match &**ty_name {
+                    node::TyNode::Ty(name) => name.to_string(),
+                    // `Self*`/`Self*mut`のように、`Self`を指す
+                    // ポインタ型の場合も、実際の構造体名を返す
+                    node::TyNode::SelfTy(name) => name.to_string(),
+                    _ => panic!(),
+                }
+            }
             node::TyNode::SelfTy(name) => name.to_string(),
             // 契約(`must`/`of`)が付いた型は、内側の型の名前を返す
-            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
+            node::TyNode::ConstractMust(ty) 
+            | node::TyNode::ConstractOf(ty) => {
                 ty.unwrap_ty().get_ty_str_name()
             }
             t => panic!("{:?}", t),
@@ -252,7 +255,11 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&self, name: &String, module_name: Option<&String>) -> Option<FuncDefInfo> {
+    pub fn get(
+        &self, 
+        name: &String, 
+        module_name: Option<&String>
+    ) -> Option<FuncDefInfo> {
         self.func.get(&Self::make_key(name, module_name)).cloned()
     }
 
@@ -263,7 +270,10 @@ impl FuncTree {
         ret_ty: &node::TyNode,
         stk_size: usize,
     ) {
-        let key = Self::make_key(&meta_data.name, meta_data.module.as_ref());
+        let key = Self::make_key(
+            &meta_data.name, 
+            meta_data.module.as_ref()
+        );
         self.func.insert(
             key,
             FuncDefInfo {
@@ -295,7 +305,10 @@ impl FuncDefMetaData {
     /// moduleは自分自身がどのモジュールに属しているか
     /// Noneの場合は、#includeで関数の名前ごと指定しているか
     /// 自分のファイルの中にあるかのどちらか
-    pub fn new(info: &node::FuncDefine, module: Option<&String>) -> Self {
+    pub fn new(
+        info: &node::FuncDefine, 
+        module: Option<&String>
+    ) -> Self {
         Self {
             module: module.map(|v| v.clone()),
             name: info.name.clone(),

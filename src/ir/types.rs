@@ -149,7 +149,16 @@ impl IR {
                     let fields = struct_def
                         .fields
                         .iter()
-                        .map(|field| Box::new((field.name.clone(), self.size_of(&field.ty))))
+                        .map(
+                            |field| {
+                                Box::new(
+                                    (
+                                        field.name.clone(), 
+                                        self.size_of(&field.ty)
+                                    )
+                                )
+                            }
+                        )
                         .collect();
                     return types::Size::Struct(fields);
                 }
@@ -166,7 +175,8 @@ impl IR {
                 range: range.clone(),
             },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
+            node::TyNode::Stack { name, len } 
+            | node::TyNode::Static { name, len } => {
                 let size = self.size_of(&node::TyNode::Ty(name.clone()));
                 // 配列の作成
                 if len >= &1 {
@@ -181,7 +191,9 @@ impl IR {
             node::TyNode::RefTy(inner) => self.size_of(inner),
             // `Self`はIRへ変換する前に、実際の構造体の型
             // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
-            node::TyNode::SelfTy(name) => self.size_of(&node::TyNode::Ty(name.to_string())),
+            node::TyNode::SelfTy(name) => {
+                self.size_of(&node::TyNode::Ty(name.to_string()))
+            }
             node::TyNode::ConstractMust(ty) 
             | node::TyNode::ConstractOf(ty) => {
                 self.size_of(&ty.unwrap_ty())
