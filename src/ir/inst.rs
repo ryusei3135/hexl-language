@@ -207,7 +207,9 @@ impl Inst {
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),
             inst::Inst::Num { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
-            inst::Inst::MemoryValue(inst::MemoryInst::Memory{ size, .. }) => Some(size.clone()),
+            inst::Inst::MemoryValue(
+                inst::MemoryInst::Memory{ size, .. }
+            ) => Some(size.clone()),
             inst::Inst::Mov { size, .. } => Some(size.clone()),
             inst::Inst::Str {value,..} => {
                 Some(
@@ -224,7 +226,11 @@ impl Inst {
         }
     }
 
-    pub fn gen_num(value: &str, size: &types::Size, dst: usize) -> Self {
+    pub fn gen_num(
+        value: &str, 
+        size: &types::Size, 
+        dst: usize
+    ) -> Self {
         match size {
             types::Size::DB => {
                 value.parse::<u8>().unwrap();

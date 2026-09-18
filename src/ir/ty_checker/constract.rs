@@ -230,7 +230,9 @@ impl IR {
         match arg {
             node::Expr::Var(name) => Some(name),
             node::Expr::GetAddress(target)
-            | node::Expr::ConnectAddr(target) => Self::arg_var_name(target),
+            | node::Expr::ConnectAddr(target) => {
+                Self::arg_var_name(target)
+            }
             _ => None,
         }
     }
@@ -239,7 +241,10 @@ impl IR {
         name: &String, 
         must_vars: &mut Vec<MustVar>
     ) {
-        if let Some(var) = must_vars.iter_mut().find(|var| &var.name == name) {
+        if let Some(var) = must_vars
+            .iter_mut()
+            .find(|var| &var.name == name) 
+        {
             var.used = true;
         }
     }
