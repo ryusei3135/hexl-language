@@ -11,13 +11,14 @@ impl Parser {
             panic!("system err Parser::expr_match `parse/expr/cond.rs`");
         }
         // match の対象式
-        let cond_expr = if matches!(self.peek_tkn().unwrap(), lex::Tkn::LBrace) {
-            self.next_tkn(vec![])?;
-            None
-        } else {
-            // 構造体を初期化する式を代入することはできないので、`false`
-            Some(Box::new(self.expr_cmp(STRUCT_NOT_INIT)?))
-        };
+        let cond_expr = 
+            if matches!(self.peek_tkn().unwrap(), lex::Tkn::LBrace) {
+                self.next_tkn(vec![])?;
+                None
+            } else {
+                // 構造体を初期化する式を代入することはできないので、`false`
+                Some(Box::new(self.expr_cmp(STRUCT_NOT_INIT)?))
+            };
 
         // 真偽値(比較式)が与えられた場合は、単純なif/elseとして扱う
         // `cond a == 10 { .. } | { .. }`

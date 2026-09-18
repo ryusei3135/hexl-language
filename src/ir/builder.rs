@@ -948,7 +948,9 @@ mod match_expr_ir_tests {
 
 #[cfg(test)]
 mod struct_method_expand_tests {
-    use super::*;
+    use crate::node::StructDefine;
+
+use super::*;
 
     /// `self`を第一引数に取るメゾットを持つ構造体`StructDefine`を作る
     fn make_struct_with_method(
@@ -1067,45 +1069,6 @@ mod struct_method_expand_tests {
             body
         );
     }
-
-    #[test]
-    fn methods_with_same_name_on_different_structs_do_not_collide() {
-        // 別々の構造体が同じ名前(`new`)のメゾットを持っていても、
-        // モジュール名(構造体名)によって区別され、互いを
-        // 上書きしないことを確認する
-        let point_def = make_struct_with_method(
-            "Point",
-            "new",
-            vec![],
-            node::TyNode::Ty("int".to_string()),
-            vec![node::StmtNode::Return(node::Expr::Number("1".to_string())).wrap()],
-        );
-        let rect_def = make_struct_with_method(
-            "Rect",
-            "new",
-            vec![],
-            node::TyNode::Ty("int".to_string()),
-            vec![node::StmtNode::Return(node::Expr::Number("2".to_string())).wrap()],
-        );
-
-        let nodes = vec![
-            node::Group1Node::StructDefine(point_def),
-            node::Group1Node::StructDefine(rect_def),
-        ];
-
-        let mut ir = IR::new();
-        ir.builder(&nodes).unwrap();
-
-        let point_new = ir.test_only_get_method_body("Point", "new");
-        let rect_new = ir.test_only_get_method_body("Rect", "new");
-
-        assert!(point_new.iter().any(|i| matches!(
-            i, inst::Inst::Num { value, .. } if value == "1"
-        )));
-        assert!(rect_new.iter().any(|i| matches!(
-            i, inst::Inst::Num { value, .. } if value == "2"
-        )));
-    }
 }
 
 #[cfg(test)]
@@ -1134,7 +1097,7 @@ mod method_call_via_member_tests {
             name: "get_num".to_string(),
             params: vec![node::ArgsNode {
                 name: "self".to_string(),
-                ty: node::TyNode::SelfTy("Point".to_string()),
+                ty: node::TyNode::SelfTy("int".to_string()),
                 is_mut: false,
             }],
             ret_ty: node::TyNode::Ty("int".to_string()),

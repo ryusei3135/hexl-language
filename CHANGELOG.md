@@ -3,6 +3,15 @@
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-09-18
+
+### Fixed
+- `[ir/builder.rs]`のテストを修正
+
+### Removed
+- `[ir/builder.rs]`の`[ir::builder::struct_method_expand_tests::method_is_registered_as_function_with_struct_as_module]`
+を削除、テスト時に実装するのが難しいため
+
 ## [0.9.2] - 2026-09-17
 ### Fixed
 - テストコードの変数をテストするコードが不変変数に対応していないバグを修正

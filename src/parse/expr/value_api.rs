@@ -40,7 +40,7 @@ impl Parser {
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す
-        if !init_struct {
+        if init_struct == false {
             return Ok(node::Expr::Var(name));
         }
         let node = match self.next_tkn_ref(vec![".", "(", "`", "::"])? {

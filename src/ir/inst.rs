@@ -74,7 +74,11 @@ pub struct CallFuncMetaData {
 }
 
 impl CallFuncMetaData {
-    pub fn new(name: String, start_expr: bool, stk_capacity: Option<usize>) -> Self {
+    pub fn new(
+        name: String, 
+        start_expr: bool, 
+        stk_capacity: Option<usize>
+    ) -> Self {
         Self {
             path: Vec::new(),
             public: false,
