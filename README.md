@@ -4,7 +4,7 @@
   <img src="hexl_lang.png" width="128" />
 </p>
 
-# Hexl(Hexadecimal Language) - 自作プログラミング言語 / Custom Programming Language
+# Hexl - 自作プログラミング言語 / Custom Programming Language
 Hexlはrustで実装されたプログラミング言語であり
 字句解析・構文解析・AST・コンパイラを自前で実装しており、
 c言語ライクな言語を作ることを目的としています。
@@ -21,6 +21,7 @@ c言語ライクな言語
 - 自作プログラミング言語
 - 静的型付け
 - シンプルな構文
+- **契約システム**
 
 ## 目的（Motivation）
 - プログラミングをしているとめんどくさくなることがあるから
@@ -51,7 +52,10 @@ gcc 生成したアセンブリソースコード -nostdlib
 - static
 - Self
 - mut
-- jmp
+- must
+- of
+- continue
+- break
 
 ### プロプロセッサ
 - #include

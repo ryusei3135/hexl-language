@@ -176,6 +176,10 @@ impl IR {
             // `Self`はIRへ変換する前に、実際の構造体の型
             // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
             node::TyNode::SelfTy(name) => self.size_of(&node::TyNode::Ty(name.to_string())),
+            node::TyNode::ConstractMust(ty) 
+            | node::TyNode::ConstractOf(ty) => {
+                self.size_of(&ty.unwrap_ty())
+            }
         }
     }
 }

@@ -1,6 +1,25 @@
 use super::*;
 
 impl IR {
+    fn check_contract_arg(
+        &self, 
+        expected_ty: &node::TyNode, 
+        arg: &node::Expr
+    ) {
+        if !matches!(expected_ty, node::TyNode::ConstractOf(_)) {
+            return;
+        }
+
+        let actual_ty = match arg {
+            node::Expr::Var(name) => self.var_tree.get_ty_node(name),
+            _ => None,
+        };
+
+        if !matches!(actual_ty, Some(node::TyNode::ConstractMust(_))) {
+            CompileErr::contract_of_requires_must().unwrap();
+        }
+    }
+
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
     pub(super) fn ini_def_fn_info(&mut self, info: &node::FuncDefine) {
@@ -50,7 +69,10 @@ impl IR {
     /// 外部の関数を定義するノードを
     /// 作成し、スタックする関数
     /// アセンブリ言語を出力する際にだけ使う
-    pub(super) fn make_extern_func_inst(&mut self, fn_tree: &Vec<def_tree::FuncDefMetaData>) {
+    pub(super) fn make_extern_func_inst(
+        &mut self, 
+        fn_tree: &Vec<def_tree::FuncDefMetaData>
+    ) {
         for func in fn_tree {
             self.extern_funcs
                 .push(inst::Inst::ExternFunc(func.name.clone()));
@@ -95,11 +117,8 @@ impl IR {
         );
 
         for (index, _) in meta_data.args.iter().enumerate() {
-            let expr_arg = meta_data
-                .args
-                .get(index)
-                .unwrap()
-                .clone();
+            let expr_arg = meta_data.args.get(index).unwrap().clone();
+            self.check_contract_arg(&def_args[index].ty, &expr_arg);
             let ty = self.size_of(&def_args[index].ty).clone();
             let idx = self.gen_expr_ir(expr_arg, &ty);
             func_meta_data.insert_param_parent_id(idx);

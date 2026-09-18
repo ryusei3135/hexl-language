@@ -1,5 +1,42 @@
 use std::collections::HashMap;
 
+
+pub const IS_MUST: usize = 0;
+pub const IS_OF: usize = 1;
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConstractTy {
+    must: Option<String>,
+    of: Option<String>,
+    ty: Box<TyNode>,
+}
+
+impl ConstractTy {
+    pub fn new<const K: usize>(
+        must: Option<String>, 
+        of: Option<String>, 
+        ty: Box<TyNode>
+    ) -> TyNode {
+        // 自クラス（TyNode）ではなく、内側の構造体を組み立てる
+        let base = Self { must, of, ty };
+
+        // constジェネリクスの文字列をifで判定する
+        if K == IS_MUST {
+            TyNode::ConstractMust(base)
+        } else if K == IS_OF {
+            TyNode::ConstractOf(base)
+        } else {
+            panic!("Unsupported key: {}", K);
+        }
+    }
+
+    #[inline(always)]
+    pub fn unwrap_ty(&self) -> TyNode {
+        (*self.ty).clone()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum TyNode {
     Ty(String),
@@ -30,6 +67,9 @@ pub enum TyNode {
         name: String,
         len: usize,
     },
+
+    ConstractMust(ConstractTy),
+    ConstractOf(ConstractTy),
 }
 
 impl TyNode {
@@ -45,6 +85,9 @@ impl TyNode {
             Self::Stack { name, .. } => name.to_string(),
             Self::Static { name, .. } => name.to_string(),
             Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name(),
+            Self::ConstractMust(ty) | Self::ConstractOf(ty) => {
+                ty.unwrap_ty().get_ty_str_name()
+            }
         }
     }
 }
@@ -67,7 +110,12 @@ pub struct FuncDefine {
 }
 
 impl FuncDefine {
-    pub fn new(name: String, args: Vec<ArgsNode>, ret_ty: TyNode, public: bool) -> Group1Node {
+    pub fn new(
+        name: String, 
+        args: Vec<ArgsNode>, 
+        ret_ty: TyNode, 
+        public: bool
+    ) -> Group1Node {
         Group1Node::FuncDefine(Self {
             public,
             name: name,

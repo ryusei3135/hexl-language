@@ -22,7 +22,6 @@ use std::fmt;
 /// 位置・関数名は[`ErrLoc`]としてまとめて[`SyntaxErr`]に持たせる。
 #[derive(Debug, Clone, PartialEq)]
 pub enum SyntaxErrKind {
-    /// 期待していたトークンがある前に、トークン列が終了した(EOF)
     TknIsEof { expected: Vec<&'static str> },
     /// 現在のトークンが、期待していたトークンと異なる
     UnexpectedTkn {
@@ -73,6 +72,13 @@ pub enum SyntaxErrKind {
     NotImplemented {
         /// 未対応の機能名(例: `"ジェネリクス"`)
         feature: &'static str,
+    },
+
+    MissingEqualsAfterMust {
+        found: lex::Tkn,
+    },
+    MissingIdentAfterOf {
+        found: lex::Tkn,
     },
 }
 
@@ -125,6 +131,16 @@ impl fmt::Display for SyntaxErrKind {
             Self::NotImplemented { feature } => {
                 write!(f, "`{}`はまだ実装されていません", feature)
             }
+            Self::MissingEqualsAfterMust { found } => write!(
+                f,
+                "`must`の後には`=`が必要ですが、`{:?}`が見つかりました",
+                found
+            ),
+            Self::MissingIdentAfterOf { found } => write!(
+                f,
+                "`of`の後には名前が必要ですが、`{:?}`が見つかりました",
+                found
+            ),
         }
     }
 }

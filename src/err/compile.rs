@@ -10,6 +10,8 @@ pub enum CompileErr {
         range: (usize, usize),
         value_len: usize,
     },
+    /// `ConstractOf`型の引数に`ConstractMust`型以外を渡した
+    ContractOfRequiresMust,
 }
 
 impl CompileErr {
@@ -28,5 +30,9 @@ impl CompileErr {
         Err(err::ErrKind::CompileErr(
             Self::PointerRangeLengthMismatch { range, value_len },
         ))
+    }
+
+    pub fn contract_of_requires_must() -> Result<(), err::ErrKind> {
+        Err(err::ErrKind::CompileErr(Self::ContractOfRequiresMust))
     }
 }

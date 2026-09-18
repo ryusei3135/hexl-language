@@ -80,7 +80,9 @@ impl Parser {
 
     /// `enum name { mem, mem2 }` を解析する
     /// 呼び出し時は current_tkn() が `KeyWordEnum`
-    pub(super) fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(super) fn enum_node(
+        &mut self
+    ) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(vec!["name"])? else {
             panic!("列挙型の名前が必要です");
         };
@@ -338,17 +340,20 @@ impl Parser {
                 }
             }
             lex::Tkn::Name(name) => {
+                let base_ty = self.is_constract_ty(
+                    node::TyNode::Ty(name.clone())
+                )?;
                 let ty = match self.next_tkn(vec!["<", "*"])? {
                     lex::Tkn::LAngleBracket => panic!(),
                     // 境界付きポインタ
                     lex::Tkn::LBracket => {
                         self.advance_tkn().unwrap();
-                        self.make_range_ptr_node(node::TyNode::Ty(name.clone()))?
+                        self.make_range_ptr_node(base_ty)?
                     }
                     // ポインタの型
                     // var: *.. の `*`
                     lex::Tkn::Mul => { 
-                        self.ptr_ty_node(node::TyNode::Ty(name.clone())).unwrap()
+                        self.ptr_ty_node(base_ty).unwrap()
                     }
                     _ => {
                         // ジェネリクスに定義ずみの型がある
@@ -359,7 +364,7 @@ impl Parser {
                         {
                             node::TyNode::make_ref_ty(&generics.0)
                         } else {
-                            node::TyNode::Ty(name.clone())
+                            base_ty
                         }
                     }
                 };
@@ -385,13 +390,6 @@ impl Parser {
         }
     }
 
-    /// 境界付きポインタのノードの処理
-    fn range_ptr_node(&mut self) {
-        if !matches!(self.current_tkn(), lex::Tkn::Mul) {
-            panic!();
-        }
-    }
-
     /// スタック/静的領域に確保する変数の型を解析する
     /// 呼び出し時、`current_tkn()`は`LBracket`
     /// - `[ty]`   -> len == 1
@@ -399,9 +397,7 @@ impl Parser {
     ///
     /// 呼び出し終了時は、`]`の次のトークンを指す
     fn define_mem_ty_node(&mut self, is_static: bool) -> Result<node::TyNode, err::ErrKind> {
-        let lex::Tkn::Name(ty_name) = self.next_tkn(vec!["name"])? else {
-            panic!("スタック/静的領域の型名が必要です");
-        };
+        let ty_name = self.next_tkn(vec!["name"])?.unwrap_name();
 
         let len = match self.next_tkn(vec!["number", "]"])? {
             lex::Tkn::Number(num) => {

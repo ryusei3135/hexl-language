@@ -13,6 +13,7 @@ mod preproc;
 mod typedef;
 pub mod node;
 mod mut_var;
+mod contract;
 
 use crate::{err, lex};
 use stmt::*;

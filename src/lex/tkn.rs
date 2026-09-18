@@ -48,6 +48,22 @@ pub enum Tkn {
     KeyWordMut,
     /// `Self` (メゾット内で自身の構造体を表す予約語)
     KeyWordSelf,
+
+    KeyWordMust,
+    KeyWordOf,
+
+    KeyWordContinue,
+    KeyWordBreak,
+}
+
+impl Tkn {
+    pub fn unwrap_name(&self) -> String {
+        if let Self::Name(val) = self.clone() {
+            val
+        } else {
+            panic!();
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
