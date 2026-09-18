@@ -8,6 +8,15 @@ struct Name {
 }
 
 
+func4(): int must=func5 {
+    ret 10
+}
+
+func5(a: int of func4): int {
+    ret a + 10
+}
+
+
 add(a mut: int, b: int) {
     c: byte* = "hello world\n"
     d: byte* = "tomato\n"
@@ -38,6 +47,7 @@ add(a mut: int, b: int) {
 }
 
 _start(): int {
+    a: int must=func5 = func4()
     func2(10)
     a: static[int] = 30
     b::add_1(10)
@@ -45,6 +55,7 @@ _start(): int {
         name: 10
         aa: 10
     }
+    func5(a)
     add(s.name, a)
     add(a, 0)
     #asm(gcc_x64) {
