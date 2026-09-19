@@ -2,7 +2,7 @@
   <img src="hexl_lang.png" width="128" />
 </p>
 
-# Hexl (Hexadecimal Language) - Custom Programming Language
+# Hexl - Custom Programming Language
 Hexl is a programming language implemented in Rust. 
 It features a custom-built lexer, parser, AST, and compiler, with the ultimate goal of creating a C-like programming language.
 - [X64 Assembler](https://github.com/ryusei3135/hexl-language/tree/HasmX64)
@@ -55,13 +55,14 @@ gcc <generated-assembly-source-code> -nostdlib
 ```
 d: int = 5
 a:[int] = 10
-b: ""[int] = 10
+b: static[int] = 10
 c: [int 4] = {1, 2, 3, 4}
 ```
 
 - [Memory Specifications](./english/mem.md)
 - [Variable & Array Handling](./english/variable.md)
 - [Type System](./english/type.md)
+- [Contracts](./english/constract.md)
 
 ### Structures & Enums
 - [Structs and Enums](./english/struct_and_enum.md)

@@ -61,7 +61,7 @@ a: int* = malloc(...)
 契約は、契約に指定された関数へ値を渡すことで終了する。
 
 ```text
-a: int* must free = malloc(...)
+a: int* must=free = malloc(...)
 
 free(a)
 ```
