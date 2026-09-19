@@ -98,6 +98,10 @@ pub enum ErrKind {
     /// 予期しないトークンだった(簡易版、詳細情報なし)
     UnexpectedToken,
     CompileErr(CompileErr),
+    CompileErrAt {
+        error: CompileErr,
+        span: Span,
+    },
     /// トークン管理・式解析など、構文解析全般のエラー
     Syntax(SyntaxErr),
     /// プリプロセッサ特有のエラー
@@ -112,6 +116,18 @@ impl fmt::Display for ErrKind {
             Self::Syntax(e) => write!(f, "{}", e),
             Self::Preproc(e) => write!(f, "{}", e),
             Self::CompileErr(e) => write!(f, "{:?}", e),
+            Self::CompileErrAt { error, span } => {
+                write!(f, "コンパイルエラー: {} [{}]", error.message(), span)
+            }
+        }
+    }
+}
+
+impl ErrKind {
+    pub fn with_span(self, span: Span) -> Self {
+        match self {
+            Self::CompileErr(error) => Self::CompileErrAt { error, span },
+            other => other,
         }
     }
 }

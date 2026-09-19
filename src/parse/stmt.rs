@@ -1,6 +1,8 @@
 //! group1は、関数や構造体など
 //! group2は変数の定義や条件分岐など
 
+use crate::{models::Body, node::Group2Info};
+
 use super::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,7 +107,8 @@ impl Parser {
                         continue;
                     }
 
-                    let node = self.one_line_node()?;
+                    let node: Group2Info = self.one_line_node()?
+                        .gen_group_info(&self.build_err_span().line);
 
                     match self.gen_nodes.last_mut().unwrap() {
                         node::Group1Node::FuncDefine(func) => {
@@ -248,15 +251,20 @@ impl Parser {
         let body = self.gen_block_node()?;
         self.next_tkn(vec!["expr"])?;
 
-        let node = node::Group2Node::Expr(node::Expr::Loop { pattern, body });
+        let node = node::Group2Node::Expr(
+            node::Expr::Loop { 
+                pattern, 
+                body 
+            }
+        );
         Ok(node)
     }
 
     /// 同じスコープ内のノードを生成
     pub(super) fn gen_block_node(
         &mut self
-    ) -> Result<Vec<node::Group2Node>, err::ErrKind> {
-        let mut block = Vec::<node::Group2Node>::new();
+    ) -> Result<Body, err::ErrKind> {
+        let mut block = Body::new();
 
         // ブロックが空(`{}`)の場合、`one_line_node`を呼ばずに
         // そのまま空のブロックを返す
@@ -266,9 +274,15 @@ impl Parser {
 
         loop {
             let node = self.one_line_node()?;
-            block.push(node);
-
-            if matches!(self.current_tkn(), lex::Tkn::RBrace) {
+            block.push(
+                node.gen_group_info(
+                    &self.build_err_span().line
+                )
+            );
+            if matches!(
+                self.current_tkn(), 
+                lex::Tkn::RBrace
+            ) {
                 break;
             }
         }

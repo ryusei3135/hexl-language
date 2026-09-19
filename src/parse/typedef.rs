@@ -154,11 +154,20 @@ impl Parser {
                                 'method_body: loop {
                                     let node = self.one_line_node()?;
 
-                                    if let node::Group1Node::FuncDefine(ref mut func) = method {
-                                        func.body.push(node);
+                                    if let node::Group1Node::FuncDefine(
+                                        ref mut func
+                                    ) = method {
+                                        func.body.push(
+                                            node.gen_group_info(
+                                                &self.build_err_span().line
+                                            )
+                                        );
                                     }
 
-                                    if matches!(self.current_tkn(), lex::Tkn::RBrace) {
+                                    if matches!(
+                                        self.current_tkn(), 
+                                        lex::Tkn::RBrace
+                                    ) {
                                         self.advance_tkn().unwrap();
                                         break 'method_body;
                                     }

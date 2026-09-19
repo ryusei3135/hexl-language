@@ -5,6 +5,7 @@ mod ir;
 mod lex;
 mod macros;
 mod parse;
+mod models;
 
 use std::{env, fs, process};
 pub use parse::node;

@@ -55,7 +55,12 @@ macro_rules! scope_node {
                         )?
                         {
                             node::Expr::Assign { .. } => {
-                                node::Expr::Var(path_node.last().unwrap().to_string())
+                                node::Expr::Var(
+                                    path_node
+                                        .last()
+                                        .unwrap()
+                                        .to_string()
+                                )
                             }
                             n => {
                                 n
@@ -122,13 +127,8 @@ macro_rules! gen_struct_asm {
             add_size += size.to_bytes();
 
             let offset = if $name {
-                // `self`のポインタ先に直接書き込むので、既存の
-                // `stk_use_counter`(このスコープでのスタック使用量)は
-                // 無関係。累積サイズそのものがオフセットになる
                 add_size
             } else {
-                // 既に使用していたスタックのサイズ + ここまでの
-                // メンバーの累積サイズ = このメンバーの正しいオフセット
                 $self.stk_use_counter + add_size
             };
 

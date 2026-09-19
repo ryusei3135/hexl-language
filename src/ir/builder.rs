@@ -4,7 +4,7 @@ mod proc_fn_info;
 mod scope;
 mod preproc;
 
-use crate::err::*;
+use crate::{err::*, models::Body};
 use super::*;
 
 impl IR {
@@ -27,6 +27,7 @@ impl IR {
             struct_tree: def_tree::StructTree::new(),
             enum_tree: HashMap::new(),
             stk_counter: 0,
+            current_span: err::Span::unknown(),
         }
     }
 
@@ -40,7 +41,11 @@ impl IR {
         let first_param_is_self = func
             .params
             .first()
-            .is_some_and(|param| Self::ty_contains_self(&param.ty));
+            .is_some_and(
+                |param| {
+                    Self::ty_contains_self(&param.ty)
+                }
+            );
 
         if let Some(first) = func.params.first_mut() {
             if Self::ty_contains_self(&first.ty) {
@@ -80,8 +85,12 @@ impl IR {
     fn ty_contains_self(ty: &node::TyNode) -> bool {
         match ty {
             node::TyNode::SelfTy(..) => true,
-            node::TyNode::Pointer { ty_name, .. } => Self::ty_contains_self(ty_name),
-            node::TyNode::RefTy(inner) => Self::ty_contains_self(inner),
+            node::TyNode::Pointer { ty_name, .. } => {
+                Self::ty_contains_self(ty_name)
+            }
+            node::TyNode::RefTy(inner) =>{ 
+                Self::ty_contains_self(inner)
+            }
             _ => false,
         }
     }
@@ -211,12 +220,19 @@ impl IR {
         self.this_is_self = false;
     }
 
-    fn gen_inst(&mut self, node: &Vec<node::Group2Node>) -> usize {
+    fn gen_inst(
+        &mut self, 
+        node: &Body
+    ) -> usize {
         for stmt in node {
+            self.current_span = err::Span::new(&stmt.line, &0);
             self.expr_counter = 0;
-            match stmt.clone() {
+            match stmt.get_node().clone() {
                 node::Group2Node::Expr(expr) => {
-                    let _ = self.gen_expr_ir(expr, &types::Size::DD);
+                    let _ = self.gen_expr_ir(
+                        expr, 
+                        &types::Size::DD
+                    );
                 }
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir(stmt);
@@ -238,7 +254,10 @@ impl IR {
     }
 
     /// 文のノードを生成
-    fn gen_stmt_ir(&mut self, stmt: node::StmtNode) -> usize {
+    fn gen_stmt_ir(
+        &mut self,
+        stmt: node::StmtNode
+    ) -> usize {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
                 let func_ret_ty = self.func_ret_ty.as_ref().unwrap();
@@ -483,7 +502,7 @@ impl IR {
     fn gen_loop_expr_ir(
         &mut self,
         pattern: Option<Box<node::Expr>>,
-        body: &Vec<node::Group2Node>,
+        body: &Body,
     ) -> usize {
         // 反復処理が始まる場所を作成
         let start = self.pattern_labels;
@@ -516,7 +535,7 @@ impl IR {
         &mut self,
         pattern: &Option<Box<node::Expr>>,
         arms: &Vec<node::MatchArm>,
-        arm_else: &Option<Vec<node::Group2Node>>,
+        arm_else: &Option<Body>,
     ) -> usize {
         // 各armの条件式を作成する
         // - `pattern`(matchに与えられた値)がある場合は、
@@ -567,10 +586,6 @@ impl IR {
             // このアーム専用のラベル(条件が一致した場合の飛び先)
             crate::push_jmp_code!(self, Block, label);
             self.gen_inst(&arm.body);
-            // 処理が終わったら、他のアームへ流れ込まないよう
-            // 終了ラベルへジャンプする
-            // (以前はここが無く、あるアームの処理が終わると
-            //  そのまま次のアームの処理へ流れ込んでしまっていた)
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
 
@@ -596,7 +611,10 @@ impl IR {
     }
 
     #[cfg(test)]
-    pub(crate) fn test_only_get_func_body(&self, name: &str) -> Vec<inst::Inst> {
+    pub(crate) fn test_only_get_func_body(
+        &self, 
+        name: &str
+    ) -> Vec<inst::Inst> {
         self.func_tree.func.get(name).unwrap().body.clone()
     }
 
@@ -958,7 +976,7 @@ use super::*;
         method_name: &str,
         method_params: Vec<node::ArgsNode>,
         method_ret_ty: node::TyNode,
-        method_body: Vec<node::Group2Node>,
+        method_body: Body,
     ) -> node::StructDefine {
         let method = node::FuncDefine {
             public: true,

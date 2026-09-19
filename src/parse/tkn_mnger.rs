@@ -69,7 +69,10 @@ impl Parser {
     /// エラーが発生したときのどの行の何文字目がエラーかを
     /// 確認する構造体を作成する
     pub(super) fn build_err_span(&self) -> err::Span {
-        err::Span::new(self.current_line(self.idx - 1), self.tkn_chr_pos())
+        err::Span::new(
+            self.current_line(self.idx - 1), 
+            self.tkn_chr_pos()
+        )
     }
 
     #[inline(always)]

@@ -37,6 +37,7 @@ impl IR {
                         node::ConstractTy::name_or_anon(must.must_name()),
                         fn_name,
                     )
+                    .map_err(|err| err.with_span(self.current_span))
                     .unwrap();
                 }
             }
@@ -47,6 +48,7 @@ impl IR {
                     &param.name,
                     node::ConstractTy::name_or_anon(of.of_name()),
                 )
+                .map_err(|err| err.with_span(self.current_span))
                 .unwrap();
             }
             // `must`の値は、`of`の引数にしか渡せない
@@ -56,6 +58,7 @@ impl IR {
                     &param.name,
                     node::ConstractTy::name_or_anon(must.must_name()),
                 )
+                .map_err(|err| err.with_span(self.current_span))
                 .unwrap();
             }
             (None, None) => {}
@@ -121,23 +124,28 @@ impl IR {
     }
 
     fn walk_group2_nodes(
-        nodes: &Vec<node::Group2Node>,
+        nodes: &Body,
         must_vars: &mut Vec<MustVar>,
     ) {
-        for node in nodes.iter() {
-            match node {
-                node::Group2Node::Expr(expr) => {
-                    Self::walk_expr(expr, must_vars);
+        for n in nodes.iter() {
+            match n.get_node() {
+                node::Group2Node::Expr(ref expr) => {
+                    Self::walk_expr(&expr, must_vars);
                 }
-                node::Group2Node::Stmt(node::StmtNode::Return(expr)) => {
-                    Self::walk_expr(expr, must_vars);
+                node::Group2Node::Stmt(
+                    node::StmtNode::Return(ref expr)
+                ) => {
+                    Self::walk_expr(&expr, must_vars);
                 }
                 _ => {}
             }
         }
     }
 
-    fn walk_expr(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
+    fn walk_expr(
+        expr: &node::Expr, 
+        must_vars: &mut Vec<MustVar>
+    ) {
         match expr {
             // 変数の定義: `must`の型ならここから追跡を始める
             node::Expr::DefVar(var) => {

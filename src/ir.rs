@@ -38,6 +38,7 @@ pub struct IR {
     // 定義済みの列挙型の情報
     pub enum_tree: HashMap<String, node::EnumDefine>,
     stk_counter: usize,
+    pub(crate) current_span: err::Span,
 }
 
 pub const IS_ASSIGN_EXPR: bool = true;

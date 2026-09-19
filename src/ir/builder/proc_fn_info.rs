@@ -3,14 +3,15 @@ use super::*;
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
-    pub(super) fn ini_def_fn_info(&mut self, info: &node::FuncDefine) {
+    pub(super) fn ini_def_fn_info(
+        &mut self, 
+        info: &node::FuncDefine
+    ) {
         // 関数の情報を登録
         self.entry_fn_info(&info);
-
         // `ir/param.rs`
         self.push_param_meta_data(&info.params);
         self.gen_inst(&info.body.clone());
-
         // 関数の処理内容をpush
         self.push_fn_ir_tree(&info);
         // 使うデータを初期化
@@ -19,7 +20,10 @@ impl IR {
     }
 
     /// 関数の情報を関数ツリーに登録
-    pub(super) fn push_fn_ir_tree(&mut self, info: &node::FuncDefine) {
+    pub(super) fn push_fn_ir_tree(
+        &mut self, 
+        info: &node::FuncDefine
+    ) {
         // 関数のデータをpush
         self.func_tree.add(
             // 関数の処理
@@ -35,20 +39,24 @@ impl IR {
 
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
-    pub(super) fn entry_fn_info(&mut self, info: &node::FuncDefine) {
-        // `must`の契約を持つ変数が、関数の中で必ず一度は
-        // 関数へ渡されているかを確認する
-        // (`src/ir/ty_checker/constract.rs`)
+    pub(super) fn entry_fn_info(
+        &mut self, 
+        info: &node::FuncDefine
+    ) {
         self.check_must_var_used(&info);
-
         self.func_ret_ty = Some(info.ret_ty.clone());
         // メゾットの場合、`info.module`に自身が属する構造体の名前が
         // 入っているので、そのままモジュール名として登録する
         self.define_meta_data
-            .push(def_tree::FuncDefMetaData::new(&info, info.module.as_ref()));
+            .push(
+                def_tree::FuncDefMetaData::new(
+                    &info, info.module.as_ref()
+                )
+            );
         // 公開する関数を登録
         if info.public {
-            self.public_func_tree.push(info.name.to_string());
+            self.public_func_tree
+                .push(info.name.to_string());
         }
     }
 
@@ -72,12 +80,20 @@ impl IR {
     ) -> inst::Inst {
         // 関数の定義を取得
         let defined_func_data = {
-            if let Some(def_data) = self.func_tree.get(&meta_data.name, module_name) {
+            if let Some(def_data) = self.func_tree.get(
+                &meta_data.name, 
+                module_name
+            ) {
                 def_data
             } else {
-                let result = self.extern_func_tree.iter().find(|v| {
-                    v.name.as_str() == meta_data.name.as_str() && v.module() == module_name
-                });
+                let result = self.extern_func_tree
+                    .iter()
+                    .find(
+                        |v| {
+                            v.name.as_str() == meta_data.name.as_str() 
+                            && v.module() == module_name
+                        }
+                    );
                 if let Some(def_data) = result {
                     def_data.gen(self.stk_counter)
                 } else {
@@ -103,7 +119,11 @@ impl IR {
         );
 
         for (index, _) in meta_data.args.iter().enumerate() {
-            let expr_arg = meta_data.args.get(index).unwrap().clone();
+            let expr_arg = meta_data
+                .args
+                .get(index)
+                .unwrap()
+                .clone();
             // 契約(`must`/`of`)のチェック
             // (`src/ir/ty_checker/constract.rs`)
             self.check_constract_arg(

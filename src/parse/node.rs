@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::models::Body;
+
 
 pub const IS_MUST: usize = 0;
 pub const IS_OF: usize = 1;
@@ -51,7 +53,9 @@ impl ConstractTy {
     }
 
     /// エラーメッセージ用に、契約の名前を文字列化する
-    pub fn name_or_anon<'a>(name: Option<&'a String>) -> &'a str {
+    pub fn name_or_anon<'a>(
+        name: Option<&'a String>
+    ) -> &'a str {
         match name {
             Some(name) => name.as_str(),
             None => "(名前なし)",
@@ -145,7 +149,8 @@ impl TyNode {
     /// 付いていない場合は自分自身をそのまま返す
     pub fn unwrap_constract(&self) -> TyNode {
         match self {
-            Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty(),
+            Self::ConstractMust(ty) 
+            | Self::ConstractOf(ty) => ty.unwrap_ty(),
             t => t.clone(),
         }
     }
@@ -164,7 +169,7 @@ pub struct FuncDefine {
     pub name: String,
     pub params: Vec<ArgsNode>,
     pub ret_ty: TyNode,
-    pub body: Vec<Group2Node>,
+    pub body: Vec<Group2Info>,
     pub module: Option<String>,
 }
 
@@ -185,11 +190,14 @@ impl FuncDefine {
         })
     }
 
-    pub fn self_module_name(&mut self, name: &String) {
+    pub fn self_module_name(
+        &mut self, 
+        name: &String
+    ) {
         self.module = Some(name.to_string());
     }
 
-    pub fn add(&mut self, node: Group2Node) {
+    pub fn add(&mut self, node: Group2Info) {
         self.body.push(node);
     }
 }
@@ -218,7 +226,11 @@ pub struct StructDefine {
 }
 
 impl StructDefine {
-    pub fn new(name: String, fields: Vec<StructField>, methods: Vec<Group1Node>) -> Group1Node {
+    pub fn new(
+        name: String, 
+        fields: Vec<StructField>,
+        methods: Vec<Group1Node>
+    ) -> Group1Node {
         Group1Node::StructDefine(Self {
             name,
             fields,
@@ -234,8 +246,17 @@ pub struct EnumDefine {
 }
 
 impl EnumDefine {
-    pub fn new(name: String, variants: Vec<String>) -> Group1Node {
-        Group1Node::EnumDefine(Self { name, variants })
+    #[inline(always)]
+    pub fn new(
+        name: String, 
+        variants: Vec<String>
+    ) -> Group1Node {
+        Group1Node::EnumDefine(
+            Self { 
+                name, 
+                variants 
+            }
+        )
     }
 }
 
@@ -281,7 +302,7 @@ impl DefineVar {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MatchArm {
     pub pattern: Box<Expr>,
-    pub body: Vec<Group2Node>,
+    pub body: Body,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -293,7 +314,12 @@ pub struct AssignVar {
 }
 
 impl AssignVar {
-    pub fn new(name: &String, dst: Expr, value: Expr) -> Expr {
+    #[inline(always)]
+    pub fn new(
+        name: &String, 
+        dst: Expr, 
+        value: Expr
+    ) -> Expr {
         Expr::Assign(Self {
             name: name.to_string(),
             dst: Box::new(dst),
@@ -327,11 +353,11 @@ pub enum Expr {
     Match {
         pattern: Option<Box<Expr>>,
         arms: Vec<MatchArm>,
-        arm_else: Option<Vec<Group2Node>>,
+        arm_else: Option<Body>,
     },
     Loop {
         pattern: Option<Box<Expr>>,
-        body: Vec<Group2Node>,
+        body: Body,
     },
     InitStruct {
         is_self: bool,
@@ -368,7 +394,10 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn wrap(left: Expr, right: Expr) -> (Box<Expr>, Box<Expr>) {
+    pub fn wrap(
+        left: Expr, 
+        right: Expr
+    ) -> (Box<Expr>, Box<Expr>) {
         (Box::new(left), Box::new(right))
     }
 
@@ -469,7 +498,36 @@ pub enum Group2Node {
     Line(String),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Group2Info {
+    pub line: usize,
+    pub node: Group2Node,
+}
+
+impl Group2Info {
+    /// ノードを抽出する
+    #[inline(always)]
+    pub fn get_node<'a>(
+        &'a self
+    ) -> &'a Group2Node {
+        &self.node
+    }
+}
+
+
 impl Group2Node {
+    /// ノードに、何行目かの情報を入れる
+    #[inline(always)]
+    pub fn gen_group_info(
+        self, 
+        line: &usize
+    ) -> Group2Info {
+        Group2Info { 
+            line: *line, 
+            node: self
+        }
+    }
+
     pub fn change_group1(self) -> Group1Node {
         match self {
             Self::Include(v) => Group1Node::Include(v),

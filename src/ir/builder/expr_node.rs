@@ -51,11 +51,13 @@ impl IR {
         // `must`の契約を持つ変数は、`mut`かどうかに関わらず
         // 再代入できない(契約が別の値にすり替わってしまうため)
         if self.var_tree.is_constract_must(&assign_node.name) {
-            CompileErr::assign_to_must_var(&assign_node.name)?;
+            CompileErr::assign_to_must_var(&assign_node.name)
+                .map_err(|err| err.with_span(self.current_span))?;
         }
 
         if is_mut == &false {
-            CompileErr::assign_to_imm_var(&assign_node.name)?;
+            CompileErr::assign_to_imm_var(&assign_node.name)
+                .map_err(|err| err.with_span(self.current_span))?;
         }
 
         let right_expr_idx: usize =
@@ -195,7 +197,9 @@ impl IR {
                         CompileErr::ptr_range_len_mismatch(
                             range.unwrap(), 
                             base_range
-                        ).unwrap();
+                        )
+                        .map_err(|err| err.with_span(self.current_span))
+                        .unwrap();
                     }
                 }
                 inst::Inst::Mov {
