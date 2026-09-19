@@ -22,7 +22,7 @@ impl IR {
         target: Box<node::Expr>,
         var_name: Option<&String>,
         is_mut: &bool,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         if let node::Expr::CallFunc(mut call_func_node) = *target {
             if self.expr_counter != 1 {
                 if let Some(struct_info) = self.struct_tree
@@ -52,22 +52,29 @@ impl IR {
                         Some(name) => name.clone(),
                         None => format!("$self_area_{}", self_idx),
                     };
-                    self.var_tree.push::<'l'>(
+                    let _ = self.var_tree.push::<'l'>(
                         &tmp_name,
                         &self_idx,
                         &node::TyNode::Ty(struct_info.name.clone()),
                         &is_mut,
-                    );
+                    )?;
 
                     // メゾットの第一引数(`self`)として、今確保した
                     // スタックへのポインタを暗黙的に先頭へ渡す
                     call_func_node.args.insert(
                         0,
-                        node::Expr::GetAddress(Box::new(node::Expr::Var(tmp_name))),
+                        node::Expr::GetAddress(
+                            Box::new(node::Expr::Var(tmp_name))
+                        ),
                     );
                 }
             }
-            self.gen_call_fn_ir(scope.last(), &call_func_node)
+            Ok(
+                self.gen_call_fn_ir(
+                    scope.last(), 
+                    &call_func_node
+                )
+            )
         } else {
             panic!();
         }

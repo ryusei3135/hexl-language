@@ -6,17 +6,18 @@ impl IR {
     pub(super) fn ini_def_fn_info(
         &mut self, 
         info: &node::FuncDefine
-    ) {
+    ) -> Result<(), err::ErrKind> {
         // 関数の情報を登録
         self.entry_fn_info(&info);
         // `ir/param.rs`
-        self.push_param_meta_data(&info.params);
+        self.push_param_meta_data(&info.params)?;
         self.gen_inst(&info.body.clone());
         // 関数の処理内容をpush
         self.push_fn_ir_tree(&info);
         // 使うデータを初期化
         self.ir_tree = Vec::new();
         self.id_counter = 0;
+        Ok(())
     }
 
     /// 関数の情報を関数ツリーに登録

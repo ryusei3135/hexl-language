@@ -136,8 +136,7 @@ impl AsmEmitter {
 
     pub(super) fn mem_val_ir(
         &mut self, 
-        mem_value: &inst::MemoryInst, 
-        this_is_self: &bool,
+        mem_value: &inst::MemoryInst
     ) {
         match mem_value {
             inst::MemoryInst::Memory {

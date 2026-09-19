@@ -37,7 +37,7 @@ impl Parser {
     #[inline(always)]
     pub fn args_is_mut(
         &mut self, 
-        name: &String
+        _name: &String
     ) -> Result<bool, err::ErrKind> {// 引数が不変か
         let is_mut = matches!(
             self.next_tkn_ref(vec!["mut"])?, 

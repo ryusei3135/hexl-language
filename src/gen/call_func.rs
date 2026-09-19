@@ -171,7 +171,7 @@ impl AsmEmitter {
                 } // メモリに配置されている値の生成
                 inst::Inst::MemoryValue(mem_value) => {
                     // call_func/mem_ir.rs
-                    self.mem_val_ir(mem_value, &this_is_self);
+                    self.mem_val_ir(mem_value);
                 }
                 inst::Inst::Param(param) => {
                     let ty = node.get_param_ty().unwrap();

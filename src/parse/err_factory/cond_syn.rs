@@ -42,7 +42,10 @@ impl MatchErr {
 impl Parser {
     /// 条件分岐のエラーのバリアントを生成するAPIを提供する
     #[inline(always)]
-    pub fn tkn_checker(&self) -> MatchErr {
-        MatchErr::new(self.build_err_span(), self.current_tkn().clone())
+    pub(in crate::parse) fn tkn_checker(&self) -> MatchErr {
+        MatchErr::new(
+            self.build_err_span(), 
+            self.current_tkn().clone()
+        )
     }
 }

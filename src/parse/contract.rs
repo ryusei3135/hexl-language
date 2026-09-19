@@ -1,5 +1,5 @@
 use super::*;
-use crate::{lex, node::TyNode};
+use crate::lex;
 
 
 impl Parser {

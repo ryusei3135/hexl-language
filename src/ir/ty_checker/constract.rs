@@ -16,7 +16,7 @@ impl IR {
     /// - 渡された値が`must`なのに、引数の型が`of`でない -> エラー
     /// - `must`の渡し先が呼び出し先と一致しない -> エラー
     pub(crate) fn check_constract_arg(
-        &self,
+        &mut self,
         fn_name: &String,
         param: &node::ArgsNode,
         arg: &node::Expr,
@@ -39,6 +39,13 @@ impl IR {
                     )
                     .map_err(|err| err.with_span(self.current_span))
                     .unwrap();
+                }
+
+                if let Some(var_name) = Self::arg_var_name(arg) {
+                    self.var_tree
+                        .finish_constract_var(var_name)
+                        .map_err(|err| err.with_span(self.current_span))
+                        .unwrap();
                 }
             }
             // `of`の引数には、`must`の値しか渡せない

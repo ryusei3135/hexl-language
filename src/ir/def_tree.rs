@@ -1,3 +1,12 @@
+use crate::{
+    err::{
+        compile::{
+            self, 
+            CompileErr
+        }
+    }
+};
+
 use super::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -6,11 +15,18 @@ pub enum VarType {
     Param(usize), //これは、左から何番目の引数かを保存
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarLife {
+    EndConstract,
+    Constracting,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarMetaData {
     pub attribute: VarType,
     pub size: node::TyNode,
     pub is_mut: bool,
+    pub life: VarLife,
 }
 
 impl VarMetaData {
@@ -23,6 +39,7 @@ impl VarMetaData {
             attribute: attribute.clone(),
             size: size.clone(),
             is_mut: *is_mut,
+            life: VarLife::Constracting,
         }
     }
 }
@@ -49,20 +66,47 @@ impl VarTree {
         var_index: &usize,
         var_ty: &node::TyNode,
         is_mut: &bool,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         let var = match K {
             'l' => VarType::Local(*var_index),
             'p' => VarType::Param(*var_index),
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
+        if let Some(ref var_info) = self.hash
+            .get(var_name) 
+        {
+            return match var_info.life {
+                VarLife::Constracting => {
+                    crate::GenCompileErr!(
+                        ReassignActiveContract, 
+                        format!("{} 契約中の変数klkj", var_name)
+                    )
+                }
+                VarLife::EndConstract => {
+                    *self.hash
+                        .get_mut(var_name)
+                        .unwrap()
+                        = VarMetaData::new(
+                            &var, 
+                            &var_ty, 
+                            &is_mut
+                        );
+                    Ok(())
+                }
+            };
+        }
         self.hash
             .insert(
                 var_name.clone(), 
                 VarMetaData::new(&var, &var_ty, &is_mut)
             );
+        Ok(())
     }
 
-    pub fn get_ty_name(&self, name: &String) -> String {
+    pub fn get_ty_name(
+        &self, 
+        name: &String
+    ) -> String {
         match &self.hash.get(name).unwrap().size {
             node::TyNode::Ty(name) => name.to_string(),
             node::TyNode::Pointer { ty_name, .. } => {
@@ -94,10 +138,36 @@ impl VarTree {
     /// 契約(`must`/`of`)が付いた変数は、値の生成自体は
     /// 内側の型として行うため、登録後に契約付きの型へ戻すのに使う
     /// (`src/ir/builder/expr_node.rs`の`def_var_node`)
-    pub fn overwrite_ty(&mut self, var_name: &String, ty: &node::TyNode) {
+    pub fn overwrite_ty(
+        &mut self, 
+        var_name: &String, 
+        ty: &node::TyNode
+    ) {
         if let Some(var) = self.hash.get_mut(var_name) {
             var.size = ty.clone();
         }
+    }
+
+    /// 契約を終わらせる
+    pub(in crate::ir) fn finish_constract_var(
+        &mut self,
+        var_name: &String,
+    ) -> Result<(), err::ErrKind> {
+        let life: &VarLife = &self.hash
+            .get(var_name)
+            .unwrap()
+            .life;
+        match life {
+            VarLife::Constracting => {
+                self.hash
+                    .get_mut(var_name)
+                    .unwrap().life = VarLife::EndConstract;
+            }
+            VarLife::EndConstract => {
+                compile::CompileErr::constract_expired(&var_name)?;
+            }
+        }
+        Ok(())
     }
 
     /// 指定された変数が`must`の契約を持つかどうか
@@ -132,7 +202,10 @@ impl VarTree {
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
     pub fn get(&self, name: &String) -> &VarType {
-        &self.hash.get(name).expect(name).attribute
+        &self.hash
+            .get(name)
+            .expect(name)
+            .attribute
     }
 }
 

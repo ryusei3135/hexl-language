@@ -36,10 +36,36 @@ pub enum CompileErr {
     },
     /// `must`の契約を持つ変数へ再代入しようとした
     AssignToMustVar(String),
+
+    VariableConstractExpired(String),
+    ReassignActiveContract(String),
+}
+
+#[macro_export]
+macro_rules! GenCompileErr {
+    ($kind:ident, $msg:expr) => {
+        Err(
+            err::ErrKind::CompileErr(
+                CompileErr::$kind($msg.to_string())
+            )
+        )
+    };
 }
 
 impl CompileErr {
-    pub fn assign_to_imm_var(var_name: &String) -> Result<Self, err::ErrKind> {
+    pub fn constract_expired(
+        var_name: &String
+    ) -> Result<Self, err::ErrKind> {
+        Err(
+            err::ErrKind::CompileErr(
+                Self::VariableConstractExpired(var_name.to_string())
+            )
+        )
+    }
+
+    pub fn assign_to_imm_var(
+        var_name: &String
+    ) -> Result<Self, err::ErrKind> {
         Err(
             err::ErrKind::CompileErr(
                 Self::AssignToImmutableVar(var_name.to_string())
@@ -173,6 +199,12 @@ impl CompileErr {
             }
             Self::AssignToMustVar(var_name) => {
                 format!("`must`の契約を持つ変数`{var_name}`には再代入できません")
+            }
+            Self::VariableConstractExpired(var_name) => {
+                format!("契約が終了仕手います{var_name}")
+            }
+            Self::ReassignActiveContract(var_name) => {
+                format!("{var_name}")
             }
         }
     }

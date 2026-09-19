@@ -306,26 +306,26 @@ impl MngAsmFmt {
             .to_string()
     }
 
-    /// レジスタ文字列からレジスタのサイズを取得する
-    pub fn get_reg_size(
-        &self, 
-        reg_name: &str
-    ) -> Option<Size> {
-        for (size, registers) in [
-            (Size::DB, &self.reg_fmt.db),
-            (Size::DW, &self.reg_fmt.dw),
-            (Size::DD, &self.reg_fmt.dd),
-            (Size::DQ, &self.reg_fmt.dq),
-        ] {
-            for register in registers {
-                let formatted = self.fmt.fmt.reg.replace("{}", register);
-                if formatted == reg_name {
-                    return Some(size);
-                }
-            }
-        }
-        None
-    }
+    // /// レジスタ文字列からレジスタのサイズを取得する
+    // pub fn get_reg_size(
+    //     &self, 
+    //     reg_name: &str
+    // ) -> Option<Size> {
+    //     for (size, registers) in [
+    //         (Size::DB, &self.reg_fmt.db),
+    //         (Size::DW, &self.reg_fmt.dw),
+    //         (Size::DD, &self.reg_fmt.dd),
+    //         (Size::DQ, &self.reg_fmt.dq),
+    //     ] {
+    //         for register in registers {
+    //             let formatted = self.fmt.fmt.reg.replace("{}", register);
+    //             if formatted == reg_name {
+    //                 return Some(size);
+    //             }
+    //         }
+    //     }
+    //     None
+    // }
 
     /// 渡された文字列がレジスタのオペランド(`%eax`など)である場合、
     /// 「同じレジスタ」の`size`版のオペランド文字列(`%rax`など)に

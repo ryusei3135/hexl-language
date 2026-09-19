@@ -157,7 +157,7 @@ impl IR {
             self.expr_counter = 0;
             match node {
                 node::Group1Node::FuncDefine(info) => {
-                    self.ini_def_fn_info(&info);
+                    let _ = self.ini_def_fn_info(&info)?;
                 }
                 #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
@@ -168,7 +168,7 @@ impl IR {
                     self.struct_tree.add(info);
                     // 構造体の中に定義されているメゾットを、
                     // 通常の関数としてIRへ展開する
-                    self.expand_struct_methods(info);
+                    let _ = self.expand_struct_methods(info)?;
                 }
                 node::Group1Node::EnumDefine(info) => {
                     // 列挙型の情報を登録
@@ -192,7 +192,10 @@ impl IR {
     ///   よって、自身の構造体を指すポインタを受け取る関数として解決される
     /// - それ以外の変換処理は、トップレベルの関数定義
     ///   (`node::Group1Node::FuncDefine`)と全く同じ流れで行う
-    fn expand_struct_methods(&mut self, struct_def: &node::StructDefine) {
+    fn expand_struct_methods(
+        &mut self, 
+        struct_def: &node::StructDefine
+    ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
         for method in &struct_def.methods {
             let node::Group1Node::FuncDefine(method_info) = method else {
@@ -208,7 +211,9 @@ impl IR {
             // 関数の情報を登録
             self.entry_fn_info(&method_info);
 
-            self.push_param_meta_data(&method_info.params);
+            let _ = self.push_param_meta_data(
+                &method_info.params
+            )?;
             self.gen_inst(&method_info.body.clone());
 
             // 関数の処理内容をpush
@@ -218,6 +223,7 @@ impl IR {
             self.id_counter = 0;
         }
         self.this_is_self = false;
+        Ok(())
     }
 
     fn gen_inst(
@@ -359,7 +365,7 @@ impl IR {
             node::Expr::DefVar(var) => {
                 let is_mut = var.is_mut;
                 // `src/ir/builder/expr_node.rs`
-                self.def_var_node(var, &expect_byte, &is_mut)
+                self.def_var_node(var, &expect_byte, &is_mut).unwrap()
             }
             node::Expr::CallFunc(meta_data) => self.gen_call_fn_ir(None, &meta_data),
             node::Expr::Var(name) => {
@@ -397,7 +403,7 @@ impl IR {
                 ..
             } => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_struct_node(&name, &mut fields, &expect_byte)
+                self.init_struct_node(&name, &mut fields)
             }
             // ここでは対応する「元の変数名」が分からない文脈
             // (関数の引数や構造体フィールドの初期化式など)から
@@ -405,7 +411,15 @@ impl IR {
             // 場合は`def_var_node`/`assign_expr_node`が
             // `gen_named_expr_ir`経由で`scope_node`を直接呼び出し、
             // 変数名を渡している(`src/ir/builder/expr_node.rs`)
-            node::Expr::Scope { scope, target } => self.scope_node(&scope, target, None, &false),
+            node::Expr::Scope { scope, target } => {
+                self.scope_node(
+                    &scope, 
+                    target, 
+                    None, 
+                    &false
+                )
+                .unwrap()
+            }
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
@@ -442,7 +456,7 @@ impl IR {
     fn gen_mem_def_var(
         &mut self, 
         mut var: node::DefineVar
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         let (ref ty_name, len, is_static) = match &var.ty {
             node::TyNode::Stack { name, len } => (name.clone(), *len, false),
             node::TyNode::Static { name, len } => (name.clone(), *len, true),
@@ -487,15 +501,15 @@ impl IR {
         //  変数を参照した際に即値やレジスタが直接使われてしまい、
         //  スタック/静的領域への書き込みが無視されるバグがあった)
         let var_idx = self.id_counter;
-        self.var_tree
+        let _ = self.var_tree
             .push::<'l'>(
                 &mem::take(&mut var.name),
                 &var_idx, 
                 &var.ty, 
                 &var.is_mut
-            );
+            )?;
 
-        inst::Inst::MemoryValue(mem_insts)
+        Ok(inst::Inst::MemoryValue(mem_insts))
     }
 
     #[inline(always)]

@@ -1,5 +1,3 @@
-use crate::err::{ErrKind, lex_err::LexErrKind};
-
 use super::*;
 use regex::{Captures, Regex};
 

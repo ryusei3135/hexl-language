@@ -33,7 +33,7 @@ impl IR {
                 target,
                 Some(var_name), 
                 &is_mut
-            );
+            ).unwrap();
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
@@ -116,7 +116,7 @@ impl IR {
         mut var: node::DefineVar,
         expect_byte: &types::Size,
         is_mut: &bool,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         match &var.ty.clone() {
             node::TyNode::ConstractMust(constract)
             | node::TyNode::ConstractOf(constract) => {
@@ -148,19 +148,20 @@ impl IR {
                         &self.size_of(&var.ty),
                         &is_mut
                     );
-                self.var_tree
+                let _ = self.var_tree
                     .push::<'l'>(
                         &var.name, 
                         &self.id_counter, 
                         &var.ty,
                         &is_mut,
-                    );
-                inst::Inst::Mov {
+                    )?;
+                let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
                     size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
                     dst: self.id_counter,
                     src: value_idx,
-                }
+                };
+                return Ok(inst);
             }
             node::TyNode::Pointer {
                 ty_name,
@@ -181,13 +182,13 @@ impl IR {
                     );
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
-                self.var_tree
+                let _ = self.var_tree
                     .push::<'l'>(
                         &var.name, 
                         &self.id_counter, 
                         &var.ty, 
                         &is_mut
-                    );
+                    )?;
 
                 if range.is_none() {
                     range = Some((0, base_range));
@@ -202,12 +203,13 @@ impl IR {
                         .unwrap();
                     }
                 }
-                inst::Inst::Mov {
+                let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
                     size: types::Size::build_ptr_ty(&*ty_name, range.clone()),
                     dst: self.id_counter,
                     src: value_idx,
-                }
+                };
+                return Ok(inst);
             }
             t => panic!("{:?}", t),
         }
@@ -238,8 +240,7 @@ impl IR {
     pub fn init_struct_node(
         &mut self,
         name: &String,
-        fields: &mut HashMap<String, Box<node::Expr>>,
-        expect_byte: &types::Size,
+        fields: &mut HashMap<String, Box<node::Expr>>
     ) -> inst::Inst {
         // 構造体のメゾットを処理中かつ初期化する構造体が`self`
         let struct_name = if self.this_is_self {

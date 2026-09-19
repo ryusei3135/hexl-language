@@ -168,8 +168,6 @@ impl AsmEmitter {
                         );
                     } else {
                         self.mov_register_val_to_stack(
-                            &size, 
-                            var_name, 
                             &reg,
                             &mut stacked_regs
                         );
@@ -231,8 +229,6 @@ impl AsmEmitter {
     #[inline(always)]
     fn mov_register_val_to_stack(
         &mut self,
-        size: &Size,
-        var_name: String,
         reg: &usize,
         stacked_regs: &mut Vec<usize>,
     ) {
