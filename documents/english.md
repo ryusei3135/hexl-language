@@ -52,11 +52,13 @@ gcc <generated-assembly-source-code> -nostdlib
 2. Stack-allocated variable
 3. Statically-allocated variable
 4. Array variable
+5. mut variable
 ```
 d: int = 5
 a:[int] = 10
 b: static[int] = 10
 c: [int 4] = {1, 2, 3, 4}
+d mut: int = 5 
 ```
 
 - [Memory Specifications](./english/mem.md)
