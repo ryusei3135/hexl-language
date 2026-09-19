@@ -15,7 +15,7 @@
 
 ```
 #asm(gcc_x64) {
-    "{space}mov ${a}, %eax"
+    "{space}movl ${a}, %eax"
 }
 ```
 

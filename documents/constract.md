@@ -11,7 +11,7 @@
 契約は型の後ろに `must` と終了関数を記述する。
 
 ```text
-a: int* must free = malloc(...)
+a: int* must=free = malloc(...)
 ```
 
 この例では、`a` は `free` によって契約を終了させなければならない。
@@ -37,7 +37,7 @@ free(a)
 例えば、メモリを確保する関数がポインタに契約を付与して返すことができる。
 
 ```text
-func malloc(...): int* must free
+func malloc(...): int* must=free
 ```
 
 この関数の戻り値を受け取った場合、呼び出し側はその値を `free` に渡す必要がある。
@@ -83,7 +83,7 @@ func free(a: int* of free)
 例えば、
 
 ```text
-a: int* must free = malloc(...)
+a: int* must=free = malloc(...)
 
 free(a)
 ```
@@ -101,7 +101,7 @@ free(a)
 契約中の変数への再代入は禁止する。
 
 ```text
-a: int* must free = malloc(...)
+a: int* must=free = malloc(...)
 
 a = ...
 ```
@@ -113,7 +113,7 @@ a = ...
 契約を終了した後であれば、通常の再代入が可能になる。
 
 ```text
-a: int* must free = malloc(...)
+a: int* must=free = malloc(...)
 
 free(a)
 
@@ -129,7 +129,7 @@ a = ...
 例えば、
 
 ```text
-a: int* must free = malloc(...)
+a: int* must=free = malloc(...)
 
 b = move a
 ```
@@ -234,7 +234,7 @@ a: int* must free = malloc(...)
 
 ```text
 struct A: must {
-    p: int* must free
+    p: int* must=free
 }
 ```
 
@@ -253,7 +253,7 @@ struct A: must {
 例えば、
 
 ```text
-a: [int* must free 5]
+a: [int* must=free 5]
 ```
 
 のような配列では、配列の各要素について契約が存在する。

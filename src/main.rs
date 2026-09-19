@@ -36,7 +36,10 @@ pub mod cmd_line_args {
             }
         }
 
-        pub fn new_file(&self, file_name: &String) -> Self {
+        pub fn new_file(
+            &self, 
+            file_name: &String
+        ) -> Self {
             Self {
                 fmt_name: self.fmt_name.clone(),
                 file_name: Some(file_name.clone()),
@@ -76,15 +79,18 @@ pub mod cmd_line_args {
     }
 
     /// オプション管理
-    pub fn mng_opt_cmd(args: &Vec<String>) -> OptSettings {
-        let mut settings = OptSettings::new(OptFlags::SetFile);
+    pub fn mng_opt_cmd(
+        args: &[&str]
+    ) -> OptSettings {
+        let mut settings 
+            = OptSettings::new(OptFlags::SetFile);
 
         for (index, opt) in args.iter().enumerate() {
             // 1以下の数はオプションをつけれない
             match &index {
                 0 => continue,
                 1 => {
-                    if let Err(e) = settings.set_value(opt.clone()) {
+                    if let Err(ref e) = settings.set_value(opt.to_string()) {
                         eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
                     }
                     continue;
@@ -92,7 +98,7 @@ pub mod cmd_line_args {
                 _ => {}
             }
 
-            match opt.as_str() {
+            match *opt {
                 "-f" => {
                     if let Err(e) = settings.set_flag(OptFlags::FmtAsm) {
                         eprintln!("警告: オプション`-f`を無視しました: {}", e);
@@ -100,7 +106,7 @@ pub mod cmd_line_args {
                 }
                 // フラグ以外の文字
                 _ => {
-                    if let Err(e) = settings.set_value(opt.clone()) {
+                    if let Err(e) = settings.set_value(opt.to_string()) {
                         eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
                     }
                 }
@@ -165,7 +171,14 @@ pub fn build(
 }
 
 fn main() -> process::ExitCode {
-    let args: Vec<String> = env::args().collect();
+    let args_vec: Vec<String> = env::args().collect();
+    // 各 String への参照（&str）を集めた Vec を作る
+    let args_refs: Vec<&str> = args_vec
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+    // スライス（&[&str]）にする
+    let args: &[&str] = &args_refs;
     // オプションなどの設定
     let settings = cmd_line_args::mng_opt_cmd(&args);
 
