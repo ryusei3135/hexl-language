@@ -71,11 +71,13 @@ gcc 生成したアセンブリソースコード -nostdlib
 2. スタック領域の変数
 3. 静的領域の変数
 4. 配列の変数
+5. 可変変数 
 ```
 d: int = 5
 a: [int] = 10
 b: static[int] = 10
 c: [int 4] = {1, 2, 3, 4}
+d mut: int = 5
 ```
 - [契約について](./documents/constract.md)
 - [メモリ関連の仕様](./documents/mem.md)
