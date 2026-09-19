@@ -276,6 +276,7 @@ pub struct FuncDefInfo {
     pub args: Vec<node::ArgsNode>,
     pub body: Vec<inst::Inst>,
     pub ret_ty: Option<node::TyNode>,
+    pub temp_ty: Vec<node::TyNode>,
     pub public: bool,
     pub stk_size: usize,
 }
@@ -325,10 +326,19 @@ impl FuncTree {
     /// ように同名のメゾットが別の構造体にあっても衝突しないようにする)。
     /// モジュール名を持たない、通常の(トップレベルの)関数は
     /// そのまま関数名だけをキーにする
-    fn make_key(name: &String, module_name: Option<&String>) -> String {
-        match module_name {
+    fn make_key(
+        name: &String,
+        module_name: Option<&String>,
+        temp_ty: &[node::TyNode],
+    ) -> String {
+        let base = match module_name {
             Some(module) => format!("{}::{}", module, name),
             None => name.clone(),
+        };
+        if temp_ty.is_empty() {
+            base
+        } else {
+            format!("{}::<{:?}>", base, temp_ty)
         }
     }
 
@@ -337,7 +347,19 @@ impl FuncTree {
         name: &String, 
         module_name: Option<&String>
     ) -> Option<FuncDefInfo> {
-        self.func.get(&Self::make_key(name, module_name)).cloned()
+        let no_temp_ty: &[node::TyNode] = &[];
+        self.get_with_temp(name, module_name, no_temp_ty)
+    }
+
+    pub fn get_with_temp(
+        &self,
+        name: &String,
+        module_name: Option<&String>,
+        temp_ty: &[node::TyNode],
+    ) -> Option<FuncDefInfo> {
+        self.func
+            .get(&Self::make_key(name, module_name, temp_ty))
+            .cloned()
     }
 
     pub fn add(
@@ -349,7 +371,8 @@ impl FuncTree {
     ) {
         let key = Self::make_key(
             &meta_data.name, 
-            meta_data.module.as_ref()
+            meta_data.module.as_ref(),
+            &meta_data.temp_ty,
         );
         self.func.insert(
             key,
@@ -360,10 +383,28 @@ impl FuncTree {
                 args: meta_data.params.clone(),
                 body,
                 ret_ty: Some(ret_ty.clone()),
+                temp_ty: meta_data.temp_ty.clone(),
                 public: meta_data.public,
                 stk_size,
             },
         );
+    }
+
+    pub fn declare(&mut self, meta_data: &node::FuncDefine) {
+        let key = Self::make_key(
+            &meta_data.name,
+            meta_data.module.as_ref(),
+            &meta_data.temp_ty,
+        );
+        self.func.entry(key).or_insert_with(|| FuncDefInfo {
+            module: meta_data.module.clone(),
+            args: meta_data.params.clone(),
+            body: Vec::new(),
+            ret_ty: Some(meta_data.ret_ty.clone()),
+            temp_ty: meta_data.temp_ty.clone(),
+            public: meta_data.public,
+            stk_size: 0,
+        });
     }
 }
 
@@ -411,6 +452,7 @@ impl FuncDefMetaData {
             args: self.params.clone(),
             body: Vec::new(),
             ret_ty: self.ret_ty.clone(),
+            temp_ty: Vec::new(),
             public: true,
             stk_size,
         }

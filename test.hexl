@@ -8,8 +8,8 @@ struct Name {
 }
 
 
-f(): Name {
-    lll: Name = Name {
+f<T>(): T {
+    lll: T = T {
         name: 10
         aa: 10
     }
@@ -72,6 +72,6 @@ _start(): int {
         "{space}movl $0, %edi"
         "syscall"
     }
-    ll: Name = f()
+    ll: Name = f<Name>()
     ret 0
 }

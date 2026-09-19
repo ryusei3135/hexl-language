@@ -33,6 +33,14 @@ impl Parser {
                     let n = self.call_func_expr(&name, true);
                     return n;
                 }
+                // ジェネリクス関数の呼び出し: `func<int>(..)`
+                // (比較の`a < b`と区別するため、`name`が定義済みの
+                // ジェネリクス関数で、`<..>(`の形のときだけ)
+                lex::Tkn::LAngleBracket
+                    if self.is_generic_call(&name, self.idx) =>
+                {
+                    return self.generic_call_expr(&name, true);
+                }
                 lex::Tkn::LBrace => {
                     return self.struct_init_node::<false>(&name);
                 }
@@ -344,6 +352,9 @@ impl Parser {
         self.next_tkn(vec![])?;
         Ok(node::Expr::CallFunc(node::CallInfo {
             name: name.clone(),
+            // ジェネリクス関数の場合は、呼び出し元(`generic_call_expr`)が
+            // `<>`の中身を入れる
+            temp_ty: Vec::new(),
             args,
         }))
     }
@@ -399,6 +410,7 @@ mod expr_tests {
             node.body[0].get_node(),
             &node::Expr::CallFunc(node::CallInfo {
                 name: "a".to_string(),
+                temp_ty: Vec::new(),
                 args: vec![
                     node::Expr::Number("10".to_string()),
                     node::Expr::Var("a".to_string()),

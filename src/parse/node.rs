@@ -167,6 +167,10 @@ pub struct ArgsNode {
 pub struct FuncDefine {
     pub public: bool,
     pub name: String,
+    /// ジェネリクス関数(`func<T>(..)`)から作られた関数の場合の、
+    /// `<>`の中身(呼び出しで指定された実際の型)。
+    /// `func<int>()`なら`[Ty("int")]`。ジェネリクスでない関数は空
+    pub temp_ty: Vec<TyNode>,
     pub params: Vec<ArgsNode>,
     pub ret_ty: TyNode,
     pub body: Vec<Group2Info>,
@@ -183,11 +187,21 @@ impl FuncDefine {
         Group1Node::FuncDefine(Self {
             public,
             name: name,
+            temp_ty: Vec::new(),
             params: args,
             ret_ty: ret_ty,
             body: Vec::new(),
             module: None,
         })
+    }
+
+    /// ジェネリクス関数から作った関数に、`<>`の中身を登録する
+    #[inline(always)]
+    pub fn set_temp_ty(
+        &mut self, 
+        temp_ty: Vec<TyNode>
+    ) {
+        self.temp_ty = temp_ty;
     }
 
     pub fn self_module_name(
@@ -226,7 +240,8 @@ pub struct StructDefine {
 }
 
 impl StructDefine {
-    pub fn new(
+    #[inline(always)]
+    pub const fn new(
         name: String, 
         fields: Vec<StructField>,
         methods: Vec<Group1Node>
@@ -426,7 +441,8 @@ pub struct ModPath {
 }
 
 impl ModPath {
-    pub fn new() -> Self {
+    #[inline(always)]
+    pub const fn new() -> Self {
         Self { path: Vec::new() }
     }
 
@@ -477,6 +493,10 @@ impl ModPath {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallInfo {
     pub name: String,
+    /// `func<int>(..)`の`<>`の中身。呼び出す関数を
+    /// `FuncDefine`の`temp_ty`と突き合わせて特定するために使う。
+    /// ジェネリクスでない関数の呼び出しでは空
+    pub temp_ty: Vec<TyNode>,
     pub args: Vec<Expr>,
 }
 

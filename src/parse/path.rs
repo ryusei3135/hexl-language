@@ -7,7 +7,10 @@ impl Parser {
         &mut self, 
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
-        if matches!(self.next_tkn_ref(vec!["{"])?, lex::Tkn::LBrace) {
+        if matches!(
+            self.next_tkn_ref(vec!["{"])?, 
+            lex::Tkn::LBrace
+        ) {
             self.next_tkn(vec![])?;
             let node = self.struct_init_node::<false>(name);
             self.next_tkn(vec![])?;
@@ -39,7 +42,10 @@ impl Parser {
         // "."の次のトークンを確認するため一旦"."まで進める
         self.next_tkn(vec!["."])?;
         let after_dot_is_bracket =
-            matches!(self.next_tkn_ref(vec!["name", "["])?, lex::Tkn::LBracket);
+            matches!(
+                self.next_tkn_ref(vec!["name", "["])?,
+                lex::Tkn::LBracket
+            );
         // まだ"."を消費していない状態(呼び出し時点の位置)に戻す
         self.back_tkn();
 

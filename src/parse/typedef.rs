@@ -329,7 +329,16 @@ impl Parser {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
+        self.ty_node_after_delim()
+    }
 
+    /// 型のノードを作成する。`define_ty_node`と違い、型の1つ手前の
+    /// トークンが`:`である必要はなく、`current_tkn()`は型の直前の
+    /// 区切り(`:`、ジェネリクスの型引数の`<`や`,`)を指していればよい。
+    /// 終了時は、型の次のトークンを指す
+    pub(super) fn ty_node_after_delim(
+        &mut self
+    ) -> Result<node::TyNode, err::ErrKind> {
         match self.next_tkn(vec!["name", "[", "string", "Self"])? {
             // 予約語`Self`: 自身の構造体を指す型
             lex::Tkn::KeyWordSelf => {

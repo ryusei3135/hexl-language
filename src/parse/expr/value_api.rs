@@ -53,6 +53,16 @@ impl Parser {
                 self.advance_tkn().unwrap();
                 self.call_func_expr(&name, true)?
             }
+            // ジェネリクス関数を呼びだすノードを作成: `func<int>(..)`
+            // (比較の`a < b`と区別するため、`name`が定義済みの
+            // ジェネリクス関数で、`<..>(`の形のときだけ)
+            lex::Tkn::LAngleBracket
+                if self.is_generic_call(&name, self.idx + 1) =>
+            {
+                // `<`まで進める
+                self.advance_tkn().unwrap();
+                self.generic_call_expr(&name, true)?
+            }
             // 構造体の初期化ノードを作成する
             lex::Tkn::LBrace => {
                 // "{"から始まらないといけないので、次に進める

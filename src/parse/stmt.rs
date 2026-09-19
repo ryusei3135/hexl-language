@@ -1,6 +1,8 @@
 //! group1は、関数や構造体など
 //! group2は変数の定義や条件分岐など
 
+use std::collections::HashMap;
+
 use crate::{models::Body, node::Group2Info};
 
 use super::*;
@@ -16,15 +18,45 @@ pub(super) enum StkInfo {
     Generics,
 }
 
+/// ジェネリクス関数(`func<T>(..) { .. }`)の定義。
+///
+/// 定義を読んだ時点ではノードを作らず、トークン列をそのまま保存しておく。
+/// 呼び出し(`func<int>(..)`)のたびに、型パラメータを実際の型の
+/// トークンに置き換えて解析し直し、その型の関数のノードを作る
+/// (`func.rs`の`instantiate_generic_func`)。
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct GenericFunc {
+    pub(super) is_public: bool,
+    /// `<T, U>`の型パラメータの名前
+    pub(super) params: Vec<String>,
+    /// 関数名から本体を閉じる`}`までのトークン。
+    /// ただし`<T, U>`の部分は取り除いてある
+    /// (`name(arg: T): T { .. }`という通常の関数と同じ形)
+    pub(super) tkns: Vec<lex::LocatedTkn>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parser {
-    gen_nodes: Vec<node::Group1Node>,
+    pub(super) gen_nodes: Vec<node::Group1Node>,
     pub(super) tkns: Option<Vec<lex::LocatedTkn>>,
     pub(super) idx: usize,
     pub(super) scope_counter: usize,
     pub(super) struct_self_name: Option<String>,
     pub(super) gen_flag: GenFlag,
     pub(super) other_stk: Vec<(String, StkInfo)>, // 処理中の一時データを保存
+    /// 定義済みのジェネリクス関数(関数名 -> 定義)
+    pub(super) generic_funcs: HashMap<String, GenericFunc>,
+    /// 作成済みの(関数名, `<>`の中身)。同じ型での呼び出しが
+    /// 何度あっても、その型の関数は1つだけ作るために使う
+    pub(super) generated_funcs: Vec<(String, Vec<node::TyNode>)>,
+    /// 呼び出された型ごとに作った関数のノード。
+    /// 関数の解析中に`gen_nodes`へ積むと、本体の追加先
+    /// (`gen_nodes.last_mut()`)がずれてしまうため、
+    /// 解析がすべて終わってから`gen_nodes`の後ろに追加する
+    pub(super) pending_funcs: Vec<node::Group1Node>,
+    /// ジェネリクス関数の中で、さらにジェネリクス関数が
+    /// 呼び出されている入れ子の深さ
+    pub(super) generic_depth: usize,
 }
 
 impl Parser {
@@ -37,6 +69,10 @@ impl Parser {
             struct_self_name: None,
             gen_flag: GenFlag::Group1,
             other_stk: Vec::new(),
+            generic_funcs: HashMap::new(),
+            generated_funcs: Vec::new(),
+            pending_funcs: Vec::new(),
+            generic_depth: 0,
         }
     }
 
@@ -46,6 +82,16 @@ impl Parser {
         &mut self, 
         func_name: &String
     ) -> Result<(), err::ErrKind> {
+        // ジェネリクス関数(`name<T>(..)`)の定義は、呼び出されるまで
+        // ノードを作らない。定義は`collect_generic_funcs`で集め済みなので、
+        // ここでは本体を閉じる`}`まで読み飛ばすだけ
+        if matches!(
+            self.next_tkn_ref(vec!["(", "<"])?, 
+            lex::Tkn::LAngleBracket
+        ) {
+            return self.skip_generic_func_def();
+        }
+
         // トップレベルの関数定義なので、`Self`が解決される
         // 構造体/列挙型は存在しない
         let node = self.func_node(&func_name, P)?;
@@ -62,6 +108,20 @@ impl Parser {
     ) -> Result<&Vec<node::Group1Node>, err::ErrKind> {
         self.tkns = Some(tkns);
 
+        // 呼び出しが定義より前に書かれていても、その型の関数を
+        // 作れるように、先にジェネリクス関数の定義を集めておく
+        self.collect_generic_funcs()?;
+        self.parse_loop()?;
+
+        // 呼び出された型ごとに作った関数を、通常の関数の後ろに追加する
+        self.gen_nodes.append(&mut self.pending_funcs);
+        Ok(&self.gen_nodes)
+    }
+
+    /// `self.tkns`の先頭から順に、関数などのノードを`gen_nodes`へ作る。
+    /// ジェネリクス関数の呼び出しで、型ごとの関数を作る際にも
+    /// (トークン列を差し替えて)この関数が使われる
+    pub(super) fn parse_loop(&mut self) -> Result<(), err::ErrKind> {
         loop {
             match &self.gen_flag {
                 GenFlag::Group1 => {
@@ -100,7 +160,7 @@ impl Parser {
                         if self.next_tkn(vec![])
                             .is_err() 
                         {
-                            return Ok(&self.gen_nodes);
+                            return Ok(());
                         }
 
                         self.gen_flag = GenFlag::Group1;
@@ -126,7 +186,7 @@ impl Parser {
                     if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                         self.scope_counter -= 1;
                         if self.next_tkn(vec![]).is_err() {
-                            return Ok(&self.gen_nodes);
+                            return Ok(());
                         }
 
                         self.gen_flag = GenFlag::Group1;
@@ -135,10 +195,10 @@ impl Parser {
                 }
             }
             if self.next_tkn(vec![]).is_err() && self.scope_counter == 0 {
-                return Ok(&self.gen_nodes);
+                return Ok(());
             }
         }
-        //Ok(&self.gen_nodes)
+        //Ok(())
     }
 
     pub(super) fn one_line_node(

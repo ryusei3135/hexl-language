@@ -83,9 +83,10 @@ impl IR {
     ) -> inst::Inst {
         // 関数の定義を取得
         let defined_func_data = {
-            if let Some(def_data) = self.func_tree.get(
+            if let Some(def_data) = self.func_tree.get_with_temp(
                 &meta_data.name, 
-                module_name
+                module_name,
+                &meta_data.temp_ty,
             ) {
                 def_data
             } else {

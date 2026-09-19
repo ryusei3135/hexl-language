@@ -99,11 +99,13 @@ impl IR {
         ty: &node::TyNode
     ) -> node::TyNode {
         match ty {
-            node::TyNode::SelfTy(name) => node::TyNode::Pointer {
-                is_const: false,
-                ty_name: Box::new(node::TyNode::Ty(name.clone())),
-                range: None,
-            },
+            node::TyNode::SelfTy(name) => {
+                node::TyNode::Pointer {
+                    is_const: false,
+                    ty_name: Box::new(node::TyNode::Ty(name.clone())),
+                    range: None,
+                }
+            }
             node::TyNode::Pointer {
                 is_const,
                 ty_name,
@@ -113,7 +115,9 @@ impl IR {
                     node::TyNode::Pointer {
                         is_const: *is_const,
                         ty_name: Box::new(match &**ty_name {
-                            node::TyNode::SelfTy(name) => node::TyNode::Ty(name.clone()),
+                            node::TyNode::SelfTy(name) => {
+                                node::TyNode::Ty(name.clone())
+                            }
                             other => other.clone(),
                         }),
                         range: range.clone(),
@@ -124,7 +128,11 @@ impl IR {
             }
             node::TyNode::RefTy(inner) => {
                 if Self::ty_contains_self(inner) {
-                    node::TyNode::RefTy(Box::new(Self::resolve_self_like_ty(inner)))
+                    node::TyNode::RefTy(
+                        Box::new(
+                            Self::resolve_self_like_ty(inner)
+                        )
+                    )
                 } else {
                     ty.clone()
                 }
@@ -148,6 +156,11 @@ impl IR {
                 }
                 node::Group1Node::EnumDefine(info) => {
                     self.enum_tree.insert(info.name.clone(), info.clone());
+                }
+                node::Group1Node::FuncDefine(info) => {
+                    // 関数本体を生成する前にシグネチャを登録し、
+                    // 前方参照とジェネリック関数の呼び出しを解決する
+                    self.func_tree.declare(info);
                 }
                 _ => {}
             }
@@ -659,6 +672,7 @@ mod self_ty_tests {
         node::FuncDefine {
             public: false,
             name: name.to_string(),
+            temp_ty: Vec::new(),
             params,
             ret_ty,
             body: Vec::new(),
@@ -997,6 +1011,7 @@ use super::*;
         let method = node::FuncDefine {
             public: true,
             name: method_name.to_string(),
+            temp_ty: Vec::new(),
             params: method_params,
             ret_ty: method_ret_ty,
             body: method_body,
@@ -1078,12 +1093,14 @@ use super::*;
         let main_fn = node::FuncDefine {
             public: true,
             name: "main".to_string(),
+            temp_ty: Vec::new(),
             params: vec![],
             ret_ty: node::TyNode::Ty("int".to_string()),
             body: vec![node::StmtNode::Return(node::Expr::Scope {
                 scope: vec!["Point".to_string()],
                 target: Box::new(node::Expr::CallFunc(node::CallInfo {
                     name: "answer".to_string(),
+                    temp_ty: Vec::new(),
                     args: vec![],
                 })),
             })
@@ -1134,6 +1151,7 @@ mod method_call_via_member_tests {
         let method = node::FuncDefine {
             public: true,
             name: "get_num".to_string(),
+            temp_ty: Vec::new(),
             params: vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("int".to_string()),
@@ -1172,6 +1190,7 @@ mod method_call_via_member_tests {
             scope: vec!["p".to_string()],
             target: Box::new(node::Expr::CallFunc(node::CallInfo {
                 name: "get_num".to_string(),
+                temp_ty: Vec::new(),
                 args: vec![],
             })),
         })
@@ -1181,6 +1200,7 @@ mod method_call_via_member_tests {
         let main_fn = node::FuncDefine {
             public: true,
             name: "main".to_string(),
+            temp_ty: Vec::new(),
             params: vec![],
             ret_ty: node::TyNode::Ty("int".to_string()),
             body: vec![def_p, call_method],
