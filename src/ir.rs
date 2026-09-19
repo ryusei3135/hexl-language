@@ -21,6 +21,7 @@ pub struct IR {
     func_ret_ty: Option<node::TyNode>,
     ir_tree: Vec<inst::Inst>,
     pattern_labels: usize,
+    loop_labels: Vec<(usize, usize)>,
 
     this_is_self: bool,
     /// 式や文を生成する際に、一番最初のノードの場合のみtrue

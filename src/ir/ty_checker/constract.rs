@@ -144,6 +144,10 @@ impl IR {
                 ) => {
                     Self::walk_expr(&expr, must_vars);
                 }
+                node::Group2Node::Stmt(
+                    node::StmtNode::Continue 
+                    | node::StmtNode::Break
+                ) => {}
                 _ => {}
             }
         }

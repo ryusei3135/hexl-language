@@ -41,6 +41,7 @@ pub struct Parser {
     pub(super) tkns: Option<Vec<lex::LocatedTkn>>,
     pub(super) idx: usize,
     pub(super) scope_counter: usize,
+    pub(super) loop_depth: usize,
     pub(super) struct_self_name: Option<String>,
     pub(super) gen_flag: GenFlag,
     pub(super) other_stk: Vec<(String, StkInfo)>, // 処理中の一時データを保存
@@ -66,6 +67,7 @@ impl Parser {
             tkns: None,
             idx: 0,
             scope_counter: 0,
+            loop_depth: 0,
             struct_self_name: None,
             gen_flag: GenFlag::Group1,
             other_stk: Vec::new(),
@@ -241,6 +243,8 @@ impl Parser {
                 }
             }
             lex::Tkn::KeyWordRet => node::StmtNode::Return(self.expr_add(true)?).wrap(),
+            lex::Tkn::KeyWordContinue => self.loop_control_node(true)?,
+            lex::Tkn::KeyWordBreak => self.loop_control_node(false)?,
             lex::Tkn::KeyWordLoop => self.make_loop_node()?,
             // 条件分岐
             lex::Tkn::KeyWordCond => {
@@ -261,6 +265,30 @@ impl Parser {
             }
         };
         Ok(node)
+    }
+
+    fn loop_control_node(
+        &mut self,
+        is_continue: bool,
+    ) -> Result<node::Group2Node, err::ErrKind> {
+        if self.loop_depth == 0 {
+            return Err(err::ErrKind::Syntax(err::SyntaxErr {
+                kind: err::SyntaxErrKind::UnexpectTknInStmt {
+                    found: self.current_tkn().clone(),
+                },
+                loc: err::ErrLoc::new(
+                    self.build_err_span(),
+                    "parse::stmt::loop_control_node".to_string(),
+                ),
+            }));
+        }
+        self.next_tkn(vec![])?;
+        let stmt = if is_continue {
+            node::StmtNode::Continue
+        } else {
+            node::StmtNode::Break
+        };
+        Ok(stmt.wrap())
     }
 
     fn pub_keyword_node(
@@ -308,7 +336,10 @@ impl Parser {
         }
         self.next_tkn(vec!["{"])?;
 
-        let body = self.gen_block_node()?;
+        self.loop_depth += 1;
+        let body_result = self.gen_block_node();
+        self.loop_depth -= 1;
+        let body = body_result?;
         self.next_tkn(vec!["expr"])?;
 
         let node = node::Group2Node::Expr(

@@ -49,6 +49,7 @@ add(a mut: int, b: int) {
                     "{space}movl $7, %edx"
                     "{space}syscall"
                 }
+                break
             }
         }
         a = a - 1

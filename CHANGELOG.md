@@ -3,6 +3,29 @@
 
 ## [Unreleased]
 
+
+
+## [0.11.0] - 2026-09-19
+
+### Added
+- ジェネリクスを追加(関数のみ)
+    ```
+    func<T>(var: T): T {}
+
+    func<int>(10)
+    ```
+- 反復処理に機能追加
+    ```
+    loop expr {
+        continue
+        break
+    }
+    ```
+    - continue
+    - break
+
+    
+
 ## [0.10.6] - 2026-09-19
 
 ### Added

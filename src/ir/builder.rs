@@ -16,6 +16,7 @@ impl IR {
             func_ret_ty: None,
             ir_tree: Vec::new(),
             pattern_labels: 0,
+            loop_labels: Vec::new(),
             expr_counter: 0,
             // メゾットの処理中`true`
             this_is_self: false,
@@ -282,6 +283,16 @@ impl IR {
                 let func_ret_ty = self.func_ret_ty.as_ref().unwrap();
                 let idx = self.gen_expr_ir(expr, &self.size_of(&func_ret_ty));
                 inst::Inst::Ret(idx)
+            }
+            node::StmtNode::Continue => {
+                let (continue_label, _) = self.loop_labels.last()
+                    .expect("continueはloopの中でのみ使用できます");
+                inst::Inst::Jmp(format!("L{}", continue_label))
+            }
+            node::StmtNode::Break => {
+                let (_, break_label) = self.loop_labels.last()
+                    .expect("breakはloopの中でのみ使用できます");
+                inst::Inst::Jmp(format!("L{}", break_label))
             }
         };
 
@@ -553,7 +564,9 @@ impl IR {
             // 条件がtrueのときジャンプする場所
             crate::push_jmp_code!(self, Block, &condition);
         }
+        self.loop_labels.push((start.clone(), end.clone()));
         self.gen_inst(&body);
+        self.loop_labels.pop();
         crate::push_jmp_code!(self, Jmp, &start);
         crate::push_jmp_code!(self, Block, &end);
         self.id_counter - 1

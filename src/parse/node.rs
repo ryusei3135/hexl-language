@@ -278,6 +278,8 @@ impl EnumDefine {
 #[derive(Clone, Debug, PartialEq)]
 pub enum StmtNode {
     Return(Expr),
+    Continue,
+    Break,
 }
 
 impl StmtNode {
@@ -418,14 +420,18 @@ impl Expr {
 
     pub fn get_assign_node_name(&self) -> String {
         match &self {
-            Self::Assign(assign_node) => assign_node.clone().name,
+            Self::Assign(assign_node) => {
+                assign_node.clone().name
+            }
             _ => panic!(),
         }
     }
 
     pub fn get_assign_node(&mut self) -> &mut AssignVar {
         match self {
-            Self::Assign(ref mut name) => return name,
+            Self::Assign(ref mut name) => {
+                return name;
+            }
             _ => panic!(),
         }
     }
@@ -446,7 +452,11 @@ impl ModPath {
         Self { path: Vec::new() }
     }
 
-    pub fn add_path(&mut self, path_name: &String) {
+    #[inline(always)]
+    pub fn add_path(
+        &mut self, 
+        path_name: &String
+    ) {
         self.path.push(path_name.clone());
     }
 
@@ -478,7 +488,9 @@ impl ModPath {
         const PATH_START: usize = 0;
 
         let mut path = String::new();
-        let parent_len = self.path.len().saturating_sub(1);
+        let parent_len = self.path
+            .len()
+            .saturating_sub(1);
         for (index, dir) in self.path[..parent_len].iter().enumerate() {
             if index != PATH_START {
                 path.push('/');
