@@ -222,7 +222,10 @@ impl IR {
                     Self::walk_expr(value, must_vars);
                 }
             }
-            node::Expr::RefArray { dst, index, .. } => {
+            node::Expr::RefArray { 
+                dst, 
+                index, .. 
+            } => {
                 Self::walk_expr(dst, must_vars);
                 Self::walk_expr(index, must_vars);
             }

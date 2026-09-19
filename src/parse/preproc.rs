@@ -234,7 +234,7 @@ mod inline_asm_tests {
 
         let node::Group2Node::CompleSyntax(
             (name, lines)
-        ) = &func.body[0] else {
+        ) = &func.body[0].get_node() else {
             panic!("not an inline asm node: {:?}", func.body[0])
         };
         assert_eq!(name, "gas");

@@ -494,7 +494,7 @@ mod ty_tests {
             is_self: false,
             name: "Name".to_string(),
             fields: map,
-        }));
+        }).gen_group_info(&1));
         assert_eq!(
             &build("main(): int { Name { name: 1 name2: 1 } }"),
             &vec![func]

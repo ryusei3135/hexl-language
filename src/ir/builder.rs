@@ -1008,7 +1008,9 @@ use super::*;
                 is_mut: false,
             }],
             node::TyNode::Ty("int".to_string()),
-            vec![node::StmtNode::Return(node::Expr::Number("1".to_string())).wrap()],
+            vec![node::StmtNode::Return(node::Expr::Number("1".to_string()))
+                .wrap()
+                .gen_group_info(&0)],
         );
 
         let mut ir = IR::new();
@@ -1052,7 +1054,9 @@ use super::*;
             "answer",
             vec![],
             node::TyNode::Ty("int".to_string()),
-            vec![node::StmtNode::Return(node::Expr::Number("42".to_string())).wrap()],
+            vec![node::StmtNode::Return(node::Expr::Number("42".to_string()))
+                .wrap()
+                .gen_group_info(&0)],
         );
 
         let main_fn = node::FuncDefine {
@@ -1067,7 +1071,8 @@ use super::*;
                     args: vec![],
                 })),
             })
-            .wrap()],
+            .wrap()
+            .gen_group_info(&0)],
             module: None,
         };
 
@@ -1119,7 +1124,9 @@ mod method_call_via_member_tests {
                 is_mut: false,
             }],
             ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![node::StmtNode::Return(node::Expr::Number("7".to_string())).wrap()],
+            body: vec![node::StmtNode::Return(node::Expr::Number("7".to_string()))
+                .wrap()
+                .gen_group_info(&0)],
             module: None,
         };
 
@@ -1142,7 +1149,8 @@ mod method_call_via_member_tests {
             &false,
         )
         .wrap()
-        .wrap_group2();
+        .wrap_group2()
+        .gen_group_info(&0);
 
         let call_method = node::StmtNode::Return(node::Expr::Member {
             scope: vec!["p".to_string()],
@@ -1151,7 +1159,8 @@ mod method_call_via_member_tests {
                 args: vec![],
             })),
         })
-        .wrap();
+        .wrap()
+        .gen_group_info(&0);
 
         let main_fn = node::FuncDefine {
             public: true,

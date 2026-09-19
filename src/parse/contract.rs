@@ -108,7 +108,7 @@ mod test {
             panic!("not func");
         };
         assert_eq!(
-            &node.body[0],
+            node.body[0].get_node(),
             &node::Group2Node::Expr(node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Number("10".to_string())),

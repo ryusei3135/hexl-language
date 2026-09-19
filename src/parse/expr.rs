@@ -371,7 +371,7 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            &node.body[0],
+            node.body[0].get_node(),
             &node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
@@ -396,7 +396,7 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            &node.body[0],
+            node.body[0].get_node(),
             &node::Expr::CallFunc(node::CallInfo {
                 name: "a".to_string(),
                 args: vec![
@@ -416,8 +416,8 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::DefVar(node::DefineVar {
+            node.body[0].get_node(),
+            &node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Number("100".to_string())),
                 ty: node::TyNode::Stack {
@@ -438,8 +438,8 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::DefVar(node::DefineVar {
+            node.body[0].get_node(),
+            &node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Array(vec![
                     node::Expr::Number("100".to_string()),
@@ -465,8 +465,8 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::DefVar(node::DefineVar {
+            node.body[0].get_node(),
+            &node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Number("100".to_string())),
                 ty: node::TyNode::Static {
@@ -500,14 +500,14 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::Match {
+            node.body[0].get_node(),
+            &node::Expr::Match {
                 pattern: None,
                 arms: vec![node::MatchArm {
                     pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
-                    body: vec![gen_var_node("hh", "100", "b1"),],
+                    body: vec![gen_var_node("hh", "100", "b1", 5),],
                 }],
-                arm_else: Some(vec![gen_var_node("a", "10", "b1"),]),
+                arm_else: Some(vec![gen_var_node("a", "10", "b1", 8),]),
             }
             .wrap_group2()
         );
@@ -532,17 +532,17 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::Match {
+            node.body[0].get_node(),
+            &node::Expr::Match {
                 pattern: None,
                 arms: vec![node::MatchArm {
                     pattern: Box::new(node::Expr::Equal((
                         Box::new(node::Expr::Var("a".to_string())),
                         Box::new(node::Expr::Number("10".to_string())),
                     ))),
-                    body: vec![gen_var_node("hh", "100", "int"),],
+                    body: vec![gen_var_node("hh", "100", "int", 4),],
                 }],
-                arm_else: Some(vec![gen_var_node("a", "10", "int"),]),
+                arm_else: Some(vec![gen_var_node("a", "10", "int", 6),]),
             }
             .wrap_group2()
         );
@@ -573,20 +573,20 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::Match {
+            node.body[0].get_node(),
+            &node::Expr::Match {
                 pattern: Some(Box::new(node::Expr::Var("a".to_string()))),
                 arms: vec![
                     node::MatchArm {
                         pattern: Box::new(node::Expr::Number("10".to_string())),
-                        body: vec![gen_var_node("hh", "100", "int"),],
+                        body: vec![gen_var_node("hh", "100", "int", 5),],
                     },
                     node::MatchArm {
                         pattern: Box::new(node::Expr::Number("20".to_string())),
-                        body: vec![gen_var_node("hh", "200", "int"),],
+                        body: vec![gen_var_node("hh", "200", "int", 8),],
                     }
                 ],
-                arm_else: Some(vec![gen_var_node("a", "10", "int"),]),
+                arm_else: Some(vec![gen_var_node("a", "10", "int", 11)]),
             }
             .wrap_group2()
         );
@@ -600,8 +600,8 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0],
-            node::Expr::DefVar(node::DefineVar {
+            node.body[0].get_node(),
+            &node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::EnumVariant {
                     name: "Color".to_string(),

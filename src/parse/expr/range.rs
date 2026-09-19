@@ -101,6 +101,7 @@ mod test {
                 },
                 is_mut: false,
             }))
+            .gen_group_info(&1)
         );
     }
 
@@ -125,6 +126,7 @@ mod test {
                 },
                 is_mut: false,
             }))
+            .gen_group_info(&1)
         );
     }
 }

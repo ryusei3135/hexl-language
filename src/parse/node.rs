@@ -550,13 +550,19 @@ pub enum Group1Node {
 
 
 #[cfg(test)]
-pub fn gen_var_node(name: &str, value: &str, ty: &str) -> Group2Node {
+pub fn gen_var_node(
+    name: &str,
+    value: &str,
+    ty: &str,
+    line: usize,
+) -> Group2Info {
     Group2Node::Expr(Expr::DefVar(DefineVar::new(
         &name.to_string(),
         Expr::Number(value.to_string()),
         &TyNode::Ty(ty.to_string()),
         &false
     )))
+    .gen_group_info(&line)
 }
 
 #[cfg(test)]
