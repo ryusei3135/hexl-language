@@ -72,7 +72,8 @@ impl IR {
             Ok(
                 self.gen_call_fn_ir(
                     scope.last(), 
-                    &call_func_node
+                    &call_func_node,
+                    None
                 )
             )
         } else {

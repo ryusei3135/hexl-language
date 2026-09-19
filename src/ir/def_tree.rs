@@ -299,6 +299,8 @@ impl FuncDefInfo {
         }
         match self.ret_ty.as_ref().unwrap() {
             node::TyNode::SelfTy(..) => None,
+            node::TyNode::Ty(name)
+                if !types::Size::is_builtin_ty_name(name) => None,
             ty => Some(types::Size::new(ty).unwrap()),
         }
     }

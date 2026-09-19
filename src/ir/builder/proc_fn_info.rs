@@ -9,6 +9,7 @@ impl IR {
     ) -> Result<(), err::ErrKind> {
         // 関数の情報を登録
         self.entry_fn_info(&info);
+        self.var_tree = def_tree::VarTree::new();
         // `ir/param.rs`
         self.push_param_meta_data(&info.params)?;
         self.gen_inst(&info.body.clone());
@@ -78,6 +79,7 @@ impl IR {
         &mut self,
         module_name: Option<&String>,
         meta_data: &node::CallInfo,
+        return_var_name: Option<&String>,
     ) -> inst::Inst {
         // 関数の定義を取得
         let defined_func_data = {
@@ -118,6 +120,32 @@ impl IR {
                 None
             },
         );
+
+        if return_var_name.is_some() {
+            if let Some(node::TyNode::Ty(struct_name)) = defined_func_data.ret_ty.as_ref() {
+                if let Some(struct_info) = self.struct_tree.get(struct_name).cloned() {
+                    let size = struct_info.fields
+                        .iter()
+                        .map(|field| self.size_of(&field.ty).to_bytes())
+                        .sum();
+                    self.stk_counter += size;
+                    self.ir_tree.push(inst::Inst::Stacks { size });
+                    self.id_counter += 1;
+
+                    self.ir_tree.push(inst::Inst::GetPtr {
+                        size,
+                        stk: self.stk_counter,
+                    });
+                    let ptr_idx = self.id_counter;
+                    self.id_counter += 1;
+
+                    self.ir_tree.push(inst::Inst::GetAddress(ptr_idx));
+                    let dst_idx = self.id_counter;
+                    self.id_counter += 1;
+                    func_meta_data.insert_param_parent_id(dst_idx);
+                }
+            }
+        }
 
         for (index, _) in meta_data.args.iter().enumerate() {
             let expr_arg = meta_data

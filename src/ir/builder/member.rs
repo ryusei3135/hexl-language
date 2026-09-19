@@ -64,7 +64,7 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
         );
 
-        self.gen_call_fn_ir(Some(&struct_name), &call_info)
+        self.gen_call_fn_ir(Some(&struct_name), &call_info, None)
     }
 
     pub fn member_is_arr_ref(

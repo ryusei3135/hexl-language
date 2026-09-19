@@ -8,6 +8,15 @@ struct Name {
 }
 
 
+f(): Name {
+    lll: Name = Name {
+        name: 10
+        aa: 10
+    }
+    ret lll
+}
+
+
 func4(): int must=func5 {
     ret 10
 }
@@ -63,5 +72,6 @@ _start(): int {
         "{space}movl $0, %edi"
         "syscall"
     }
+    ll: Name = f()
     ret 0
 }

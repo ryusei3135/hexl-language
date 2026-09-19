@@ -2,7 +2,7 @@ mod assign_var;
 mod mem_ir;
 
 use super::*;
-use crate::ir;
+use crate::ir::{self, types};
 
 impl AsmEmitter {
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する
@@ -12,7 +12,8 @@ impl AsmEmitter {
     /// 使われるため`pub(super)`にしている
     pub(super) fn emit_call_func(
         &mut self,
-        meta_data: &inst::CallFuncMetaData
+        meta_data: &inst::CallFuncMetaData,
+        expand_struct_return: bool,
     ) -> String {
         // 生成するアセンブリコード
         let mut call_func = String::new();
@@ -42,7 +43,9 @@ impl AsmEmitter {
                 *param
             };
 
-            let opcode = if self.curr_inst[*param].is_pointer() {
+            let opcode = if expand_struct_return && index == 0 {
+                "address"
+            } else if self.curr_inst[*param].is_pointer() {
                 "address"
             } else {
                 "mov"
@@ -116,6 +119,14 @@ impl AsmEmitter {
         }
 
         self.curr_inst = mem::take(&mut fn_meta_data.1.body);
+        let returned_struct_idx = if fn_ret_ty.is_none() {
+            self.curr_inst.iter().find_map(|node| match node {
+                inst::Inst::Ret(idx) => self.resolve_struct_idx(&idx),
+                _ => None,
+            })
+        } else {
+            None
+        };
 
         for node in self.curr_inst.clone().iter() {
             match &node {
@@ -167,7 +178,11 @@ impl AsmEmitter {
                     dst,
                     src,
                 } => {
-                    self.mov_value_ir(size, dst, src, &name, &Some(size.clone()));
+                    let is_returned_struct = matches!(size, types::Size::Struct(..))
+                        && returned_struct_idx == self.resolve_struct_idx(dst);
+                    if !is_returned_struct {
+                        self.mov_value_ir(size, dst, src, &name, &Some(size.clone()));
+                    }
                 } // メモリに配置されている値の生成
                 inst::Inst::MemoryValue(mem_value) => {
                     // call_func/mem_ir.rs
@@ -186,7 +201,7 @@ impl AsmEmitter {
                 inst::Inst::CallFunc(meta_data) => {
                     // 関数を呼ぶノードが変数に戻り値を代入しないばあいのみ生成
                     if meta_data.parent == ir::IS_NOT_ASSIGN_EXPR {
-                        let asm_text = self.emit_call_func(&meta_data);
+                        let asm_text = self.emit_call_func(&meta_data, false);
                         self.asm_text.push_str(asm_text.as_str());
                     }
                 }
@@ -326,6 +341,21 @@ impl AsmEmitter {
         fn_ret_ty: &SelfPtrInfo,
         idx: &usize,
     ) {
+        if fn_ret_ty.is_none() {
+            if let Some(struct_idx) = self.resolve_struct_idx(idx) {
+                let mem = match self.curr_inst[struct_idx].clone() {
+                    inst::Inst::Struct { mem, .. } => mem,
+                    _ => panic!("構造体の戻り値を解決できません"),
+                };
+                let t = self.emit_struct_ini_asm(mem, true);
+                self.asm_text.push_str(t.as_str());
+                self.asm_text
+                    .push_str(self.asm_fmt.func_frame_end().as_str());
+                self.asm_text.push_str("ret\n");
+                return;
+            }
+        }
+
         let ret_asm = self.format_line(
             "mov", 
             Some(&0), 

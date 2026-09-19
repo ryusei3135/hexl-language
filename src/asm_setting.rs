@@ -113,7 +113,10 @@ impl AsmSetting {
 
         let asm_fmt_file_name = format!("asm_fmts/{}", file_name());
 
-        serde_yaml::from_str(&fs::read_to_string(&asm_fmt_file_name).expect(&asm_fmt_file_name))
+        serde_yaml::from_str(
+                &fs::read_to_string(&asm_fmt_file_name)
+                .expect(&asm_fmt_file_name)
+            )
             .unwrap()
     }
 

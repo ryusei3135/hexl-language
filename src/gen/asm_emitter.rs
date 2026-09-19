@@ -405,7 +405,8 @@ impl AsmEmitter {
         match &self.curr_inst[*idx] {
             inst::Inst::Struct { .. } => Some(*idx),
             inst::Inst::GetAddress(inner)
-            | inst::Inst::Pointer(inner) => {
+            | inst::Inst::Pointer(inner)
+            | inst::Inst::Mov { src: inner, .. } => {
                 self.resolve_struct_idx(inner)
             }
             _ => None,
@@ -576,7 +577,8 @@ impl AsmEmitter {
                 // レジスタ0番、`%eax`など)をオペランドとして返す
                 if call_fn_info.parent == crate::ir::IS_ASSIGN_EXPR {
                     let call_asm = self.emit_call_func(
-                        &call_fn_info
+                        &call_fn_info,
+                        matches!(this_is_self, Some(types::Size::Struct(..)))
                     );
                     self.asm_text.push_str(&call_asm);
                     self.asm_fmt.get_fmt_reg(&0, &Size::DQ)

@@ -37,6 +37,11 @@ impl IR {
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
+        } else if let node::Expr::CallFunc(call) = expr {
+            let inst = self.gen_call_fn_ir(None, &call, Some(var_name));
+            self.ir_tree.push(inst);
+            self.id_counter += 1;
+            self.id_counter - 1
         } else {
             self.gen_expr_ir(expr, expect_byte)
         }

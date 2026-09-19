@@ -367,7 +367,9 @@ impl IR {
                 // `src/ir/builder/expr_node.rs`
                 self.def_var_node(var, &expect_byte, &is_mut).unwrap()
             }
-            node::Expr::CallFunc(meta_data) => self.gen_call_fn_ir(None, &meta_data),
+            node::Expr::CallFunc(meta_data) => {
+                self.gen_call_fn_ir(None, &meta_data, None)
+            }
             node::Expr::Var(name) => {
                 // `src/ir/ty_checker/var_ty.rs`
                 self.check_var_ty(&name, &expect_byte);
