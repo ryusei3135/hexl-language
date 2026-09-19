@@ -1,7 +1,6 @@
 use crate::{
     err::{
         compile::{
-            self, 
             CompileErr
         }
     }
@@ -164,7 +163,10 @@ impl VarTree {
                     .unwrap().life = VarLife::EndConstract;
             }
             VarLife::EndConstract => {
-                compile::CompileErr::constract_expired(&var_name)?;
+                return crate::GenCompileErr!(
+                    VariableConstractExpired, 
+                    format!("kkkkklljjbkj {var_name}")
+                );
             }
         }
         Ok(())

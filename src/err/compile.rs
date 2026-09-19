@@ -53,16 +53,6 @@ macro_rules! GenCompileErr {
 }
 
 impl CompileErr {
-    pub fn constract_expired(
-        var_name: &String
-    ) -> Result<Self, err::ErrKind> {
-        Err(
-            err::ErrKind::CompileErr(
-                Self::VariableConstractExpired(var_name.to_string())
-            )
-        )
-    }
-
     pub fn assign_to_imm_var(
         var_name: &String
     ) -> Result<Self, err::ErrKind> {
