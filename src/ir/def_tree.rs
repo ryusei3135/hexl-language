@@ -264,7 +264,10 @@ impl StructTree {
             );
     }
 
-    pub fn get(&self, name: &String) -> Option<&node::StructDefine> {
+    pub fn get(
+        &self, 
+        name: &String
+    ) -> Option<&node::StructDefine> {
         self.tree.get(name)
     }
 
@@ -395,10 +398,14 @@ impl FuncTree {
     pub fn get(
         &self, 
         name: &String, 
-        module_name: Option<&String>
+        mod_name: Option<&String>
     ) -> Option<FuncDefInfo> {
         let no_temp_ty: &[node::TyNode] = &[];
-        self.get_with_temp(name, module_name, no_temp_ty)
+        self.get_with_temp(
+            name, 
+            mod_name, 
+            no_temp_ty
+        )
     }
 
     pub fn get_with_temp(

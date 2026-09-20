@@ -157,7 +157,12 @@ impl MngAsmFmt {
         value: &String,
         size: &types::Size,
     ) -> String {
-        self.fmt_mnemonic_resize_inner(mnemonic, value, size, false)
+        self.fmt_mnemonic_resize_inner(
+            mnemonic, 
+            value, 
+            size, 
+            false
+        )
     }
 
     /// メモリを読み書きする命令は、フォーマット設定に関係なく
@@ -168,7 +173,12 @@ impl MngAsmFmt {
         value: &String,
         size: &types::Size,
     ) -> String {
-        self.fmt_mnemonic_resize_inner(mnemonic, value, size, true)
+        self.fmt_mnemonic_resize_inner(
+            mnemonic, 
+            value, 
+            size, 
+            true
+        )
     }
 
     fn fmt_mnemonic_resize_inner(

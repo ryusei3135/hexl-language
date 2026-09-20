@@ -55,8 +55,13 @@ impl IR {
         // - メゾットの第一引数`self`には、呼び出し元の
         //   変数のアドレス(構造体へのポインタ)を
         //   暗黙的に第一引数として渡す
-        let var_name = scope.last().unwrap().clone();
-        let struct_name = self.var_tree.get_ty_name(&var_name);
+        let var_name = scope
+            .last()
+            .unwrap()
+            .clone();
+        let struct_name = self
+            .var_tree
+            .get_ty_name(&var_name);
 
         let mut call_info = call_func_info.clone();
         call_info.args.insert(

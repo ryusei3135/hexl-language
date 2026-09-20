@@ -13,7 +13,9 @@ impl IR {
             .unwrap();
 
         if types::Size::new(&ty)
-            .is_ok_and(|result| !matches!(result, expect_ty))
+            .is_ok_and(
+                |result| !matches!(result, expect_ty)
+            )
         {
             panic!("{:?} fond {:?}", expect_ty, types::Size::new(&ty));
         }

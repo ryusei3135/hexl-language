@@ -64,7 +64,7 @@ impl AsmEmitter {
     }
 
     fn resolve_operand_var_size(
-        &self, 
+        &self,
         node_idx: &usize
     ) -> Option<Size> {
         match self.curr_inst[*node_idx].clone() {
@@ -94,10 +94,14 @@ impl AsmEmitter {
     ) -> String {
         match self.curr_inst[*node_idx].clone() {
             inst::Inst::AssignVar { name, .. } => {
-                let var_info = self.var_hash_map
+                let var_info = self
+                    .var_hash_map
                     .get(&name)
                     .unwrap();
-                let size = gen_reg_size(&var_info, &forced_size);
+                let size = gen_reg_size(
+                    &var_info, 
+                    &forced_size
+                );
                 self.asm_fmt.get_fmt_reg(&var_info.reg, &size)
             }
             inst::Inst::Param(param) => {

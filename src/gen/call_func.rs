@@ -97,7 +97,13 @@ impl AsmEmitter {
         let fn_ret_ty: SelfPtrInfo = fn_meta_data.1.get_ret_ty();
         println!("{:?}", this_is_self);
         // 新しく関数の作成、
-        self.asm_text.push_str(&format!("{}:\n", &fn_meta_data.0));
+        self.asm_text
+            .push_str(
+                &format!(
+                    "{}:\n", 
+                    &fn_meta_data.0
+                )
+            );
         // 関数ごとにスタックの使用量をリセットする
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)
@@ -114,7 +120,11 @@ impl AsmEmitter {
         } else {
             if &fn_meta_data.0 != "_start" {
                 self.asm_text
-                    .push_str(self.asm_fmt.func_frame_fmt().as_str());
+                    .push_str(
+                        self.asm_fmt
+                            .func_frame_fmt()
+                            .as_str()
+                        );
             }
         }
 
@@ -194,7 +204,11 @@ impl AsmEmitter {
                         .get_fmt_param::<usize>(&param.num, ty.clone());
                     self.insert_var_info(
                         &param.name,
-                        asm_emitter::VarIndexInfo::new(&reg_num, &ty, &param.dst),
+                        asm_emitter::VarIndexInfo::new(
+                            &reg_num, 
+                            &ty, 
+                            &param.dst
+                        ),
                     );
                 }
                 inst::Inst::CallFunc(meta_data) => {
@@ -225,7 +239,10 @@ impl AsmEmitter {
 
 impl AsmEmitter {
     #[inline(always)]
-    pub(super) fn expect_jmp(&mut self, name: &String) {
+    pub(super) fn expect_jmp(
+        &mut self, 
+        name: &String
+    ) {
         // 次のフォーマットに使うラベルの名前を予約する
         if self.reserved_label_name.is_none() {
             self.reserved_label_name = Some(name.to_string());
