@@ -156,16 +156,6 @@ impl AsmEmitter {
                     self.asm_text.push_str(&format!("jmp {}\n", name));
                 }
                 inst::Inst::AssignVar { name, dst, value } => {
-                    // 代入先(`dst`)が「変数そのもの」ではなく、
-                    // 実際に書き込むべきメモリを表すノードを
-                    // 参照している場合は、変数への再代入ではなく
-                    // そのメモリへ直接値を書き込む必要がある
-                    // - `Inst::Pointer`: `[b] = 20`(ポインタの参照先)
-                    // - `Inst::InsertArr`: `[arr 0] = 10`(配列の要素)
-                    // - `Inst::RefStruct`: `a.[c 0] = 10`(構造体の
-                    //   メンバー、あるいはそのメンバーが配列の場合の
-                    //   要素へのアクセス)
-                    // build_fn_proc.rs
                     self.gen_assign_var_asm(name, dst, value, &this_is_self);
                 }
                 inst::Inst::Ret(idx) => {
@@ -178,10 +168,19 @@ impl AsmEmitter {
                     dst,
                     src,
                 } => {
-                    let is_returned_struct = matches!(size, types::Size::Struct(..))
-                        && returned_struct_idx == self.resolve_struct_idx(dst);
+                    let is_returned_struct = matches!(
+                        size, 
+                        types::Size::Struct(..)
+                    )
+                    && returned_struct_idx == self.resolve_struct_idx(dst);
                     if !is_returned_struct {
-                        self.mov_value_ir(size, dst, src, &name, &Some(size.clone()));
+                        self.mov_value_ir(
+                            size, 
+                            dst, 
+                            src, 
+                            &name, 
+                            &Some(size.clone())
+                        );
                     }
                 } // メモリに配置されている値の生成
                 inst::Inst::MemoryValue(mem_value) => {
@@ -250,7 +249,10 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
+    pub(super) fn gen_expr_asm(
+        &mut self, 
+        expr: &inst::ExprInst
+    ) {
         let asm = self.format_expr_inst(&expr);
 
         self.asm_text.push_str(&asm);
@@ -347,10 +349,19 @@ impl AsmEmitter {
                     inst::Inst::Struct { mem, .. } => mem,
                     _ => panic!("構造体の戻り値を解決できません"),
                 };
-                let t = self.emit_struct_ini_asm(mem, true);
-                self.asm_text.push_str(t.as_str());
-                self.asm_text
-                    .push_str(self.asm_fmt.func_frame_end().as_str());
+                let t = self.emit_struct_ini_asm(
+                    mem, 
+                    true
+                );
+                self.asm_text.push_str(
+                    format!(
+                        "{}{}", 
+                        t.as_str(),
+                        self.asm_fmt
+                            .func_frame_end()
+                            .as_str()
+                    ).as_str()
+                );
                 self.asm_text.push_str("ret\n");
                 return;
             }

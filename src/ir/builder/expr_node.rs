@@ -38,7 +38,11 @@ impl IR {
             self.id_counter += 1;
             self.id_counter - 1
         } else if let node::Expr::CallFunc(call) = expr {
-            let inst = self.gen_call_fn_ir(None, &call, Some(var_name));
+            let inst = self.gen_call_fn_ir(
+                None, 
+                &call, 
+                Some(var_name)
+            );
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
@@ -234,7 +238,15 @@ impl IR {
             .variants
             .iter()
             .position(|v| &v == &variant)
-            .unwrap_or_else(|| panic!("列挙型 `{}` にメンバ `{}` は存在しません", name, variant));
+            .unwrap_or_else(
+                || {
+                    panic!(
+                        "列挙型 `{}` にメンバ `{}` は存在しません", 
+                        name, 
+                        variant
+                    )
+                }
+            );
         inst::Inst::gen_num(
             &variant_index.to_string(), 
             &expect_byte, 
@@ -259,19 +271,28 @@ impl IR {
             .cloned()
             .unwrap_or_else(|| panic!("未定義の構造体です: {}", name));
 
-        let mut mem_insts = Vec::with_capacity(struct_def.fields.len());
+        let mut mem_insts = Vec::with_capacity(
+            struct_def.fields.len());
         // フィールドは構造体で定義された順番通りに展開する
-        for field in struct_def.fields.clone().iter() {
+        for field in struct_def
+            .fields
+            .clone()
+            .iter() 
+        {
             let field_size = self.size_of(&field.ty);
             // 確保するスタックを増やす
             self.stack_counter(&field.ty);
 
-            let field_expr = fields.remove(&field.name).unwrap_or_else(|| {
-                panic!(
-                    "構造体 `{}` の初期化にフィールド `{}` の値がありません",
-                    name, field.name
-                )
-            });
+            let field_expr = fields
+                .remove(&field.name)
+                .unwrap_or_else(
+                    || {
+                        panic!(
+                            "構造体 `{}` の初期化にフィールド `{}` の値がありません",
+                            name, field.name
+                        )
+                    }
+                );
 
             let value_idx = self.gen_expr_ir(*field_expr, &field_size);
             mem_insts.push(inst::MemoryInst::Member {

@@ -87,8 +87,18 @@ impl Size {
             Self::DW => 2,
             Self::DD => 4,
             Self::DQ => 8,
-            Self::Array { size, len } => size.to_bytes() * len,
-            Self::Pointer { ty, .. } => (*ty).to_bytes(),
+            Self::Array { 
+                size, 
+                len 
+            } => {
+                size.to_bytes() * len
+            }
+            Self::Pointer { 
+                ty, 
+                .. 
+            } => {
+                (*ty).to_bytes()
+            }
             Self::Struct(struct_size) => {
                 let mut size_counter = 0;
                 for mem in struct_size.iter() {
