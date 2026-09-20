@@ -152,7 +152,7 @@ impl IR {
         &mut self,
         nodes: &Vec<node::Group1Node>,
         #[cfg(not(test))] settings: &crate::cmd_line_args::OptSettings,
-    ) -> Result<Vec<def_tree::FuncDefMetaData>, err::ErrKind> {
+    ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
         // 構造体・列挙型は、定義された場所より前で使われる場合があるので
         // 先に全て登録しておく(前方参照に対応するため)
         for node in nodes {
@@ -397,10 +397,18 @@ impl IR {
             node::Expr::DefVar(var) => {
                 let is_mut = var.is_mut;
                 // `src/ir/builder/expr_node.rs`
-                self.def_var_node(var, &expect_byte, &is_mut).unwrap()
+                self.def_var_node(
+                    var, 
+                    &expect_byte, 
+                    &is_mut
+                ).unwrap()
             }
             node::Expr::CallFunc(meta_data) => {
-                self.gen_call_fn_ir(None, &meta_data, None)
+                self.gen_call_fn_ir(
+                    None, 
+                    &meta_data, 
+                    None
+                )
             }
             node::Expr::Var(name) => {
                 // `src/ir/ty_checker/var_ty.rs`

@@ -52,8 +52,9 @@ impl IR {
         // 入っているので、そのままモジュール名として登録する
         self.define_meta_data
             .push(
-                def_tree::FuncDefMetaData::new(
-                    &info, info.module.as_ref()
+                def_tree::FnDefMetaData::new(
+                    &info, 
+                    info.module.as_ref()
                 )
             );
         // 公開する関数を登録
@@ -68,7 +69,7 @@ impl IR {
     /// アセンブリ言語を出力する際にだけ使う
     pub(in crate::ir::builder) fn make_extern_func_inst(
         &mut self, 
-        fn_tree: &Vec<def_tree::FuncDefMetaData>
+        fn_tree: &Vec<def_tree::FnDefMetaData>
     ) {
         for func in fn_tree {
             self.extern_funcs
@@ -124,7 +125,11 @@ impl IR {
         );
 
         if return_var_name.is_some() {
-            if let Some(node::TyNode::Ty(struct_name)) = defined_func_data.ret_ty.as_ref() {
+            if let Some(node::TyNode::Ty(struct_name)) 
+                = defined_func_data
+                    .ret_ty
+                    .as_ref() 
+            {
                 if let Some(struct_info) = self.struct_tree.get(struct_name).cloned() {
                     let size = struct_info.fields
                         .iter()
@@ -149,7 +154,11 @@ impl IR {
             }
         }
 
-        for (index, _) in meta_data.args.iter().enumerate() {
+        for (index, _) in meta_data
+            .args
+            .iter()
+            .enumerate() 
+        {
             let expr_arg = meta_data
                 .args
                 .get(index)
@@ -158,7 +167,7 @@ impl IR {
             // 契約(`must`/`of`)のチェック
             // (`src/ir/ty_checker/constract.rs`)
             self.check_constract_arg(
-                &meta_data.name, 
+                meta_data.name.as_str(), 
                 &def_args[index], 
                 &expr_arg
             );

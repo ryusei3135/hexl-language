@@ -15,9 +15,9 @@ impl IR {
     /// - 引数の型が`of`なのに、渡された値が`must`でない -> エラー
     /// - 渡された値が`must`なのに、引数の型が`of`でない -> エラー
     /// - `must`の渡し先が呼び出し先と一致しない -> エラー
-    pub(crate) fn check_constract_arg(
+    pub(in crate::ir) fn check_constract_arg(
         &mut self,
-        fn_name: &String,
+        fn_name: &str,
         param: &node::ArgsNode,
         arg: &node::Expr,
     ) {
@@ -30,12 +30,17 @@ impl IR {
         match (param_of, arg_must) {
             // `must=func`は、実際に値を渡す関数を指定する
             (Some(_of), Some(must)) => {
-                if must.must_name().is_some_and(|name| name != fn_name) {
+                if must
+                    .must_name()
+                    .is_some_and(|name| name.as_str() != fn_name) 
+                {
                     CompileErr::constract_name_mismatch(
-                        fn_name,
+                        &fn_name,
                         &param.name,
-                        node::ConstractTy::name_or_anon(must.must_name()),
-                        fn_name,
+                        node::ConstractTy::name_or_anon(
+                            must.must_name()
+                        ),
+                        &fn_name,
                     )
                     .map_err(|err| err.with_span(self.current_span))
                     .unwrap();
@@ -51,7 +56,7 @@ impl IR {
             // `of`の引数には、`must`の値しか渡せない
             (Some(of), None) => {
                 CompileErr::constract_of_requires_must(
-                    fn_name,
+                    &fn_name,
                     &param.name,
                     node::ConstractTy::name_or_anon(of.of_name()),
                 )
@@ -61,7 +66,7 @@ impl IR {
             // `must`の値は、`of`の引数にしか渡せない
             (None, Some(must)) => {
                 CompileErr::constract_must_requires_of(
-                    fn_name,
+                    &fn_name,
                     &param.name,
                     node::ConstractTy::name_or_anon(must.must_name()),
                 )
@@ -263,7 +268,7 @@ impl IR {
         name: &String, 
         must_vars: &mut Vec<MustVar>
     ) {
-        if let Some(var) = must_vars
+        if let Some(ref mut var) = must_vars
             .iter_mut()
             .find(|var| &var.name == name) 
         {

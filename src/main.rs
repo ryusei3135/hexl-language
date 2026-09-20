@@ -128,7 +128,7 @@ pub mod cmd_line_args {
 /// - アセンブリ言語ファイルの書き込みに失敗した場合
 pub fn build(
     settings: &cmd_line_args::OptSettings,
-) -> Result<Vec<ir::def_tree::FuncDefMetaData>, Box<dyn std::error::Error>> {
+) -> Result<Vec<ir::def_tree::FnDefMetaData>, Box<dyn std::error::Error>> {
     // 初期化
     let file_name = settings
         .file_name

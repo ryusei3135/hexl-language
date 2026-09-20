@@ -64,7 +64,11 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
         );
 
-        self.gen_call_fn_ir(Some(&struct_name), &call_info, None)
+        self.gen_call_fn_ir(
+            Some(&struct_name), 
+            &call_info, 
+            None
+        )
     }
 
     pub fn member_is_arr_ref(
@@ -80,7 +84,8 @@ impl IR {
         let field_ty = self
             .struct_tree
             .get(&struct_name)
-            .unwrap_or_else(|| panic!("未定義の構造体です: {}", struct_name))
+            .unwrap_or_else(
+                || panic!("未定義の構造体です: {}", struct_name))
             .fields
             .iter()
             .find(|field| &field.name == name)
@@ -100,9 +105,17 @@ impl IR {
         // 添字は数字リテラルとしてのみ許可されているので、
         // ここでそのまま定数として解決する
         let index_num = match &**index {
-            node::Expr::Number(value) => value.parse::<usize>().unwrap_or_else(|_| {
-                panic!("配列のインデックスは数字である必要があります: {}", value)
-            }),
+            node::Expr::Number(val) => {
+                val.parse::<usize>()
+                .unwrap_or_else(|_| 
+                    {
+                        panic!(
+                            "配列のインデックスは数字である必要があります: {}", 
+                            val
+                        )
+                    }
+                )
+            }
             t => panic!(
                 "配列のインデックスは数字リテラルである必要があります: {:?}",
                 t

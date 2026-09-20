@@ -97,7 +97,11 @@ impl VarTree {
         self.hash
             .insert(
                 var_name.clone(), 
-                VarMetaData::new(&var, &var_ty, &is_mut)
+                VarMetaData::new(
+                    &var, 
+                    &var_ty, 
+                    &is_mut
+                )
             );
         Ok(())
     }
@@ -142,7 +146,10 @@ impl VarTree {
         var_name: &String, 
         ty: &node::TyNode
     ) {
-        if let Some(var) = self.hash.get_mut(var_name) {
+        if let Some(var) = self
+            .hash
+            .get_mut(var_name) 
+        {
             var.size = ty.clone();
         }
     }
@@ -152,7 +159,8 @@ impl VarTree {
         &mut self,
         var_name: &String,
     ) -> Result<(), err::ErrKind> {
-        let life: &VarLife = &self.hash
+        let life: &VarLife = &self
+            .hash
             .get(var_name)
             .unwrap()
             .life;
@@ -160,7 +168,8 @@ impl VarTree {
             VarLife::Constracting => {
                 self.hash
                     .get_mut(var_name)
-                    .unwrap().life = VarLife::EndConstract;
+                    .unwrap()
+                    .life = VarLife::EndConstract;
             }
             VarLife::EndConstract => {
                 return crate::GenCompileErr!(
@@ -180,7 +189,11 @@ impl VarTree {
     ) -> bool {
         self.hash
             .get(var_name)
-            .is_some_and(|var| var.size.is_constract_must())
+            .is_some_and(
+                |var| {
+                    var.size.is_constract_must()
+                }
+            )
     }
 
     #[inline(always)]
@@ -195,14 +208,28 @@ impl VarTree {
 
     /// 指定された変数が`Self`型、または`Self`を指すポインタ型
     /// (`Self*` / `Self*mut`)かどうかを判定する
-    pub fn is_self_ty(&self, name: &String) -> bool {
-        self.hash.get(name).is_some_and(|v| match &v.size {
-            node::TyNode::SelfTy(_) => true,
-            node::TyNode::Pointer { ty_name, .. } => {
-                matches!(**ty_name, node::TyNode::SelfTy(_))
+    pub fn is_self_ty(
+        &self, 
+        var_name: &String
+    ) -> bool {
+        let mut b = move |v: &VarMetaData| {
+            match &v.size {
+                node::TyNode::SelfTy(_) => true,
+                node::TyNode::Pointer { 
+                    ty_name, 
+                    .. 
+                } => {
+                    matches!(
+                        **ty_name, 
+                        node::TyNode::SelfTy(_)
+                    )
+                }
+                _ => false,
             }
-            _ => false,
-        })
+        };
+        self.hash
+            .get(var_name)
+            .is_some_and(&mut b)
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
@@ -226,8 +253,15 @@ impl StructTree {
         }
     }
 
-    pub fn add(&mut self, info: &node::StructDefine) {
-        self.tree.insert(info.name.to_string(), info.clone());
+    pub fn add(
+        &mut self, 
+        info: &node::StructDefine
+    ) {
+        self.tree
+            .insert(
+                info.name.to_string(), 
+                info.clone()
+            );
     }
 
     pub fn get(&self, name: &String) -> Option<&node::StructDefine> {
@@ -243,7 +277,13 @@ impl StructTree {
         field_name: &String,
     ) -> usize {
         let mut byte_counter = 0;
-        for member in self.tree.get(name).expect(name).fields.iter() {
+        for member in self
+            .tree
+            .get(name)
+            .expect(name)
+            .fields
+            .iter() 
+        {
             byte_counter += types::Size::new(&member.ty)
                 .unwrap()
                 .to_bytes();
@@ -297,11 +337,18 @@ impl FuncDefInfo {
         })
     }
 
-    pub fn get_ret_ty(&self) -> crate::gen::SelfPtrInfo {
+    pub fn get_ret_ty(
+        &self
+    ) -> crate::gen::SelfPtrInfo {
         if self.ret_ty.is_none() {
-            return types::Size::Void.wrap_dst_size();
+            return types::Size::Void
+                .wrap_dst_size();
         }
-        match self.ret_ty.as_ref().unwrap() {
+        match self
+            .ret_ty
+            .as_ref()
+            .unwrap() 
+        {
             node::TyNode::SelfTy(..) => None,
             node::TyNode::Ty(name)
                 if !types::Size::is_builtin_ty_name(name) => None,
@@ -393,13 +440,19 @@ impl FuncTree {
         );
     }
 
-    pub fn declare(&mut self, meta_data: &node::FuncDefine) {
+    pub fn declare(
+        &mut self,
+        meta_data: &node::FuncDefine
+    ) {
         let key = Self::make_key(
             &meta_data.name,
             meta_data.module.as_ref(),
             &meta_data.temp_ty,
         );
-        self.func.entry(key).or_insert_with(|| FuncDefInfo {
+        self.func
+            .entry(key)
+            .or_insert_with(
+            || FuncDefInfo {
             module: meta_data.module.clone(),
             args: meta_data.params.clone(),
             body: Vec::new(),
@@ -412,7 +465,7 @@ impl FuncTree {
 }
 
 #[derive(Clone, Debug)]
-pub struct FuncDefMetaData {
+pub struct FnDefMetaData {
     module: Option<String>,
     pub name: String,
     params: Vec<node::ArgsNode>,
@@ -422,7 +475,7 @@ pub struct FuncDefMetaData {
     pub public: bool,
 }
 
-impl FuncDefMetaData {
+impl FnDefMetaData {
     /// moduleは自分自身がどのモジュールに属しているか
     /// Noneの場合は、#includeで関数の名前ごと指定しているか
     /// 自分のファイルの中にあるかのどちらか
@@ -439,8 +492,14 @@ impl FuncDefMetaData {
         }
     }
 
-    pub fn add_self_module_name(&mut self, self_name: &String) {
-        self.module = Some(self_name.to_string());
+    #[inline(always)]
+    pub fn add_self_module_name(
+        &mut self, 
+        self_name: &String
+    ) {
+        self.module = Some(
+            self_name.to_string()
+        );
     }
 
     /// この関数がどのモジュール名で登録されているかを返す

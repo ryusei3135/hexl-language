@@ -6,8 +6,12 @@ impl IR {
         ast: &node::Expr
     ) -> Option<usize> {
         match ast {
-            node::Expr::Str(value) => Some(value.len()),
-            node::Expr::Array(values) => Some(values.len()),
+            node::Expr::Str(value) => {
+                Some(value.len())
+            }
+            node::Expr::Array(values) => {
+                Some(values.len())
+            }
             _ => None,
         }
     }
@@ -26,7 +30,10 @@ impl IR {
         expect_byte: &types::Size,
         is_mut: &bool,
     ) -> usize {
-        if let node::Expr::Scope { scope, target } = expr {
+        if let node::Expr::Scope { 
+            scope, 
+            target 
+        } = expr {
             self.expr_counter += 1;
             let inst = self.scope_node(
                 &scope,
@@ -37,7 +44,11 @@ impl IR {
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
-        } else if let node::Expr::CallFunc(call) = expr {
+        } 
+        else if let node::Expr::CallFunc(
+                call
+            ) = expr 
+        {
             let inst = self.gen_call_fn_ir(
                 None, 
                 &call, 
@@ -51,7 +62,7 @@ impl IR {
         }
     }
 
-    pub fn assign_expr_node(
+    pub(super) fn assign_expr_node(
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
@@ -59,14 +70,29 @@ impl IR {
     ) -> Result<inst::Inst, err::ErrKind> {
         // `must`の契約を持つ変数は、`mut`かどうかに関わらず
         // 再代入できない(契約が別の値にすり替わってしまうため)
-        if self.var_tree.is_constract_must(&assign_node.name) {
-            CompileErr::assign_to_must_var(&assign_node.name)
-                .map_err(|err| err.with_span(self.current_span))?;
+        if self.var_tree
+            .is_constract_must(
+                &assign_node.name) 
+        {
+            CompileErr::assign_to_must_var(
+                    &assign_node.name)
+                .map_err(
+                    |err| {
+                        err.with_span(
+                            self.current_span)
+                    }
+                )?;
         }
 
         if is_mut == &false {
-            CompileErr::assign_to_imm_var(&assign_node.name)
-                .map_err(|err| err.with_span(self.current_span))?;
+            CompileErr::assign_to_imm_var(
+                    &assign_node.name
+                )
+                .map_err(
+                    |err| {
+                        err.with_span(
+                            self.current_span)
+                    })?;
         }
 
         let right_expr_idx: usize =
@@ -88,7 +114,7 @@ impl IR {
         })
     }
 
-    pub fn init_array_node(
+    pub(super) fn init_array_node(
         &mut self,
         init_nodes: Vec<node::Expr>,
         expect_byte: &types::Size,
@@ -99,28 +125,37 @@ impl IR {
         };
         let mut dsts = Vec::new();
         for node in init_nodes.iter() {
-            let dst = self.gen_expr_ir(node.clone(), &size);
+            let dst = self.gen_expr_ir(
+                node.clone(), 
+                &size
+            );
             dsts.push(dst);
         }
         inst::Inst::InitArr(dsts)
     }
 
-    pub fn ref_array_node(
+    #[inline(always)]
+    pub(super) fn ref_array_node(
         &mut self,
         dst: node::Expr,
         index: node::Expr,
         name: &String,
         expect_byte: &types::Size,
     ) -> inst::Inst {
-        let dst = self.gen_expr_ir(dst, &expect_byte);
         inst::Inst::InsertArr {
             name: name.to_string(),
-            dst,
-            index: self.gen_expr_ir(index, &expect_byte),
+            dst: self.gen_expr_ir(
+                dst, 
+                &expect_byte
+            ),
+            index: self.gen_expr_ir(
+                index, 
+                &expect_byte
+            ),
         }
     }
 
-    pub fn def_var_node(
+    pub(super) fn def_var_node(
         &mut self,
         mut var: node::DefineVar,
         expect_byte: &types::Size,
@@ -140,7 +175,10 @@ impl IR {
                     expect_byte, 
                     is_mut
                 );
-                self.var_tree.overwrite_ty(&var_name, &constract_ty);
+                self.var_tree.overwrite_ty(
+                    &var_name, 
+                    &constract_ty
+                );
                 inst
             }
             node::TyNode::Stack { .. } => {
@@ -148,7 +186,9 @@ impl IR {
                 self.stack_counter(&var.ty);
                 self.gen_mem_def_var(var)
             }
-            node::TyNode::Static { .. } => self.gen_mem_def_var(var),
+            node::TyNode::Static { .. } => {
+                self.gen_mem_def_var(var)
+            }
             node::TyNode::Ty(ref ty_name) => {
                 let value_idx =
                     self.gen_named_expr_ir(
@@ -166,7 +206,9 @@ impl IR {
                     )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
-                    size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
+                    size: self.size_of(
+                        &node::TyNode::Ty(
+                            ty_name.to_string())),
                     dst: self.id_counter,
                     src: value_idx,
                 };
@@ -180,7 +222,10 @@ impl IR {
                 // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
                 // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
                 let val = *var.value;
-                let base_range = self.get_ast_len(&val).unwrap();
+                // 実際の長さ
+                let base_range 
+                    = self.get_ast_len(&val)
+                        .unwrap();
 
                 let value_idx =
                     self.gen_named_expr_ir(
@@ -208,13 +253,18 @@ impl IR {
                             range.unwrap(), 
                             base_range
                         )
-                        .map_err(|err| err.with_span(self.current_span))
+                        .map_err(
+                            |err| {
+                                err.with_span(self.current_span)})
                         .unwrap();
                     }
                 }
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
-                    size: types::Size::build_ptr_ty(&*ty_name, range.clone()),
+                    size: types::Size::build_ptr_ty(
+                        &*ty_name, 
+                        range
+                    ),
                     dst: self.id_counter,
                     src: value_idx,
                 };
@@ -224,7 +274,7 @@ impl IR {
         }
     }
 
-    pub fn enum_variant_node(
+    pub(super) fn enum_variant_node(
         &mut self,
         name: &String,
         variant: &String,
@@ -233,7 +283,13 @@ impl IR {
         let enum_def = self
             .enum_tree
             .get(&name.to_string())
-            .unwrap_or_else(|| panic!("未定義の列挙型です: {}", name));
+            .unwrap_or_else(
+                || {
+                    panic!(
+                        "未定義の列挙型です: {}", 
+                        name
+                    )
+                });
         let variant_index = enum_def
             .variants
             .iter()
@@ -254,7 +310,7 @@ impl IR {
         )
     }
 
-    pub fn init_struct_node(
+    pub(super) fn init_struct_node(
         &mut self,
         name: &String,
         fields: &mut HashMap<String, Box<node::Expr>>
@@ -269,7 +325,8 @@ impl IR {
             .struct_tree
             .get(&struct_name)
             .cloned()
-            .unwrap_or_else(|| panic!("未定義の構造体です: {}", name));
+            .unwrap_or_else(
+                || panic!("未定義の構造体です: {}", name));
 
         let mut mem_insts = Vec::with_capacity(
             struct_def.fields.len());
@@ -294,17 +351,25 @@ impl IR {
                     }
                 );
 
-            let value_idx = self.gen_expr_ir(*field_expr, &field_size);
-            mem_insts.push(inst::MemoryInst::Member {
-                parent: field.name.clone(),
-                value_idx: value_idx,
-                size: field_size,
-            });
+            let value_idx = self.gen_expr_ir(
+                *field_expr, 
+                &field_size
+            );
+            mem_insts.push(
+                inst::MemoryInst::Member {
+                    parent: field.name.clone(),
+                    value_idx: value_idx,
+                    size: field_size,
+                }
+            );
         }
         inst::Inst::Struct {
             name: name.to_string(),
             mem: mem_insts,
-            is_self: self.this_is_self && self.var_tree.is_self_ty(&name),
+            is_self: {
+                self.this_is_self 
+                && self.var_tree.is_self_ty(&name)
+            }
         }
     }
 }

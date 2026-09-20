@@ -74,7 +74,7 @@ impl CompileErr {
 
     /// `of`の引数に、`must`ではない値が渡された
     pub fn constract_of_requires_must(
-        fn_name: &String,
+        fn_name: &str,
         param_name: &String,
         of_name: &str,
     ) -> Result<(), err::ErrKind> {
@@ -87,7 +87,7 @@ impl CompileErr {
 
     /// `must`の値が、`of`ではない引数に渡された
     pub fn constract_must_requires_of(
-        fn_name: &String,
+        fn_name: &str,
         param_name: &String,
         must_name: &str,
     ) -> Result<(), err::ErrKind> {
@@ -100,7 +100,7 @@ impl CompileErr {
 
     /// `must`と`of`の名前が一致していない
     pub fn constract_name_mismatch(
-        fn_name: &String,
+        fn_name: &str,
         param_name: &String,
         must_name: &str,
         of_name: &str,

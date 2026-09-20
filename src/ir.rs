@@ -9,7 +9,7 @@ pub mod def_tree;
 pub mod inst;
 mod param;
 
-mod ty_checker;
+mod checker;
 pub mod types;
 
 use crate::err;
@@ -31,10 +31,10 @@ pub struct IR {
     // 関数の情報
     pub func_tree: def_tree::FuncTree,
     // 外部の関数の情報
-    extern_func_tree: Vec<def_tree::FuncDefMetaData>,
+    extern_func_tree: Vec<def_tree::FnDefMetaData>,
     // 自身が公開する関数の配列:
     pub public_func_tree: Vec<String>,
-    define_meta_data: Vec<def_tree::FuncDefMetaData>,
+    define_meta_data: Vec<def_tree::FnDefMetaData>,
     // 定義済みの構造体の情報
     pub struct_tree: def_tree::StructTree,
     // 定義済みの列挙型の情報
