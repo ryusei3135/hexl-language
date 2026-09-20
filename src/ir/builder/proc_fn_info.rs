@@ -85,11 +85,14 @@ impl IR {
     ) -> inst::Inst {
         // 関数の定義を取得
         let defined_func_data = {
-            if let Some(def_data) = self.func_tree.get_with_temp(
-                &meta_data.name, 
-                module_name,
-                &meta_data.temp_ty,
-            ) {
+            if let Some(def_data) = self
+                .func_tree
+                .get_with_temp(
+                    &meta_data.name, 
+                    module_name,
+                    &meta_data.temp_ty,
+                )
+            {
                 def_data
             } else {
                 let result = self.extern_func_tree
@@ -130,7 +133,11 @@ impl IR {
                     .ret_ty
                     .as_ref() 
             {
-                if let Some(struct_info) = self.struct_tree.get(struct_name).cloned() {
+                if let Some(struct_info) = self
+                    .struct_tree
+                    .get(struct_name)
+                    .cloned() 
+                {
                     let size = struct_info.fields
                         .iter()
                         .map(|field| self.size_of(&field.ty).to_bytes())
@@ -170,8 +177,10 @@ impl IR {
                 meta_data.name.as_str(), 
                 &def_args[index], 
                 &expr_arg
-            );
-            let ty = self.size_of(&def_args[index].ty).clone();
+            ).unwrap();
+            let ty = self.size_of(
+                &def_args[index].ty
+            ).clone();
             let idx = self.gen_expr_ir(expr_arg, &ty);
             func_meta_data.insert_param_parent_id(idx);
         }

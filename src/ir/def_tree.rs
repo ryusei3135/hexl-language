@@ -48,6 +48,7 @@ pub struct VarTree {
     pub hash: HashMap<String, VarMetaData>,
 }
 
+/// `must`かどうかは、型に情報がある
 impl VarTree {
     pub fn new() -> Self {
         Self {
@@ -233,7 +234,10 @@ impl VarTree {
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
-    pub fn get(&self, name: &String) -> &VarType {
+    pub fn get(
+        &self, 
+        name: &String
+    ) -> &VarType {
         &self.hash
             .get(name)
             .expect(name)

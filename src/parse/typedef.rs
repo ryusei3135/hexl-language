@@ -358,6 +358,7 @@ impl Parser {
                 }
             }
             lex::Tkn::Name(name) => {
+                // 契約型かを調べる
                 let base_ty = self.is_constract_ty(
                     node::TyNode::Ty(name.clone())
                 )?;
@@ -387,13 +388,6 @@ impl Parser {
                     }
                 };
                 Ok(ty)
-            }
-            // 旧記法の静的領域: `""[ty]` / `""[ty 4]`
-            lex::Tkn::Str(value) if value.is_empty() => {
-                if !matches!(self.next_tkn(vec!["["] )?, lex::Tkn::LBracket) {
-                    panic!("静的領域の定義には`[`が必要です");
-                }
-                self.define_mem_ty_node(true)
             }
             // スタック領域: `[ty]` / `[ty 4]`
             lex::Tkn::LBracket => self.define_mem_ty_node(false),

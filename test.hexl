@@ -25,6 +25,10 @@ func5(a: int of func4): int {
     ret a + 10
 }
 
+func6(a: int must=func5) {
+    func5(a)
+}
+
 
 add(a mut: int, b: int) {
     c: byte* = "hello world\n"
@@ -65,7 +69,7 @@ _start(): int {
         name: 10
         aa: 10
     }
-    func5(h)
+    func6(h)
     add(s.name, a)
     add(a, 0)
     #asm(gcc_x64) {

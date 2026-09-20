@@ -685,7 +685,11 @@ impl IR {
     /// 構造体のメゾットとして展開された関数の処理内容を取得する
     /// (テスト用)
     #[cfg(test)]
-    pub(crate) fn test_only_get_method_body(&self, module: &str, name: &str) -> Vec<inst::Inst> {
+    pub(crate) fn test_only_get_method_body(
+        &self, 
+        module: &str, 
+        name: &str
+    ) -> Vec<inst::Inst> {
         self.func_tree
             .func
             .get(&format!("{}::{}", module, name))

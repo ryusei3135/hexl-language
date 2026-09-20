@@ -20,7 +20,7 @@ impl IR {
         fn_name: &str,
         param: &node::ArgsNode,
         arg: &node::Expr,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         let arg_ty = self.expr_ty_node(arg);
         let arg_must = arg_ty
             .as_ref()
@@ -30,6 +30,8 @@ impl IR {
         match (param_of, arg_must) {
             // `must=func`は、実際に値を渡す関数を指定する
             (Some(_of), Some(must)) => {
+                // 渡す変数が契約しているのに渡す先の関数
+                // の型が契約じゃない
                 if must
                     .must_name()
                     .is_some_and(|name| name.as_str() != fn_name) 
@@ -42,15 +44,15 @@ impl IR {
                         ),
                         &fn_name,
                     )
-                    .map_err(|err| err.with_span(self.current_span))
-                    .unwrap();
+                    .map_err(|err| err.with_span(self.current_span))?
                 }
 
                 if let Some(var_name) = Self::arg_var_name(arg) {
                     self.var_tree
                         .finish_constract_var(var_name)
                         .map_err(|err| err.with_span(self.current_span))
-                        .unwrap();
+                } else {
+                    Ok(())
                 }
             }
             // `of`の引数には、`must`の値しか渡せない
@@ -61,19 +63,64 @@ impl IR {
                     node::ConstractTy::name_or_anon(of.of_name()),
                 )
                 .map_err(|err| err.with_span(self.current_span))
-                .unwrap();
             }
             // `must`の値は、`of`の引数にしか渡せない
             (None, Some(must)) => {
+                // 引数が契約を譲渡するならOk
+                if self.move_constract_next_fn(
+                    &param, 
+                    &arg, 
+                    must.must_name()
+                )? {return Ok(());};
+                //
                 CompileErr::constract_must_requires_of(
                     &fn_name,
                     &param.name,
-                    node::ConstractTy::name_or_anon(must.must_name()),
+                    node::ConstractTy::name_or_anon(
+                        must.must_name()),
                 )
                 .map_err(|err| err.with_span(self.current_span))
-                .unwrap();
             }
-            (None, None) => {}
+            (None, None) => Ok(())
+        }
+    }
+
+    /// 呼び出し元と先の引数の型がそれぞれ`must`なら呼び出し先の
+    /// 関数に契約を譲渡する
+    /// ## 例
+    /// ```
+    /// a(): int must=c {}
+    /// b(a: int must=c){}
+    /// c(a: int of a){}
+    /// ```
+    #[inline(always)]
+    fn move_constract_next_fn(
+        &mut self,
+        param: &node::ArgsNode,
+        arg: &node::Expr,
+        must: Option<&String>,
+    ) -> Result<bool, err::ErrKind> {
+        // 引数が契約を譲渡するならOk
+        if param.ty
+            .as_constract_must()
+            .is_some_and(
+                |v| {
+                    v.must_name() == must
+                }
+            ) 
+        {
+            self.var_tree
+                .finish_constract_var(
+                Self::arg_var_name(&arg)
+                        .unwrap()
+                )
+                .map_err(
+                    |err| {
+                        err.with_span(
+                            self.current_span)})?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 
@@ -122,7 +169,10 @@ impl IR {
             }
         }
 
-        Self::walk_group2_nodes(&func.body, &mut must_vars);
+        Self::walk_group2_nodes(
+            &func.body, 
+            &mut must_vars
+        );
 
         for var in must_vars.iter() {
             if !var.used {
@@ -215,8 +265,14 @@ impl IR {
                     Self::walk_expr(pattern, must_vars);
                 }
                 for arm in arms.iter() {
-                    Self::walk_expr(&arm.pattern, must_vars);
-                    Self::walk_group2_nodes(&arm.body, must_vars);
+                    Self::walk_expr(
+                        &arm.pattern, 
+                        must_vars
+                    );
+                    Self::walk_group2_nodes(&
+                        arm.body, 
+                        must_vars
+                    );
                 }
                 if let Some(body) = arm_else {
                     Self::walk_group2_nodes(body, must_vars);
