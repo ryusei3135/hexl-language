@@ -45,20 +45,32 @@ gcc 生成したアセンブリソースコード -nostdlib
 おすすめします(それかDocker)
 
 ### 予約語
-- ret
-- cond
-- loop
-- pub
-- const
-- struct
-- enum
-- static
-- Self
-- mut
-- must
-- of
-- continue
-- break
+* 構造
+    - pub
+* 制御
+    - ret
+    - cond
+    - loop
+    - continue
+    - break
+* データ
+    - struct
+    - enum
+    - static
+    - const
+    - mut
+    - Self
+* 契約
+    - must
+    - of
+* 将来つかう予定
+    - `register`データ
+    - `union`データ
+    - `move`契約
+    - `async`制御
+    - `await`制御
+    - `extern`構造
+    - `where`契約
 
 ### プロプロセッサ
 - #include

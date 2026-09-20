@@ -287,8 +287,14 @@ impl IR {
     ) -> usize {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
-                let func_ret_ty = self.func_ret_ty.as_ref().unwrap();
-                let idx = self.gen_expr_ir(expr, &self.size_of(&func_ret_ty));
+                let func_ret_ty = self
+                    .func_ret_ty
+                    .as_ref()
+                    .unwrap();
+                let idx = self.gen_expr_ir(
+                    expr, 
+                    &self.size_of(&func_ret_ty)
+                );
                 inst::Inst::Ret(idx)
             }
             node::StmtNode::Continue => {
