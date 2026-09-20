@@ -174,7 +174,10 @@ impl VarTree {
 
     /// 指定された変数が`must`の契約を持つかどうか
     #[inline(always)]
-    pub fn is_constract_must(&self, var_name: &String) -> bool {
+    pub fn is_constract_must(
+        &self, 
+        var_name: &String
+    ) -> bool {
         self.hash
             .get(var_name)
             .is_some_and(|var| var.size.is_constract_must())

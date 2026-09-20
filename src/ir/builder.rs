@@ -17,6 +17,7 @@ impl IR {
             ir_tree: Vec::new(),
             pattern_labels: 0,
             loop_labels: Vec::new(),
+            scope_states: Vec::new(),
             expr_counter: 0,
             // メゾットの処理中`true`
             this_is_self: false,
@@ -83,10 +84,15 @@ impl IR {
         self.resolved_self_ty(func)
     }
 
-    fn ty_contains_self(ty: &node::TyNode) -> bool {
+    fn ty_contains_self(
+        ty: &node::TyNode
+    ) -> bool {
         match ty {
             node::TyNode::SelfTy(..) => true,
-            node::TyNode::Pointer { ty_name, .. } => {
+            node::TyNode::Pointer { 
+                ty_name, 
+                .. 
+            } => {
                 Self::ty_contains_self(ty_name)
             }
             node::TyNode::RefTy(inner) =>{ 
@@ -228,6 +234,7 @@ impl IR {
             let _ = self.push_param_meta_data(
                 &method_info.params
             )?;
+            self.scope_states.clear();
             self.gen_inst(&method_info.body.clone());
 
             // 関数の処理内容をpush
@@ -290,6 +297,7 @@ impl IR {
                 inst::Inst::Jmp(format!("L{}", continue_label))
             }
             node::StmtNode::Break => {
+                self.end_scope(false).unwrap();
                 let (_, break_label) = self.loop_labels.last()
                     .expect("breakはloopの中でのみ使用できます");
                 inst::Inst::Jmp(format!("L{}", break_label))
@@ -565,7 +573,9 @@ impl IR {
             crate::push_jmp_code!(self, Block, &condition);
         }
         self.loop_labels.push((start.clone(), end.clone()));
+        self.begin_scope();
         self.gen_inst(&body);
+        self.end_scope(true).unwrap();
         self.loop_labels.pop();
         crate::push_jmp_code!(self, Jmp, &start);
         crate::push_jmp_code!(self, Block, &end);
@@ -619,7 +629,9 @@ impl IR {
         // どの条件にも一致しなかった場合の処理(else)
         // (elseが無い場合でも、そのまま素通りして終了ラベルへ進む)
         if let Some(arm) = arm_else.clone() {
+            self.begin_scope();
             self.gen_inst(&arm);
+            self.end_scope(true).unwrap();
         }
         crate::push_jmp_code!(self, Jmp, &end_label);
 
@@ -627,7 +639,9 @@ impl IR {
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
             // このアーム専用のラベル(条件が一致した場合の飛び先)
             crate::push_jmp_code!(self, Block, label);
+            self.begin_scope();
             self.gen_inst(&arm.body);
+            self.end_scope(true).unwrap();
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
 

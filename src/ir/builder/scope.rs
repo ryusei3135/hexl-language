@@ -1,6 +1,66 @@
+//! スコープのノードを処理する
+
+
 use super::*;
 
 impl IR {
+    /// スコープをスタート
+    #[inline(always)]
+    pub(in crate::ir::builder) fn begin_scope(
+        &mut self
+    ) {
+        self.scope_states.push(self.var_tree.clone());
+    }
+
+    /// スコープが終了したときの処理
+    /// 契約が終了しているかも検査
+    pub(in crate::ir::builder) fn end_scope(
+        &mut self,
+        from_break: bool
+    ) -> Result<(), err::ErrKind> {
+        let states = if from_break {
+            self.scope_states
+                .iter()
+                .rev()
+                .collect::<Vec<_>>()
+        } else {
+            self.scope_states
+                .last()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+
+        for state in states {
+            // 契約が終了しているかを確認
+            for (name, var) in &self.var_tree.hash {
+                if state.hash.contains_key(name)
+                    || !var.size.is_constract_must()
+                    || var.life != def_tree::VarLife::Constracting
+                {
+                    continue;
+                }
+                return crate::GenCompileErr!(
+                    VariableConstractExpired, 
+                    name
+                );
+            }
+        }
+
+        if from_break == false {
+            let state = self.scope_states
+                .pop()
+                .expect("スコープが開始されていません");
+            self.var_tree
+                .hash
+                .retain(
+                    |name, _| {
+                        state.hash.contains_key(name)
+                    }
+                );
+        }
+        Ok(())
+    }
+
     /// `mod::func()`や`StructName.method()`のような、スコープを伴う
     /// 呼び出しを処理する
     ///
@@ -23,12 +83,14 @@ impl IR {
         var_name: Option<&String>,
         is_mut: &bool,
     ) -> Result<inst::Inst, err::ErrKind> {
-        if let node::Expr::CallFunc(mut call_func_node) = *target {
+        if let node::Expr::CallFunc(
+            mut call_func_node
+        ) = *target {
             if self.expr_counter != 1 {
                 if let Some(struct_info) = self.struct_tree
-                .get(scope.last().unwrap())
-                .cloned() 
-            {
+                    .get(scope.last().unwrap())
+                    .cloned() 
+                {
                     let mut size = 0;
                     for field in &struct_info.fields {
                         // 確保するスタックを増やす

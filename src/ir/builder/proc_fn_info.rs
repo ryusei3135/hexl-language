@@ -10,6 +10,7 @@ impl IR {
         // 関数の情報を登録
         self.entry_fn_info(&info);
         self.var_tree = def_tree::VarTree::new();
+        self.scope_states.clear();
         // `ir/param.rs`
         self.push_param_meta_data(&info.params)?;
         self.gen_inst(&info.body.clone());
@@ -65,7 +66,7 @@ impl IR {
     /// 外部の関数を定義するノードを
     /// 作成し、スタックする関数
     /// アセンブリ言語を出力する際にだけ使う
-    pub(super) fn make_extern_func_inst(
+    pub(in crate::ir::builder) fn make_extern_func_inst(
         &mut self, 
         fn_tree: &Vec<def_tree::FuncDefMetaData>
     ) {

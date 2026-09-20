@@ -22,6 +22,7 @@ pub struct IR {
     ir_tree: Vec<inst::Inst>,
     pattern_labels: usize,
     loop_labels: Vec<(usize, usize)>,
+    scope_states: Vec<def_tree::VarTree>,
 
     this_is_self: bool,
     /// 式や文を生成する際に、一番最初のノードの場合のみtrue
