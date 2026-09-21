@@ -69,7 +69,7 @@ impl VarTree {
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
         if let Some(ref var_info) = self.hash
-            .get(var_name) 
+            .get(var_name)
         {
             return match var_info.life {
                 VarLife::Constracting => {
@@ -319,7 +319,7 @@ impl StructTree {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FuncDefInfo {
+pub struct FnDefInfo {
     pub module: Option<String>,
     pub args: Vec<node::ArgsNode>,
     pub body: Vec<inst::Inst>,
@@ -329,7 +329,7 @@ pub struct FuncDefInfo {
     pub stk_size: usize,
 }
 
-impl FuncDefInfo {
+impl FnDefInfo {
     /// 第一引数が`Self`型、または`Self`を指すポインタ型
     /// (`self: Self` / `self: Self*` / `self: Self*mut`)かどうかを判定する
     pub fn first_param_is_self(&self) -> bool {
@@ -364,7 +364,7 @@ impl FuncDefInfo {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FuncTree {
-    pub func: HashMap<String, FuncDefInfo>,
+    pub func: HashMap<String, FnDefInfo>,
 }
 
 impl FuncTree {
@@ -401,7 +401,7 @@ impl FuncTree {
         &self, 
         name: &String, 
         mod_name: Option<&String>
-    ) -> Option<FuncDefInfo> {
+    ) -> Option<FnDefInfo> {
         let no_temp_ty: &[node::TyNode] = &[];
         self.get_with_temp(
             name, 
@@ -415,7 +415,7 @@ impl FuncTree {
         name: &String,
         module_name: Option<&String>,
         temp_ty: &[node::TyNode],
-    ) -> Option<FuncDefInfo> {
+    ) -> Option<FnDefInfo> {
         self.func
             .get(&Self::make_key(name, module_name, temp_ty))
             .cloned()
@@ -435,7 +435,7 @@ impl FuncTree {
         );
         self.func.insert(
             key,
-            FuncDefInfo {
+            FnDefInfo {
                 // 構造体のメゾットとして展開された関数の場合、
                 // 属している構造体の名前がここに入る
                 module: meta_data.module.clone(),
@@ -461,7 +461,7 @@ impl FuncTree {
         self.func
             .entry(key)
             .or_insert_with(
-            || FuncDefInfo {
+            || FnDefInfo {
             module: meta_data.module.clone(),
             args: meta_data.params.clone(),
             body: Vec::new(),
@@ -517,8 +517,8 @@ impl FnDefMetaData {
         self.module.as_ref()
     }
 
-    pub fn gen(&self, stk_size: usize) -> FuncDefInfo {
-        FuncDefInfo {
+    pub fn gen(&self, stk_size: usize) -> FnDefInfo {
+        FnDefInfo {
             module: None,
             args: self.params.clone(),
             body: Vec::new(),

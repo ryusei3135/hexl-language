@@ -30,6 +30,7 @@ impl IR {
             enum_tree: HashMap::new(),
             stk_counter: 0,
             current_span: err::Span::unknown(),
+            constract_flag: ConstractFlags::new(),
         }
     }
 
@@ -379,9 +380,17 @@ impl IR {
             node::Expr::NotEq(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::NotEq)
             }
-            node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
+            node::Expr::Number(value) => {
+                inst::Inst::gen_num(
+                    &value, 
+                    &expect_byte, 
+                    self.id_counter
+                )
+            }
             node::Expr::Assign(assign_node) => {
-                let var_attr = self.var_tree.is_mut(&assign_node.name);
+                let var_attr = self
+                    .var_tree
+                    .is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
                 self.assign_expr_node(
                     assign_node, 
@@ -401,7 +410,12 @@ impl IR {
             // 配列にアクセスする
             node::Expr::RefArray { name, dst, index } => {
                 // `src/ir/builder/expr_node.rs`
-                self.ref_array_node(*dst, *index, &name, &expect_byte)
+                self.ref_array_node(
+                    *dst, 
+                    *index, 
+                    &name, 
+                    &expect_byte
+                )
             }
             // ポインタの中身
             node::Expr::DefVar(var) => {
@@ -418,7 +432,7 @@ impl IR {
             node::Expr::CallFunc(meta_data) => {
                 self.gen_call_fn_ir(
                     None, 
-                    &meta_data, 
+                    &meta_data,
                     None
                 )
             }

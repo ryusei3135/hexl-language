@@ -1,3 +1,5 @@
+use crate::ir::def_tree::FnDefInfo;
+
 use super::*;
 
 impl IR {
@@ -48,6 +50,7 @@ impl IR {
     ) {
         self.check_must_var_used(&info);
         self.func_ret_ty = Some(info.ret_ty.clone());
+        
         // メゾットの場合、`info.module`に自身が属する構造体の名前が
         // 入っているので、そのままモジュール名として登録する
         self.define_meta_data
@@ -77,6 +80,7 @@ impl IR {
         }
     }
 
+    /// もし戻り値が契約ならフラグを立てる
     pub(super) fn gen_call_fn_ir(
         &mut self,
         module_name: Option<&String>,
@@ -84,7 +88,7 @@ impl IR {
         return_var_name: Option<&String>,
     ) -> inst::Inst {
         // 関数の定義を取得
-        let defined_func_data = {
+        let defined_func_data: FnDefInfo = {
             if let Some(def_data) = self
                 .func_tree
                 .get_with_temp(
@@ -110,6 +114,9 @@ impl IR {
                 }
             }
         };
+        // もし戻り値が契約ならフラグを立てる
+        self.is_constract_ret(&defined_func_data);
+
         let def_args = defined_func_data.args.clone();
         // 関数のノードを作成
         let mut func_meta_data = inst::CallFuncMetaData::new(
@@ -135,7 +142,7 @@ impl IR {
             {
                 if let Some(struct_info) = self
                     .struct_tree
-                    .get(struct_name)
+                    .get(&struct_name)
                     .cloned() 
                 {
                     let size = struct_info.fields
@@ -185,5 +192,25 @@ impl IR {
             func_meta_data.insert_param_parent_id(idx);
         }
         inst::Inst::CallFunc(func_meta_data)
+    }
+
+    #[inline(always)]
+    fn is_constract_ret(
+        &mut self,
+        fn_def: &FnDefInfo
+    ) {
+        let flag = fn_def
+            .ret_ty
+            .as_ref()
+            .map(|v| v.is_constract_must())
+            .unwrap_or(false)
+            || fn_def
+                .ret_ty
+                .as_ref()
+                .map(|v| v.is_constract_of())
+                .unwrap_or(false);
+        if flag {
+            self.constract_flag.constract_fn();
+        }
     }
 }

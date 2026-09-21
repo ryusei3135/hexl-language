@@ -77,7 +77,13 @@ impl AsmEmitter {
             };
             call_func.push_str(&asm);
         }
-        call_func.push_str(&self.asm_fmt.get_call_func_fmt(&meta_data.name));
+        call_func.push_str(
+            &self
+                .asm_fmt
+                .get_call_func_fmt(
+                    &meta_data.name
+                )
+            );
         call_func
     }
 
@@ -90,7 +96,7 @@ impl AsmEmitter {
     ///     出力するアセンブリ言語のフォーマットの名前
     pub(super) fn build_fn_process(
         &mut self,
-        fn_meta_data: &mut (String, def_tree::FuncDefInfo),
+        fn_meta_data: &mut (String, def_tree::FnDefInfo),
         asm_fmt_name: &Option<String>,
     ) {
         let this_is_self = fn_meta_data.1.first_param_is_self();
