@@ -63,6 +63,7 @@ pub struct CallFuncMetaData {
     pub path: Vec<String>,
     pub public: bool,
     pub name: String,
+    pub temp_ty: Vec<node::TyNode>,
     pub params: Vec<ValueId>,
 
     /// 関数を呼ぶ際に、代入する変数があるかをbooleanで表現
@@ -83,6 +84,7 @@ impl CallFuncMetaData {
             path: Vec::new(),
             public: false,
             name,
+            temp_ty: Vec::new(),
             params: Vec::new(),
             parent: start_expr,
             stk_capacity,

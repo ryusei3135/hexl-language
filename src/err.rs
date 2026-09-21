@@ -128,7 +128,9 @@ impl fmt::Display for ErrKind {
 impl ErrKind {
     pub fn with_span(self, span: Span) -> Self {
         match self {
-            Self::CompileErr(error) => Self::CompileErrAt { error, span },
+            Self::CompileErr(error) => {
+                Self::CompileErrAt { error, span }
+            }
             other => other,
         }
     }

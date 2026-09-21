@@ -7,12 +7,19 @@ struct Name {
     aa: int
 }
 
+enum E {
+    a
+    b
+    c
+}
 
 f<T>(): T {
+    e mut: E = E::a
     lll: T = T {
         name: 10
         aa: 10
     }
+    e = E::c
     ret lll
 }
 

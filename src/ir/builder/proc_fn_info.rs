@@ -137,6 +137,7 @@ impl IR {
                 None
             },
         );
+        func_meta_data.temp_ty = meta_data.temp_ty.clone();
 
         if return_var_name.is_some() {
             if let Some(node::TyNode::Ty(struct_name)) 

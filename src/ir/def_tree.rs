@@ -322,6 +322,7 @@ impl StructTree {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnDefInfo {
+    pub name: String,
     pub module: Option<String>,
     pub args: Vec<node::ArgsNode>,
     pub body: Vec<inst::Inst>,
@@ -438,6 +439,7 @@ impl FuncTree {
         self.func.insert(
             key,
             FnDefInfo {
+                name: meta_data.name.clone(),
                 // 構造体のメゾットとして展開された関数の場合、
                 // 属している構造体の名前がここに入る
                 module: meta_data.module.clone(),
@@ -464,6 +466,7 @@ impl FuncTree {
             .entry(key)
             .or_insert_with(
             || FnDefInfo {
+            name: meta_data.name.clone(),
             module: meta_data.module.clone(),
             args: meta_data.params.clone(),
             body: Vec::new(),
@@ -521,6 +524,7 @@ impl FnDefMetaData {
 
     pub fn gen(&self, stk_size: usize) -> FnDefInfo {
         FnDefInfo {
+            name: self.name.clone(),
             module: None,
             args: self.params.clone(),
             body: Vec::new(),

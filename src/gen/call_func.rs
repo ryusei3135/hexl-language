@@ -2,6 +2,7 @@ mod assign_var;
 mod mem_ir;
 
 use super::*;
+use crate::gen::emit_fn_name::*;
 use crate::ir::{self, types};
 
 impl AsmEmitter {
@@ -77,11 +78,21 @@ impl AsmEmitter {
             };
             call_func.push_str(&asm);
         }
+        let fn_label = if meta_data.temp_ty.is_empty() {
+            emit_fn_name_id(&meta_data.name)
+        } else {
+            let generic_args = meta_data
+                .temp_ty
+                .iter()
+                .map(|ty| format!("{:?}", ty))
+                .collect::<Vec<_>>();
+            emit_generic_fn_name_id(&meta_data.name, &generic_args)
+        };
         call_func.push_str(
             &self
                 .asm_fmt
                 .get_call_func_fmt(
-                    &meta_data.name
+                    &fn_label
                 )
             );
         call_func
@@ -103,11 +114,22 @@ impl AsmEmitter {
         let fn_ret_ty: SelfPtrInfo = fn_meta_data.1.get_ret_ty();
         println!("{:?}", this_is_self);
         // 新しく関数の作成、
+        let fn_label = if fn_meta_data.1.temp_ty.is_empty() {
+            emit_fn_name_id(&fn_meta_data.1.name)
+        } else {
+            let generic_args = fn_meta_data
+                .1
+                .temp_ty
+                .iter()
+                .map(|ty| format!("{:?}", ty))
+                .collect::<Vec<_>>();
+            emit_generic_fn_name_id(&fn_meta_data.1.name, &generic_args)
+        };
         self.asm_text
             .push_str(
                 &format!(
                     "{}:\n", 
-                    &fn_meta_data.0
+                    &fn_label
                 )
             );
         // 関数ごとにスタックの使用量をリセットする
