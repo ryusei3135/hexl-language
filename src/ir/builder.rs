@@ -4,7 +4,7 @@ mod proc_fn_info;
 mod scope;
 mod preproc;
 
-use crate::{err::*, models::Body};
+use crate::{err::*, models::Body, parse};
 use super::*;
 
 impl IR {
@@ -381,9 +381,13 @@ impl IR {
             }
             node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
             node::Expr::Assign(assign_node) => {
-                let is_mut = self.var_tree.is_mut(&assign_node.name);
+                let var_attr = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
-                self.assign_expr_node(assign_node, &expect_byte, &is_mut).unwrap()
+                self.assign_expr_node(
+                    assign_node, 
+                    &expect_byte, 
+                    &var_attr
+                ).unwrap()
             }
             node::Expr::Str(value) => inst::Inst::Str {
                 dst: self.id_counter,
@@ -401,12 +405,14 @@ impl IR {
             }
             // ポインタの中身
             node::Expr::DefVar(var) => {
-                let is_mut = var.is_mut;
+                let var_attr: parse::VarMutAttr = var
+                    .var_attr
+                    .clone();
                 // `src/ir/builder/expr_node.rs`
                 self.def_var_node(
                     var, 
                     &expect_byte, 
-                    &is_mut
+                    &var_attr
                 ).unwrap()
             }
             node::Expr::CallFunc(meta_data) => {
@@ -464,7 +470,7 @@ impl IR {
                     &scope, 
                     target, 
                     None, 
-                    &false
+                    &parse::VarMutAttr::Invar
                 )
                 .unwrap()
             }
@@ -554,7 +560,7 @@ impl IR {
                 &mem::take(&mut var.name),
                 &var_idx, 
                 &var.ty, 
-                &var.is_mut
+                &var.var_attr
             )?;
 
         Ok(inst::Inst::MemoryValue(mem_insts))

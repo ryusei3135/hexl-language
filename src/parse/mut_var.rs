@@ -10,18 +10,18 @@ impl Parser {
     pub fn assign_expr_is_mut(
         &mut self, 
         name: &String
-    ) -> Result<bool, Result<node::Expr, err::ErrKind>> {
-        let is_mut = match &self.current_tkn() {
+    ) -> Result<VarMutAttr, Result<node::Expr, err::ErrKind>> {
+        let attr = match &self.current_tkn() {
             lex::Tkn::KeyWordMut => {
                 self.advance_tkn().unwrap();
-                true
+                VarMutAttr::Var
             }
             lex::Tkn::KeyWordConst => {
                 self.advance_tkn().unwrap();
-                false
+                VarMutAttr::Const
             }
             // コロンが来た場合、それは型の定義なので、変数の定義
-            lex::Tkn::Colon => false,
+            lex::Tkn::Colon => VarMutAttr::Invar,
             _ => {
                 // define assign var node
                 return Err(Ok(node::AssignVar::new(
@@ -31,21 +31,26 @@ impl Parser {
                 )));
             }
         };
-        Ok(is_mut)
+        Ok(attr)
     }
 
     #[inline(always)]
     pub fn args_is_mut(
         &mut self, 
         _name: &String
-    ) -> Result<bool, err::ErrKind> {// 引数が不変か
-        let is_mut = matches!(
-            self.next_tkn_ref(vec!["mut"])?, 
-            lex::Tkn::KeyWordMut
-        );
-        if is_mut {
+    ) -> Result<VarMutAttr, err::ErrKind> {// 引数が不変か
+        let attr = match self.next_tkn_ref(vec!["mut"])? {
+            lex::Tkn::KeyWordMut => {
+                VarMutAttr::Var
+            }
+            lex::Tkn::KeyWordConst => {
+                VarMutAttr::Const
+            }
+            _ => VarMutAttr::Invar
+        };
+        if !matches!(attr, VarMutAttr::Invar) {
             self.next_tkn(vec![])?;
         }
-        Ok(is_mut)
+        Ok(attr)
     }
 }

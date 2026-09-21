@@ -1,3 +1,5 @@
+use crate::parse::{self, VarMutAttr};
+
 use super::*;
 
 impl IR {
@@ -28,7 +30,7 @@ impl IR {
         var_name: &String,
         expr: node::Expr,
         expect_byte: &types::Size,
-        is_mut: &bool,
+        attr: &VarMutAttr,
     ) -> usize {
         if let node::Expr::Scope { 
             scope, 
@@ -39,7 +41,7 @@ impl IR {
                 &scope,
                 target,
                 Some(var_name), 
-                &is_mut
+                &attr
             ).unwrap();
             self.ir_tree.push(inst);
             self.id_counter += 1;
@@ -66,7 +68,7 @@ impl IR {
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
-        is_mut: &bool,
+        attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
         // `must`の契約を持つ変数は、`mut`かどうかに関わらず
         // 再代入できない(契約が別の値にすり替わってしまうため)
@@ -84,7 +86,7 @@ impl IR {
                 )?;
         }
 
-        if is_mut == &false {
+        if !matches!(attr, parse::VarMutAttr::Var) {
             CompileErr::assign_to_imm_var(
                     &assign_node.name
                 )
@@ -100,7 +102,7 @@ impl IR {
                 &assign_node.name, 
                 *assign_node.value, 
                 &expect_byte,
-                &is_mut 
+                &attr 
             );
         let dst_idx = self.gen_expr_ir(
             *assign_node.dst, 
@@ -159,7 +161,7 @@ impl IR {
         &mut self,
         mut var: node::DefineVar,
         expect_byte: &types::Size,
-        is_mut: &bool,
+        var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
         match &var.ty.clone() {
             node::TyNode::ConstractMust(constract)
@@ -173,7 +175,7 @@ impl IR {
                 let inst = self.def_var_node(
                     inner_var, 
                     expect_byte, 
-                    is_mut
+                    &var_attr
                 );
                 self.var_tree.overwrite_ty(
                     &var_name, 
@@ -195,14 +197,14 @@ impl IR {
                         &var.name, 
                         *var.value, 
                         &self.size_of(&var.ty),
-                        &is_mut
+                        &var.var_attr
                     );
                 let _ = self.var_tree
                     .push::<'l'>(
                         &var.name, 
                         &self.id_counter, 
                         &var.ty,
-                        &is_mut,
+                        &var_attr,
                     )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
@@ -232,16 +234,17 @@ impl IR {
                         &var.name, 
                         val, 
                         &self.size_of(&var.ty), 
-                        &is_mut
+                        &var_attr
                     );
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
-                let _ = self.var_tree
+                let _ = self
+                    .var_tree
                     .push::<'l'>(
                         &var.name, 
                         &self.id_counter, 
                         &var.ty, 
-                        &is_mut
+                        &var_attr
                     )?;
 
                 if range.is_none() {

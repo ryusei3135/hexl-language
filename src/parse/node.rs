@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::models::Body;
+use crate::{models::Body, parse::VarMutAttr};
 
 
 pub const IS_MUST: usize = 0;
@@ -160,7 +160,7 @@ impl TyNode {
 pub struct ArgsNode {
     pub name: String,
     pub ty: TyNode,
-    pub is_mut: bool,
+    pub var_attr: VarMutAttr,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -224,7 +224,10 @@ pub struct StructField {
 
 impl StructField {
     #[cfg(test)]
-    pub fn make_field(name: &str, ty: &str) -> Self {
+    pub fn make_field(
+        name: &str, 
+        ty: &str
+    ) -> Self {
         Self {
             name: name.to_string(),
             ty: TyNode::Ty(ty.to_string()),
@@ -293,7 +296,7 @@ pub struct DefineVar {
     pub name: String,
     pub value: Box<Expr>,
     pub ty: TyNode,
-    pub is_mut: bool,
+    pub var_attr: VarMutAttr,
 }
 
 impl DefineVar {
@@ -301,13 +304,13 @@ impl DefineVar {
         name: &String, 
         value: Expr, 
         ty: &TyNode,
-        is_mut: &bool
+        var_attr: VarMutAttr,
     ) -> Self {
         Self {
             name: name.to_string(),
             value: Box::new(value),
             ty: ty.clone(),
-            is_mut: *is_mut,
+            var_attr: var_attr,
         }
     }
 

@@ -51,7 +51,10 @@ impl Parser {
                 lex::Tkn::RBracket => {
                     // ポインタ参照なので、次のトークンに進めずに
                     // ノードを返す
-                    if !matches!(self.next_tkn_ref(vec!["="])?, lex::Tkn::Equal) {
+                    if !matches!(
+                        self.next_tkn_ref(vec!["="])?, 
+                        lex::Tkn::Equal
+                    ) {
                         return Ok(node::Expr::Var(name));
                     }
                     self.next_tkn(vec!["="])?;
@@ -68,7 +71,7 @@ impl Parser {
             if result.is_err() {
                 return result.err().unwrap();
             }
-            let is_mut = result.unwrap();
+            let var_attr = result.unwrap();
             let ty_node = self.define_ty_node()?;
 
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
@@ -77,7 +80,7 @@ impl Parser {
                         &name,
                         node::Expr::ConnectAddr(Box::new(self.expr_branch()?)),
                         &ty_node,
-                        &is_mut,
+                        var_attr,
                     )
                     .wrap());
                 }
@@ -88,7 +91,7 @@ impl Parser {
                     &name, 
                     self.expr_branch()?, 
                     &ty_node,
-                    &is_mut,
+                    var_attr,
                 ).wrap()
             } else {
                 crate::syntax_err!(

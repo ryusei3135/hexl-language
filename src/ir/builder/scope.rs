@@ -81,7 +81,7 @@ impl IR {
         scope: &Vec<String>,
         target: Box<node::Expr>,
         var_name: Option<&String>,
-        is_mut: &bool,
+        var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
         if let node::Expr::CallFunc(
             mut call_func_node
@@ -118,7 +118,7 @@ impl IR {
                         &tmp_name,
                         &self_idx,
                         &node::TyNode::Ty(struct_info.name.clone()),
-                        &is_mut,
+                        &var_attr,
                     )?;
 
                     // メゾットの第一引数(`self`)として、今確保した

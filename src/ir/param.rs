@@ -12,7 +12,7 @@ impl IR {
                 &param.name, 
                 &index, 
                 &param.ty, 
-                &param.is_mut
+                &param.var_attr
             )?;
             self.ir_tree
                 .push(inst::Inst::Param(inst::ParamMetaData::new(

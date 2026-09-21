@@ -1,9 +1,5 @@
 use crate::{
-    err::{
-        compile::{
-            CompileErr
-        }
-    }
+    err::compile::CompileErr, parse::{self, VarMutAttr}
 };
 
 use super::*;
@@ -24,7 +20,7 @@ pub enum VarLife {
 pub struct VarMetaData {
     pub attribute: VarType,
     pub size: node::TyNode,
-    pub is_mut: bool,
+    pub var_attr: parse::VarMutAttr,
     pub life: VarLife,
 }
 
@@ -32,12 +28,12 @@ impl VarMetaData {
     pub fn new(
         attribute: &VarType, 
         size: &node::TyNode,
-        is_mut: &bool   
+        var_attr: &parse::VarMutAttr 
     ) -> Self {
         Self {
             attribute: attribute.clone(),
             size: size.clone(),
-            is_mut: *is_mut,
+            var_attr: var_attr.clone(),
             life: VarLife::Constracting,
         }
     }
@@ -65,7 +61,7 @@ impl VarTree {
         var_name: &String,
         var_index: &usize,
         var_ty: &node::TyNode,
-        is_mut: &bool,
+        var_attr: &parse::VarMutAttr,
     ) -> Result<(), err::ErrKind> {
         let var = match K {
             'l' => VarType::Local(*var_index),
@@ -89,7 +85,7 @@ impl VarTree {
                         = VarMetaData::new(
                             &var, 
                             &var_ty, 
-                            &is_mut
+                            &var_attr
                         );
                     Ok(())
                 }
@@ -101,7 +97,7 @@ impl VarTree {
                 VarMetaData::new(
                     &var, 
                     &var_ty, 
-                    &is_mut
+                    &var_attr
                 )
             );
         Ok(())
@@ -112,7 +108,9 @@ impl VarTree {
         name: &String
     ) -> String {
         match &self.hash.get(name).unwrap().size {
-            node::TyNode::Ty(name) => name.to_string(),
+            node::TyNode::Ty(name) => {
+                name.to_string()
+            }
             node::TyNode::Pointer { ty_name, .. } => {
                 match &**ty_name {
                     node::TyNode::Ty(name) => name.to_string(),
@@ -133,8 +131,8 @@ impl VarTree {
     }
 
     #[inline(always)]
-    pub fn is_mut(&self, name: &String) -> bool {
-        self.hash.get(name).unwrap().is_mut
+    pub fn is_mut(&self, name: &String) -> parse::VarMutAttr {
+        self.hash.get(name).unwrap().var_attr.clone()
     }
 
     /// 既に登録されている変数の型だけを上書きする

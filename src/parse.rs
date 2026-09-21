@@ -19,3 +19,14 @@ use crate::{err, lex};
 use stmt::*;
 
 pub use stmt::Parser;
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarMutAttr {
+    /// var const
+    Const,
+    /// var:
+    Invar,
+    /// var mut
+    Var,
+}
