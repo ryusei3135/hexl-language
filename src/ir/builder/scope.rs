@@ -137,7 +137,7 @@ impl IR {
                     scope.last(), 
                     &call_func_node,
                     None
-                )
+                )?
             )
         } else {
             panic!();

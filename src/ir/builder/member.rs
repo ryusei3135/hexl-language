@@ -73,7 +73,7 @@ impl IR {
             Some(&struct_name), 
             &call_info, 
             None
-        )
+        ).unwrap()
     }
 
     pub fn member_is_arr_ref(

@@ -104,6 +104,7 @@ pub enum ErrKind {
     },
     /// トークン管理・式解析など、構文解析全般のエラー
     Syntax(SyntaxErr),
+    Undef(undef::UndefErrs),
     /// プリプロセッサ特有のエラー
     Preproc(PreprocErrDetail),
 }
@@ -119,6 +120,7 @@ impl fmt::Display for ErrKind {
             Self::CompileErrAt { error, span } => {
                 write!(f, "コンパイルエラー: {} [{}]", error.message(), span)
             }
+            Self::Undef(e) => panic!("{:?}", e),
         }
     }
 }

@@ -23,10 +23,10 @@ pub use stmt::Parser;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VarMutAttr {
-    /// var const
+    /// var const: t
     Const,
-    /// var:
+    /// var:t
     Invar,
-    /// var mut
+    /// var mut: t
     Var,
 }

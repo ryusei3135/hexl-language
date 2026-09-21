@@ -55,7 +55,7 @@ impl IR {
                 None, 
                 &call, 
                 Some(var_name)
-            );
+            ).unwrap();
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1

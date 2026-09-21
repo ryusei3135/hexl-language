@@ -437,7 +437,7 @@ impl IR {
                     None, 
                     &meta_data,
                     None
-                )
+                ).unwrap()
             }
             node::Expr::Var(name) => {
                 // `src/ir/ty_checker/var_ty.rs`

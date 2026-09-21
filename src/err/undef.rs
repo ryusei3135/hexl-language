@@ -18,14 +18,29 @@
 //! - [`preproc_err_at!`]  : 位置(`Span`)を直接指定して`PreprocErrs`の
 //!                          `ErrKind`を作る(式として使う)
 
-#[derive(Debug, Clone)]
+use crate::err;
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum UndefKind {
     UndefVarTy,
+    UndefFunc,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UndefErrs {
     kind: UndefKind,
     found: String,
-    expect: String,
+    expect: Option<String>,
+}
+
+impl UndefErrs {
+    pub fn undef_fn(found: &String) -> err::ErrKind {
+        err::ErrKind::Undef(
+            Self {
+                kind: UndefKind::UndefFunc,
+                found: found.to_string(),
+                expect: None,
+            }
+        )
+    }
 }

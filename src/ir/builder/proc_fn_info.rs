@@ -86,7 +86,7 @@ impl IR {
         module_name: Option<&String>,
         meta_data: &node::CallInfo,
         return_var_name: Option<&String>,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         // 関数の定義を取得
         let defined_func_data: FnDefInfo = {
             if let Some(def_data) = self
@@ -110,7 +110,11 @@ impl IR {
                 if let Some(def_data) = result {
                     def_data.gen(self.stk_counter)
                 } else {
-                    panic!();
+                    return Err(
+                        undef::UndefErrs::undef_fn(
+                            &meta_data.name
+                        )
+                    );
                 }
             }
         };
@@ -192,7 +196,7 @@ impl IR {
             let idx = self.gen_expr_ir(expr_arg, &ty);
             func_meta_data.insert_param_parent_id(idx);
         }
-        inst::Inst::CallFunc(func_meta_data)
+        Ok(inst::Inst::CallFunc(func_meta_data))
     }
 
     #[inline(always)]
