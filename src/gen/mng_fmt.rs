@@ -252,7 +252,10 @@ impl MngAsmFmt {
     }
 
     #[inline(always)]
-    pub fn get_global_fmt(&self, name: &String) -> String {
+    pub fn get_global_fmt(
+        &self, 
+        name: &String
+    ) -> String {
         self.fmt.fmt.global.replace("{name}", name)
     }
 

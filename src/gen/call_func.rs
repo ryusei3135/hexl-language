@@ -136,6 +136,8 @@ impl AsmEmitter {
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)
         self.stk_use_counter = 0;
+        // 生成済みの関数呼び出しの記録も、関数ごとにリセットする
+        self.emitted_calls.clear();
         if fn_meta_data.1.stk_size != 0 {
             // 予約されたサイズ分確保する
             self.asm_text
@@ -166,7 +168,11 @@ impl AsmEmitter {
             None
         };
 
-        for node in self.curr_inst.clone().iter() {
+        for (node_idx, node) in self.curr_inst
+            .clone()
+            .iter()
+            .enumerate() 
+        {
             match &node {
                 inst::Inst::ExpectJmp(name) => {
                     // build_fn_proc.rs
@@ -244,6 +250,9 @@ impl AsmEmitter {
                     if meta_data.parent == ir::IS_NOT_ASSIGN_EXPR {
                         let asm_text = self.emit_call_func(&meta_data, false);
                         self.asm_text.push_str(asm_text.as_str());
+                        // 値として参照された場合(`a: int = func(10)`など)に
+                        // 戻り値のレジスタを返せるよう、生成済みとして記録する
+                        self.emitted_calls.push(node_idx);
                     }
                 }
                 /*inst::Inst::Struct { mem, is_self, .. } => {
@@ -366,9 +375,17 @@ impl AsmEmitter {
                 .is_pointer()
                 .is_some() 
             {
-                self.assign_val_ty_is_ptr(current_reg, value, &s)
+                self.assign_val_ty_is_ptr(
+                    current_reg, 
+                    value, 
+                    &s
+                )
             } else {
-                self.assign_val_is_not_ptr(current_reg, value, &s)
+                self.assign_val_is_not_ptr(
+                    current_reg, 
+                    value, 
+                    &s
+                )
             };
 
             if self.expr_vars
@@ -376,7 +393,10 @@ impl AsmEmitter {
                 .find(|v| v == &name)
                 .is_some() 
             {
-                self.update_value_reg(&name, &current_reg);
+                self.update_value_reg(
+                    &name, 
+                    &current_reg
+                );
             }
             self.asm_text.push_str(&text);
         }

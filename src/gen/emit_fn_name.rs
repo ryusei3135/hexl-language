@@ -29,8 +29,12 @@ fn join_sanitized_parts(
 /// 通常の関数ラベルを生成する。
 /// 記号は無視して、英字・数字・`_`だけを残す。
 pub fn emit_fn_name_id(base: &str) -> String {
-    let parts: Vec<&str> = base.split("::").collect();
-    format!("hexl_{}_fn", join_sanitized_parts(&parts))
+    if base == "_start" {
+        base.to_string()
+    } else {
+        let parts: Vec<&str> = base.split("::").collect();
+        format!("hexl_{}_fn", join_sanitized_parts(&parts))
+    }
 }
 
 /// ジェネリクス関数のラベルを生成する。

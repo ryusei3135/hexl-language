@@ -20,7 +20,9 @@ impl Parser {
         let start_tkn = self.advance_tkn().unwrap();
         match start_tkn {
             lex::Tkn::Number(val) => {
-                result.1 = val.parse::<usize>().unwrap();
+                result.1 = val
+                    .parse::<usize>()
+                    .unwrap();
             }
             lex::Tkn::KeyWordConst => {
                 result.1 = self.get_range_start_num()?;

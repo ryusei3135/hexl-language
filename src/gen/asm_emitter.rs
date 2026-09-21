@@ -112,6 +112,11 @@ pub struct AsmEmitter {
     // 現在使用中のレジスタを管理する
     pub(super) used_reg: UsedRegManager,
     pub(super) stk_use_counter: usize,
+    /// `build_fn_process`が、関数呼び出しのノードとして既に
+    /// アセンブリを生成済みの`Inst::CallFunc`のid。
+    /// 生成済みの呼び出しの戻り値を、後続のノードが値として
+    /// 参照する際(`a: int = func(10)`など)に使う
+    pub(super) emitted_calls: Vec<usize>,
 }
 
 impl AsmEmitter {
@@ -134,6 +139,7 @@ impl AsmEmitter {
             var_hash_map: HashMap::new(),
             used_reg: UsedRegManager::new(),
             stk_use_counter: 0,
+            emitted_calls: Vec::new(),
         };
         me.data_sec_text
             .push_str(&me.asm_fmt.get_section_fmt("data"));
@@ -271,7 +277,9 @@ impl AsmEmitter {
             );
 
             let ret_line = if this_is_self.is_none() {
-                let self_ptr_reg = self.asm_fmt.get_fmt_param::<String>(&0, Size::DQ);
+                let self_ptr_reg = self
+                    .asm_fmt
+                    .get_fmt_param::<String>(&0, Size::DQ);
                 let line = self
                     .asm_fmt
                     .get_opcode_tmpl("address")
@@ -290,18 +298,27 @@ impl AsmEmitter {
             txt.push_str(&ret_line);
             txt
         } else {
-            let dst_size = if opcode == "address" {
-                &Size::DQ
+            let dst_size = self.resolve_dst_reg_size(
+                opcode, 
+                src1, 
+                this_is_self
+            );
+            let dst_text = self.get_reg(dst, &dst_size);
+            let src_text = self.extract_operand_text(
+                src1, 
+                &this_is_self
+            );
+            // srcがレジスタの場合は、dstとサイズを揃える
+            // (`movl %rcx, %edx`のような、サイズの混在を防ぐ)
+            let src_text = if opcode == "address" {
+                src_text
             } else {
-                &base_size
+                self.asm_fmt.resize_reg_operand(&src_text, &dst_size)
             };
             self.asm_fmt
                 .get_opcode_tmpl(opcode)
-                .replace("{dst}", &self.get_reg(dst, dst_size))
-                .replace("{src1}", &self.extract_operand_text(
-                    src1, 
-                    &this_is_self
-                ))
+                .replace("{dst}", &dst_text)
+                .replace("{src1}", &src_text)
         };
 
         if let Some(resized_asm) = self
@@ -323,6 +340,57 @@ impl AsmEmitter {
         }
     }
 
+    /// レジスタに載せる値の型`ty`から、実際に使うレジスタの
+    /// サイズを決める。
+    ///
+    /// - `DB`/`DW`/`DD`/`DQ`: そのままのサイズ
+    /// - 配列: 要素のサイズ
+    /// - ポインタ/構造体など: アドレスを持つので64bit(`DQ`)
+    pub(super) fn value_reg_size(ty: &Size) -> Size {
+        match ty {
+            Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
+            Size::Array { size, .. } => Self::value_reg_size(size),
+            _ => Size::DQ,
+        }
+    }
+
+    /// `format_line`で、結果を書き込む先(`dst`)のレジスタの
+    /// サイズを決める。
+    ///
+    /// 1. `address`(`lea`)は常にアドレスなので64bit
+    /// 2. メモリ上の値を読む場合は、読む対象のサイズ
+    /// 3. 即値・式の結果・関数の戻り値など(メモリ以外)は、
+    ///    代入先の型(`dst_ty`)のサイズ
+    /// 4. `dst_ty`が無い(`self`を持つメソッド内など)場合は、
+    ///    値そのものの型から推測できるときだけその型、
+    ///    できなければ64bit
+    ///
+    /// 以前は3.と4.が無く、メモリ以外の値は常に64bitレジスタ
+    /// (`%rcx`など)に書き込まれていた。
+    fn resolve_dst_reg_size(
+        &self,
+        opcode: &str,
+        src1: &usize,
+        dst_ty: &SelfPtrInfo,
+    ) -> Size {
+        if opcode == "address" {
+            return Size::DQ;
+        }
+        if let Some(size) = self.check_node_is_mem_val(src1) {
+            return Self::value_reg_size(&size);
+        }
+        if let Some(ty) = dst_ty {
+            return Self::value_reg_size(ty);
+        }
+        match &self.curr_inst[*src1] {
+            inst::Inst::Num { size, .. } => Self::value_reg_size(size),
+            inst::Inst::Expr(..) => {
+                Self::value_reg_size(&self.get_expr_ty(src1))
+            }
+            _ => Size::DQ,
+        }
+    }
+
     #[inline(always)]
     fn gen_resize_mnemonic(
         &self, 
@@ -330,7 +398,9 @@ impl AsmEmitter {
         opcode: &str,
         src1: &usize
     ) -> Option<String> {
-        let mut resize = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
+        let mut resize = self.check_node_is_mem_val(
+            src1
+        ).unwrap_or(Size::DQ);
         let mnemonic: &str = if opcode == "address" {
             "lea"
         } else if self.check_node_is_struct(&src1)
@@ -346,10 +416,18 @@ impl AsmEmitter {
         };
         let resized = if self.check_node_is_mem_val(src1).is_some() {
             self.asm_fmt
-                .fmt_memory_mnemonic_resize(mnemonic, &formated, &resize)
+                .fmt_memory_mnemonic_resize(
+                    mnemonic, 
+                    &formated, 
+                    &resize
+                )
         } else {
             self.asm_fmt
-                .fmt_mnemonic_resize(mnemonic, &formated, &resize)
+                .fmt_mnemonic_resize(
+                    mnemonic, 
+                    &formated, 
+                    &resize
+                )
         };
         Some(resized)
     }
@@ -557,14 +635,21 @@ impl AsmEmitter {
                 }) => 
             {
                 // `asm_emitter/operand_txt/`に記述
-                self.ref_mem_value_txt(&kind, &size, &parent_id)
+                self.ref_mem_value_txt(
+                    &kind, 
+                    &size, 
+                    &parent_id
+                )
             }
             inst::Inst::RefStruct { src, pos, .. } => {
                 // `asm_emitter/operand_txt/`に記述
                 self.ref_struct_txt(&src, &pos)
             }
             inst::Inst::GetAddress(index) => {
-                self.extract_operand_text(&index.clone(), this_is_self)
+                self.extract_operand_text(
+                    &index.clone(), 
+                    this_is_self
+                )
             }
             // 配列リテラル自体を値として参照する場合
             // (例: 変数に束縛されずそのまま関数の引数などに使われる`{1,2,3}`)
@@ -574,19 +659,36 @@ impl AsmEmitter {
                 String::new()
             }
             inst::Inst::CallFunc(call_fn_info) => {
-                // レジスタ0番、`%eax`など)をオペランドとして返す
-                if call_fn_info.parent == crate::ir::IS_ASSIGN_EXPR {
-                    let call_asm = self.emit_call_func(
-                        &call_fn_info,
-                        matches!(
-                            this_is_self, 
-                            Some(types::Size::Struct(..))
-                        )
-                    );
-                    self.asm_text.push_str(&call_asm);
-                    self.asm_fmt.get_fmt_reg(&0, &Size::DQ)
-                } else {
+                // 関数呼び出しのアセンブリが`build_fn_process`側で
+                // 既に生成済みか
+                let already_emitted = self
+                    .emitted_calls
+                    .contains(parent_id);
+
+                if !already_emitted 
+                    && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR 
+                {
+                    // 呼び出しを生成する対象ではない
                     String::new()
+                } else {
+                    if !already_emitted {
+                        let call_asm = self.emit_call_func(
+                            &call_fn_info,
+                            matches!(
+                                this_is_self, 
+                                Some(types::Size::Struct(..))
+                            )
+                        );
+                        self.asm_text.push_str(&call_asm);
+                    }
+                    // 戻り値のレジスタ(0番、`%eax`など)を返す。
+                    // 戻り値を受ける側の型(`this_is_self`)がある
+                    // 場合はそのサイズ、なければ64bit(`%rax`)
+                    let ret_size = this_is_self
+                        .as_ref()
+                        .map(Self::value_reg_size)
+                        .unwrap_or(Size::DQ);
+                    self.asm_fmt.get_fmt_reg(&0, &ret_size)
                 }
             }
             inst::Inst::Pointer(index) => {
@@ -601,8 +703,16 @@ impl AsmEmitter {
                     .iter()
                     .find(|i| &i.0 == parent_id) 
                 {
-                    // レジスタの文字列を取得
-                    self.asm_fmt.get_fmt_reg(&result.1, &Size::DQ)
+                    // 式の結果を持つレジスタは、その式自身の型のサイズで
+                    // 取得する(常に64bitにすると、`movl %rcx, %edx`の
+                    // ように32bitの命令へ64bitのレジスタが混ざる)
+                    let size = match &t {
+                        inst::Inst::Expr(..) => Self::value_reg_size(
+                            &self.get_expr_ty(parent_id)
+                        ),
+                        _ => Size::DQ,
+                    };
+                    self.asm_fmt.get_fmt_reg(&result.1, &size)
                 } else {
                     panic!("{:?}", t);
                 }
@@ -679,7 +789,10 @@ impl AsmEmitter {
         );
     
         if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
-            formated = self.replace_insert_fmt_reg(&formated, &resolved_size);
+            formated = self.replace_insert_fmt_reg(
+                &formated, 
+                &resolved_size
+            );
         }
 
         // サイズがSelfでない場合
