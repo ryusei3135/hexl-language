@@ -185,6 +185,7 @@ impl IR {
                 &def_args[index], 
                 &expr_arg
             ).unwrap();
+
             let ty = self.size_of(
                 &def_args[index].ty
             ).clone();

@@ -275,7 +275,10 @@ impl IR {
         self.id_counter
     }
 
-    fn stack_counter(&mut self, size: &node::TyNode) {
+    fn stack_counter(
+        &mut self, 
+        size: &node::TyNode
+    ) {
         self.stk_counter += types::Size::new(size)
             .unwrap()
             .to_bytes();
@@ -666,7 +669,8 @@ impl IR {
         if let Some(arm) = arm_else.clone() {
             self.begin_scope();
             self.gen_inst(&arm);
-            self.end_scope(true).unwrap();
+            self.end_scope(true)
+                .unwrap();
         }
         crate::push_jmp_code!(self, Jmp, &end_label);
 

@@ -19,6 +19,7 @@ impl IR {
         &mut self,
         fn_name: &str,
         param: &node::ArgsNode,
+        // 呼び出し元
         arg: &node::Expr,
     ) -> Result<(), err::ErrKind> {
         let arg_ty = self.expr_ty_node(arg);
@@ -217,10 +218,27 @@ impl IR {
             node::Expr::DefVar(var) => {
                 Self::walk_expr(&var.value, must_vars);
                 if var.ty.is_constract_must() {
-                    must_vars.push(MustVar {
-                        name: var.name.clone(),
-                        used: false,
-                    });
+                    if must_vars
+                        .iter()
+                        .rev()
+                        .any(|entry| entry.name == var.name)
+                    {
+                        // 同名の契約変数がブロックや分岐ごとに再定義された場合、
+                        // 直近のスコープで使われる変数だけを追跡対象にする。
+                        let shadowed = must_vars
+                            .iter_mut()
+                            .rev()
+                            .find(|entry| entry.name == var.name)
+                            .unwrap();
+                        shadowed.used = false;
+                    } else {
+                        must_vars.push(
+                            MustVar {
+                                name: var.name.clone(),
+                                used: false,
+                            }
+                        );
+                    }
                 }
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
@@ -265,24 +283,24 @@ impl IR {
                     Self::walk_expr(pattern, must_vars);
                 }
                 for arm in arms.iter() {
-                    Self::walk_expr(
-                        &arm.pattern, 
-                        must_vars
-                    );
-                    Self::walk_group2_nodes(&
-                        arm.body, 
-                        must_vars
-                    );
+                    let scope_start = must_vars.len();
+                    Self::walk_expr(&arm.pattern, must_vars);
+                    Self::walk_group2_nodes(&arm.body, must_vars);
+                    must_vars.truncate(scope_start);
                 }
                 if let Some(body) = arm_else {
+                    let scope_start = must_vars.len();
                     Self::walk_group2_nodes(body, must_vars);
+                    must_vars.truncate(scope_start);
                 }
             }
             node::Expr::Loop { pattern, body } => {
+                let scope_start = must_vars.len();
                 if let Some(pattern) = pattern {
                     Self::walk_expr(pattern, must_vars);
                 }
                 Self::walk_group2_nodes(body, must_vars);
+                must_vars.truncate(scope_start);
             }
             node::Expr::InitStruct { fields, .. } => {
                 for value in fields.values() {
@@ -326,7 +344,8 @@ impl IR {
     ) {
         if let Some(ref mut var) = must_vars
             .iter_mut()
-            .find(|var| &var.name == name) 
+            .rev()
+            .find(|var| &var.name == name)
         {
             var.used = true;
         }
