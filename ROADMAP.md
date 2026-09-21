@@ -46,3 +46,7 @@ struct: must A {
     a: int must=f
 }
 ```
+---
+```
+where=0..10 var: int = 5
+```
