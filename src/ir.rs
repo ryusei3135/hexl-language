@@ -31,6 +31,12 @@ impl ConstractFlags {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.def_var = false;
+        self.constract_ret = false;
+    }
+
+    /// var_treeでフラグを立てる
     #[inline(always)]
     pub fn put_var_def(&mut self) {
         self.def_var = true

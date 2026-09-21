@@ -62,6 +62,7 @@ impl VarTree {
         var_index: &usize,
         var_ty: &node::TyNode,
         var_attr: &parse::VarMutAttr,
+        mut put_flag: impl FnMut()
     ) -> Result<(), err::ErrKind> {
         let var = match K {
             'l' => VarType::Local(*var_index),
@@ -91,6 +92,7 @@ impl VarTree {
                 }
             };
         }
+        put_flag();
         self.hash
             .insert(
                 var_name.clone(), 

@@ -205,6 +205,7 @@ impl IR {
                         &self.id_counter, 
                         &var.ty,
                         &var_attr,
+                        || { self.constract_flag.put_var_def() }
                     )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
@@ -244,7 +245,8 @@ impl IR {
                         &var.name, 
                         &self.id_counter, 
                         &var.ty, 
-                        &var_attr
+                        &var_attr,
+                        || { self.constract_flag.put_var_def() }
                     )?;
 
                 if range.is_none() {

@@ -12,7 +12,8 @@ impl IR {
                 &param.name, 
                 &index, 
                 &param.ty, 
-                &param.var_attr
+                &param.var_attr,
+                || { self.constract_flag.put_var_def() },
             )?;
             self.ir_tree
                 .push(inst::Inst::Param(inst::ParamMetaData::new(

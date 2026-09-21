@@ -119,6 +119,7 @@ impl IR {
                         &self_idx,
                         &node::TyNode::Ty(struct_info.name.clone()),
                         &var_attr,
+                        || { self.constract_flag.put_var_def() },
                     )?;
 
                     // メゾットの第一引数(`self`)として、今確保した

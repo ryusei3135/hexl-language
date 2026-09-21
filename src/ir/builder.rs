@@ -38,7 +38,7 @@ impl IR {
     /// `Self`をメゾットの所属構造体名に解決し、最初の引数が`self`の場合は
     /// そのまま構造体へのポインタ型に変換する。
     fn resolved_self_ty(
-        &self, 
+        &self,
         mut func: node::FuncDefine
     ) -> node::FuncDefine {
         let first_param_is_self = func
@@ -574,7 +574,8 @@ impl IR {
                 &mem::take(&mut var.name),
                 &var_idx, 
                 &var.ty, 
-                &var.var_attr
+                &var.var_attr,
+                || { self.constract_flag.put_var_def() },
             )?;
 
         Ok(inst::Inst::MemoryValue(mem_insts))
