@@ -10,7 +10,7 @@
 
 use super::*;
 
-use crate::lex;
+use crate::{err::PreprocErrs::ExpectedRBracketInAsmOperand, lex};
 use std::fmt;
 // ---------------------------------------------------------------------
 // 構文全般(トークン管理・式)のエラー

@@ -1,3 +1,8 @@
+use crate::err::{
+    ErrKind::UnexpectedToken,
+    syntax_err::SyntaxErrKind,
+};
+
 use super::*;
 
 
@@ -8,48 +13,75 @@ impl Parser {
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
         if !matches!(self.current_tkn(), lex::Tkn::Mul) {
-            panic!();
+            return Err(err::ErrKind::UnexpectedToken);
         }
-        let left: (bool, usize) = match self.advance_tkn().unwrap() {
+
+        let mut result = (true, 0usize);
+        let start_tkn = self.advance_tkn().unwrap();
+        match start_tkn {
             lex::Tkn::Number(val) => {
-                (true, val.parse::<usize>().unwrap())
+                result.1 = val.parse::<usize>().unwrap();
             }
             lex::Tkn::KeyWordConst => {
-                let val: usize = self.get_range_start_num()?;
-                (true, val)
+                result.1 = self.get_range_start_num()?;
             }
             lex::Tkn::KeyWordMut => {
-                let val: usize = self.get_range_start_num()?;
-                (false, val)
+                result.0 = false;
+                result.1 = self.get_range_start_num()?;
             }
-            _ => panic!(),
-        };
+            found => {
+                return crate::syntax_err!(
+                    self.build_err_span(),
+                    err::SyntaxErrKind::ExpectedKind {
+                        expected: "number or `const`/`mut`",
+                        found,
+                    }
+                );
+            }
+        }
 
-        if matches!(
+        if !matches!(
             self.advance_tkn().unwrap(), 
             lex::Tkn::RangeTkn
         ) {
-            match self.advance_tkn().unwrap() {
-                lex::Tkn::Number(val) => {
-                    if !matches!(
-                        self.advance_tkn().unwrap(), 
-                        lex::Tkn::RBracket
-                    ) {
-                        panic!();
-                    }
-                    self.advance_tkn().unwrap();
-                    return Ok(node::TyNode::Pointer {
-                        is_const: left.0,
-                        ty_name: Box::new(base_ty),
-                        range: Some(
-                            (left.1, val.parse::<usize>().unwrap())
-                        ),
-                    });
-                }
-                _ => panic!(),
-            }
+            return Err(err::ErrKind::UnexpectedToken);
         }
-        Err(err::ErrKind::UnexpectedToken)
+
+        let end_tkn = self.advance_tkn().unwrap();
+        let end_num = match end_tkn {
+            lex::Tkn::Number(val) => {
+                val.parse::<usize>().unwrap()
+            }
+            found => {
+                return crate::syntax_err!(
+                    self.build_err_span(),
+                    err::SyntaxErrKind::ExpectedKind {
+                        expected: "number",
+                        found,
+                    }
+                );
+            }
+        };
+
+        if !matches!(
+            self.advance_tkn().unwrap(), 
+            lex::Tkn::RBracket
+        ) {
+            return crate::syntax_err!(
+                self.build_err_span(),
+                err::SyntaxErrKind::ExpectedKind {
+                    expected: "]",
+                    found: self.current_tkn().clone(),
+                }
+            );
+        }
+
+        self.advance_tkn().unwrap();
+        Ok(node::TyNode::Pointer {
+            is_const: result.0,
+            ty_name: Box::new(base_ty),
+            range: Some((result.1, end_num)),
+        })
     }
 
     /// 範囲付きポインタのスタート地点の数字を取得
@@ -128,5 +160,12 @@ mod test {
             }))
             .gen_group_info(&1)
         );
+    }
+
+    #[test]
+    fn check_invalid_ptr_range_node() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): b1 { a: int[* 1..10 = [b] }");
+        assert!(p.parser(tkns).is_err());
     }
 }
