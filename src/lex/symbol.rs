@@ -23,6 +23,10 @@ impl Lexer {
                 let tkn = match &self.gen_tkns.last()?.tkn {
                     Tkn::Equal => Tkn::EqEq,
                     Tkn::Not => Tkn::NotEq,
+                    Tkn::Add => Tkn::AddEq,
+                    Tkn::Sub => Tkn::SubEq,
+                    Tkn::Mul => Tkn::MulEq,
+                    Tkn::Div => Tkn::DivEq,
                     _ => return None,
                 };
                 self.gen_tkns.pop();

@@ -12,7 +12,10 @@ impl Parser {
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
-        if !matches!(self.current_tkn(), lex::Tkn::KeyWordMust) {
+        if !matches!(
+            self.current_tkn(), 
+            lex::Tkn::KeyWordMust
+        ) {
             panic!();
         }
         // `must`の後ろは必ず`=`
@@ -47,7 +50,10 @@ impl Parser {
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
-        if !matches!(self.current_tkn(), lex::Tkn::KeyWordOf) {
+        if !matches!(
+            self.current_tkn(), 
+            lex::Tkn::KeyWordOf
+        ) {
             panic!();
         }
 

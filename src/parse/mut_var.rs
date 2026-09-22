@@ -22,6 +22,40 @@ impl Parser {
             }
             // コロンが来た場合、それは型の定義なので、変数の定義
             lex::Tkn::Colon => VarMutAttr::Invar,
+            // `a += 1` のような複合代入は `a = a + 1` の形に展開して
+            // 通常の代入ノード(`AssignVar`)にする。
+            lex::Tkn::AddEq => {
+                return Err(Ok(node::AssignVar::new(
+                    &name,
+                    node::Expr::Var(name.to_string()),
+                    self.compound_assign_value(&name, node::Expr::Add)
+                        .unwrap(),
+                )));
+            }
+            lex::Tkn::SubEq => {
+                return Err(Ok(node::AssignVar::new(
+                    &name,
+                    node::Expr::Var(name.to_string()),
+                    self.compound_assign_value(&name, node::Expr::Sub)
+                        .unwrap(),
+                )));
+            }
+            lex::Tkn::MulEq => {
+                return Err(Ok(node::AssignVar::new(
+                    &name,
+                    node::Expr::Var(name.to_string()),
+                    self.compound_assign_value(&name, node::Expr::Mul)
+                        .unwrap(),
+                )));
+            }
+            lex::Tkn::DivEq => {
+                return Err(Ok(node::AssignVar::new(
+                    &name,
+                    node::Expr::Var(name.to_string()),
+                    self.compound_assign_value(&name, node::Expr::Div)
+                        .unwrap(),
+                )));
+            }
             _ => {
                 // define assign var node
                 return Err(Ok(node::AssignVar::new(
@@ -32,6 +66,23 @@ impl Parser {
             }
         };
         Ok(attr)
+    }
+
+    /// `a += 1` / `a -= 1` / `a *= 1` / `a /= 1` の右辺を
+    /// `a <op> 1` の式に展開する。
+    ///
+    /// `op`には `node::Expr::Add` / `Sub` / `Mul` / `Div` のような
+    /// タプルバリアントのコンストラクタをそのまま渡す。
+    #[inline(always)]
+    fn compound_assign_value(
+        &mut self,
+        name: &String,
+        op: fn((Box<node::Expr>, Box<node::Expr>)) -> node::Expr,
+    ) -> Result<node::Expr, err::ErrKind> {
+        Ok(op(node::Expr::wrap(
+            node::Expr::Var(name.to_string()),
+            self.expr_branch()?,
+        )))
     }
 
     #[inline(always)]

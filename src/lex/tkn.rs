@@ -27,6 +27,11 @@ pub enum Tkn {
     /// `=>` (matchの条件/パターンの後に付ける矢印)
     Arrow,
 
+    AddEq, // +=
+    SubEq, // -=
+    MulEq, // *=
+    DivEq, // /=
+
     CompleSyn,
 
     Number(String),

@@ -117,20 +117,48 @@ impl Lexer {
 
     /// プリプロセッサを処理し、展開済みのソースを作る。
     ///
-    /// - 行頭の `#NAME ...`: `sort_preproc` がディレクティブとして認識すれば
-    ///   (例: `#define A 10`) `Preprocessor` に登録し、その行は出力から
-    ///   取り除く(行数がずれないよう改行だけは残す)。
-    /// - それ以外の `#NAME`(行頭・行中どちらでも可): 登録済みの値に置き換える。
-    ///   未登録なら仕様どおり `Preprocessor::resolve` が panic する。
+    /// 対応する行頭ディレクティブ:
+    /// - `#define NAME VALUE`: `Preprocessor` に登録する
+    /// - `#if #NAME` / `#else` / `#endif`: `NAME` が定義済みなら `#if`〜`#else`間を、
+    ///   未定義なら `#else`〜`#endif`間を有効にする(`#else`は省略可、入れ子可)
+    ///
+    /// 行頭・行中どちらでも使えるインライン展開:
+    /// - `#NAME`: 登録済みの値に置き換える(未登録なら仕様どおり panic する)
+    /// - `#line`: その時点で処理中の(元ソース上の)行番号に置き換える組み込み
+    ///
+    /// ディレクティブ行そのものは出力から取り除かれるが、行番号がずれないよう
+    /// 改行だけは(有効な範囲にいる限り)残す。`#if`が偽になった範囲の中身は
+    /// まるごと取り除かれるため、その範囲をまたぐと行番号がずれる点に注意。
     ///
     /// `#` はこの言語では単独で `Tkn::CompleSyn` としても使われるため、
     /// 直後に識別子(英数字/`_`)が続かない `#` はここでは一切触らない。
     fn preprocess(&mut self, content: &str) -> String {
+        /// `#if` / `#else` の入れ子1段分の状態。
+        struct CondFrame {
+            /// 外側のスコープ自体が有効かどうか
+            parent_active: bool,
+            /// `#if #NAME` の条件(NAMEが定義済みか)
+            condition: bool,
+            /// すでに `#else` を通過したか
+            in_else: bool,
+        }
+        impl CondFrame {
+            fn active(&self) -> bool {
+                self.parent_active && (self.condition != self.in_else)
+            }
+        }
+        fn is_active(stack: &[CondFrame]) -> bool {
+            stack.last().map(CondFrame::active).unwrap_or(true)
+        }
+
         let chars: Vec<char> = content.chars().collect();
         let mut output = String::new();
         let mut i = 0;
         // 現在位置までの行内が空白だけ(＝まだ行頭)かどうか
         let mut at_line_start = true;
+        // 元ソース上で、今どの行を処理しているか(`#line`用)
+        let mut current_line: usize = 1;
+        let mut cond_stack: Vec<CondFrame> = Vec::new();
 
         while i < chars.len() {
             let c = chars[i];
@@ -151,25 +179,74 @@ impl Lexer {
                             line_end += 1;
                         }
                         let rest_of_line: String = chars[j..line_end].iter().collect();
+                        let active_here = is_active(&cond_stack);
 
-                        if let Some((target, kind)) = preprocessor::sort_preproc(&name, &rest_of_line) {
-                            // ディレクティブ行: テーブルに登録し、行の中身は出力しない
-                            self.preproc_table.add(target, kind);
-                            i = line_end;
-                            continue;
+                        match name.as_str() {
+                            "if" => {
+                                // `#if #A` のように、条件は `#NAME` の形で書く
+                                let target = rest_of_line
+                                    .trim()
+                                    .trim_start_matches('#')
+                                    .to_string();
+                                cond_stack.push(CondFrame {
+                                    parent_active: active_here,
+                                    condition: self.preproc_table.is_defined(&target),
+                                    in_else: false,
+                                });
+                                i = line_end;
+                                continue;
+                            }
+                            "else" => {
+                                if let Some(frame) = cond_stack.last_mut() {
+                                    frame.in_else = true;
+                                }
+                                i = line_end;
+                                continue;
+                            }
+                            "endif" => {
+                                cond_stack.pop();
+                                i = line_end;
+                                continue;
+                            }
+                            _ => {
+                                if active_here {
+                                    if let Some((target, kind)) =
+                                        preprocessor::sort_preproc(&name, &rest_of_line)
+                                    {
+                                        // `#define ...` 行: テーブルに登録
+                                        self.preproc_table.add(
+                                            target, 
+                                            kind
+                                        );
+                                        i = line_end;
+                                        continue;
+                                    }
+                                }
+                            }
                         }
                     }
 
-                    // ディレクティブでなければ `#NAME` の呼び出しとして展開する
-                    let ReplaceVal::Str(value) = self.preproc_table.resolve(&name);
-                    output.push_str(&value);
+                    // 行頭ディレクティブでなければ、インライン展開として扱う
+                    if is_active(&cond_stack) {
+                        if name == "line" {
+                            output.push_str(&current_line.to_string());
+                        } else {
+                            let ReplaceVal::Str(value) = self.preproc_table.resolve(&name);
+                            output.push_str(&value);
+                        }
+                    }
                     i = j;
                     at_line_start = false;
                     continue;
                 }
             }
 
-            output.push(c);
+            if is_active(&cond_stack) {
+                output.push(c);
+            }
+            if c == '\n' {
+                current_line += 1;
+            }
             at_line_start = c == '\n' || (at_line_start && c.is_whitespace());
             i += 1;
         }
@@ -766,6 +843,61 @@ mod tests {
         // 仕様: 登録されていない名前の `#NAME` は panic する。
         let mut lex = lexer();
         let _ = lex.analy(&"#UNDEFINED".to_string());
+    }
+
+    #[test]
+    fn check_preprocessor_if_defined_takes_if_branch() {
+        let mut lex = lexer();
+        lex.analy(
+            &"#define A 10\n#if #A\nret 1\n#else\nret 2\n#endif".to_string(),
+        )
+        .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![Tkn::KeyWordRet, Tkn::Number("1".to_string())]
+        );
+    }
+
+    #[test]
+    fn check_preprocessor_if_undefined_takes_else_branch() {
+        let mut lex = lexer();
+        lex.analy(&"#if #A\nret 1\n#else\nret 2\n#endif".to_string())
+            .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![Tkn::KeyWordRet, Tkn::Number("2".to_string())]
+        );
+    }
+
+    #[test]
+    fn check_preprocessor_if_without_else() {
+        let mut lex = lexer();
+        lex.analy(&"#if #A\nret 1\n#endif\nret 2".to_string())
+            .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        // `A` は未定義なので `#if`〜`#endif` はまるごと消える
+        assert_eq!(
+            tkns,
+            vec![Tkn::KeyWordRet, Tkn::Number("2".to_string())]
+        );
+    }
+
+    #[test]
+    fn check_preprocessor_line_builtin() {
+        let mut lex = lexer();
+        lex.analy(&"ret 1\nret #line".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::KeyWordRet,
+                Tkn::Number("1".to_string()),
+                Tkn::KeyWordRet,
+                Tkn::Number("2".to_string()),
+            ]
+        );
     }
 
     #[test]
