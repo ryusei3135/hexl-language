@@ -50,3 +50,19 @@ struct: must A {
 ```
 where=0..10 var: int = 5
 ```
+
+## もジュy－る
+```
+#include Name="mod/file.hexl"
+Name::func
+
+#include "mod/file.hexl"
+
+#include "mod/*"
+#include "mod/func.hexl"::func
+
+
+file::func
+
+pub("../main") func() {}
+```

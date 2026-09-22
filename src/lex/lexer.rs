@@ -125,14 +125,7 @@ impl Lexer {
     /// 行頭・行中どちらでも使えるインライン展開:
     /// - `#NAME`: 登録済みの値に置き換える(未登録なら仕様どおり panic する)
     /// - `#line`: その時点で処理中の(元ソース上の)行番号に置き換える組み込み
-    ///
-    /// ディレクティブ行そのものは出力から取り除かれるが、行番号がずれないよう
-    /// 改行だけは(有効な範囲にいる限り)残す。`#if`が偽になった範囲の中身は
-    /// まるごと取り除かれるため、その範囲をまたぐと行番号がずれる点に注意。
-    ///
-    /// `#` はこの言語では単独で `Tkn::CompleSyn` としても使われるため、
-    /// 直後に識別子(英数字/`_`)が続かない `#` はここでは一切触らない。
-    fn preprocess(&mut self, content: &str) -> String {
+    fn preprocess(&mut self, content: &str) -> Option<String> {
         /// `#if` / `#else` の入れ子1段分の状態。
         struct CondFrame {
             /// 外側のスコープ自体が有効かどうか
@@ -228,7 +221,12 @@ impl Lexer {
 
                     // 行頭ディレクティブでなければ、インライン展開として扱う
                     if is_active(&cond_stack) {
-                        if name == "line" {
+                        if name == "asm" {
+                            // `#asm(...)` は構文として残し、後段のパーサーが
+                            // 直接解釈する。ここで未定義マクロ扱いにしてはならない。
+                            output.push('#');
+                            output.push_str(&name);
+                        } else if name == "line" {
                             output.push_str(&current_line.to_string());
                         } else {
                             let ReplaceVal::Str(value) = self.preproc_table.resolve(&name);
@@ -251,10 +249,13 @@ impl Lexer {
             i += 1;
         }
 
-        output
+        Some(output)
     }
 
-    pub fn analy(&mut self, content: &String) -> Result<(), err::lex_err::LexErrs> {
+    pub fn analy(
+        &mut self, 
+        content: &String
+    ) -> Result<(), err::lex_err::LexErrs> {
         self.gen_tkns = Vec::new();
         self.chr_stk = String::new();
         self.last_kind = None;
@@ -262,7 +263,7 @@ impl Lexer {
         let char_table: [CharKind; 256] = make_char_table();
 
         // `#define ...` を登録し、`#NAME` をその値に展開したソースを作る。
-        let content = self.preprocess(content);
+        let content = self.preprocess(content).unwrap_or(content.to_string());
 
         // 現在の行の何文字目か
         let mut chr_counter: usize = 1;
@@ -529,28 +530,8 @@ impl Lexer {
                             StkResult::Stackable
                         }
                     } else if self.gen_flag == Some(GenFlag::Str) && *chr == '"' {
-                        // ===== 文字列直後トークン消失バグの本体 =====
-                        // 文字列モード中に閉じクォート `"` が来たケース。
-                        // 元のコードはここで GenTkn 相当の bool (UNSTACKABLE) を
-                        // 返すだけだったため、トークン生成後に呼び出し元の
-                        // analy() が無条件に `chr_stk.push(chr)` を実行し、
-                        // 消費したはずの閉じクォートが再度 chr_stk に
-                        // 積まれてしまっていた。その結果、文字列トークンの
-                        // 直後の数文字ぶん gen_tkn が FlagNotFound で
-                        // 失敗し続け、トークンが欠落する原因になっていた。
-                        //
-                        // Consumed を返すことで、analy() 側に
-                        // 「この文字は積むな」と明示的に伝える。
                         StkResult::Consumed
                     } else if self.gen_flag == Some(GenFlag::Str) {
-                        // ===== 文字列内の演算子記号バグ =====
-                        // 文字列モード中で、かつ今の文字が閉じクォートでも
-                        // ないなら（例: "a+b" の '+'）、それは単なる文字列の
-                        // 中身であり、記号として解釈してはいけない。
-                        // 元のコードはこのケースをチェックせず else に
-                        // 落としていたため、文字列内の演算子記号が
-                        // sort_symbol_tkn に渡ってトークンが分断され、
-                        // 文字列の中身が壊れていた。
                         StkResult::Stackable
                     } else {
                         if r == &CharKind::Op {
@@ -833,6 +814,26 @@ mod tests {
                 Tkn::KeyWordRet,
                 Tkn::Number("1".to_string()),
                 Tkn::CompleSyn,
+            ]
+        );
+    }
+
+    #[test]
+    fn check_asm_directive_is_not_treated_as_undefined_macro() {
+        let mut lex = lexer();
+        lex.analy(&"#asm(gas) { \"mov ${a}\" }".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::CompleSyn,
+                Tkn::Name("asm".to_string()),
+                Tkn::LParen,
+                Tkn::Name("gas".to_string()),
+                Tkn::RParen,
+                Tkn::LBrace,
+                Tkn::Str("mov ${a}".to_string()),
+                Tkn::RBrace,
             ]
         );
     }

@@ -19,6 +19,28 @@ impl AsmEmitter {
         // 生成するアセンブリコード
         let mut call_func = String::new();
 
+        let protected_regs: Vec<usize> = self
+            .used_reg
+            .used_regs()
+            .into_iter()
+            .filter(|reg| *reg != 0)
+            .collect();
+
+        for reg in protected_regs.iter() {
+            let reg_name = self
+                .asm_fmt
+                .get_fmt_reg(
+                    reg, 
+                    &Size::DQ
+                );
+            call_func
+                .push_str(
+                    &self
+                        .asm_fmt
+                        .get_push(&reg_name)
+                );
+        }
+
         for (index, param) in meta_data
             .params
             .iter()
@@ -58,12 +80,19 @@ impl AsmEmitter {
                 param_ty.clone()
             };
 
-            let src1_text = self.extract_operand_text(
-                &src1_idx, 
-                &resize_size.clone().wrap_dst_size()
-            );
-            let src1_text = self.asm_fmt
-                .resize_reg_operand(&src1_text, &resize_size);
+            let src1_text = self
+                .extract_operand_text(
+                    &src1_idx, 
+                    &resize_size
+                        .clone()
+                        .wrap_dst_size()
+                );
+            let src1_text = self
+                .asm_fmt
+                .resize_reg_operand(
+                    &src1_text, 
+                    &resize_size
+                );
 
             let mut asm = self.asm_fmt
                 .get_opcode_tmpl(opcode)
@@ -86,7 +115,10 @@ impl AsmEmitter {
                 .iter()
                 .map(|ty| format!("{:?}", ty))
                 .collect::<Vec<_>>();
-            emit_generic_fn_name_id(&meta_data.name, &generic_args)
+            emit_generic_fn_name_id(
+                &meta_data.name, 
+                &generic_args
+            )
         };
         call_func.push_str(
             &self
@@ -95,6 +127,21 @@ impl AsmEmitter {
                     &fn_label
                 )
             );
+        // === 退避したレジスタを、退避した時とは逆順に復元する ===
+        for reg in protected_regs.iter().rev() {
+            let reg_name = self
+                .asm_fmt
+                .get_fmt_reg(
+                    reg, 
+                    &Size::DQ
+                );
+            call_func
+                .push_str(
+                    &self
+                        .asm_fmt
+                        .get_pop(&reg_name)
+                );
+        }
         call_func
     }
 
@@ -112,7 +159,6 @@ impl AsmEmitter {
     ) {
         let this_is_self = fn_meta_data.1.first_param_is_self();
         let fn_ret_ty: SelfPtrInfo = fn_meta_data.1.get_ret_ty();
-        println!("{:?}", this_is_self);
         // 新しく関数の作成、
         let fn_label = if fn_meta_data.1.temp_ty.is_empty() {
             emit_fn_name_id(&fn_meta_data.1.name)
@@ -123,7 +169,10 @@ impl AsmEmitter {
                 .iter()
                 .map(|ty| format!("{:?}", ty))
                 .collect::<Vec<_>>();
-            emit_generic_fn_name_id(&fn_meta_data.1.name, &generic_args)
+            emit_generic_fn_name_id(
+                &fn_meta_data.1.name, 
+                &generic_args
+            )
         };
         self.asm_text
             .push_str(
@@ -200,11 +249,20 @@ impl AsmEmitter {
                     self.asm_text.push_str(&format!("jmp {}\n", name));
                 }
                 inst::Inst::AssignVar { name, dst, value } => {
-                    self.gen_assign_var_asm(name, dst, value, &this_is_self);
+                    self.gen_assign_var_asm(
+                        name, 
+                        dst, 
+                        value, 
+                        &this_is_self
+                    );
                 }
                 inst::Inst::Ret(idx) => {
                     // build_fn_proc.rs
-                    self.gen_ret_asm(&fn_ret_ty, &idx);
+                    self.gen_ret_asm(
+                        &fn_ret_ty, 
+                        &idx,
+                        &fn_meta_data.0,
+                    );
                 }
                 inst::Inst::Mov {
                     name,
@@ -407,7 +465,14 @@ impl AsmEmitter {
         &mut self, 
         fn_ret_ty: &SelfPtrInfo,
         idx: &usize,
+        fn_name: &String,
     ) {
+        // `_start`はOSから直接呼ばれるエントリーポイントであり、
+        // `call`で呼ばれたわけではないため`ret`で戻ることができない。
+        // `_start`の中に明示的な`return`(`Inst::Ret`)が書かれていた
+        // 場合も、通常の`leave; ret`ではなく`sys_exit`で終了させる。
+        let is_start = fn_name == "_start";
+
         if fn_ret_ty.is_none() {
             if let Some(struct_idx) = self.resolve_struct_idx(idx) {
                 let mem = match self.curr_inst[struct_idx].clone() {
@@ -418,20 +483,23 @@ impl AsmEmitter {
                     mem, 
                     true
                 );
-                self.asm_text.push_str(
-                    format!(
-                        "{}{}", 
-                        t.as_str(),
-                        self.asm_fmt
-                            .func_frame_end()
-                            .as_str()
-                    ).as_str()
-                );
-                self.asm_text.push_str("ret\n");
+                self.asm_text.push_str(t.as_str());
+                // if is_start {
+                //     self.asm_text.push_str(
+                //         &self.gen_exit_syscall_asm()
+                //     );
+                // } else {
+                    self.asm_text
+                        .push_str(
+                            self.asm_fmt
+                                .func_frame_end()
+                                .as_str()
+                            );
+                    self.asm_text.push_str("ret\n");
+                // }
                 return;
             }
         }
-
         let ret_asm = self.format_line(
             "mov", 
             Some(&0), 
@@ -440,12 +508,19 @@ impl AsmEmitter {
             &fn_ret_ty
         );
         self.asm_text.push_str(&ret_asm);
-        self.asm_text
-            .push_str(
-                self.asm_fmt
-                    .func_frame_end()
-                    .as_str()
-                );
-        self.asm_text.push_str("ret\n");
+        // if is_start {
+        //     self.asm_text
+        //         .push_str(
+        //             &self.gen_exit_syscall_asm()
+        //         );
+        // } else {
+            self.asm_text
+                .push_str(
+                    self.asm_fmt
+                        .func_frame_end()
+                        .as_str()
+                    );
+            self.asm_text.push_str("ret\n");
+        // }
     }
 }

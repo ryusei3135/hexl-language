@@ -172,33 +172,30 @@ impl Parser {
 
         let asm = inline_var
             .replace_all(
-                value, 
-                |caps: &Captures|
-            {
-                if parse_err.is_some() {
-                    return String::new();
-                }
-                println!("{:?}", caps);
-                let inner = &caps[1]; // ← 正しく "reg_a" 等が取れる
+                value,
+                |caps: &Captures| {
+                    if parse_err.is_some() {
+                        return String::new();
+                    }
 
-                // このクロージャの中で別の Regex::new を呼んでも、
-                // もう inline_var のノード領域を破壊しない
-                match Parser::parse_asm_operand(inner) {
-                    Ok(expr) => {
-                        let index = operands.len();
-                        println!("exprs inline asm {:?}", expr);
-                        operands.push(expr);
-                        format!("{{{}}}", index)
-                    }
-                    Err(e) => {
-                        parse_err = Some(e);
-                        String::new()
+                    let inner = &caps[1];
+
+                    match Parser::parse_asm_operand(inner) {
+                        Ok(expr) => {
+                            let index = operands.len();
+                            operands.push(expr);
+                            format!("{{{}}}", index)
+                        }
+                        Err(e) => {
+                            parse_err = Some(e);
+                            String::new()
+                        }
                     }
                 }
-            }
-        );
+            );
+
         if let Some(e) = parse_err {
-            panic!("KKKKKK {:?}", e);
+            return Err(e);
         }
 
         Ok(node::InlineAsm { asm, operands })
@@ -329,5 +326,26 @@ mod inline_asm_tests {
         let lines = gen_inline_asm(r#""nop""#);
         assert_eq!(lines[0].asm, "nop");
         assert!(lines[0].operands.is_empty());
+    }
+
+    #[test]
+    fn asm_block_does_not_truncate_following_statements() {
+        let src = "main(): b1 { #asm(gas) { \"mov ${a}\" } ret a }";
+
+        let mut lexer = lex::Lexer::new();
+        lexer.analy(&src.to_string()).unwrap();
+
+        let mut p = parse::Parser::new();
+        let nodes = p.parser(lexer.gen_tkns).expect("parse failed");
+
+        let node::Group1Node::FuncDefine(func) = &nodes[0] else {
+            panic!("not a func define")
+        };
+
+        assert_eq!(func.body.len(), 2);
+        assert!(matches!(
+            func.body[1].get_node(),
+            node::Group2Node::Stmt(node::StmtNode::Return(_))
+        ));
     }
 }
