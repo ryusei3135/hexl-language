@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-09-23
+### Changed
+- #includeプロセッサの使い方を変更
+    ```
+    #include "file.hexl"
+    #include "file.hexl"::func
+    #include File="file.hexl"
+    #include "file.hexl"::*
+    ```
+
+
+
 ## [0.12.1] - 2026-09-23
 ### Fixed
 - プロセッサが使えないバグを修正

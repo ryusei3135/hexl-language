@@ -9,37 +9,6 @@ use regex::{Captures, Regex};
 //     Regex::new(r"\$\{([^}]+)\}").unwrap()
 // }
 
-macro_rules! NoneIsBreak {
-    ($val:expr) => {
-        if $val.is_none() {
-            break;
-        } else {
-            $val
-        }
-    };
-}
-
-#[derive(Debug, Clone)]
-enum PathTkn {
-    Name,
-    PathTkn,
-}
-
-fn path_node(
-    mod_path: &mut node::ModPath,
-    flag: &Option<PathTkn>,
-) -> Option<PathTkn> {
-    if flag
-        .as_ref()
-        .is_none_or(|v| matches!(v, PathTkn::PathTkn)) 
-    {
-        Some(PathTkn::Name)
-    } else {
-        // pathの終了
-        None
-    }
-}
-
 impl Parser {
     pub(super) fn make_preproc(
         &mut self,
@@ -48,7 +17,7 @@ impl Parser {
         let result = match proc_name.as_str() {
             "include" => {
                 node::Group2Node::Include(
-                    self.build_mod_path()?)
+                    self.build_include_path()?)
             }
             "preserve" => {
                 println!("{}", proc_name);
@@ -61,45 +30,113 @@ impl Parser {
         Ok(result)
     }
 
-    fn build_mod_path(
+    /// `#include`の後ろを解析する。以下の書き方に対応する:
+    /// - `#include Name="mod/file.hexl"`  公開関数を全て`Name::`で取り込む
+    /// - `#include "mod/file.hexl"`       公開関数を全て、ファイル名から
+    ///                                     生成したモジュール名で取り込む
+    ///                                     (`file::func()`)
+    /// - `#include "mod/file.hexl"::func` `func`だけをそのまま取り込む
+    /// - `#include "mod/file.hexl"::*`    公開関数を全て、そのまま取り込む
+    /// - `#include mod::file`             従来通りの書き方(下位互換)
+    fn build_include_path(
         &mut self
     ) -> Result<node::ModPath, err::ErrKind> {
-        let mut flag: Option<PathTkn> = None;
-        let mut mod_path = node::ModPath::new();
-        loop {
-            match self.next_tkn_ref(vec!["name", "::", ".."])? {
-                lex::Tkn::Name(name) => {
-                    flag = path_node(
-                        &mut mod_path, 
-                        &flag
-                    );
-                    mod_path.add_path(&name);
-                    NoneIsBreak!(flag.clone());
-                }
-                lex::Tkn::Str(val) => {
-                    flag = path_node(
-                        &mut mod_path, 
-                        &flag, 
-                    );
-                    mod_path.add_path(&val);
-                    NoneIsBreak!(flag.clone());
-                }
-                lex::Tkn::ModPathTkn => {
-                    flag = Some(PathTkn::PathTkn);
-                }
+        // `Name "=" ...`の形なら、エイリアス指定として読み取る
+        let alias = self.try_take_include_alias()?;
+
+        match self.next_tkn(vec!["string", "name"])? {
+            lex::Tkn::Str(literal) => {
+                self.finish_literal_include(literal, alias)
+            }
+            // エイリアスが指定されている場合、パスは必ず
+            // 文字列リテラル(`Literal`形式)でなければならない
+            lex::Tkn::Name(first_seg) if alias.is_none() => {
+                self.build_mod_path_segments(first_seg)
+            }
+            _ => {
+                crate::preproc_err!(self, ExpectedPathSegment);
+            }
+        }
+    }
+
+    /// `Name "=" `の形になっているかどうかを覗き見て判定する。
+    /// なっていれば両方のトークンを消費してエイリアス名を返し、
+    /// なっていなければ何も消費せず`None`を返す
+    fn try_take_include_alias(
+        &mut self
+    ) -> Result<Option<String>, err::ErrKind> {
+        let is_alias = matches!(
+            self.peek_tkn(), 
+            Some(lex::Tkn::Name(_))
+        ) && matches!(
+            self.peek2_tkn(), 
+            Some(lex::Tkn::Equal)
+        );
+
+        if !is_alias {
+            return Ok(None);
+        }
+
+        let lex::Tkn::Name(alias_name) = self.next_tkn(vec!["name"])? else {
+            unreachable!();
+        };
+        // `=`を読み飛ばす
+        self.next_tkn(vec!["="])?;
+        Ok(Some(alias_name))
+    }
+
+    /// `"mod/file.hexl"`(と、それに続く`::func` / `::*`)を解析して
+    /// `ModPath`を作る。呼び出された時点で、対象の文字列トークンは
+    /// 読み込み済み(`current_tkn`がその文字列を指している)
+    fn finish_literal_include(
+        &mut self,
+        literal: String,
+        alias: Option<String>,
+    ) -> Result<node::ModPath, err::ErrKind> {
+        // `::`が続いていなければ、ファイル全体をモジュールとして
+        // 取り込む(エイリアスが無ければファイル名からモジュール名を
+        // 自動生成する)
+        if !matches!(self.peek_tkn(), Some(lex::Tkn::ModPathTkn)) {
+            return Ok(node::ModPath::new_literal(
+                literal,
+                node::ImportKind::Module(alias),
+            ));
+        }
+        // `::`を読み飛ばす
+        self.next_tkn(vec![])?;
+
+        let kind = match self.next_tkn(vec!["name", "*"])? {
+            lex::Tkn::Name(func_name) => node::ImportKind::Func(func_name),
+            lex::Tkn::Mul => node::ImportKind::Glob,
+            _ => {
+                crate::preproc_err!(self, ExpectedPathSegment);
+            }
+        };
+
+        Ok(node::ModPath::new_literal(literal, kind))
+    }
+
+    /// 従来通りの書き方(`mod::file`)を解析する。
+    /// `first_seg`は既に読み込み済みの最初のセグメント
+    fn build_mod_path_segments(
+        &mut self,
+        first_seg: String,
+    ) -> Result<node::ModPath, err::ErrKind> {
+        let mut mod_path = node::ModPath::new_segments();
+        mod_path.add_path(&first_seg);
+
+        while matches!(self.peek_tkn(), Some(lex::Tkn::ModPathTkn)) {
+            // `::`を読み飛ばす
+            self.next_tkn(vec![])?;
+            match self.next_tkn(vec!["name"])? {
+                lex::Tkn::Name(name) => mod_path.add_path(&name),
+                lex::Tkn::Str(val) => mod_path.add_path(&val),
                 _ => {
-                    if flag
-                        .as_ref()
-                        .is_some_and(|v| matches!(v, PathTkn::Name))
-                    {
-                        break;
-                    } else {
-                        crate::preproc_err!(self, ExpectedPathSegment);
-                    }
+                    crate::preproc_err!(self, ExpectedPathSegment);
                 }
             }
-            self.next_tkn(vec![]).unwrap();
         }
+
         Ok(mod_path)
     }
 

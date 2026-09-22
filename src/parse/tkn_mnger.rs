@@ -9,17 +9,22 @@ impl Parser {
     /// 現在の位置から1つ先のトークンを取得する。
     /// `next_tkn_ref`と違い、それ以上トークンが無い場合は
     /// エラーではなく`None`を返す。
-    ///
-    /// inlineアセンブラの`${...}`内の式は、文の途中ではなく
-    /// それだけで閉じた短いトークン列として解析されるため、
-    /// 最後まで解析した後に続くトークンが存在しないことがある。
-    /// そのため通常の文の解析(常に後続のトークンがある前提)
-    /// とは違い、EOFをエラーにしない先読みが必要になる。
     pub(super) fn peek_tkn(&self) -> Option<lex::Tkn> {
         self.tkns
             .as_ref()
             .unwrap()
             .get(self.idx + 1)
+            .map(|v| v.tkn.clone())
+    }
+
+    /// `peek_tkn`の2つ先版。`#include`の
+    /// `Name "=" ...`(エイリアス指定)のように、2つ先まで
+    /// 覗き見てからでないと構文を判断できない場合に使う
+    pub(super) fn peek2_tkn(&self) -> Option<lex::Tkn> {
+        self.tkns
+            .as_ref()
+            .unwrap()
+            .get(self.idx + 2)
             .map(|v| v.tkn.clone())
     }
 

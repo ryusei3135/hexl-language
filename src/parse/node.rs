@@ -445,47 +445,105 @@ impl Expr {
 }
 
 
+/// `#include`で指定されたパスの実体
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportPath {
+    /// `#include mod::file`のように、`::`で区切られた
+    /// セグメントをそのままディレクトリ・ファイル名として使う
+    /// (従来の書き方。拡張子は付いていないので`gen_path`側で付与する)
+    Segments(Vec<String>),
+    /// `#include "mod/file.hexl"`のように、拡張子を含む
+    /// ファイルパスをそのまま文字列で指定する書き方
+    Literal(String),
+}
+
+/// `#include`で取り込んだ関数を、どういう名前で
+/// 使えるようにするかを表す
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportKind {
+    Auto,
+    /// 公開されている関数をすべて、モジュール名を付けて取り込む。
+    /// `None`の場合はファイル名からモジュール名を自動生成する
+    /// - `#include Name="mod/file.hexl"` -> `Some("Name")` (`Name::func()`)
+    /// - `#include "mod/file.hexl"` -> `None` (ファイル名から`file::func()`)
+    Module(Option<String>),
+    /// 指定した関数だけを、モジュール名を付けずに取り込む
+    /// (`#include "mod/file.hexl"::func` -> `func()`)
+    Func(String),
+    /// 公開されている関数をすべて、モジュール名を付けずに取り込む
+    /// (`#include "mod/file.hexl"::*` -> `func()`)
+    Glob,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModPath {
-    pub path: Vec<String>,
+    pub path: ImportPath,
+    pub kind: ImportKind,
 }
 
 impl ModPath {
+    /// 従来の書き方(`mod::file`)用の空の`ModPath`を作る
     #[inline(always)]
-    pub const fn new() -> Self {
-        Self { path: Vec::new() }
+    pub fn new_segments() -> Self {
+        Self {
+            path: ImportPath::Segments(Vec::new()),
+            kind: ImportKind::Auto,
+        }
     }
 
+    /// 新しい書き方(`"mod/file.hexl"`)用の`ModPath`を作る
+    #[inline(always)]
+    pub fn new_literal(literal: String, kind: ImportKind) -> Self {
+        Self {
+            path: ImportPath::Literal(literal),
+            kind,
+        }
+    }
+
+    /// 従来の書き方(`Segments`)でのみ使う。
+    /// `Literal`に対して呼び出すとpanicする
     #[inline(always)]
     pub fn add_path(
         &mut self, 
         path_name: &String
     ) {
-        self.path.push(
-            path_name.to_string()
-        );
+        match &mut self.path {
+            ImportPath::Segments(segments) => {
+                segments.push(path_name.to_string());
+            }
+            ImportPath::Literal(_) => panic!(
+                "system err: ModPath::add_pathは`Segments`形式の\
+                パスにのみ使えます"
+            ),
+        }
     }
 
+    /// `#include`先のファイルパスを生成する
     pub fn gen_path(&self) -> String {
-        // ディレクトリの最初のパスのインデック
-        const PATH_START: usize = 0;
+        match &self.path {
+            // 既に拡張子込みの完全なパスなので、そのまま返す
+            ImportPath::Literal(literal) => literal.clone(),
+            ImportPath::Segments(segments) => {
+                // ディレクトリの最初のパスのインデックス
+                const PATH_START: usize = 0;
 
-        let mut path = String::new();
-        for (index, dir) in self
-            .path
-            .iter()
-            .enumerate() 
-        {
-            if index != PATH_START {
-                path.push('/');
+                let mut path = String::new();
+                for (index, dir) in segments
+                    .iter()
+                    .enumerate() 
+                {
+                    if index != PATH_START {
+                        path.push('/');
+                    }
+                    path.push_str(
+                        dir.as_str()
+                    );
+                }
+                // 最後に拡張子を追加
+                path.push_str(".hexl");
+                path
             }
-            path.push_str(
-                dir.as_str()
-            );
         }
-        // 最後に拡張子を追加
-        path.push_str(".hexl");
-        path
     }
 
     /// パスの最後のセグメントを除いた、
@@ -495,16 +553,23 @@ impl ModPath {
     /// `#include`で指定されたパスがファイルとして
     /// 存在しない場合、最後のセグメントは
     /// 関数名とみなし、その手前までを
-    /// ファイルパスとして探すのに使う
+    /// ファイルパスとして探すのに使う。
+    /// `Segments`形式(従来の書き方)でのみ使う
     pub fn gen_parent_path(&self) -> String {
         const PATH_START: usize = 0;
 
+        let ImportPath::Segments(segments) = &self.path else {
+            panic!(
+                "system err: gen_parent_pathは`Segments`形式の\
+                パスにのみ使えます"
+            );
+        };
+
         let mut path = String::new();
-        let parent_len = self.path
+        let parent_len = segments
             .len()
             .saturating_sub(1);
-        for (index, dir) in self
-            .path[..parent_len]
+        for (index, dir) in segments[..parent_len]
             .iter()
             .enumerate() 
         {
@@ -515,6 +580,29 @@ impl ModPath {
         }
         path.push_str(".hexl");
         path
+    }
+
+    /// パスの最後のセグメント(`Segments`の場合)や、
+    /// ファイル名から拡張子を除いた部分(`Literal`の場合)を返す。
+    /// モジュール名を自動生成する際や、`Auto`判定で関数名として
+    /// 使う際に使う
+    pub fn last_segment(&self) -> String {
+        match &self.path {
+            ImportPath::Literal(literal) => {
+                let file_name = literal
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(literal.as_str());
+                file_name
+                    .strip_suffix(".hexl")
+                    .unwrap_or(file_name)
+                    .to_string()
+            }
+            ImportPath::Segments(segments) => segments
+                .last()
+                .expect("#includeのパスが空です")
+                .clone(),
+        }
     }
 }
 

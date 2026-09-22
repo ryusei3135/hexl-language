@@ -1,5 +1,6 @@
 use crate::{
-    err::compile::CompileErr, parse::{self, VarMutAttr}
+    err::compile::CompileErr, 
+    parse::{self, VarMutAttr}
 };
 
 use super::*;
@@ -420,7 +421,13 @@ impl FuncTree {
         temp_ty: &[node::TyNode],
     ) -> Option<FnDefInfo> {
         self.func
-            .get(&Self::make_key(name, module_name, temp_ty))
+            .get(
+                &Self::make_key(
+                    name, 
+                    module_name, 
+                    temp_ty
+                )
+            )
             .cloned()
     }
 

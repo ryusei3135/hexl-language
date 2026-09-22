@@ -77,6 +77,11 @@ gcc 生成したアセンブリソースコード -nostdlib
 - #asm(..)
     [詳細](./documents/inline_asm.md)
     - (..)に任意のアセンブラの設定ファイルの名前を入れると使える
+- #define
+- #if
+- #else
+- #endif
+- #line
 
 ### 変数の定義方法
 1. 普通の変数の定義
