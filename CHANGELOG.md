@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-22
+### Added
+- プリプロセッサを追加 
+    - #define
+    - #if
+    - #else
+    - #line
+
+
 ## [0.11.7] - 2026-09-22
 ### Added
 - `[ir/checker/tracking.rs]`を追加配列のidxが範囲内か調べる

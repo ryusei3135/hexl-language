@@ -301,7 +301,10 @@ impl IR {
             node::Expr::Loop { pattern, body } => {
                 let scope_start = must_vars.len();
                 if let Some(pattern) = pattern {
-                    Self::walk_expr(pattern, must_vars);
+                    Self::walk_expr(
+                        pattern, 
+                        must_vars
+                    );
                 }
                 Self::walk_group2_nodes(body, must_vars);
                 must_vars.truncate(scope_start);

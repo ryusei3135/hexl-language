@@ -1,10 +1,13 @@
 use super::*;
-use crate::err;
+use crate::{
+    err,
+    lex::preprocessor::{self, Preprocessor, ReplaceVal},
+};
 
 mod local {
     /// asciiに対応したテーブルを作成する
     pub fn make_char_table() -> [CharKind; 256] {
-        let mut table: [CharKind; 256] = [const { CharKind::Other }; 256];
+        let mut table: [CharKind; 256] = [CharKind::Other; 256];
 
         table[0x09..=0x0D].fill(CharKind::Space);
         table[0x20] = CharKind::Space;
@@ -98,6 +101,7 @@ pub struct Lexer {
     gen_flag: Option<GenFlag>,
     chr_stk: String,
     pub gen_tkns: Vec<LocatedTkn>,
+    preproc_table: Preprocessor,
 }
 
 impl Lexer {
@@ -107,7 +111,70 @@ impl Lexer {
             gen_flag: None,
             chr_stk: String::new(),
             gen_tkns: Vec::new(),
+            preproc_table: Preprocessor::new(),
         }
+    }
+
+    /// プリプロセッサを処理し、展開済みのソースを作る。
+    ///
+    /// - 行頭の `#NAME ...`: `sort_preproc` がディレクティブとして認識すれば
+    ///   (例: `#define A 10`) `Preprocessor` に登録し、その行は出力から
+    ///   取り除く(行数がずれないよう改行だけは残す)。
+    /// - それ以外の `#NAME`(行頭・行中どちらでも可): 登録済みの値に置き換える。
+    ///   未登録なら仕様どおり `Preprocessor::resolve` が panic する。
+    ///
+    /// `#` はこの言語では単独で `Tkn::CompleSyn` としても使われるため、
+    /// 直後に識別子(英数字/`_`)が続かない `#` はここでは一切触らない。
+    fn preprocess(&mut self, content: &str) -> String {
+        let chars: Vec<char> = content.chars().collect();
+        let mut output = String::new();
+        let mut i = 0;
+        // 現在位置までの行内が空白だけ(＝まだ行頭)かどうか
+        let mut at_line_start = true;
+
+        while i < chars.len() {
+            let c = chars[i];
+
+            if c == '#' {
+                let name_start = i + 1;
+                let mut j = name_start;
+                while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_') {
+                    j += 1;
+                }
+
+                if j > name_start {
+                    let name: String = chars[name_start..j].iter().collect();
+
+                    if at_line_start {
+                        let mut line_end = j;
+                        while line_end < chars.len() && chars[line_end] != '\n' {
+                            line_end += 1;
+                        }
+                        let rest_of_line: String = chars[j..line_end].iter().collect();
+
+                        if let Some((target, kind)) = preprocessor::sort_preproc(&name, &rest_of_line) {
+                            // ディレクティブ行: テーブルに登録し、行の中身は出力しない
+                            self.preproc_table.add(target, kind);
+                            i = line_end;
+                            continue;
+                        }
+                    }
+
+                    // ディレクティブでなければ `#NAME` の呼び出しとして展開する
+                    let ReplaceVal::Str(value) = self.preproc_table.resolve(&name);
+                    output.push_str(&value);
+                    i = j;
+                    at_line_start = false;
+                    continue;
+                }
+            }
+
+            output.push(c);
+            at_line_start = c == '\n' || (at_line_start && c.is_whitespace());
+            i += 1;
+        }
+
+        output
     }
 
     pub fn analy(&mut self, content: &String) -> Result<(), err::lex_err::LexErrs> {
@@ -116,6 +183,9 @@ impl Lexer {
         self.last_kind = None;
         self.gen_flag = None;
         let char_table: [CharKind; 256] = make_char_table();
+
+        // `#define ...` を登録し、`#NAME` をその値に展開したソースを作る。
+        let content = self.preprocess(content);
 
         // 現在の行の何文字目か
         let mut chr_counter: usize = 1;
@@ -231,23 +301,25 @@ impl Lexer {
                     }
                 }
                 GenFlag::Not => Tkn::Not,
-                GenFlag::Name => match self.chr_stk.as_str() {
-                    "ret" => Tkn::KeyWordRet,
-                    "cond" => Tkn::KeyWordCond,
-                    "loop" => Tkn::KeyWordLoop,
-                    "pub" => Tkn::KeyWordPub,
-                    "struct" => Tkn::KeyWordStruct,
-                    "enum" => Tkn::KeyWordEnum,
-                    "const" => Tkn::KeyWordConst,
-                    "static" => Tkn::KeyWordStatic,
-                    "mut" => Tkn::KeyWordMut,
-                    "Self" => Tkn::KeyWordSelf,
-                    "must" => Tkn::KeyWordMust,
-                    "of" => Tkn::KeyWordOf,
-                    "continue" => Tkn::KeyWordContinue,
-                    "break" => Tkn::KeyWordBreak,
-                    _ => Tkn::Name(self.chr_stk.clone()),
-                },
+                GenFlag::Name => {
+                    match self.chr_stk.as_str() {
+                        "ret" => Tkn::KeyWordRet,
+                        "cond" => Tkn::KeyWordCond,
+                        "loop" => Tkn::KeyWordLoop,
+                        "pub" => Tkn::KeyWordPub,
+                        "struct" => Tkn::KeyWordStruct,
+                        "enum" => Tkn::KeyWordEnum,
+                        "const" => Tkn::KeyWordConst,
+                        "static" => Tkn::KeyWordStatic,
+                        "mut" => Tkn::KeyWordMut,
+                        "Self" => Tkn::KeyWordSelf,
+                        "must" => Tkn::KeyWordMust,
+                        "of" => Tkn::KeyWordOf,
+                        "continue" => Tkn::KeyWordContinue,
+                        "break" => Tkn::KeyWordBreak,
+                        _ => Tkn::Name(self.chr_stk.clone()),
+                    }
+                }
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),
             };
             Ok(LocatedTkn {
@@ -256,7 +328,10 @@ impl Lexer {
                 line: line_counter.clone(),
             })
         } else {
-            crate::lex_err!(err::Span::new(line_counter, chr_counter), FlagNotFound)
+            crate::lex_err!(
+                err::Span::new(line_counter, chr_counter), 
+                FlagNotFound
+            )
         }
     }
 
@@ -349,16 +424,11 @@ impl Lexer {
                 }
                 (CharKind::Name | CharKind::Num, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
-                        self.get_value_by_flag_ty(chr, StkResult::GenTkn)
+                        self.get_value_by_flag_ty(
+                            chr, 
+                            StkResult::GenTkn
+                        )
                     } else {
-                        // 元のコードはここで無条件に gen_flag を
-                        // last_kind 由来の値で上書きしていたため、
-                        // 0x1F のように Num で始まり Name 種別の文字
-                        // (a-f, x) を含む16進数リテラルが、末尾の文字種
-                        // だけで判定されて Number ではなく Name に
-                        // 化けてしまう不具合があった。
-                        // すでに gen_flag が確定している場合はそれを
-                        // 優先し、未確定の場合のみ last_kind から補う。
                         if self.gen_flag.is_none() {
                             let flag = match last_kind {
                                 CharKind::Name => GenFlag::Name,
@@ -420,7 +490,12 @@ impl Lexer {
                         }
                     }
                 }
-                (_, CharKind::Op) => self.get_value_by_flag_ty(chr, StkResult::GenTkn),
+                (_, CharKind::Op) => {
+                    self.get_value_by_flag_ty(
+                        chr, 
+                        StkResult::GenTkn
+                    )
+                }
                 (_, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
                         StkResult::Stackable
@@ -437,7 +512,11 @@ impl Lexer {
 
     /// 現在のトークンが文字列のトークンかつ今処理中の文字が'"'なら
     /// 文字のスタックを止める関数
-    fn get_value_by_flag_ty(&self, chr: &char, other_flag_value: StkResult) -> StkResult {
+    fn get_value_by_flag_ty(
+        &self, 
+        chr: &char, 
+        other_flag_value: StkResult
+    ) -> StkResult {
         if self.gen_flag == Some(GenFlag::Str) {
             if *chr == '"' {
                 StkResult::Consumed
@@ -642,6 +721,51 @@ mod tests {
                 Tkn::RBracket,
             ]
         );
+    }
+
+    #[test]
+    fn check_preprocessor_define_and_use() {
+        // `#define A 10` で登録した値が、行頭・行中どちらの `#A` でも
+        // 展開されることを確認する。
+        let mut lex = lexer();
+        lex.analy(&"#define A 10\nret #A + 1\n#A".to_string())
+            .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::KeyWordRet,
+                Tkn::Number("10".to_string()),
+                Tkn::Add,
+                Tkn::Number("1".to_string()),
+                Tkn::Number("10".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_hash_without_name_is_complesyn() {
+        // `#` の直後が識別子でない場合はプリプロセッサとして扱わず、
+        // 従来どおり `Tkn::CompleSyn` になることを確認する。
+        let mut lex = lexer();
+        lex.analy(&"ret 1 #".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::KeyWordRet,
+                Tkn::Number("1".to_string()),
+                Tkn::CompleSyn,
+            ]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn check_preprocessor_undefined_symbol_panics() {
+        // 仕様: 登録されていない名前の `#NAME` は panic する。
+        let mut lex = lexer();
+        let _ = lex.analy(&"#UNDEFINED".to_string());
     }
 
     #[test]

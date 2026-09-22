@@ -1,3 +1,7 @@
+
+//! 配列やポインタが契約した範囲にいるかを
+//! 探索
+
 use super::*;
 
 
@@ -51,7 +55,7 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や`name`が配列型でない場合は判定できない
     /// ため`true`を返す(配列型でない場合は`range_ptr_checker`に任せる)
-    pub fn arr_idx_checker(
+    pub(in crate::ir) fn arr_idx_checker(
         &mut self,
         name: &String,
         index: &node::Expr,
@@ -86,7 +90,7 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や、`name`が範囲指定付きのポインタ型
     /// でない場合は判定できないため`true`を返す
-    pub fn range_ptr_checker(
+    pub(in crate::ir) fn range_ptr_checker(
         &mut self,
         name: &String,
         index: &node::Expr,
