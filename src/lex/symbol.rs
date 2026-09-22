@@ -3,8 +3,12 @@ use super::*;
 impl Lexer {
     pub(super) fn join_sym_tkn(
         &mut self, 
-        curr_tkn: &LocatedTkn
+        curr_tkn: &LocatedTkn,
+        adjacent: bool,
     ) -> Option<Tkn> {
+        if !adjacent {
+            return None;
+        }
         match &curr_tkn.tkn {
             Tkn::Colon => {
                 let tkn = match &self.gen_tkns.last()?.tkn {

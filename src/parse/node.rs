@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{models::Body, parse::VarMutAttr};
+use crate::{models::Body, node, parse::VarMutAttr};
 
 
 pub const IS_MUST: usize = 0;
@@ -444,6 +444,7 @@ impl Expr {
     }
 }
 
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModPath {
     pub path: Vec<String>,
@@ -460,7 +461,9 @@ impl ModPath {
         &mut self, 
         path_name: &String
     ) {
-        self.path.push(path_name.clone());
+        self.path.push(
+            path_name.to_string()
+        );
     }
 
     pub fn gen_path(&self) -> String {
@@ -468,11 +471,17 @@ impl ModPath {
         const PATH_START: usize = 0;
 
         let mut path = String::new();
-        for (index, dir) in self.path.iter().enumerate() {
+        for (index, dir) in self
+            .path
+            .iter()
+            .enumerate() 
+        {
             if index != PATH_START {
                 path.push('/');
             }
-            path.push_str(dir);
+            path.push_str(
+                dir.as_str()
+            );
         }
         // 最後に拡張子を追加
         path.push_str(".hexl");
@@ -494,11 +503,15 @@ impl ModPath {
         let parent_len = self.path
             .len()
             .saturating_sub(1);
-        for (index, dir) in self.path[..parent_len].iter().enumerate() {
+        for (index, dir) in self
+            .path[..parent_len]
+            .iter()
+            .enumerate() 
+        {
             if index != PATH_START {
                 path.push('/');
             }
-            path.push_str(dir);
+            path.push_str(dir.as_str());
         }
         path.push_str(".hexl");
         path

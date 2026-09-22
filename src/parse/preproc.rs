@@ -9,25 +9,46 @@ use regex::{Captures, Regex};
 //     Regex::new(r"\$\{([^}]+)\}").unwrap()
 // }
 
+macro_rules! NoneIsBreak {
+    ($val:expr) => {
+        if $val.is_none() {
+            break;
+        } else {
+            $val
+        }
+    };
+}
+
+#[derive(Debug, Clone)]
+enum PathTkn {
+    Name,
+    PathTkn,
+}
+
+fn path_node(
+    mod_path: &mut node::ModPath,
+    flag: &Option<PathTkn>,
+) -> Option<PathTkn> {
+    if flag
+        .as_ref()
+        .is_none_or(|v| matches!(v, PathTkn::PathTkn)) 
+    {
+        Some(PathTkn::Name)
+    } else {
+        // pathの終了
+        None
+    }
+}
+
 impl Parser {
     pub(super) fn make_preproc(
         &mut self,
         proc_name: &String,
     ) -> Result<node::Group2Node, err::ErrKind> {
         let result = match proc_name.as_str() {
-            /*"define" => {},
-            "undef" => {},*/
-            "include" => node::Group2Node::Include(self.build_mod_path()?),
-            /*"if" => {},
-            "ifdef" => {},
-            "ifndef" => {},
-            "else" => {},
-            "elif" => {},
-            "endif" => {},
-            "error" => {},*/
-            "line" => {
-                let curr_line = self.build_err_span().line.to_string();
-                node::Group2Node::Line(curr_line)
+            "include" => {
+                node::Group2Node::Include(
+                    self.build_mod_path()?)
             }
             "preserve" => {
                 println!("{}", proc_name);
@@ -43,26 +64,25 @@ impl Parser {
     fn build_mod_path(
         &mut self
     ) -> Result<node::ModPath, err::ErrKind> {
-        enum PathTkn {
-            Name,
-            PathTkn,
-        }
         let mut flag: Option<PathTkn> = None;
         let mut mod_path = node::ModPath::new();
         loop {
             match self.next_tkn_ref(vec!["name", "::", ".."])? {
                 lex::Tkn::Name(name) => {
-                    // 前回のトークンの種類が、無いまたは、"::"の場合だけ実行
-                    if flag
-                        .as_ref()
-                        .is_none_or(|v| matches!(v, PathTkn::PathTkn)) 
-                    {
-                        mod_path.add_path(&name);
-                        flag = Some(PathTkn::Name);
-                    } else {
-                        // pathの終了
-                        break;
-                    }
+                    flag = path_node(
+                        &mut mod_path, 
+                        &flag
+                    );
+                    mod_path.add_path(&name);
+                    NoneIsBreak!(flag.clone());
+                }
+                lex::Tkn::Str(val) => {
+                    flag = path_node(
+                        &mut mod_path, 
+                        &flag, 
+                    );
+                    mod_path.add_path(&val);
+                    NoneIsBreak!(flag.clone());
                 }
                 lex::Tkn::ModPathTkn => {
                     flag = Some(PathTkn::PathTkn);

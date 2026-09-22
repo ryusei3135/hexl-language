@@ -14,7 +14,7 @@ impl IR {
         let full_path = path.gen_path();
 
         if std::path::Path::new(&full_path)
-            .exists() 
+            .exists()
         {
             let new_setting = settings
                 .new_file(&full_path);
@@ -32,7 +32,13 @@ impl IR {
                 .unwrap();
             extern_fn_tree
                 .iter_mut()
-                .for_each(|v| v.add_self_module_name(module_name));
+                .for_each(
+                    |v| {
+                        v.add_self_module_name(
+                            module_name
+                        )
+                    }
+                );
 
             self.make_extern_func_inst(&extern_fn_tree);
             self.extern_func_tree.extend(extern_fn_tree);

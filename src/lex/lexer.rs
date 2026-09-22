@@ -21,8 +21,8 @@ mod local {
         table[0x7B..=0x7E].fill(CharKind::Op);
 
         table[0x0A] = CharKind::Ln;
-        table[0x0D] = CharKind::Ln;
         table
+
     }
 
     #[derive(Clone, Debug, PartialEq, Copy)]
@@ -75,12 +75,6 @@ mod local {
     }
 
     /// `check_stkable_chr` の戻り値。
-    ///
-    /// 元のコードは `bool`(STACKABLE/UNSTACKABLE) だけだったため、
-    /// 「現在の文字をすでに消費済みなので `chr_stk` に積んではいけない」
-    /// というケース（文字列の閉じクォートなど）を表現できなかった。
-    /// これが「文字列トークンの後ろが壊れる」バグの直接原因だったため、
-    /// 第三の状態 `Consumed` を追加して区別できるようにする。
     #[derive(Clone, Debug, PartialEq, Copy)]
     pub enum StkResult {
         /// 現在の文字をスタックに積んでよい
@@ -102,6 +96,12 @@ pub struct Lexer {
     chr_stk: String,
     pub gen_tkns: Vec<LocatedTkn>,
     preproc_table: Preprocessor,
+    /// `join_sym_tkn`が「直前のトークンと結合してよいか(=本当にソース上で
+    /// 隣接した文字だったか)」を判定するために使う。これが無いと、
+    /// `gen_tkns`の末尾が`Mul`かどうかだけで判定してしまい、
+    /// `byte* = ...`のように`*`と`=`の間に空白があるだけのケースまで
+    /// `*=`(MulEq)として誤って結合してしまう。
+    saw_gap: bool,
 }
 
 impl Lexer {
@@ -112,6 +112,7 @@ impl Lexer {
             chr_stk: String::new(),
             gen_tkns: Vec::new(),
             preproc_table: Preprocessor::new(),
+            saw_gap: true,
         }
     }
 
@@ -121,10 +122,6 @@ impl Lexer {
     /// - `#define NAME VALUE`: `Preprocessor` に登録する
     /// - `#if #NAME` / `#else` / `#endif`: `NAME` が定義済みなら `#if`〜`#else`間を、
     ///   未定義なら `#else`〜`#endif`間を有効にする(`#else`は省略可、入れ子可)
-    ///
-    /// 行頭・行中どちらでも使えるインライン展開:
-    /// - `#NAME`: 登録済みの値に置き換える(未登録なら仕様どおり panic する)
-    /// - `#line`: その時点で処理中の(元ソース上の)行番号に置き換える組み込み
     fn preprocess(&mut self, content: &str) -> Option<String> {
         /// `#if` / `#else` の入れ子1段分の状態。
         struct CondFrame {
@@ -221,7 +218,7 @@ impl Lexer {
 
                     // 行頭ディレクティブでなければ、インライン展開として扱う
                     if is_active(&cond_stack) {
-                        if name == "asm" {
+                        if name == "asm" || name == "include" {
                             // `#asm(...)` は構文として残し、後段のパーサーが
                             // 直接解釈する。ここで未定義マクロ扱いにしてはならない。
                             output.push('#');
@@ -260,6 +257,7 @@ impl Lexer {
         self.chr_stk = String::new();
         self.last_kind = None;
         self.gen_flag = None;
+        self.saw_gap = true;
         let char_table: [CharKind; 256] = make_char_table();
 
         // `#define ...` を登録し、`#NAME` をその値に展開したソースを作る。
@@ -284,12 +282,16 @@ impl Lexer {
                 if stk_result != StkResult::Stackable {
                     match self.gen_tkn(&line_counter, &chr_counter) {
                         Ok(tkn) => {
+                            let adjacent = !self.saw_gap;
                             let t = LocatedTkn {
-                                tkn: self.join_sym_tkn(&tkn).unwrap_or(tkn.tkn.clone()),
+                                tkn: self
+                                    .join_sym_tkn(&tkn, adjacent)
+                                    .unwrap_or(tkn.tkn.clone()),
                                 pos: chr_counter.clone(),
                                 line: line_counter.clone(),
                             };
                             self.gen_tkns.push(t);
+                            self.saw_gap = false;
                         }
                         Err(_e) => {}
                     }
@@ -324,6 +326,15 @@ impl Lexer {
                 self.chr_stk.push(chr);
                 self.last_kind = Some(*curr_kind);
             }
+
+            // 空白・改行を見たら、以降トークンを積むまでは「隙間あり」として
+            // 記録する。この判定は、上のトークン生成処理より後に行うことで、
+            // 「この空白/改行の直前で確定したトークン」自体の隣接判定には
+            // 影響しないようにしている。
+            if matches!(curr_kind, CharKind::Space | CharKind::Ln) {
+                self.saw_gap = true;
+            }
+
             chr_counter += 1;
         }
         self.check_stkable_chr(&CharKind::Other, &'\0');
@@ -591,7 +602,10 @@ impl Lexer {
     /// がtrueの場合必ず上書きする
     /// OW = "over write"
     #[inline(always)]
-    fn over_write_flag<const OW: bool>(&mut self, flag: GenFlag) {
+    fn over_write_flag<const OW: bool>(
+        &mut self, 
+        flag: GenFlag
+    ) {
         if OW {
             // 上書きモード
             self.gen_flag = Some(flag);

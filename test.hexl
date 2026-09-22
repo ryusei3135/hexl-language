@@ -63,7 +63,7 @@ add(a mut: int, b: int) {
                 break
             }
         }
-        a = a - 1
+        a -= 1
     }
 }
 

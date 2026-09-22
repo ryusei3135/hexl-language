@@ -87,8 +87,13 @@ impl IR {
             mut call_func_node
         ) = *target {
             if self.expr_counter != 1 {
-                if let Some(struct_info) = self.struct_tree
-                    .get(scope.last().unwrap())
+                if let Some(struct_info) = self
+                    .struct_tree
+                    .get(
+                        scope
+                            .last()
+                            .unwrap()
+                    )
                     .cloned() 
                 {
                     let mut size = 0;
