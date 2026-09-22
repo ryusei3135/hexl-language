@@ -114,13 +114,24 @@ impl IR {
                         Some(name) => name.clone(),
                         None => format!("$self_area_{}", self_idx),
                     };
-                    let _ = self.var_tree.push::<'l'>(
-                        &tmp_name,
-                        &self_idx,
-                        &node::TyNode::Ty(struct_info.name.clone()),
-                        &var_attr,
-                        || { self.constract_flag.put_var_def() },
-                    )?;
+                    let self_area_ty = node::TyNode::Ty(
+                        struct_info
+                            .name
+                            .clone()
+                    );
+                    let _ = self
+                        .var_tree
+                        .push::<'l'>(
+                            &tmp_name,
+                            &self_idx,
+                            &self_area_ty,
+                            &var_attr,
+                            || { 
+                                self
+                                    .constract_flag
+                                    .put_var_def(&self_area_ty) 
+                            },
+                        )?;
 
                     // メゾットの第一引数(`self`)として、今確保した
                     // スタックへのポインタを暗黙的に先頭へ渡す

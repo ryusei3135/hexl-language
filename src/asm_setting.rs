@@ -64,6 +64,7 @@ pub struct ValueFmt {
     pub frame_end: String,
 }
 
+/// なんの関数か忘れた
 fn default_mnemonic_size() -> bool {
     true
 }

@@ -7,14 +7,24 @@ impl IR {
         &mut self, 
         params: &Vec<node::ArgsNode>
     ) -> Result<(), err::ErrKind> {
-        for (index, param) in params.iter().enumerate() {
-            let _ = self.var_tree.push::<'p'>(
-                &param.name, 
-                &index, 
-                &param.ty, 
-                &param.var_attr,
-                || { self.constract_flag.put_var_def() },
-            )?;
+        for (index, param) in params
+            .iter()
+            .enumerate() 
+        {
+            let _ = self
+                .var_tree
+                .push::<'p'>(
+                    &param.name, 
+                    &index, 
+                    &param.ty, 
+                    &param.var_attr,
+                    || {
+                        self.constract_flag
+                            .put_var_def(
+                                &param.ty
+                            )
+                    },
+                )?;
             self.ir_tree
                 .push(inst::Inst::Param(inst::ParamMetaData::new(
                     param.name.to_string(),

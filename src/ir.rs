@@ -15,42 +15,6 @@ pub mod types;
 use crate::err;
 
 
-struct ConstractFlags {
-    /// 変数を定義
-    /// これは戻り値が契約のフラグを立てたときにtrueならOk
-    def_var: bool,
-    /// 戻り値が契約
-    constract_ret: bool,
-}
-
-impl ConstractFlags {
-    pub const fn new() -> Self {
-        Self {
-            def_var: false,
-            constract_ret: false,
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.def_var = false;
-        self.constract_ret = false;
-    }
-
-    /// var_treeでフラグを立てる
-    #[inline(always)]
-    pub fn put_var_def(&mut self) {
-        self.def_var = true
-    }
-
-    #[inline(always)]
-    pub fn constract_fn(&mut self) {
-        if self.def_var == false {
-            panic!();
-        }
-        self.def_var = false;
-    }
-}
-
 pub struct IR {
     pub var_tree: def_tree::VarTree,
     pub extern_funcs: Vec<inst::Inst>,
@@ -79,7 +43,7 @@ pub struct IR {
     stk_counter: usize,
     pub(in crate::ir) current_span: err::Span,
 
-    pub(in crate::ir) constract_flag: ConstractFlags,
+    pub(in crate::ir) constract_flag: checker::ConstractFlags,
 }
 
 pub const IS_ASSIGN_EXPR: bool = true;

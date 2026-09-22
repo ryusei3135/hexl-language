@@ -35,7 +35,11 @@ impl IR {
                 // の型が契約じゃない
                 if must
                     .must_name()
-                    .is_some_and(|name| name.as_str() != fn_name) 
+                    .is_some_and(
+                        |name| {
+                            name.as_str() != fn_name
+                        }
+                    ) 
                 {
                     CompileErr::constract_name_mismatch(
                         &fn_name,

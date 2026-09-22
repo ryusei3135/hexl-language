@@ -168,7 +168,10 @@ impl IR {
                     self.ir_tree.push(inst::Inst::GetAddress(ptr_idx));
                     let dst_idx = self.id_counter;
                     self.id_counter += 1;
-                    func_meta_data.insert_param_parent_id(dst_idx);
+                    func_meta_data
+                        .insert_param_parent_id(
+                            dst_idx
+                        );
                 }
             }
         }
@@ -216,7 +219,12 @@ impl IR {
                 .map(|v| v.is_constract_of())
                 .unwrap_or(false);
         if flag {
-            self.constract_flag.constract_fn();
+            self.constract_flag
+                .constract_fn(
+                    fn_def
+                        .ret_ty
+                        .as_ref()
+                );
         }
     }
 }

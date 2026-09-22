@@ -30,7 +30,7 @@ impl IR {
             enum_tree: HashMap::new(),
             stk_counter: 0,
             current_span: err::Span::unknown(),
-            constract_flag: ConstractFlags::new(),
+            constract_flag: checker::ConstractFlags::new(),
         }
     }
 
@@ -56,7 +56,12 @@ impl IR {
             }
         }
 
-        for (index, param) in func.params.iter().enumerate().skip(1) {
+        for (index, param) in func
+            .params
+            .iter()
+            .enumerate()
+            .skip(1) 
+        {
             if Self::ty_contains_self(&param.ty) {
                 panic!(
                     "Self型は第一引数以外では使えません: param#{index} {:?}",
@@ -255,6 +260,7 @@ impl IR {
         for stmt in node {
             self.current_span = err::Span::new(&stmt.line, &0);
             self.expr_counter = 0;
+            self.constract_flag.reset();
             match stmt.get_node().clone() {
                 node::Group2Node::Expr(expr) => {
                     let _ = self.gen_expr_ir(
@@ -408,10 +414,17 @@ impl IR {
             // 配列を初期化する
             node::Expr::Array(init_nodes) => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_array_node(init_nodes, &expect_byte)
+                self.init_array_node(
+                    init_nodes, 
+                    &expect_byte
+                )
             }
             // 配列にアクセスする
-            node::Expr::RefArray { name, dst, index } => {
+            node::Expr::RefArray { 
+                name, 
+                dst, 
+                index 
+            } => {
                 // `src/ir/builder/expr_node.rs`
                 self.ref_array_node(
                     *dst, 
@@ -441,7 +454,10 @@ impl IR {
             }
             node::Expr::Var(name) => {
                 // `src/ir/ty_checker/var_ty.rs`
-                self.check_var_ty(&name, &expect_byte);
+                self.check_var_ty(
+                    &name, 
+                    &expect_byte
+                );
 
                 return match self.var_tree.get(&name) {
                     def_tree::VarType::Local(index) => *index,
@@ -456,16 +472,27 @@ impl IR {
                 arms,
                 arm_else,
             } => {
-                return self.gen_match_expr_ir(&pattern, &arms, &arm_else);
+                return self.gen_match_expr_ir(
+                    &pattern, 
+                    &arms, 
+                    &arm_else
+                );
             }
             node::Expr::Loop { pattern, body } => {
-                return self.gen_loop_expr_ir(pattern, &body);
+                return self.gen_loop_expr_ir(
+                    pattern, 
+                    &body
+                );
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
             // メンバの定義順に基いたタグ(整数値)として展開する
             node::Expr::EnumVariant { name, variant } => {
                 // `src/ir/builder/expr_node.rs`
-                self.enum_variant_node(&name, &variant, &expect_byte)
+                self.enum_variant_node(
+                    &name, 
+                    &variant, 
+                    &expect_byte
+                )
             }
             // 構造体の初期化: `Name { field: value, .. }`
             node::Expr::InitStruct {
@@ -474,7 +501,10 @@ impl IR {
                 ..
             } => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_struct_node(&name, &mut fields)
+                self.init_struct_node(
+                    &name, 
+                    &mut fields
+                )
             }
             // ここでは対応する「元の変数名」が分からない文脈
             // (関数の引数や構造体フィールドの初期化式など)から
@@ -495,16 +525,32 @@ impl IR {
                 match &*target {
                     node::Expr::Var(name) => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_var(&scope, &name)
+                        self.member_is_var(
+                            &scope, 
+                            &name
+                        )
                     }
-                    node::Expr::CallFunc(call_func_info) => {
+                    node::Expr::CallFunc(
+                        call_func_info
+                    ) => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_fn(&scope, &call_func_info)
+                        self.member_is_fn(
+                            &scope, 
+                            &call_func_info
+                        )
                     }
                     // `変数名.[メンバー名 添字]`
-                    node::Expr::RefArray { name, index, .. } => {
+                    node::Expr::RefArray { 
+                        name, 
+                        index, 
+                        .. 
+                    } => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_arr_ref(&scope, &name, &index)
+                        self.member_is_arr_ref(
+                            &scope, 
+                            &name, 
+                            &index
+                        )
                     }
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
@@ -578,7 +624,12 @@ impl IR {
                 &var_idx, 
                 &var.ty, 
                 &var.var_attr,
-                || { self.constract_flag.put_var_def() },
+                || { 
+                    self.constract_flag
+                        .put_var_def(
+                            &var.ty
+                        ) 
+                },
             )?;
 
         Ok(inst::Inst::MemoryValue(mem_insts))

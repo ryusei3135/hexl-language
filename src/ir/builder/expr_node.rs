@@ -1,4 +1,4 @@
-use crate::parse::{self, VarMutAttr};
+use crate::{err::PreprocErrs::NotFoundAsmName, parse::{self, VarMutAttr}};
 
 use super::*;
 
@@ -49,18 +49,21 @@ impl IR {
         } 
         else if let node::Expr::CallFunc(
                 call
-            ) = expr 
+            ) = expr
         {
             let inst = self.gen_call_fn_ir(
                 None, 
-                &call, 
+                &call,
                 Some(var_name)
             ).unwrap();
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
         } else {
-            self.gen_expr_ir(expr, expect_byte)
+            self.gen_expr_ir(
+                expr, 
+                expect_byte
+            )
         }
     }
 
@@ -144,14 +147,24 @@ impl IR {
         name: &String,
         expect_byte: &types::Size,
     ) -> inst::Inst {
+        // 配列/範囲付きポインタの添字が範囲を超えていないかを確認する
+        self.arr_idx_checker(
+            name, 
+            &index
+        );
+        self.range_ptr_checker(
+            name, 
+            &index
+        );
+
         inst::Inst::InsertArr {
             name: name.to_string(),
             dst: self.gen_expr_ir(
-                dst, 
+                dst,
                 &expect_byte
             ),
             index: self.gen_expr_ir(
-                index, 
+                index,
                 &expect_byte
             ),
         }
@@ -159,29 +172,75 @@ impl IR {
 
     pub(super) fn def_var_node(
         &mut self,
+        var: node::DefineVar,
+        expect_byte: &types::Size,
+        var_attr: &parse::VarMutAttr,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        // `register_ty`を指定しない = `var.ty`をそのまま登録する
+        self.def_var_node_with_register_ty(
+            var, 
+            expect_byte, 
+            var_attr, 
+            None
+        )
+    }
+
+    /// `def_var_node`の本体
+    ///
+    /// `register_ty`: `var_tree`/`constract_flag`へ登録する型を、
+    /// `var.ty`(値を生成するために実際に使う型)とは別に指定したい場合に渡す。
+    /// `must`/`of`の契約付き変数は、値の生成自体は契約を外した中身の型
+    /// (`constract.unwrap_ty()`)で行う必要があるが、登録する型は
+    /// 契約情報を含む元の型でなければならない。そのため契約付きの分岐から
+    /// 中身の型で再帰呼び出しする際に、ここへ元の型(`constract_ty`)を渡し、
+    /// 「値の生成には中身の型を使いつつ、登録は元の型のまま行う」を実現する。
+    /// `None`の場合は`var.ty`がそのまま登録される
+    fn def_var_node_with_register_ty(
+        &mut self,
         mut var: node::DefineVar,
         expect_byte: &types::Size,
         var_attr: &parse::VarMutAttr,
+        register_ty: Option<node::TyNode>,
     ) -> Result<inst::Inst, err::ErrKind> {
         match &var.ty.clone() {
             node::TyNode::ConstractMust(constract)
             | node::TyNode::ConstractOf(constract) => {
                 let constract_ty = var.ty.clone();
-                let var_name = var.name.clone();
-
                 let mut inner_var = var.clone();
                 inner_var.ty = constract.unwrap_ty();
 
-                let inst = self.def_var_node(
-                    inner_var, 
-                    expect_byte, 
-                    &var_attr
-                );
-                self.var_tree.overwrite_ty(
-                    &var_name, 
-                    &constract_ty
-                );
-                inst
+                let value_idx =
+                    self.gen_named_expr_ir(
+                        &var.name, 
+                        *var.value, 
+                        &self.size_of(&var.ty),
+                        &var.var_attr
+                    );
+                // 登録する型: `register_ty`が指定されていればそちらを、
+                // 無ければ`var.ty`をそのまま使う(加工しない)
+                let ty_to_register = register_ty
+                    .as_ref()
+                    .unwrap_or(&var.ty);
+                let _ = self.var_tree
+                    .push::<'l'>(
+                        &var.name, 
+                        &self.id_counter, 
+                        ty_to_register,
+                        &var_attr,
+                        || { 
+                            self.constract_flag
+                                .put_var_def(
+                                    ty_to_register
+                                ) 
+                        }
+                    )?;
+                let inst = inst::Inst::Mov {
+                    name: Some(mem::take(&mut var.name)),
+                    size: self.size_of(&constract.unwrap_ty()),
+                    dst: self.id_counter,
+                    src: value_idx,
+                };
+                return Ok(inst);
             }
             node::TyNode::Stack { .. } => {
                 // 確保するスタックを増やす
@@ -199,13 +258,18 @@ impl IR {
                         &self.size_of(&var.ty),
                         &var.var_attr
                     );
+                // 登録する型: `register_ty`が指定されていればそちらを、
+                // 無ければ`var.ty`をそのまま使う(加工しない)
+                let ty_to_register = register_ty
+                    .as_ref()
+                    .unwrap_or(&var.ty);
                 let _ = self.var_tree
                     .push::<'l'>(
                         &var.name, 
                         &self.id_counter, 
-                        &var.ty,
+                        ty_to_register,
                         &var_attr,
-                        || { self.constract_flag.put_var_def() }
+                        || { self.constract_flag.put_var_def(ty_to_register) }
                     )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
@@ -237,6 +301,11 @@ impl IR {
                         &self.size_of(&var.ty), 
                         &var_attr
                     );
+                // 登録する型: `register_ty`が指定されていればそちらを、
+                // 無ければ`var.ty`をそのまま使う(加工しない)
+                let ty_to_register = register_ty
+                    .as_ref()
+                    .unwrap_or(&var.ty);
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
                 let _ = self
@@ -244,9 +313,9 @@ impl IR {
                     .push::<'l'>(
                         &var.name, 
                         &self.id_counter, 
-                        &var.ty, 
+                        ty_to_register, 
                         &var_attr,
-                        || { self.constract_flag.put_var_def() }
+                        || { self.constract_flag.put_var_def(ty_to_register) }
                     )?;
 
                 if range.is_none() {
