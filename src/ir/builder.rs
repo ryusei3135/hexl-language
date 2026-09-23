@@ -528,7 +528,7 @@ impl IR {
                         self.member_is_var(
                             &scope, 
                             &name
-                        )
+                        ).unwrap()
                     }
                     node::Expr::CallFunc(
                         call_func_info
@@ -537,7 +537,7 @@ impl IR {
                         self.member_is_fn(
                             &scope, 
                             &call_func_info
-                        )
+                        ).unwrap()
                     }
                     // `変数名.[メンバー名 添字]`
                     node::Expr::RefArray { 

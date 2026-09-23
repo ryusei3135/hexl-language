@@ -24,13 +24,15 @@ use crate::err;
 pub enum UndefKind {
     UndefVarTy,
     UndefFunc,
+    UndefMemberInVar,
+    UndefMemberInFn,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UndefErrs {
-    kind: UndefKind,
-    found: String,
-    expect: Option<String>,
+    pub kind: UndefKind,
+    pub found: String,
+    pub expect: Option<String>,
 }
 
 impl UndefErrs {
@@ -43,4 +45,17 @@ impl UndefErrs {
             }
         )
     }
+}
+
+#[macro_export]
+macro_rules! GenUndefErrResult {
+    ($kind:ident, $found:expr, $expect:expr) => {
+        err::ErrKind::Undef(
+            crate::err::undef::UndefErrs {
+                kind: $kind,
+                found: $found,
+                expect: $expect,
+            }
+        )
+    };
 }

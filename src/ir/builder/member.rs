@@ -1,3 +1,5 @@
+use crate::err::undef::UndefKind::*;
+
 use super::*;
 
 impl IR {
@@ -5,7 +7,7 @@ impl IR {
         &mut self, 
         scope: &Vec<String>, 
         name: &String
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         /*match self.var_tree.get(&scope.last().unwrap()) {
             def_tree::VarType::Local(index) => *index,
             def_tree::VarType::Param(param) => {
@@ -15,36 +17,48 @@ impl IR {
         };*/
         let member_name = scope
             .last()
-            .unwrap()
+            // スコープないに」変数が存在しない
+            .ok_or_else(|| {
+                crate::GenUndefErrResult!(
+                    UndefMemberInVar, 
+                    name.to_string(), 
+                    None
+                )
+            })?
             .to_string();
-        let pos: usize = self.struct_tree.get_pos(
-            // 変数の名前で登録されている変数の型を取得する
-            // （変数）の名前の文字列
-            &self.var_tree
-                .get_ty_name(&member_name),
-            &name,
-        );
+        let pos: usize = self
+            .struct_tree
+            .get_pos(
+                // 変数の名前で登録されている変数の型を取得する
+                // （変数）の名前の文字列
+                &self.var_tree
+                    .get_ty_name(
+                        &member_name),
+                &name,
+            );
         let size: types::Size = self
             .struct_tree
             .get_mem_size(
                 // 変数の名前で登録されている変数の型を取得する
                 // （変数）の名前の文字列
                 &self.var_tree
-                    .get_ty_name(&member_name),
+                    .get_ty_name(
+                        &member_name),
                 &name,
             );
-        inst::Inst::RefStruct {
+        let r = inst::Inst::RefStruct {
             src: member_name,
             size,
             pos,
-        }
+        };
+        Ok(r)
     }
 
     pub fn member_is_fn(
         &mut self,
         scope: &Vec<String>,
         call_func_info: &node::CallInfo,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         // `変数名.メゾット名(引数, ..)`という、メンバーアクセス
         // を経由したメゾット呼び出し
         //
@@ -57,7 +71,14 @@ impl IR {
         //   暗黙的に第一引数として渡す
         let var_name = scope
             .last()
-            .unwrap()
+            // スコープ内に関数が存在しない
+            .ok_or_else(|| {
+                crate::GenUndefErrResult!(
+                    UndefMemberInFn,
+                    "none".to_string(),
+                    None
+                )
+            })?
             .clone();
         let struct_name = self
             .var_tree
@@ -69,11 +90,12 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
         );
 
-        self.gen_call_fn_ir(
+        let r = self.gen_call_fn_ir(
             Some(&struct_name), 
             &call_info, 
             None
-        ).unwrap()
+        ).unwrap();
+        Ok(r)
     }
 
     pub fn member_is_arr_ref(
@@ -82,15 +104,24 @@ impl IR {
         name: &String,
         index: &Box<node::Expr>,
     ) -> inst::Inst {
-        let var_name = scope.last().unwrap().clone();
-        let struct_name = self.var_tree.get_ty_name(&var_name);
+        let var_name = scope
+            .last()
+            .unwrap()
+            .clone();
+        let struct_name = self
+            .var_tree
+            .get_ty_name(&var_name);
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める
         let field_ty = self
             .struct_tree
             .get(&struct_name)
             .unwrap_or_else(
-                || panic!("未定義の構造体です: {}", struct_name))
+                || panic!(
+                    "未定義の構造体です: {}", 
+                    struct_name
+                )
+            )
             .fields
             .iter()
             .find(|field| &field.name == name)
@@ -102,7 +133,9 @@ impl IR {
             })
             .ty
             .clone();
-        let elem_size = self.size_of(&field_ty).to_bytes();
+        let elem_size = self
+            .size_of(&field_ty)
+            .to_bytes();
 
         // 配列メンバー自身の、構造体先頭から見た(1要素目までの)オフセット
         let field_pos = self.struct_tree.get_pos(&struct_name, name);

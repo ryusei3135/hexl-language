@@ -1,3 +1,6 @@
+
+//! 関数のirを処理する
+
 use crate::ir::def_tree::FnDefInfo;
 
 use super::*;

@@ -1,20 +1,33 @@
 use super::*;
 
-pub(in crate::parse) struct MatchErr {
+pub(in crate::parse) 
+struct MatchErr {
     span: err::Span,
     tkn: lex::Tkn,
 }
 
 impl MatchErr {
-    pub fn new(span: err::Span, tkn: lex::Tkn) -> Self {
+    #[inline(always)]
+    pub fn new(
+        span: err::Span, 
+        tkn: lex::Tkn
+    ) -> Self {
         Self { span, tkn }
     }
 
     /// スコープが`}`で閉じられているかを確認するAPI
-    pub fn close_scope_to_rbrace(self, target: Option<lex::Tkn>) -> Result<(), err::ErrKind> {
+    pub fn close_scope_to_rbrace(
+        self, 
+        target: Option<lex::Tkn>
+    ) -> Result<(), err::ErrKind> {
         if !matches!(self.tkn, lex::Tkn::RBrace) {
             // match構文が`}`で閉じられていない
-            crate::syntax_err!(self.span, err::SyntaxErrKind::UnenclosedScope { target })
+            crate::syntax_err!(
+                self.span, 
+                err::SyntaxErrKind::UnenclosedScope { 
+                    target 
+                }
+            )
         } else {
             Ok(())
         }
