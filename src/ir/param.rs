@@ -15,7 +15,7 @@ impl IR {
                 .var_tree
                 .push::<'p'>(
                     &param.name, 
-                    &index, 
+                    index, 
                     &param.ty, 
                     &param.var_attr,
                     || {

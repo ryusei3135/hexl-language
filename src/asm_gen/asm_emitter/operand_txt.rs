@@ -17,13 +17,13 @@ impl AsmEmitter {
             // ポインタ型はアドレス(常に8byte)を保持するため、
             // 64bitレジスタ(`%rcx`など)を経由してメモリを参照する
             let reg = self.asm_fmt.get_fmt_reg(
-                &var_info.reg, 
+                var_info.reg, 
                 &Size::DQ
             );
-            self.asm_fmt.fmt_ref_operand(&reg, &ty.to_bytes())
+            self.asm_fmt.fmt_ref_operand(&reg, ty.to_bytes())
         } else {
             self.asm_fmt.get_fmt_reg(
-                &var_info.reg, 
+                var_info.reg, 
                 &var_info.size
             )
         }
@@ -31,12 +31,12 @@ impl AsmEmitter {
     /// 文字列のメモリ参照を生成する
     pub(super) fn string_mem_ref(
         &mut self, 
-        parent_id: &usize
+        parent_id: usize
     ) -> String {
         let label = self
             .data_map
             .iter()
-            .find(|v| &v.0 == parent_id)
+            .find(|v| v.0 == parent_id)
             .unwrap()
             .1
             .clone();
@@ -47,11 +47,11 @@ impl AsmEmitter {
     pub(super) fn insert_arr_txt(
         &mut self,
         name: &String,
-        dst: &usize,
-        index: &usize,
+        dst: usize,
+        index: usize,
         this_is_self: &SelfPtrInfo,
     ) -> String {
-        let index_value = match &self.curr_inst[*index] {
+        let index_value = match &self.curr_inst[index] {
             inst::Inst::Num { value, .. } => value
                 .parse::<usize>()
                 .expect("配列の添字は数字である必要があります"),
@@ -69,18 +69,23 @@ impl AsmEmitter {
             }
         };
 
-        let base = self.extract_operand_text(
-            &dst, 
-            &this_is_self
-        );
-        self.asm_fmt.fmt_ref_operand(&base, &pos)
+        let base = self
+            .extract_operand_text(
+                dst, 
+                &this_is_self
+            );
+        self.asm_fmt
+            .fmt_ref_operand(
+                &base, 
+                pos
+            )
     }
 
     /// 構造体を参照するコードを作成
     pub(super) fn ref_struct_txt(
         &mut self, 
         src: &str, 
-        size: &usize
+        size: usize
     ) -> String {
         let var_info = self
             .var_hash_map
@@ -97,11 +102,11 @@ impl AsmEmitter {
             // (`size`)を足した位置を直接`%rbp`相対で参照する
             // (レジスタを経由した間接参照`(%rcx)`にはしない)
             let offset = var_info.reg + size;
-            self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), &offset)
+            self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), offset)
         } else {
             self.asm_fmt.fmt_ref_operand(
-                &self.asm_fmt.get_fmt_reg(&var_info.reg, &Size::DQ),
-                &size,
+                &self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ),
+                size,
             )
         }
     }
@@ -109,7 +114,7 @@ impl AsmEmitter {
     pub(super) fn gen_mov_code(
         &mut self, 
         name: &Option<String>, 
-        src: &usize
+        src: usize
     ) -> String {
         let var_name = name.clone().unwrap();
         let var = self
@@ -122,7 +127,7 @@ impl AsmEmitter {
                 .asm_fmt
                 .fmt_ref_operand(
                     &"%rbp".to_string(), 
-                    &var.reg
+                    var.reg
                 );
         }
         let (reg_num, is_ptr, var_size) =
@@ -131,7 +136,7 @@ impl AsmEmitter {
         if is_ptr == false {
             if let Some(static_var) = self.data_map
                 .iter()
-                .find(|v| &v.0 == src) 
+                .find(|v| v.0 == src) 
             {
                 // static領域の変数を返す:
                 return static_var.1.clone();
@@ -139,7 +144,11 @@ impl AsmEmitter {
         }
 
         self.reg_idx = reg_num.clone();
-        self.asm_fmt.get_fmt_reg(&reg_num, &size)
+        self.asm_fmt
+            .get_fmt_reg(
+                reg_num, 
+                &size
+            )
     }
 
     /// メモリを参照するコードを生成する
@@ -147,14 +156,14 @@ impl AsmEmitter {
         &mut self,
         kind: &inst::MemoryKind,
         size: &Size,
-        parent_id: &usize,
+        parent_id: usize,
     ) -> String {
         if matches!(kind, inst::MemoryKind::Static) {
             // 静的領域の変数: データセクションに置いたラベルを参照する
             let name = self
                 .data_map
                 .iter()
-                .find(|v| &v.0 == parent_id)
+                .find(|v| v.0 == parent_id)
                 .expect("static var label not found")
                 .1
                 .clone();
@@ -162,7 +171,10 @@ impl AsmEmitter {
         } else {
             // スタック領域の変数: %rbpからのオフセットを参照する
             self.asm_fmt
-                .fmt_ref_operand(&"%rbp".to_string(), &size.to_bytes())
+                .fmt_ref_operand(
+                    &"%rbp".to_string(), 
+                    size.to_bytes()
+                )
         }
     }
 
@@ -179,7 +191,11 @@ impl AsmEmitter {
     ) -> String {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
         let assign_reg = if this_is_self.is_none() {
-            self.asm_fmt.get_fmt_param::<String>(&0, Size::DQ)
+            self.asm_fmt
+                .get_fmt_param::<String>(
+                    0, 
+                    Size::DQ
+                )
         } else {
             "%rbp".to_string()
         };
@@ -189,7 +205,9 @@ impl AsmEmitter {
         // 配列の要素のサイズは先頭の要素から求める
         // (配列の要素は全て同じ型/サイズであることが前提)
         let size = match &self.curr_inst[*first_id] {
-            inst::Inst::Num { size, .. } => size.clone(),
+            inst::Inst::Num { size, .. } => {
+                size.clone()
+            }
             t => panic!("配列の要素には数字のノードが必要です: {:?}", t),
         };
 
@@ -197,10 +215,11 @@ impl AsmEmitter {
         let mut head_offset = None;
 
         for id in ids.iter() {
-            let value = self.extract_operand_text(
-                id, 
-                &this_is_self
-            );
+            let value = self
+                .extract_operand_text(
+                    *id, 
+                    &this_is_self
+                );
 
             // スタックの場所を更新
             // (この要素のオフセットは、これまで使用したスタックのサイズ
@@ -212,7 +231,10 @@ impl AsmEmitter {
 
             let dst = self
                 .asm_fmt
-                .fmt_ref_operand(&assign_reg, &self.stk_use_counter);
+                .fmt_ref_operand(
+                    &assign_reg, 
+                    self.stk_use_counter
+                );
 
             let mov_line = self
                 .asm_fmt
@@ -222,7 +244,11 @@ impl AsmEmitter {
 
             txt.push_str(
                 self.asm_fmt
-                    .fmt_memory_mnemonic_resize("mov", &mov_line, &size)
+                    .fmt_memory_mnemonic_resize(
+                        "mov", 
+                        &mov_line, 
+                        &size
+                    )
                     .as_str(),
             );
         }
@@ -237,7 +263,7 @@ impl AsmEmitter {
         self.asm_fmt
             .fmt_ref_operand(
                 &assign_reg, 
-                &head_offset.unwrap()
+                head_offset.unwrap()
             )
     }
 

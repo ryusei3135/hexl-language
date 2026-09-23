@@ -27,7 +27,7 @@ impl Parser {
         if lexer.gen_tkns.is_empty() {
             return Err(
                 crate::preproc_err_at!(
-                    err::Span::new(&0, &0), 
+                    err::Span::new(0, 0), 
                     EmptyAsmOperand
                 )
             );

@@ -35,28 +35,28 @@ pub struct VarIndexInfo {
 
 impl VarIndexInfo {
     pub fn new(
-        reg: &usize, 
+        reg: usize, 
         size: &types::Size, 
-        index: &usize
+        index: usize
     ) -> Self {
         Self {
-            reg: *reg,
+            reg: reg,
             size: size.clone(),
-            index: *index,
+            index: index,
             is_stack: false,
         }
     }
 
     /// `%rbp`からのオフセット(`offset`)に直接置かれている変数として登録する
     pub fn new_stack(
-        offset: &usize, 
+        offset: usize, 
         size: &types::Size, 
-        index: &usize
+        index: usize
     ) -> Self {
         Self {
-            reg: *offset,
+            reg: offset,
             size: size.clone(),
-            index: *index,
+            index: index,
             is_stack: true,
         }
     }
@@ -74,9 +74,9 @@ impl UsedRegManager {
     }
 
     /// 指定したレジスタを使用中として記録する
-    pub fn mark_used(&mut self, reg: &usize) {
-        if !self.used.contains(reg) {
-            self.used.push(*reg);
+    pub fn mark_used(&mut self, reg: usize) {
+        if !self.used.contains(&reg) {
+            self.used.push(reg);
         }
     }
 
@@ -206,7 +206,7 @@ impl AsmEmitter {
         name: &String, 
         var: VarIndexInfo) 
     {
-        self.used_reg.mark_used(&var.reg);
+        self.used_reg.mark_used(var.reg);
         self.expr_vars.push(name.clone());
         self.var_hash_map.insert(name.clone(), var);
     }
@@ -215,22 +215,22 @@ impl AsmEmitter {
     pub(super) fn update_value_info(
         &mut self, 
         name: &String, 
-        index: &usize
+        index: usize
     ) {
         self.var_hash_map
             .get_mut(name)
             .unwrap()
-            .index = *index;
+            .index = index;
     }
 
     #[inline(always)]
     pub(super) fn update_value_reg(
         &mut self, 
         name: &String, 
-        reg: &usize
+        reg: usize
     ) {
         self.used_reg.mark_used(reg);
-        self.var_hash_map.get_mut(name).unwrap().reg = *reg;
+        self.var_hash_map.get_mut(name).unwrap().reg = reg;
     }
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
@@ -238,9 +238,9 @@ impl AsmEmitter {
     pub(super) fn format_line(
         &mut self,
         opcode: &str,
-        dst: Option<&usize>,
-        src1: &usize,
-        src2: Option<&usize>,
+        dst: Option<usize>,
+        src1: usize,
+        src2: Option<usize>,
         this_is_self: &SelfPtrInfo,
     ) -> String {
         let base_size: Size = self.check_node_is_mem_val(src1)
@@ -248,14 +248,14 @@ impl AsmEmitter {
         let mut formated = if let Some(struct_idx) = self.resolve_struct_idx(src1) {
             // 構造体の生成
             let mut txt = self.extract_operand_text(
-                &struct_idx, 
+                struct_idx, 
                 &this_is_self
             );
 
             let ret_line = if this_is_self.is_none() {
                 let self_ptr_reg = self
                     .asm_fmt
-                    .get_fmt_param::<String>(&0, Size::DQ);
+                    .get_fmt_param::<String>(0, Size::DQ);
                 let line = self
                     .asm_fmt
                     .get_opcode_tmpl("address")
@@ -298,7 +298,7 @@ impl AsmEmitter {
         };
 
         if let Some(resized_asm) = self
-            .gen_resize_mnemonic(&formated, opcode, &src1) 
+            .gen_resize_mnemonic(&formated, opcode, src1) 
         {
             formated = resized_asm;
         }
@@ -346,7 +346,7 @@ impl AsmEmitter {
     fn resolve_dst_reg_size(
         &self,
         opcode: &str,
-        src1: &usize,
+        src1: usize,
         dst_ty: &SelfPtrInfo,
     ) -> Size {
         if opcode == "address" {
@@ -358,7 +358,7 @@ impl AsmEmitter {
         if let Some(ty) = dst_ty {
             return Self::value_reg_size(ty);
         }
-        match &self.curr_inst[*src1] {
+        match &self.curr_inst[src1] {
             inst::Inst::Num { size, .. } => Self::value_reg_size(size),
             inst::Inst::Expr(..) => {
                 Self::value_reg_size(&self.get_expr_ty(src1))
@@ -372,18 +372,18 @@ impl AsmEmitter {
         &self, 
         formated: &String,
         opcode: &str,
-        src1: &usize
+        src1: usize
     ) -> Option<String> {
         let mut resize = self.check_node_is_mem_val(
             src1
         ).unwrap_or(Size::DQ);
         let mnemonic: &str = if opcode == "address" {
             "lea"
-        } else if self.check_node_is_struct(&src1)
+        } else if self.check_node_is_struct(src1)
         {
             "mov"
         } else if let Some(size) = self
-            .check_node_is_mem_val(&src1) 
+            .check_node_is_mem_val(src1) 
         {
             resize = size;
             "mov"
@@ -409,15 +409,15 @@ impl AsmEmitter {
     }
 
     /// IRの値IDから、その式が生成する値の型をたどって取得する。
-    pub(super) fn get_expr_ty(&self, node_idx: &usize) -> Size {
-        match &self.curr_inst[*node_idx] {
-            inst::Inst::Expr(expr) => self.get_expr_ty(&expr.ls),
+    pub(super) fn get_expr_ty(&self, node_idx: usize) -> Size {
+        match self.curr_inst[node_idx] {
+            inst::Inst::Expr(ref expr) => self.get_expr_ty(expr.ls),
             inst::Inst::Pointer(inner) => match self.get_expr_ty(inner) {
                 Size::Pointer { ty, .. } => *ty,
                 ty => ty,
             },
             inst::Inst::GetAddress(..) => Size::DQ,
-            inst::Inst::InsertArr { name, .. } => {
+            inst::Inst::InsertArr { ref name, .. } => {
                 let size = self
                     .var_hash_map
                     .get(name)
@@ -431,10 +431,10 @@ impl AsmEmitter {
                 }
             }
             inst::Inst::AssignVar { value, .. } => self.get_expr_ty(value),
-            inst::Inst::InitArr(ids) => {
+            inst::Inst::InitArr(ref ids) => {
                 let size = ids
                     .first()
-                    .map(|id| self.get_expr_ty(id))
+                    .map(|id| self.get_expr_ty(*id))
                     .unwrap_or(Size::Void);
                 Size::Array {
                     size: Box::new(size),
@@ -442,7 +442,7 @@ impl AsmEmitter {
                 }
             }
             inst::Inst::CallFunc(..) => Size::DQ,
-            node => node
+            ref node => node
                 .get_param_ty()
                 .unwrap_or_else(|| panic!("cannot determine expression type: {:?}", node)),
         }
@@ -454,10 +454,10 @@ impl AsmEmitter {
     /// ノードの内側までたどれるようにするためのヘルパー
     pub(super) fn resolve_struct_idx(
             &self, 
-            idx: &usize
+            idx: usize
     ) -> Option<usize> {
-        match &self.curr_inst[*idx] {
-            inst::Inst::Struct { .. } => Some(*idx),
+        match self.curr_inst[idx] {
+            inst::Inst::Struct { .. } => Some(idx),
             inst::Inst::GetAddress(inner)
             | inst::Inst::Pointer(inner)
             | inst::Inst::Mov { src: inner, .. } => {
@@ -467,8 +467,8 @@ impl AsmEmitter {
         }
     }
 
-    fn check_node_is_struct(&self, node_idx: &usize) -> bool {
-        match &self.curr_inst[*node_idx] {
+    fn check_node_is_struct(&self, node_idx: usize) -> bool {
+        match &self.curr_inst[node_idx] {
             inst::Inst::RefStruct { .. } => true,
             _ => false,
         }
@@ -481,7 +481,7 @@ impl AsmEmitter {
     #[inline(always)]
     pub(in crate::asm_gen) fn check_node_is_mem_val(
         &self, 
-        node_idx: &usize
+        node_idx: usize
     ) -> Option<Size> {
         self.check_node_is_mem_val_inner(node_idx, false)
     }
@@ -496,16 +496,16 @@ impl AsmEmitter {
     ///     ポインタ変数「自身」の値のサイズ(常に8byte)を返す。
     fn check_node_is_mem_val_inner(
         &self,
-        node_idx: &usize,
+        node_idx: usize,
         is_deref: bool,
     ) -> Option<Size> {
-        match &self.curr_inst[*node_idx] {
+        match self.curr_inst[node_idx] {
             inst::Inst::MemoryValue(
-                inst::MemoryInst::Memory { size, .. }
+                inst::MemoryInst::Memory { ref size, .. }
             ) => match size {
                 // `*ptr`のように参照先を読み書きする場合のみ、
                 // 参照先の型`ty`のサイズを使う
-                Size::Pointer { ty, .. } if is_deref => Some((**ty).clone()),
+                Size::Pointer { ty, .. } if is_deref => Some(*(*ty).clone()),
                 // それ以外(ポインタ変数自身の値をそのまま読む場合)は、
                 // ポインタの実際のサイズ(常に8byte)を使う
                 Size::Pointer { .. } => Some(Size::DQ),
@@ -520,9 +520,9 @@ impl AsmEmitter {
                 // ではないので、`is_deref`はそのまま引き継ぐ
                 self.check_node_is_mem_val_inner(inner, is_deref)
             }
-            inst::Inst::InsertArr { name, .. } => {
+            inst::Inst::InsertArr { ref name, .. } => {
                 self.var_hash_map
-                    .get(name)
+                    .get(&name.to_string())
                     .map(|var| var.size.clone())
             }
             _ => None,
@@ -533,23 +533,23 @@ impl AsmEmitter {
     /// - reg_idx これは必ずusizeで無ければいけない、
     fn get_reg(
         &self, 
-        reg_idx: Option<&usize>, 
+        reg_idx: Option<usize>, 
         size: &Size
     ) -> String {
         let num = if reg_idx.is_none() {
             self.reg_idx
         } else {
-            *reg_idx.unwrap()
+            reg_idx.unwrap()
         };
-        self.asm_fmt.get_fmt_reg(&num, &size)
+        self.asm_fmt.get_fmt_reg(num, &size)
     }
 
     pub(super) fn extract_operand_text(
         &mut self, 
-        parent_id: &usize, 
+        parent_id: usize, 
         this_is_self: &Option<types::Size>
     ) -> String {
-        match self.curr_inst[*parent_id].clone() {
+        match self.curr_inst[parent_id].clone() {
             inst::Inst::Num { value, .. } => {
                 self.asm_fmt.get_fmt_num(&value)
             }
@@ -558,7 +558,7 @@ impl AsmEmitter {
                 // を指すオペランドを、`%rbp`からのオフセット`stk`を使って生成する
                 self.asm_fmt.fmt_ref_operand(
                     &"%rbp".to_string(), 
-                    &stk
+                    stk
                 )
             }
             inst::Inst::Param(param) => {
@@ -579,20 +579,20 @@ impl AsmEmitter {
                     } else {
                         var_info.size.clone()
                     };
-                self.asm_fmt.get_fmt_reg(&var_info.reg, &size)
+                self.asm_fmt.get_fmt_reg(var_info.reg, &size)
             }
             // 配列にアクセス
             inst::Inst::InsertArr { name, dst, index } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.insert_arr_txt(&name, &dst, &index, this_is_self)
+                self.insert_arr_txt(&name, dst, index, this_is_self)
             }
             inst::Inst::Str { .. } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.string_mem_ref(&parent_id)
+                self.string_mem_ref(parent_id)
             }
             inst::Inst::Mov { ref name, src, .. } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.gen_mov_code(&name, &src)
+                self.gen_mov_code(&name, src)
             }
             inst::Inst::Block(name) => name.to_string(),
             inst::Inst::ExpectJmp(name) => name.to_string(),
@@ -614,16 +614,16 @@ impl AsmEmitter {
                 self.ref_mem_value_txt(
                     &kind, 
                     &size, 
-                    &parent_id
+                    parent_id
                 )
             }
             inst::Inst::RefStruct { src, pos, .. } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.ref_struct_txt(&src, &pos)
+                self.ref_struct_txt(&src, pos)
             }
             inst::Inst::GetAddress(index) => {
                 self.extract_operand_text(
-                    &index.clone(), 
+                    index, 
                     this_is_self
                 )
             }
@@ -631,7 +631,10 @@ impl AsmEmitter {
             // (例: 変数に束縛されずそのまま関数の引数などに使われる`{1,2,3}`)
             inst::Inst::InitArr(ids) => {
                 // `asm_emitter/operand_txt/`に記述
-                self.init_arr_txt::<false>(&ids, this_is_self);
+                self.init_arr_txt::<false>(
+                    &ids, 
+                    this_is_self
+                );
                 String::new()
             }
             inst::Inst::CallFunc(call_fn_info) => {
@@ -639,7 +642,7 @@ impl AsmEmitter {
                 // 既に生成済みか
                 let already_emitted = self
                     .emitted_calls
-                    .contains(parent_id);
+                    .contains(&parent_id);
 
                 if !already_emitted 
                     && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR 
@@ -664,12 +667,16 @@ impl AsmEmitter {
                         .as_ref()
                         .map(Self::value_reg_size)
                         .unwrap_or(Size::DQ);
-                    self.asm_fmt.get_fmt_reg(&0, &ret_size)
+                    self.asm_fmt
+                        .get_fmt_reg(
+                            0, 
+                            &ret_size
+                        )
                 }
             }
             inst::Inst::Pointer(index) => {
                 self.extract_operand_text(
-                    &index.clone(),
+                    index,
                     this_is_self
                 )
             }
@@ -677,7 +684,7 @@ impl AsmEmitter {
                 if let Some(result) = self
                     .last_inst_idx
                     .iter()
-                    .find(|i| &i.0 == parent_id) 
+                    .find(|i| i.0 == parent_id) 
                 {
                     // 式の結果を持つレジスタは、その式自身の型のサイズで
                     // 取得する(常に64bitにすると、`movl %rcx, %edx`の
@@ -688,7 +695,7 @@ impl AsmEmitter {
                         ),
                         _ => Size::DQ,
                     };
-                    self.asm_fmt.get_fmt_reg(&result.1, &size)
+                    self.asm_fmt.get_fmt_reg(result.1, &size)
                 } else {
                     panic!("{:?}", t);
                 }
@@ -727,14 +734,14 @@ impl AsmEmitter {
             | inst::ExprKind::Equal => "cmp",
         };
 
-        let resolved_size: Size = self.get_expr_ty(&expr.ls);
+        let resolved_size: Size = self.get_expr_ty(expr.ls);
         let wrap_size = resolved_size.wrap_dst_size();
 
         let dst_text = if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
-            Self::insert_fmt_reg_placeholder(&self.reg_idx)
+            Self::insert_fmt_reg_placeholder(self.reg_idx)
         } else {
             self.get_reg(
-                Some(&self.reg_idx), 
+                Some(self.reg_idx), 
                 &resolved_size
             )
         };
@@ -744,19 +751,19 @@ impl AsmEmitter {
             .get_opcode_tmpl(key)
             .replace("{dst}", &dst_text)
             .replace("{src1}", &self.extract_operand_text(
-                    &expr.ls, 
+                    expr.ls, 
                     &wrap_size
                 )
             )
             .replace("{src2}", &self.extract_operand_text(
-                    &expr.rs, 
+                    expr.rs, 
                     &wrap_size
                 )
             )
             .to_string();
 
-        let is_memory_access = self.check_node_is_mem_val(&expr.ls).is_some()
-            || self.check_node_is_mem_val(&expr.rs).is_some();
+        let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
+            || self.check_node_is_mem_val(expr.rs).is_some();
         formated = self.fmt_one_expr_mnemo_resize(
             formated.to_string(), 
             &resolved_size, 

@@ -51,7 +51,7 @@ impl MngAsmFmt {
     /// - param_idx = 引数の場所
     pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(
         &self, 
-        param_idx: &usize, 
+        param_idx: usize, 
         size: Size
     ) -> R {
         if TypeId::of::<R>() != TypeId::of::<usize>()
@@ -63,7 +63,7 @@ impl MngAsmFmt {
         {
             let result: Box<dyn Any> = Box::new(
                 self.get_fmt_reg(
-                        &self.param_fmt[*param_idx], 
+                        self.param_fmt[param_idx], 
                         &size
                     )
                     .to_string(),
@@ -73,7 +73,7 @@ impl MngAsmFmt {
                 .map(|b| *b)
                 .unwrap()
         } else {
-            let result: Box<dyn Any> = Box::new(self.param_fmt[*param_idx]);
+            let result: Box<dyn Any> = Box::new(self.param_fmt[param_idx]);
             result.downcast::<R>()
                 .ok()
                 .map(|b| *b)
@@ -84,7 +84,7 @@ impl MngAsmFmt {
     pub fn fmt_ref_operand(
         &self, 
         reg: &String, 
-        size: &usize
+        size: usize
     ) -> String {
         self.fmt
             .fmt
@@ -131,7 +131,7 @@ impl MngAsmFmt {
         &self,
         value: String,
         size: &types::Size,
-        offset: &usize,
+        offset: usize,
     ) -> String {
         let fmted = self
             .fmt
@@ -146,7 +146,7 @@ impl MngAsmFmt {
             types::Size::DD => crate::mov_size_fmt!(self, dd),
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
             types::Size::Array { size, .. } => {
-                return self.get_fmt_struct_member(value, &size, &offset)
+                return self.get_fmt_struct_member(value, &size, offset)
             }
             _ => panic!(),
         };
@@ -304,7 +304,7 @@ impl MngAsmFmt {
 
     pub fn get_fmt_reg(
         &self, 
-        reg_num: &usize, 
+        reg_num: usize, 
         size: &Size
     ) -> String {
         let reg = match &size {
@@ -318,7 +318,7 @@ impl MngAsmFmt {
         self.fmt
             .fmt
             .reg
-            .replace("{}", reg[*reg_num].as_str())
+            .replace("{}", reg[reg_num].as_str())
             .to_string()
     }
 
@@ -365,9 +365,17 @@ impl MngAsmFmt {
                     .iter()
                     .enumerate() 
             {
-                let formatted = self.fmt.fmt.reg.replace("{}", register);
+                let formatted = self
+                    .fmt
+                    .fmt
+                    .reg
+                    .replace("{}", register);
                 if formatted == operand {
-                    return self.get_fmt_reg(&reg_num, size);
+                    return self
+                        .get_fmt_reg(
+                            reg_num, 
+                            size
+                        );
                 }
             }
         }
@@ -386,7 +394,7 @@ impl MngAsmFmt {
         let mut result = Vec::new();
         for reg_idx in 0..self.reg_count() {
             for size in [Size::DQ, Size::DD, Size::DW, Size::DB] {
-                result.push((reg_idx, self.get_fmt_reg(&reg_idx, &size)));
+                result.push((reg_idx, self.get_fmt_reg(reg_idx, &size)));
             }
         }
         result

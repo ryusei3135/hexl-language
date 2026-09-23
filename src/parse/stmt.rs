@@ -167,8 +167,11 @@ impl Parser {
                         continue;
                     }
 
-                    let node: Group2Info = self.one_line_node()?
-                        .gen_group_info(&self.build_err_span().line);
+                    let node: Group2Info = self
+                        .one_line_node()?
+                        .gen_group_info(
+                            self.build_err_span().line
+                        );
 
                     match self.gen_nodes.last_mut().unwrap() {
                         node::Group1Node::FuncDefine(func) => {
@@ -365,7 +368,7 @@ impl Parser {
             let node = self.one_line_node()?;
             block.push(
                 node.gen_group_info(
-                    &self.build_err_span().line
+                    self.build_err_span().line
                 )
             );
             if matches!(

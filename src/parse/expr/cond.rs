@@ -7,12 +7,12 @@ impl Parser {
     ) -> Result<node::Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
-        if !matches!(self.current_tkn(), lex::Tkn::KeyWordCond) {
-            panic!("system err Parser::expr_match `parse/expr/cond.rs`");
+        if self.current_tkn() != &lex::Tkn::KeyWordCond {
+            return self.cond_keyword_not_found();
         }
         // match の対象式
         let cond_expr = 
-            if matches!(self.peek_tkn().unwrap(), lex::Tkn::LBrace) {
+            if self.peek_tkn().unwrap() == lex::Tkn::LBrace {
                 self.next_tkn(&[])?;
                 None
             } else {
@@ -30,8 +30,11 @@ impl Parser {
         }
 
         // {
-        if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
+        if self.current_tkn() != &lex::Tkn::LBrace {
+            crate::cond_err!(
+                self.build_err_span(), 
+                CondExprScopeStartLBrace
+            )?
         }
 
         let mut arms = Vec::new();
@@ -42,9 +45,12 @@ impl Parser {
             //    break;
             //}
             // elseのノードを作成する
-            if matches!(self.peek_tkn()?, lex::Tkn::Or) {
+            if self.peek_tkn()? == lex::Tkn::Or {
                 self.next_tkn(&[])?;
-                return self.build_else_arm_node(&cond_expr, arms);
+                return self.build_else_arm_node(
+                    &cond_expr, 
+                    arms
+                );
             }
             // if
             let pattern = self.expr_cmp(STRUCT_NOT_INIT)?;
@@ -53,8 +59,11 @@ impl Parser {
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
             self.tkn_checker().is_arrow_tkn()?;
             // {
-            if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {
-                crate::cond_err!(self.build_err_span(), CondExprPatternLBrace)?
+            if self.next_tkn(&["{"])? != lex::Tkn::LBrace {
+                crate::cond_err!(
+                    self.build_err_span(), 
+                    CondExprPatternLBrace
+                )?
             }
             self.next_tkn(&[])?;
             // ここでアーム本体を解析
@@ -143,8 +152,11 @@ impl Parser {
     ) -> Result<node::Expr, err::ErrKind> {
         // match expr {
         // {
-        if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
+        if self.current_tkn() != &lex::Tkn::LBrace {
+            crate::cond_err!(
+                self.build_err_span(), 
+                CondExprScopeStartLBrace
+            )?
         }
         self.next_tkn(&[])?;
         // trueのときの処理
@@ -153,8 +165,11 @@ impl Parser {
         // } | {
         self.tkn_checker().close_scope_to_rbrace(None)?;
         // |
-        if !matches!(self.next_tkn(&["|"])?, lex::Tkn::Or) {
-            crate::cond_err!(self.build_err_span(), CondElseNotFound)?
+        if self.next_tkn(&["|"])? != lex::Tkn::Or {
+            crate::cond_err!(
+                self.build_err_span(), 
+                CondElseNotFound
+            )?
         }
         // {
         if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {

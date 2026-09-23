@@ -25,7 +25,7 @@ impl AsmEmitter {
                     "{}", 
                     self.asm_fmt
                         .get_fmt_reg(
-                            &inner.parse::<usize>()
+                            inner.parse::<usize>()
                                 .unwrap(), 
                             size
                         )
@@ -43,7 +43,7 @@ impl AsmEmitter {
     /// `%eax`のような文字列)へ展開されておらず、後で
     /// [`Self::replace_insert_fmt_reg`]によって展開される。
     pub fn insert_fmt_reg_placeholder(
-        reg_num: &usize
+        reg_num: usize
     ) -> String {
         format!("%{{{}}}", reg_num)
     }

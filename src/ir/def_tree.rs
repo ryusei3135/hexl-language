@@ -60,14 +60,14 @@ impl VarTree {
     pub fn push<const K: char>(
         &mut self,
         var_name: &String,
-        var_index: &usize,
+        var_index: usize,
         var_ty: &node::TyNode,
         var_attr: &parse::VarMutAttr,
         mut put_flag: impl FnMut()
     ) -> Result<(), err::ErrKind> {
         let var = match K {
-            'l' => VarType::Local(*var_index),
-            'p' => VarType::Param(*var_index),
+            'l' => VarType::Local(var_index),
+            'p' => VarType::Param(var_index),
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
         if let Some(ref var_info) = self.hash

@@ -656,10 +656,10 @@ impl Group2Node {
     #[inline(always)]
     pub fn gen_group_info(
         self, 
-        line: &usize
+        line: usize
     ) -> Group2Info {
         Group2Info { 
-            line: *line, 
+            line: line, 
             node: self
         }
     }

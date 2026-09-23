@@ -20,7 +20,7 @@ impl AsmEmitter {
 
             let value = self
                 .extract_operand_text(
-                    &value_idx, 
+                    *value_idx, 
                     &member_size
                 )
                 .to_string();
@@ -55,15 +55,26 @@ impl AsmEmitter {
                 .get_fmt_struct_member(
                     value, 
                     &size, 
-                    &offset
+                    offset
                 );
 
             if this_is_self {
                 // 第一引数(`self`のポインタ)のレジスタを取得し、
                 // `%rbp`をそのレジスタに置き換える
                 // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
-                let self_ptr_reg = &self.asm_fmt.get_fmt_param::<String>(&0, Size::DQ);
-                struct_txt.push_str(&fmted.replace("%rbp", &self_ptr_reg));
+                let self_ptr_reg = &self
+                    .asm_fmt
+                    .get_fmt_param::<String>(
+                        0, 
+                        Size::DQ
+                    );
+                struct_txt
+                    .push_str(
+                        &fmted.replace(
+                            "%rbp", 
+                            &self_ptr_reg
+                        )
+                    );
             } else {
                 struct_txt.push_str(&fmted);
             }

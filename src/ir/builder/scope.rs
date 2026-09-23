@@ -128,7 +128,7 @@ impl IR {
                         .var_tree
                         .push::<'l'>(
                             &tmp_name,
-                            &self_idx,
+                            self_idx,
                             &self_area_ty,
                             &var_attr,
                             || { 

@@ -178,7 +178,7 @@ impl Parser {
                                     ) = method {
                                         func.body.push(
                                             node.gen_group_info(
-                                                &self.build_err_span().line
+                                                self.build_err_span().line
                                             )
                                         );
                                     }

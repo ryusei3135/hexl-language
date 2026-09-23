@@ -117,12 +117,12 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(super) fn current_line(&self, idx: usize) -> &usize {
-        &self.tkns.as_ref().unwrap()[idx].line
+    pub(super) fn current_line(&self, idx: usize) -> usize {
+        self.tkns.as_ref().unwrap()[idx].line
     }
 
     #[inline(always)]
-    pub(super) fn tkn_chr_pos(&self) -> &usize {
-        &self.tkns.as_ref().unwrap()[self.idx.saturating_sub(1)].pos
+    pub(super) fn tkn_chr_pos(&self) -> usize {
+        self.tkns.as_ref().unwrap()[self.idx.saturating_sub(1)].pos
     }
 }

@@ -226,7 +226,7 @@ impl IR {
                 let _ = self.var_tree
                     .push::<'l'>(
                         &var.name, 
-                        &self.id_counter, 
+                        self.id_counter, 
                         ty_to_register,
                         &var_attr,
                         || { 
@@ -268,7 +268,7 @@ impl IR {
                 let _ = self.var_tree
                     .push::<'l'>(
                         &var.name, 
-                        &self.id_counter, 
+                        self.id_counter, 
                         ty_to_register,
                         &var_attr,
                         || { self.constract_flag.put_var_def(ty_to_register) }
@@ -315,7 +315,7 @@ impl IR {
                     .var_tree
                     .push::<'l'>(
                         &var.name, 
-                        &self.id_counter, 
+                        self.id_counter, 
                         ty_to_register, 
                         &var_attr,
                         || { self.constract_flag.put_var_def(ty_to_register) }
@@ -352,13 +352,13 @@ impl IR {
 
     pub(super) fn enum_variant_node(
         &mut self,
-        name: &String,
+        name: &str,
         variant: &String,
         expect_byte: &types::Size,
     ) -> inst::Inst {
         let enum_def = self
             .enum_tree
-            .get(&name.to_string())
+            .get(name)
             .unwrap_or_else(
                 || {
                     panic!(

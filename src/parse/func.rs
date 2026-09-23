@@ -250,7 +250,7 @@ impl Parser {
         // (範囲外は最後のトークンの位置)
         let span_at = |i: usize| {
             let t = &tkns[i.min(tkns.len() - 1)];
-            err::Span::new(&t.line, &t.pos)
+            err::Span::new(t.line, t.pos)
         };
         let expected = |i: usize, expected: &'static str| {
             crate::syntax_err!(

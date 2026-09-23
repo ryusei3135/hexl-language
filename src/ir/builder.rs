@@ -258,7 +258,7 @@ impl IR {
         node: &Body
     ) -> usize {
         for stmt in node {
-            self.current_span = err::Span::new(&stmt.line, &0);
+            self.current_span = err::Span::new(stmt.line, 0);
             self.expr_counter = 0;
             self.constract_flag.reset();
             match stmt.get_node().clone() {
@@ -643,7 +643,7 @@ impl IR {
         let _ = self.var_tree
             .push::<'l'>(
                 &mem::take(&mut var.name),
-                &var_idx, 
+                var_idx, 
                 &var.ty, 
                 &var.var_attr,
                 || { 

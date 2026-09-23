@@ -21,7 +21,7 @@ impl IR {
             node::ImportKind::Module(alias) => {
                 self.include_module(
                     path, 
-                    alias.as_ref().map(|v| v.as_str()), 
+                    alias.as_ref(), 
                     settings
                 )
             }
@@ -138,7 +138,7 @@ impl IR {
     fn include_module(
         &mut self,
         path: &node::ModPath,
-        alias: Option<&str>,
+        alias: Option<&String>,
         settings: &crate::cmd_line_args::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();

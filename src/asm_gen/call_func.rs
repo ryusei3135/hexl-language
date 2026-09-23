@@ -30,7 +30,7 @@ impl AsmEmitter {
             let reg_name = self
                 .asm_fmt
                 .get_fmt_reg(
-                    reg, 
+                    *reg, 
                     &Size::DQ
                 );
             call_func
@@ -54,12 +54,12 @@ impl AsmEmitter {
                 .unwrap();
             // 引数のレジスタを取得
             let param_reg = self.asm_fmt.get_fmt_param::<String>(
-                &index, 
+                index, 
                 param_ty.clone()
             );
             // 引数のレジスタと値のidを挿入
             let src1_idx = if let Some(struct_idx) = self
-                .resolve_struct_idx(param) 
+                .resolve_struct_idx(*param) 
             {
                 struct_idx
             } else {
@@ -82,7 +82,7 @@ impl AsmEmitter {
 
             let src1_text = self
                 .extract_operand_text(
-                    &src1_idx, 
+                    src1_idx, 
                     &resize_size
                         .clone()
                         .wrap_dst_size()
@@ -98,12 +98,20 @@ impl AsmEmitter {
                 .get_opcode_tmpl(opcode)
                 .replace("{dst}", &param_reg)
                 .replace("{src1}", &src1_text);
-            asm = if self.check_node_is_mem_val(param).is_some() {
+            asm = if self.check_node_is_mem_val(*param).is_some() {
                 self.asm_fmt
-                    .fmt_memory_mnemonic_resize(opcode, &asm, &resize_size)
+                    .fmt_memory_mnemonic_resize(
+                        opcode, 
+                        &asm, 
+                        &resize_size
+                    )
             } else {
                 self.asm_fmt
-                    .fmt_mnemonic_resize(opcode, &asm, &resize_size)
+                    .fmt_mnemonic_resize(
+                        opcode, 
+                        &asm, 
+                        &resize_size
+                    )
             };
             call_func.push_str(&asm);
         }
@@ -132,7 +140,7 @@ impl AsmEmitter {
             let reg_name = self
                 .asm_fmt
                 .get_fmt_reg(
-                    reg, 
+                    *reg, 
                     &Size::DQ
                 );
             call_func
@@ -207,10 +215,14 @@ impl AsmEmitter {
             }
         }
 
-        self.curr_inst = mem::take(&mut fn_meta_data.1.body);
+        self.curr_inst = mem::take(
+            &mut fn_meta_data.1.body
+        );
         let returned_struct_idx = if fn_ret_ty.is_none() {
             self.curr_inst.iter().find_map(|node| match node {
-                inst::Inst::Ret(idx) => self.resolve_struct_idx(&idx),
+                inst::Inst::Ret(idx) => {
+                    self.resolve_struct_idx(*idx)
+                }
                 _ => None,
             })
         } else {
@@ -229,7 +241,7 @@ impl AsmEmitter {
                 }
                 inst::Inst::Str { dst, value } => {
                     // build_fn_proc.rs
-                    self.gen_str_asm(dst, value);
+                    self.gen_str_asm(*dst, value);
                 }
                 inst::Inst::Expr(expr) => {
                     // build_fn_proc.rs
@@ -248,11 +260,15 @@ impl AsmEmitter {
                     // build_fn_proc.rs
                     self.asm_text.push_str(&format!("jmp {}\n", name));
                 }
-                inst::Inst::AssignVar { name, dst, value } => {
+                inst::Inst::AssignVar { 
+                    name, 
+                    dst, 
+                    value 
+                } => {
                     self.gen_assign_var_asm(
                         name, 
-                        dst, 
-                        value, 
+                        *dst, 
+                        *value, 
                         &this_is_self
                     );
                 }
@@ -260,7 +276,7 @@ impl AsmEmitter {
                     // build_fn_proc.rs
                     self.gen_ret_asm(
                         &fn_ret_ty, 
-                        &idx,
+                        *idx,
                         &fn_meta_data.0,
                     );
                 }
@@ -274,12 +290,12 @@ impl AsmEmitter {
                         size, 
                         types::Size::Struct(..)
                     )
-                    && returned_struct_idx == self.resolve_struct_idx(dst);
+                    && returned_struct_idx == self.resolve_struct_idx(*dst);
                     if !is_returned_struct {
                         self.mov_value_ir(
                             size, 
-                            dst, 
-                            src, 
+                            *dst, 
+                            *src, 
                             &name, 
                             &Some(size.clone())
                         );
@@ -290,16 +306,22 @@ impl AsmEmitter {
                     self.mem_val_ir(mem_value);
                 }
                 inst::Inst::Param(param) => {
-                    let ty = node.get_param_ty().unwrap();
+                    let ty = node
+                        .get_param_ty()
+                        .unwrap();
                     // 引数に使うレジスタを取得する
-                    let reg_num = self.asm_fmt
-                        .get_fmt_param::<usize>(&param.num, ty.clone());
+                    let reg_num = self
+                        .asm_fmt
+                        .get_fmt_param::<usize>(
+                            param.num, 
+                            ty.clone()
+                        );
                     self.insert_var_info(
                         &param.name,
                         asm_emitter::VarIndexInfo::new(
-                            &reg_num, 
+                            reg_num, 
                             &ty, 
-                            &param.dst
+                            param.dst
                         ),
                     );
                 }
@@ -350,13 +372,21 @@ impl AsmEmitter {
     #[inline(always)]
     pub(super) fn gen_str_asm(
         &mut self, 
-        dst: &usize, 
+        dst: usize, 
         value: &String
     ) {
-        let label_name = format!("M{}", self.data_idx.to_string());
-        let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
+        let label_name = format!(
+            "M{}", 
+            self.data_idx.to_string()
+        );
+        let fmt_data = self
+            .asm_fmt
+            .get_str_fmt(
+                &value, 
+                &label_name
+            );
         self.data_sec_text.push_str(&fmt_data);
-        self.data_map.push((*dst, label_name));
+        self.data_map.push((dst, label_name));
         self.data_idx += 1;
     }
 
@@ -370,7 +400,7 @@ impl AsmEmitter {
         self.asm_text.push_str(&asm);
 
         // 式の結果を置いたレジスタを使用中として記録する
-        self.used_reg.mark_used(&self.reg_idx);
+        self.used_reg.mark_used(self.reg_idx);
         self.last_inst_idx.push((expr.dst, self.reg_idx));
         self.reg_idx += 1;
     }
@@ -397,12 +427,12 @@ impl AsmEmitter {
     pub(super) fn gen_assign_var_asm(
         &mut self,
         name: &String,
-        dst: &usize,
-        value: &usize,
+        dst: usize,
+        value: usize,
         this_is_self: &bool,
     ) {
         let is_mem_write = matches!(
-            self.curr_inst[*dst],
+            self.curr_inst[dst],
             inst::Inst::Pointer(..)
                 | inst::Inst::InsertArr { .. }
                 | inst::Inst::RefStruct { .. }
@@ -411,13 +441,16 @@ impl AsmEmitter {
         if is_mem_write {
             self.write_mem(
                 name, 
-                &dst, 
-                &value, 
+                dst, 
+                value, 
                 &Some(self.get_var_ty(&name))
             );
         } else {
             // 通常の変数への再代入(`b = 10`など)
-            self.update_value_info(&name, &value);
+            self.update_value_info(
+                &name, 
+                value
+            );
 
             let current_reg = self.reg_idx;
             let s: SelfPtrInfo = if *this_is_self {
@@ -453,7 +486,7 @@ impl AsmEmitter {
             {
                 self.update_value_reg(
                     &name, 
-                    &current_reg
+                    current_reg
                 );
             }
             self.asm_text.push_str(&text);
@@ -464,7 +497,7 @@ impl AsmEmitter {
     pub(super) fn gen_ret_asm(
         &mut self, 
         fn_ret_ty: &SelfPtrInfo,
-        idx: &usize,
+        idx: usize,
         fn_name: &String,
     ) {
         // `_start`はOSから直接呼ばれるエントリーポイントであり、
@@ -502,8 +535,8 @@ impl AsmEmitter {
         }
         let ret_asm = self.format_line(
             "mov", 
-            Some(&0), 
-            &idx, 
+            Some(0), 
+            idx, 
             None, 
             &fn_ret_ty
         );

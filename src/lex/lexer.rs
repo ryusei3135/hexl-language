@@ -280,7 +280,7 @@ impl Lexer {
                 // スタック可能か調べ、不可能ならトークンを生成
                 let stk_result = self.check_stkable_chr(curr_kind, &chr);
                 if stk_result != StkResult::Stackable {
-                    match self.gen_tkn(&line_counter, &chr_counter) {
+                    match self.gen_tkn(line_counter, chr_counter) {
                         Ok(tkn) => {
                             let adjacent = !self.saw_gap;
                             let t = LocatedTkn {
@@ -341,7 +341,12 @@ impl Lexer {
 
         if self.gen_flag.is_some() {
             self.gen_tkns
-                .push(self.gen_tkn(&line_counter, &chr_counter)?);
+                .push(
+                    self.gen_tkn(
+                        line_counter, 
+                        chr_counter
+                    )?
+                );
         }
 
         Ok(())
@@ -350,8 +355,8 @@ impl Lexer {
     /// トークンを生成しOptionで返す
     fn gen_tkn(
         &self,
-        line_counter: &usize,
-        chr_counter: &usize,
+        line_counter: usize,
+        chr_counter: usize,
     ) -> Result<LocatedTkn, err::lex_err::LexErrs> {
         if let Some(ref flag) = self.gen_flag {
             let tkn = match flag {

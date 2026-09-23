@@ -55,10 +55,25 @@ impl MatchErr {
 impl Parser {
     /// 条件分岐のエラーのバリアントを生成するAPIを提供する
     #[inline(always)]
-    pub(in crate::parse) fn tkn_checker(&self) -> MatchErr {
+    pub(in crate::parse) 
+    fn tkn_checker(&self) -> MatchErr {
         MatchErr::new(
             self.build_err_span(), 
             self.current_tkn().clone()
+        )
+    }
+
+    pub(in crate::parse)
+    fn cond_keyword_not_found(
+        &self
+    ) -> Result<node::Expr, err::ErrKind> {
+        crate::syntax_err!(
+            self.build_err_span(), 
+            err::SyntaxErrKind::UnexpectedTkn { 
+                found: self.current_tkn().clone(), 
+                expected: lex::Tkn::KeyWordCond, 
+                context: lex::Tkn::KeyWordCond 
+            }
         )
     }
 }

@@ -5,8 +5,8 @@ impl AsmEmitter {
     pub(super) fn mov_value_ir(
         &mut self,
         size: &types::Size,
-        dst: &usize,
-        src: &usize,
+        dst: usize,
+        src: usize,
         name: &Option<String>,
         this_is_self: &SelfPtrInfo,
     ) {
@@ -30,9 +30,9 @@ impl AsmEmitter {
             }
 
             let inst::Inst::CallFunc(meta_data) = 
-                self.curr_inst[*src].clone() else 
+                self.curr_inst[src].clone() else 
             {
-                panic!("構造体を返す初期化式はコンストラクタ呼び出しである必要があります: {:?}", self.curr_inst[*src]);
+                panic!("構造体を返す初期化式はコンストラクタ呼び出しである必要があります: {:?}", self.curr_inst[src]);
             };
             let self_arg_idx = *meta_data
                 .params
@@ -49,7 +49,7 @@ impl AsmEmitter {
                 self.insert_var_info(
                     var_name,
                     asm_emitter::VarIndexInfo::new_stack(
-                        &stk, 
+                        stk, 
                         &size, 
                         dst
                     ),
@@ -61,7 +61,7 @@ impl AsmEmitter {
         if size.is_pointer().is_none() 
             && self.data_map
                 .iter()
-                .find(|v| &v.0 == src)
+                .find(|v| v.0 == src)
                 .is_some()
         {
             // 子のノードがstatic領域の値で、かつ宣言先の型がポインタで
@@ -71,7 +71,7 @@ impl AsmEmitter {
             self.insert_var_info(
                 &name.as_ref().unwrap(),
                 asm_emitter::VarIndexInfo::new(
-                    &self.reg_idx, 
+                    self.reg_idx, 
                     &size, 
                     dst
                 ),
@@ -81,26 +81,37 @@ impl AsmEmitter {
             // レジスタに置く変数
             let reg = self.reg_idx.clone();
             // このレジスタを使用中として記録する
-            self.used_reg.mark_used(&reg);
+            self.used_reg.mark_used(reg);
             // ポインタ型の変数へ数値リテラル(`ptr: int* = 0`の
             // ような`0`=NULL初期化など)を代入する場合は、
             // アドレスを求める`lea`(="address")命令ではなく、
             // ポインタのサイズ(64bit)に合わせた`movq`で
             // そのまま即値をレジスタへ書き込む
-            let is_literal_num = matches!(self.curr_inst[*src], inst::Inst::Num { .. });
+            let is_literal_num = matches!(
+                self.curr_inst[src], 
+                inst::Inst::Num { .. }
+            );
 
             let formated = if size
                 .is_pointer()
                 .is_some() && is_literal_num 
             {
-                let dst_reg = self.asm_fmt.get_fmt_reg(&reg, &Size::DQ);
-                let value_operand = self.extract_operand_text(&src, &this_is_self);
+                let dst_reg = self.asm_fmt.get_fmt_reg(reg, &Size::DQ);
+                let value_operand = self.extract_operand_text(
+                    src, 
+                    &this_is_self
+                );
                 let text = self
                     .asm_fmt
                     .get_opcode_tmpl("mov")
                     .replace("{dst}", &dst_reg)
                     .replace("{src1}", &value_operand);
-                self.asm_fmt.fmt_mnemonic_resize("mov", &text, &Size::DQ)
+                self.asm_fmt
+                    .fmt_mnemonic_resize(
+                        "mov", 
+                        &text, 
+                        &Size::DQ
+                    )
             } else {
                 // メモリのポインタか、値かで、ニーモニックが変わる
                 let mnemonic = if size.is_pointer().is_some() {
@@ -110,7 +121,13 @@ impl AsmEmitter {
                     // 普通の場合
                     "mov"
                 };
-                self.format_line(mnemonic, Some(&reg), &src, None, this_is_self)
+                self.format_line(
+                    mnemonic, 
+                    Some(reg), 
+                    src, 
+                    None, 
+                    this_is_self
+                )
             };
 
             self.asm_text.push_str(&formated);
@@ -118,7 +135,11 @@ impl AsmEmitter {
             if let Some(var_name) = name {
                 self.insert_var_info(
                     &var_name,
-                    asm_emitter::VarIndexInfo::new(&self.reg_idx, &size, dst),
+                    asm_emitter::VarIndexInfo::new(
+                        self.reg_idx, 
+                        &size, 
+                        dst
+                    ),
                 );
                 let current_reg = self.reg_idx;
 
@@ -128,7 +149,10 @@ impl AsmEmitter {
                     .find(|v| v.as_str() == var_name.as_str())
                     .is_some()
                 {
-                    self.update_value_reg(&var_name, &current_reg);
+                    self.update_value_reg(
+                        &var_name, 
+                        current_reg
+                    );
                 }
             }
         }
@@ -151,7 +175,7 @@ impl AsmEmitter {
                 if kind == &inst::MemoryKind::Static {
                     self.is_static_var(
                         src, 
-                        &dst, 
+                        *dst, 
                         name, 
                         &size.wrap_dst_size()
                     );
@@ -161,7 +185,7 @@ impl AsmEmitter {
                         | inst::Inst::Param(..)
                         | inst::Inst::GetPtr { .. } => {
                             self.extract_operand_text(
-                                &dst, 
+                                *dst, 
                                 &dst_size
                             )
                         }
@@ -170,13 +194,22 @@ impl AsmEmitter {
 
                     let mut txt = String::new();
                     for idx in src.iter() {
-                        let value = self.extract_operand_text(&idx, &dst_size);
+                        let value = self
+                            .extract_operand_text(
+                                *idx, 
+                                &dst_size
+                            );
                         // スタックの場所を更新
                         // (この変数のオフセットは、これまで使用した
                         //  スタックのサイズ`stk_use_counter`に、
                         //  この変数のサイズを足したもの)
                         self.stk_use_counter += size.to_bytes();
-                        let s = &self.asm_fmt.fmt_ref_operand(&base, &self.stk_use_counter);
+                        let s = &self
+                            .asm_fmt
+                            .fmt_ref_operand(
+                                &base, 
+                                self.stk_use_counter
+                            );
 
                         let mov_line = self
                             .asm_fmt
@@ -197,9 +230,9 @@ impl AsmEmitter {
                     self.insert_var_info(
                         &name,
                         asm_emitter::VarIndexInfo::new(
-                            &self.reg_idx, 
+                            self.reg_idx, 
                             &size, 
-                            dst
+                            *dst
                         ),
                     );
                     self.asm_text.push_str(txt.as_str());
@@ -212,13 +245,13 @@ impl AsmEmitter {
     fn is_static_var(
         &mut self,
         src: &Vec<usize>,
-        dst: &usize,
+        dst: usize,
         name: &String,
         this_is_self: &SelfPtrInfo,
     ) {
         println!("src/gen/call_func/MemoryValue");
         let val = self.extract_operand_text(
-            &src.last().unwrap(), 
+            *src.last().unwrap(), 
             &this_is_self
         );
         let label_name = format!("M{}", self.data_idx.to_string());
@@ -229,13 +262,13 @@ impl AsmEmitter {
                 this_is_self.as_ref().unwrap()
             );
         self.data_sec_text.push_str(&fmt_data);
-        self.data_map.push((*dst, label_name));
+        self.data_map.push((dst, label_name));
         self.data_idx += 1;
         // 子のノードがstaticりょいきの値なので、変数名だけ登録する
         self.insert_var_info(
             &name,
             asm_emitter::VarIndexInfo::new(
-                &self.reg_idx, 
+                self.reg_idx, 
                 this_is_self.as_ref().unwrap(), 
                 dst
             ),
@@ -246,14 +279,14 @@ impl AsmEmitter {
         &mut self, 
         name: &Option<String>, 
         size: &types::Size,
-        src: &usize,
-        dst: &usize,
+        src: usize,
+        dst: usize,
     ) -> Option<()> {
         if let inst::Inst::Struct { 
             mem, 
             is_self, 
             .. 
-        } = self.curr_inst[*src].clone() {
+        } = self.curr_inst[src].clone() {
             // `emit_struct_ini_asm`はメンバーを書き込みながら
             // `self.stk_use_counter`を進めていくため、呼び出し後
             // では構造体自身の先頭オフセット(`%rbp`から見た位置)が
@@ -269,7 +302,7 @@ impl AsmEmitter {
                 self.insert_var_info(
                     var_name,
                     asm_emitter::VarIndexInfo::new_stack(
-                        &struct_stk_offset,
+                        struct_stk_offset,
                         &size,
                         dst,
                     ),

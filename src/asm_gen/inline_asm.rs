@@ -30,13 +30,13 @@ impl AsmEmitter {
     /// (`(変数名, その変数の型のサイズ)`を返す。見つからなければ`None`)
     fn var_using_reg(
         &self, 
-        reg: &usize
+        reg: usize
     ) -> Option<(String, Size)> {
         self.var_hash_map
             .iter()
             .find(
                 |(_, info)| {
-                    !info.is_stack && &info.reg == reg
+                    !info.is_stack && info.reg == reg
                 }
             )
             .map(
@@ -65,9 +65,9 @@ impl AsmEmitter {
 
     fn resolve_operand_var_size(
         &self,
-        node_idx: &usize
+        node_idx: usize
     ) -> Option<Size> {
-        match self.curr_inst[*node_idx].clone() {
+        match self.curr_inst[node_idx].clone() {
             inst::Inst::AssignVar { name, .. } => {
                 self.var_hash_map
                     .get(&name)
@@ -80,7 +80,7 @@ impl AsmEmitter {
             }
             inst::Inst::Pointer(inner)
             | inst::Inst::GetAddress(inner) => {
-                self.resolve_operand_var_size(&inner)
+                self.resolve_operand_var_size(inner)
             }
             _ => None,
         }
@@ -88,11 +88,11 @@ impl AsmEmitter {
 
     fn extract_operand_text_sized(
         &mut self,
-        node_idx: &usize,
+        node_idx: usize,
         this_is_self: &Option<Size>,
         forced_size: &Size,
     ) -> String {
-        match self.curr_inst[*node_idx].clone() {
+        match self.curr_inst[node_idx].clone() {
             inst::Inst::AssignVar { name, .. } => {
                 let var_info = self
                     .var_hash_map
@@ -102,7 +102,11 @@ impl AsmEmitter {
                     &var_info, 
                     &forced_size
                 );
-                self.asm_fmt.get_fmt_reg(&var_info.reg, &size)
+                self.asm_fmt
+                    .get_fmt_reg(
+                        var_info.reg, 
+                        &size
+                    )
             }
             inst::Inst::Param(param) => {
                 let var_info = self.var_hash_map
@@ -111,13 +115,19 @@ impl AsmEmitter {
                 if let Some(ty) = var_info.size.is_pointer() {
                     let reg = self
                         .asm_fmt
-                        .get_fmt_reg(&var_info.reg, &Size::DQ);
+                        .get_fmt_reg(
+                            var_info.reg, 
+                            &Size::DQ
+                        );
                     self.asm_fmt
-                        .fmt_ref_operand(&reg, &ty.to_bytes())
+                        .fmt_ref_operand(
+                            &reg, 
+                            ty.to_bytes()
+                        )
                 } else {
                     self.asm_fmt
                         .get_fmt_reg(
-                            &var_info.reg, 
+                            var_info.reg, 
                             forced_size
                         )
                 }
@@ -160,7 +170,7 @@ impl AsmEmitter {
 
             // === 2. 検出したレジスタが使用中なら、退避方法を決めて処理する ===
             for reg in literal_regs.iter() {
-                if let Some((var_name, size)) = self.var_using_reg(reg) {
+                if let Some((var_name, size)) = self.var_using_reg(*reg) {
                     if let Some(free_reg)
                         = self.find_free_reg(&literal_regs)
                     {
@@ -172,7 +182,7 @@ impl AsmEmitter {
                         );
                     } else {
                         self.mov_register_val_to_stack(
-                            &reg,
+                            *reg,
                             &mut stacked_regs
                         );
                     }
@@ -183,7 +193,7 @@ impl AsmEmitter {
             // === スタックに退避したレジスタを、退避した時とは逆順に戻す ===
             for reg in stacked_regs.iter().rev() {
                 let reg_name = self.asm_fmt
-                    .get_fmt_reg(reg, &Size::DQ);
+                    .get_fmt_reg(*reg, &Size::DQ);
                 let pop_asm = self.asm_fmt
                     .get_pop(&reg_name);
                 self.asm_text.push_str(&pop_asm);
@@ -208,9 +218,9 @@ impl AsmEmitter {
         // --- 2-a. 空いているレジスタが見つかった場合 ---
         // 変数の正式な保持場所として扱う(恒久的な移動)
         let src = self.asm_fmt
-            .get_fmt_reg(&reg, &size);
+            .get_fmt_reg(reg, &size);
         let dst = self.asm_fmt
-            .get_fmt_reg(&free_reg, &size);
+            .get_fmt_reg(free_reg, &size);
         let mut mov_asm = self
             .asm_fmt
             .get_opcode_tmpl("mov")
@@ -224,7 +234,10 @@ impl AsmEmitter {
             );
         self.asm_text.push_str(&mov_asm);
 
-        self.update_value_reg(&var_name, &free_reg);
+        self.update_value_reg(
+            &var_name, 
+            free_reg
+        );
     }
 
     /// 一回しか呼び出されないからinline
@@ -233,7 +246,7 @@ impl AsmEmitter {
     #[inline(always)]
     fn mov_register_val_to_stack(
         &mut self,
-        reg: &usize,
+        reg: usize,
         stacked_regs: &mut Vec<usize>,
     ) {
         // --- 2-b. 空いているレジスタがない場合 ---
@@ -244,7 +257,7 @@ impl AsmEmitter {
         let push_asm = self.asm_fmt
             .get_push(&reg_name);
         self.asm_text.push_str(&push_asm);
-        stacked_regs.push(*reg);
+        stacked_regs.push(reg);
     }
 
     #[inline(always)]
@@ -262,7 +275,7 @@ impl AsmEmitter {
             let dst_size: SelfPtrInfo = operand_ids
                 .last()
                 .and_then(
-                    |id| self.resolve_operand_var_size(id)
+                    |id| self.resolve_operand_var_size(*id)
                 );
             let last_index = operand_ids
                 .len()
@@ -277,12 +290,17 @@ impl AsmEmitter {
                 match (index != last_index, &dst_size) {
                     (true, Some(size)) => {
                         self.extract_operand_text_sized(
-                            operand_id, 
+                            *operand_id, 
                             &dst_size,
                             size,
                         )
                     }
-                    _ => self.extract_operand_text(operand_id, &dst_size),
+                    _ => {
+                        self.extract_operand_text(
+                            *operand_id, 
+                            &dst_size
+                        )
+                    }
                 };
                 // `{0}`, `{1}`, ... という数字のプレースホルダーを置換
                 // (`${var}`はパーサー側(preproc.rs)の時点で既に

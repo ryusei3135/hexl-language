@@ -12,7 +12,7 @@ impl Parser {
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
-        if !matches!(self.current_tkn(), lex::Tkn::Mul) {
+        if self.current_tkn() != &lex::Tkn::Mul {
             return Err(err::ErrKind::UnexpectedToken);
         }
 
@@ -42,10 +42,7 @@ impl Parser {
             }
         }
 
-        if !matches!(
-            self.advance_tkn().unwrap(), 
-            lex::Tkn::RangeTkn
-        ) {
+        if self.next_tkn(&[".."])? != lex::Tkn::RangeTkn {
             return Err(err::ErrKind::UnexpectedToken);
         }
 
