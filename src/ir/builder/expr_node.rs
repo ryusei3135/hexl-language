@@ -250,7 +250,7 @@ impl IR {
             node::TyNode::Static { .. } => {
                 self.gen_mem_def_var(var)
             }
-            node::TyNode::Ty(ref ty_name) => {
+            node::TyNode::Ty(ty_name) => {
                 let value_idx =
                     self.gen_named_expr_ir(
                         &var.name, 
@@ -283,9 +283,10 @@ impl IR {
             }
             node::TyNode::Pointer {
                 ty_name,
-                mut range,
+                range,
                 ..
             } => {
+                let mut r = range.clone();
                 // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
                 // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
                 let val = *var.value;
@@ -318,13 +319,13 @@ impl IR {
                         || { self.constract_flag.put_var_def(ty_to_register) }
                     )?;
 
-                if range.is_none() {
-                    range = Some((0, base_range));
+                if r.is_none() {
+                    r = Some((0, base_range));
                 } else {
                     // ポインタの範囲指定がある場合、指定された範囲と初期値の長さが一致するか確認する
-                    if range.unwrap() != (0, base_range) {
+                    if r.unwrap() != (0, base_range) {
                         CompileErr::ptr_range_len_mismatch(
-                            range.unwrap(), 
+                            r.unwrap(), 
                             base_range
                         )
                         .map_err(
@@ -337,7 +338,7 @@ impl IR {
                     name: Some(mem::take(&mut var.name)),
                     size: types::Size::build_ptr_ty(
                         &*ty_name, 
-                        range
+                        r
                     ),
                     dst: self.id_counter,
                     src: value_idx,

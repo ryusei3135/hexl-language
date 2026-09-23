@@ -46,7 +46,7 @@ impl MngAsmFmt {
     /// - usizeの場合はレジスタの番号が返される
     /// ## 引数
     /// - param_idx = 引数の場所
-    pub(in crate::gen) fn get_fmt_param<R: 'static>(
+    pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(
         &self, 
         param_idx: &usize, 
         size: Size

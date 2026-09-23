@@ -432,7 +432,7 @@ impl Expr {
 
     pub fn get_assign_node(&mut self) -> &mut AssignVar {
         match self {
-            Self::Assign(ref mut name) => {
+            Self::Assign(name) => {
                 return name;
             }
             _ => panic!(),

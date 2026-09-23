@@ -4,7 +4,7 @@ use std::fs;
 
 use serde::{Deserialize, Serialize};
 
-use crate::gen;
+use crate::asm_gen;
 use crate::ir;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -148,7 +148,7 @@ pub fn gen_asm_text(
     let asm_settings = load_setting();
 
     let asm_fmt = asm_settings.get_asm_fmt(inline_name);
-    let mut writer = gen::AsmEmitter::new(
+    let mut writer = asm_gen::AsmEmitter::new(
         asm_settings, 
         asm_fmt
     );

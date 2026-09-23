@@ -1,4 +1,4 @@
-use crate::gen::asm_emitter::VarIndexInfo;
+use crate::asm_gen::asm_emitter::VarIndexInfo;
 //use crate::ir::def_tree::{VarMetaData, VarTree};
 
 use super::*;

@@ -1,6 +1,6 @@
 mod asm_setting;
 mod err;
-mod gen;
+mod asm_gen;
 mod ir;
 mod lex;
 mod macros;

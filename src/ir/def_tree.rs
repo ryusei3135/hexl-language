@@ -348,7 +348,7 @@ impl FnDefInfo {
 
     pub fn get_ret_ty(
         &self
-    ) -> crate::gen::SelfPtrInfo {
+    ) -> crate::asm_gen::SelfPtrInfo {
         if self.ret_ty.is_none() {
             return types::Size::Void
                 .wrap_dst_size();
@@ -529,7 +529,7 @@ impl FnDefMetaData {
         self.module.as_ref()
     }
 
-    pub fn gen(&self, stk_size: usize) -> FnDefInfo {
+    pub fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
         FnDefInfo {
             name: self.name.clone(),
             module: None,

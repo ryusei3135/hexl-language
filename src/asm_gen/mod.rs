@@ -25,7 +25,7 @@ pub struct AsmEmitter {
 
     pub(super) asm_fmt: mng_fmt::MngAsmFmt,
 
-    pub(in crate::gen) curr_inst: Vec<inst::Inst>,
+    pub(in crate::asm_gen) curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
     pub(super) data_map: Vec<(usize, String)>,
     pub(super) last_inst_idx: Vec<(usize, usize)>,

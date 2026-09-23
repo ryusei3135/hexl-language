@@ -24,7 +24,7 @@ impl Size {
         ty: &node::TyNode
     ) -> Result<Self, err::undef::UndefKind> {
         let size_ty = match ty {
-            node::TyNode::Ty(ref ty_name) => {
+            node::TyNode::Ty(ty_name) => {
                 embe_ty_sort(ty_name)?
             }
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
@@ -111,7 +111,7 @@ impl Size {
     }
 
     #[inline(always)]
-    pub fn wrap_dst_size(&self) -> crate::gen::SelfPtrInfo {
+    pub fn wrap_dst_size(&self) -> crate::asm_gen::SelfPtrInfo {
         Some(self.clone())
     }
 

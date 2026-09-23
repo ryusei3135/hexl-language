@@ -108,7 +108,9 @@ impl IR {
                         }
                     );
                 if let Some(def_data) = result {
-                    def_data.gen(self.stk_counter)
+                    def_data.gen_fn_def(
+                        self.stk_counter
+                    )
                 } else {
                     return Err(
                         undef::UndefErrs::undef_fn(

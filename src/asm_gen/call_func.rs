@@ -2,7 +2,7 @@ mod assign_var;
 mod mem_ir;
 
 use super::*;
-use crate::gen::emit_fn_name::*;
+use crate::asm_gen::emit_fn_name::*;
 use crate::ir::{self, types};
 
 impl AsmEmitter {

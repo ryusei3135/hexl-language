@@ -1,7 +1,7 @@
 use super::*;
 
 impl AsmEmitter {
-    pub(in crate::gen) fn emit_struct_ini_asm(
+    pub(in crate::asm_gen) fn emit_struct_ini_asm(
         &mut self,
         struct_node: Vec<inst::MemoryInst>,
         this_is_self: bool,

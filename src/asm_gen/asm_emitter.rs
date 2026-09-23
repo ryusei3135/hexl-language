@@ -479,7 +479,7 @@ impl AsmEmitter {
     /// これは`mov`命令に付けるサイズ接尾辞(`movl`など)を
     /// 決定するために使う。
     #[inline(always)]
-    pub(in crate::gen) fn check_node_is_mem_val(
+    pub(in crate::asm_gen) fn check_node_is_mem_val(
         &self, 
         node_idx: &usize
     ) -> Option<Size> {

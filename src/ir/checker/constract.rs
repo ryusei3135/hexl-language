@@ -196,13 +196,19 @@ impl IR {
     ) {
         for n in nodes.iter() {
             match n.get_node() {
-                node::Group2Node::Expr(ref expr) => {
-                    Self::walk_expr(&expr, must_vars);
+                node::Group2Node::Expr(expr) => {
+                    Self::walk_expr(
+                        &expr, 
+                        must_vars
+                    );
                 }
                 node::Group2Node::Stmt(
-                    node::StmtNode::Return(ref expr)
+                    node::StmtNode::Return(expr)
                 ) => {
-                    Self::walk_expr(&expr, must_vars);
+                    Self::walk_expr(
+                        &expr, 
+                        must_vars
+                    );
                 }
                 node::Group2Node::Stmt(
                     node::StmtNode::Continue 
