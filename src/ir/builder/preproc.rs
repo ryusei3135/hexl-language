@@ -19,7 +19,11 @@ impl IR {
             // 公開関数を全て、モジュール名(エイリアスかファイル名由来)を
             // 付けて取り込む
             node::ImportKind::Module(alias) => {
-                self.include_module(path, alias.as_ref(), settings)
+                self.include_module(
+                    path, 
+                    alias.as_ref().map(|v| v.as_str()), 
+                    settings
+                )
             }
             // `#include "mod/file.hexl"::func`
             // 指定した関数だけを、モジュール名を付けずに取り込む
@@ -134,7 +138,7 @@ impl IR {
     fn include_module(
         &mut self,
         path: &node::ModPath,
-        alias: Option<&String>,
+        alias: Option<&str>,
         settings: &crate::cmd_line_args::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();

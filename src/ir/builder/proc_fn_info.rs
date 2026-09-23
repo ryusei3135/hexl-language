@@ -73,7 +73,8 @@ impl IR {
     /// 外部の関数を定義するノードを
     /// 作成し、スタックする関数
     /// アセンブリ言語を出力する際にだけ使う
-    pub(in crate::ir::builder) fn make_extern_func_inst(
+    pub(in crate::ir::builder) 
+    fn make_extern_func_inst(
         &mut self, 
         fn_tree: &Vec<def_tree::FnDefMetaData>
     ) {
