@@ -64,8 +64,7 @@ impl IR {
             let new_setting = settings
                 .new_file(&full_path);
             let mut extern_fn_tree: Vec<def_tree::FnDefMetaData> =
-                crate::build(&new_setting)
-                    .unwrap();
+                crate::build(&new_setting).unwrap();
 
             // 公開されていない関数は取り込まない
             extern_fn_tree.retain(|v| v.public);

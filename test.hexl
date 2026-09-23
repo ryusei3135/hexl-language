@@ -1,4 +1,4 @@
-#include "test/b.hexl"
+
 
 
 struct Name {
@@ -68,9 +68,7 @@ add(a mut: int, b: int) {
 
 _start(): int {
     h: int must=func5 = func4()
-    func2(10)
     a: static[int] = 30
-    b::add_1(10)
     s: Name = Name {
         name: 10
         aa: 10

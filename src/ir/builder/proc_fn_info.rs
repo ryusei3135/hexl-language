@@ -197,7 +197,7 @@ impl IR {
                 meta_data.name.as_str(), 
                 &def_args[index], 
                 &expr_arg
-            ).unwrap();
+            )?;
 
             let ty = self.size_of(
                 &def_args[index].ty

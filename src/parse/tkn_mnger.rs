@@ -106,7 +106,7 @@ impl Parser {
     /// 確認する構造体を作成する
     pub(super) fn build_err_span(&self) -> err::Span {
         err::Span::new(
-            self.current_line(self.idx - 1), 
+            self.current_line(self.idx.saturating_sub(1)), 
             self.tkn_chr_pos()
         )
     }
@@ -123,6 +123,6 @@ impl Parser {
 
     #[inline(always)]
     pub(super) fn tkn_chr_pos(&self) -> &usize {
-        &self.tkns.as_ref().unwrap()[self.idx - 1].pos
+        &self.tkns.as_ref().unwrap()[self.idx.saturating_sub(1)].pos
     }
 }

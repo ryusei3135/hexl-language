@@ -313,7 +313,8 @@ impl IR {
                 inst::Inst::Jmp(format!("L{}", continue_label))
             }
             node::StmtNode::Break => {
-                self.end_scope(false).unwrap();
+                let result = self.end_scope(false);
+                self.unwrap_or_report(result);
                 let (_, break_label) = self.loop_labels.last()
                     .expect("breakはloopの中でのみ使用できます");
                 inst::Inst::Jmp(format!("L{}", break_label))
@@ -335,6 +336,22 @@ impl IR {
             self.gen_expr_ir(*node.0, &expect_byte),
             self.gen_expr_ir(*node.1, &expect_byte),
         )
+    }
+
+    /// ユーザーのソースコード側の誤りに起因しうる`Result`を、
+    /// 生の`.unwrap()`で握りつぶす代わりに使うヘルパー。
+    /// `Err`の場合はコンパイラを異常終了させる代わりに、
+    /// エラー内容を表示してから終了する
+    /// (`gen_expr_ir`など戻り値が`usize`の関数の中では
+    /// `?`が使えないため、この形にしている)
+    fn unwrap_or_report<T>(&self, result: Result<T, err::ErrKind>) -> T {
+        match result {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("error: {:?}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     /// 指定した種類の式のノードを作成する
@@ -401,11 +418,12 @@ impl IR {
                     .var_tree
                     .is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
-                self.assign_expr_node(
+                let result = self.assign_expr_node(
                     assign_node, 
                     &expect_byte, 
                     &var_attr
-                ).unwrap()
+                );
+                self.unwrap_or_report(result)
             }
             node::Expr::Str(value) => inst::Inst::Str {
                 dst: self.id_counter,
@@ -439,18 +457,20 @@ impl IR {
                     .var_attr
                     .clone();
                 // `src/ir/builder/expr_node.rs`
-                self.def_var_node(
+                let result = self.def_var_node(
                     var, 
                     &expect_byte, 
                     &var_attr
-                ).unwrap()
+                );
+                self.unwrap_or_report(result)
             }
             node::Expr::CallFunc(meta_data) => {
-                self.gen_call_fn_ir(
+                let result = self.gen_call_fn_ir(
                     None, 
                     &meta_data,
                     None
-                ).unwrap()
+                );
+                self.unwrap_or_report(result)
             }
             node::Expr::Var(name) => {
                 // `src/ir/ty_checker/var_ty.rs`
@@ -513,31 +533,33 @@ impl IR {
             // `gen_named_expr_ir`経由で`scope_node`を直接呼び出し、
             // 変数名を渡している(`src/ir/builder/expr_node.rs`)
             node::Expr::Scope { scope, target } => {
-                self.scope_node(
+                let result = self.scope_node(
                     &scope, 
                     target, 
                     None, 
                     &parse::VarMutAttr::Invar
-                )
-                .unwrap()
+                );
+                self.unwrap_or_report(result)
             }
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_var(
+                        let result = self.member_is_var(
                             &scope, 
                             &name
-                        ).unwrap()
+                        );
+                        self.unwrap_or_report(result)
                     }
                     node::Expr::CallFunc(
                         call_func_info
                     ) => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_fn(
+                        let result = self.member_is_fn(
                             &scope, 
                             &call_func_info
-                        ).unwrap()
+                        );
+                        self.unwrap_or_report(result)
                     }
                     // `変数名.[メンバー名 添字]`
                     node::Expr::RefArray { 
@@ -664,7 +686,10 @@ impl IR {
         self.loop_labels.push((start.clone(), end.clone()));
         self.begin_scope();
         self.gen_inst(&body);
-        self.end_scope(true).unwrap();
+        {
+            let result = self.end_scope(true);
+            self.unwrap_or_report(result);
+        }
         self.loop_labels.pop();
         crate::push_jmp_code!(self, Jmp, &start);
         crate::push_jmp_code!(self, Block, &end);
@@ -720,8 +745,10 @@ impl IR {
         if let Some(arm) = arm_else.clone() {
             self.begin_scope();
             self.gen_inst(&arm);
-            self.end_scope(true)
-                .unwrap();
+            {
+                let result = self.end_scope(true);
+                self.unwrap_or_report(result);
+            }
         }
         crate::push_jmp_code!(self, Jmp, &end_label);
 
@@ -731,7 +758,10 @@ impl IR {
             crate::push_jmp_code!(self, Block, label);
             self.begin_scope();
             self.gen_inst(&arm.body);
-            self.end_scope(true).unwrap();
+            {
+                let result = self.end_scope(true);
+                self.unwrap_or_report(result);
+            }
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
 

@@ -37,12 +37,13 @@ impl IR {
             target 
         } = expr {
             self.expr_counter += 1;
-            let inst = self.scope_node(
+            let result = self.scope_node(
                 &scope,
                 target,
                 Some(var_name), 
                 &attr
-            ).unwrap();
+            );
+            let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
@@ -51,11 +52,12 @@ impl IR {
                 call
             ) = expr
         {
-            let inst = self.gen_call_fn_ir(
+            let result = self.gen_call_fn_ir(
                 None, 
                 &call,
                 Some(var_name)
-            ).unwrap();
+            );
+            let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
@@ -330,8 +332,7 @@ impl IR {
                         )
                         .map_err(
                             |err| {
-                                err.with_span(self.current_span)})
-                        .unwrap();
+                                err.with_span(self.current_span)})?;
                     }
                 }
                 let inst = inst::Inst::Mov {

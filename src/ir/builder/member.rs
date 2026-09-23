@@ -94,7 +94,7 @@ impl IR {
             Some(&struct_name), 
             &call_info, 
             None
-        ).unwrap();
+        )?;
         Ok(r)
     }
 
