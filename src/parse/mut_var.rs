@@ -88,9 +88,9 @@ impl Parser {
     #[inline(always)]
     pub fn args_is_mut(
         &mut self, 
-        _name: &String
+        _name: &str
     ) -> Result<VarMutAttr, err::ErrKind> {// 引数が不変か
-        let attr = match self.next_tkn_ref(vec!["mut"])? {
+        let attr = match self.next_tkn_ref(&["mut"])? {
             lex::Tkn::KeyWordMut => {
                 VarMutAttr::Var
             }
@@ -99,8 +99,8 @@ impl Parser {
             }
             _ => VarMutAttr::Invar
         };
-        if !matches!(attr, VarMutAttr::Invar) {
-            self.next_tkn(vec![])?;
+        if attr != VarMutAttr::Invar {
+            self.next_tkn(&["mut"])?;
         }
         Ok(attr)
     }

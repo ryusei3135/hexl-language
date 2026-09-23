@@ -15,7 +15,7 @@ impl Parser {
         func_name: &String,
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
-        let arg = match self.next_tkn(vec!["(", "<"])? {
+        let arg = match self.next_tkn(&["(", "<"])? {
             lex::Tkn::LParen => self.define_arg_node()?,
             lex::Tkn::LAngleBracket => {
                 // トップレベルのジェネリクス関数(`func<T>(..)`)は、
@@ -107,7 +107,7 @@ impl Parser {
             if can_create_param == false {
                 unreachable!("define_arg_node: 引数リストの内部状態が不正です");
             }
-            match self.next_tkn(vec!["name", ")"])? {
+            match self.next_tkn(&["name", ")"])? {
                 lex::Tkn::Name(name) => {
                     let var_attr: VarMutAttr = self.args_is_mut(&name)?;
                     // 直前の`if !can_create_param`のチェックを通過して
@@ -116,7 +116,7 @@ impl Parser {
                     if can_create_param == false {
                         unreachable!("define_arg_node: 引数リストの内部状態が不正です");
                     }
-                    self.next_tkn(vec![])?;
+                    self.next_tkn(&[])?;
                     let ty = self.define_ty_node()?;
                     args_params.push(node::ArgsNode {
                         name: name.clone(),
@@ -127,23 +127,17 @@ impl Parser {
                 }
                 // これが来た場合引数の定義が終了
                 lex::Tkn::RParen => {
-                    self.next_tkn(vec![])?;
+                    self.next_tkn(&[])?;
                     break;
                 }
                 t => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::ExpectedKind {
-                            expected: "name or `)`",
-                            found: t,
-                        }
-                    );
+                    return self.args_expr_in_unexpect_tkn(t);
                 }
             }
 
             match self.current_tkn() {
                 lex::Tkn::RParen => {
-                    self.next_tkn(vec![])?;
+                    self.next_tkn(&[])?;
                     break;
                 }
                 lex::Tkn::Comma => {
@@ -490,8 +484,8 @@ impl Parser {
         name: &String,
         ini_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
-        if !matches!(self.current_tkn(), lex::Tkn::LAngleBracket) {
-            panic!("generic_call_exprを呼び出す際に`<`ではない");
+        if self.current_tkn() != &lex::Tkn::LAngleBracket {
+            return self.fn_unexpect_tkn::<node::Expr>();
         }
         let param_count = self
             .generic_funcs
@@ -503,18 +497,15 @@ impl Parser {
         let (ty_args, ty_tkns) = self.generic_type_args(param_count)?;
 
         // `>`の次は`(`
-        let t = self.next_tkn(vec!["("])?;
-        if !matches!(t, lex::Tkn::LParen) {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "(",
-                    found: t,
-                }
-            );
+        if self.next_tkn(&["("])? != lex::Tkn::LParen {
+            return self.not_found_lparen();
         }
 
-        self.instantiate_generic_func(name, &ty_args, &ty_tkns)?;
+        self.instantiate_generic_func(
+            name, 
+            &ty_args, 
+            &ty_tkns
+        )?;
 
         let mut call = self.call_func_expr(name, ini_struct)?;
         if let node::Expr::CallFunc(ref mut info) = call {

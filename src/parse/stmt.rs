@@ -88,7 +88,7 @@ impl Parser {
         // ノードを作らない。定義は`collect_generic_funcs`で集め済みなので、
         // ここでは本体を閉じる`}`まで読み飛ばすだけ
         if matches!(
-            self.next_tkn_ref(vec!["(", "<"])?, 
+            self.next_tkn_ref(&["(", "<"])?, 
             lex::Tkn::LAngleBracket
         ) {
             return self.skip_generic_func_def();
@@ -159,9 +159,7 @@ impl Parser {
                     // ここでスコープを閉じる
                     if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                         self.scope_counter -= 1;
-                        if self.next_tkn(vec![])
-                            .is_err() 
-                        {
+                        if self.next_tkn(&[]).is_err() {
                             return Ok(());
                         }
 
@@ -187,7 +185,7 @@ impl Parser {
 
                     if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                         self.scope_counter -= 1;
-                        if self.next_tkn(vec![]).is_err() {
+                        if self.next_tkn(&[]).is_err() {
                             return Ok(());
                         }
 
@@ -196,7 +194,7 @@ impl Parser {
                     continue;
                 }
             }
-            if self.next_tkn(vec![]).is_err() && self.scope_counter == 0 {
+            if self.next_tkn(&[]).is_err() && self.scope_counter == 0 {
                 return Ok(());
             }
         }
@@ -213,12 +211,12 @@ impl Parser {
             }
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
-                let tkn = self.next_tkn(vec!["name"])?;
+                let tkn = self.next_tkn(&["name"])?;
                 if let lex::Tkn::Name(name) = tkn.clone() {
                     match self.peek_tkn() {
                         // `name`の次が数字の場合、配列への代入
                         // `[name index] = value`
-                        Some(lex::Tkn::Number(_)) => {
+                        Ok(lex::Tkn::Number(_)) => {
                             self.make_array_assign_node(&name)?.wrap_group2()
                         }
                         // それ以外の場合、ポインタへの代入
@@ -282,7 +280,7 @@ impl Parser {
                 ),
             }));
         }
-        self.next_tkn(vec![])?;
+        self.next_tkn(&[])?;
         let stmt = if is_continue {
             node::StmtNode::Continue
         } else {
@@ -294,7 +292,7 @@ impl Parser {
     fn pub_keyword_node(
         &mut self
     ) -> Result<(), err::ErrKind> {
-        match self.next_tkn(vec!["name", ".."])? {
+        match self.next_tkn(&["name", ".."])? {
             lex::Tkn::Name(name) => self.build_func::<true>(&name),
             unexpect_tkn => {
                 // 期待したトークンじゃないので、エラー
@@ -315,7 +313,7 @@ impl Parser {
         &mut self
     ) -> Result<node::Group2Node, err::ErrKind> {
         // 反復処理の条件式
-        let pattern = match self.next_tkn_ref(vec!["{", ".."])? {
+        let pattern = match self.next_tkn_ref(&["{", ".."])? {
             // "{"の場合は条件無し
             lex::Tkn::LBrace => None,
             // 条件式あり
@@ -334,13 +332,13 @@ impl Parser {
                 }
             );
         }
-        self.next_tkn(vec!["{"])?;
+        self.next_tkn(&["{"])?;
 
         self.loop_depth += 1;
         let body_result = self.gen_block_node();
         self.loop_depth -= 1;
         let body = body_result?;
-        self.next_tkn(vec!["expr"])?;
+        self.next_tkn(&["expr"])?;
 
         let node = node::Group2Node::Expr(
             node::Expr::Loop { 
@@ -383,7 +381,7 @@ impl Parser {
     pub(super) fn comple_syntax(
         &mut self
     ) -> Result<node::Group2Node, err::ErrKind> {
-        let tkn = self.next_tkn(vec!["name"])?;
+        let tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(name) = tkn.clone() else {
             return crate::syntax_err!(
                 self.build_err_span(),
@@ -414,7 +412,7 @@ impl Parser {
         name: &String
     ) -> Result<node::Expr, err::ErrKind> {
         // `index`は数字である必要がある。そうでなければエラーを返す
-        let tkn = self.next_tkn(vec!["number"])?;
+        let tkn = self.next_tkn(&["number"])?;
         let lex::Tkn::Number(index) = tkn.clone() else {
             return crate::syntax_err!(
                 self.build_err_span(),
@@ -424,8 +422,8 @@ impl Parser {
                 }
             );
         };
-        self.next_tkn(vec!["]"])?;
-        self.next_tkn(vec!["="])?;
+        self.next_tkn(&["]"])?;
+        self.next_tkn(&["="])?;
         let value = self.expr_branch()?;
 
         Ok(node::AssignVar::new(

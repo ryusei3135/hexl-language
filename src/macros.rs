@@ -17,12 +17,12 @@ macro_rules! push_jmp_code {
 macro_rules! scope_node {
     ($self:tt, $target:ident, $result:ident, $start:expr) => {
         // "::"をスキップ
-        let _ = $self.next_tkn(vec![])?;
+        let _ = $self.next_tkn(&[])?;
         let mut path_node = Vec::<String>::new();
         path_node.push($start.to_string());
         loop {
             // スコープのノードを作成
-            let scope_tkn = $self.next_tkn(vec!["name"])?;
+            let scope_tkn = $self.next_tkn(&["name"])?;
             if let lex::Tkn::Name(name) = scope_tkn.clone() {
                 path_node.push(name);
             } else {
@@ -36,7 +36,7 @@ macro_rules! scope_node {
             }
 
             // スコープやメゾットでなくなったので、ノードを作成
-            let after_name = $self.next_tkn_ref(vec![])?;
+            let after_name = $self.next_tkn_ref(&[])?;
             if !matches!(after_name, lex::Tkn::$target) {
                 let expr = match after_name {
                     // これらのトークンが続く場合のみ、代入/呼び出し/
@@ -74,7 +74,7 @@ macro_rules! scope_node {
                     // 自身は消費せず、呼び出し元がそれを見て処理を続けられる
                     // ように、名前の次のトークンまでだけ進める
                     _ => {
-                        let _ = $self.next_tkn(vec![])?;
+                        let _ = $self.next_tkn(&[])?;
                         node::Expr::Var(path_node.last().unwrap().to_string())
                     }
                 };
@@ -87,7 +87,7 @@ macro_rules! scope_node {
                 };
                 return Ok(node);
             }
-            let _ = $self.next_tkn(vec![])?;
+            let _ = $self.next_tkn(&[])?;
         }
     };
 }

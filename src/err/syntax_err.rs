@@ -80,6 +80,7 @@ pub enum SyntaxErrKind {
     MissingIdentAfterOf {
         found: lex::Tkn,
     },
+    GenericsNotSupportedYet,
 }
 
 impl fmt::Display for SyntaxErrKind {
@@ -141,6 +142,7 @@ impl fmt::Display for SyntaxErrKind {
                 "`of`の後には名前が必要ですが、`{:?}`が見つかりました",
                 found
             ),
+            t => panic!("{:?}", t),
         }
     }
 }

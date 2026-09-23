@@ -1,5 +1,4 @@
 #include "test/b.hexl"
-#include "test/func.hexl"::func2
 
 
 struct Name {

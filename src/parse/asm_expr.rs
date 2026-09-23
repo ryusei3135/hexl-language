@@ -41,7 +41,7 @@ impl Parser {
         // 式の解析が終わった後もまだトークンが残っている場合は
         // `${...}`の中に、式として解析できない文字列が
         // 混ざっていることになるのでエラーにする
-        if parser.peek_tkn().is_some() {
+        if parser.peek_tkn().is_ok() {
             crate::preproc_err!(parser, UnexpectedTrailingTokenInAsmOperand);
         }
 

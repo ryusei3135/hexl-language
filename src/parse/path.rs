@@ -5,22 +5,25 @@ impl Parser {
     /// name::mod
     pub(super) fn build_scope_node(
         &mut self, 
-        name: &String
+        name: &str
     ) -> Result<node::Expr, err::ErrKind> {
-        if matches!(
-            self.next_tkn_ref(vec!["{"])?, 
-            lex::Tkn::LBrace
-        ) {
-            self.next_tkn(vec![])?;
+        if self.next_tkn_ref(&["{"])? == lex::Tkn::LBrace {
+            self.advance_tkn().unwrap();
             let node = self.struct_init_node::<false>(name);
-            self.next_tkn(vec![])?;
-            return node;
+
+            return if self.next_tkn_ref(&["}"])? == lex::Tkn::RBrace {
+                self.advance_tkn().unwrap();
+                node
+            } else {
+                // }が来ていない
+                panic!();
+            }
         }
-        if matches!(self.next_tkn_ref(vec!["."])?, lex::Tkn::Dot) {
-            return self.build_member_node(&name);
+        if self.next_tkn_ref(&["."])? == lex::Tkn::Dot {
+            return self.build_member_node(name);
         }
         // "::"がないので、何も返さない
-        if !matches!(self.next_tkn_ref(vec!["not `::`"])?, lex::Tkn::ModPathTkn) {
+        if self.next_tkn_ref(&["not `::`"])? != lex::Tkn::ModPathTkn {
             return Ok(self.expr_define_var(name.to_string())?);
         }
 
@@ -32,18 +35,18 @@ impl Parser {
     #[inline(always)]
     pub(super) fn build_member_node(
         &mut self, 
-        name: &String
+        name: &str
     ) -> Result<node::Expr, err::ErrKind> {
         // "."がないので、何も返さない
-        if !matches!(self.next_tkn_ref(vec!["not `.`"])?, lex::Tkn::Dot) {
+        if self.next_tkn_ref(&["not `.`"])? != lex::Tkn::Dot {
             return Ok(self.expr_define_var(name.to_string())?);
         }
 
         // "."の次のトークンを確認するため一旦"."まで進める
-        self.next_tkn(vec!["."])?;
+        self.next_tkn(&["."])?;
         let after_dot_is_bracket =
             matches!(
-                self.next_tkn_ref(vec!["name", "["])?,
+                self.next_tkn_ref(&["name", "["])?,
                 lex::Tkn::LBracket
             );
         // まだ"."を消費していない状態(呼び出し時点の位置)に戻す
@@ -53,9 +56,9 @@ impl Parser {
         // アクセス(または代入)するノードを作成する: `name.[member index]`
         if after_dot_is_bracket {
             // "."をスキップ
-            self.next_tkn(vec!["."])?;
+            self.next_tkn(&["."])?;
             // "["をスキップ
-            self.next_tkn(vec!["["])?;
+            self.next_tkn(&["["])?;
             return self.build_member_array_node(name);
         }
 
@@ -75,9 +78,9 @@ impl Parser {
     /// その次が数字(`lex::Tkn::Number`)ではない場合エラー
     fn build_member_array_node(
         &mut self, 
-        name: &String
+        name: &str
     ) -> Result<node::Expr, err::ErrKind> {
-        let member_tkn = self.next_tkn(vec!["name"])?;
+        let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::syntax_err!(
                 self.build_err_span(),
@@ -87,7 +90,7 @@ impl Parser {
                 }
             );
         };
-        let index_tkn = self.next_tkn(vec!["number"])?;
+        let index_tkn = self.next_tkn(&["number"])?;
         let lex::Tkn::Number(index) = index_tkn.clone() else {
             return crate::syntax_err!(
                 self.build_err_span(),
@@ -98,7 +101,7 @@ impl Parser {
             );
         };
         // "]"まで進める(current_tkn()は"]"を指す)
-        self.next_tkn(vec!["]"])?;
+        self.next_tkn(&["]"])?;
 
         let member_node = node::Expr::Member {
             scope: vec![name.to_string()],
@@ -111,8 +114,8 @@ impl Parser {
 
         // `a.[c 0] = 10`のように代入の場合、"="の後に続く値を
         // 読み取り、代入のノードとして返す
-        if matches!(self.next_tkn_ref(vec!["="])?, lex::Tkn::Equal) {
-            self.next_tkn(vec!["="])?;
+        if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
+            self.next_tkn(&["="])?;
             let value = self.expr_branch()?;
             return Ok(node::AssignVar::new(name, member_node, value));
         }

@@ -18,7 +18,7 @@ impl Parser {
         name: String,
     ) -> Result<node::Expr, err::ErrKind> {
         let node = if self
-            .next_tkn(vec!["(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "]"])
+            .next_tkn(&["(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "]"])
             .map(|_| true)?
         {
             match &self.current_tkn() {
@@ -61,12 +61,12 @@ impl Parser {
                     // ポインタ参照なので、次のトークンに進めずに
                     // ノードを返す
                     if !matches!(
-                        self.next_tkn_ref(vec!["="])?, 
+                        self.next_tkn_ref(&["="])?, 
                         lex::Tkn::Equal
                     ) {
                         return Ok(node::Expr::Var(name));
                     }
-                    self.next_tkn(vec!["="])?;
+                    self.next_tkn(&["="])?;
                     return Ok(node::AssignVar::new(
                         &name,
                         node::Expr::GetAddress(Box::new(node::Expr::Var(name.to_string()))),
@@ -84,7 +84,7 @@ impl Parser {
             let ty_node = self.define_ty_node()?;
 
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
-                if matches!(self.next_tkn(vec!["="])?, lex::Tkn::Equal) {
+                if matches!(self.next_tkn(&["="])?, lex::Tkn::Equal) {
                     return Ok(node::DefineVar::new(
                         &name,
                         node::Expr::ConnectAddr(Box::new(self.expr_branch()?)),
@@ -123,10 +123,10 @@ impl Parser {
     /// 式に代入する物が、構文の式 例(match)かどうかで
     pub(super) fn expr_branch(&mut self) -> Result<node::Expr, err::ErrKind> {
         if matches!(
-            self.next_tkn_ref(vec!["match"])?, 
+            self.next_tkn_ref(&["match"])?, 
             lex::Tkn::KeyWordCond
         ) {
-            self.next_tkn(vec![])?;
+            self.next_tkn(&[])?;
             self.expr_match()
         } else {
             self.expr_cmp(true)
@@ -212,7 +212,7 @@ impl Parser {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
-            match self.next_tkn(vec![])? {
+            match self.next_tkn(&[])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
                     return self.gen_name_node::<false>(name, ini_struct);
@@ -233,7 +233,7 @@ impl Parser {
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
-        let v = match self.next_tkn(vec!["[", "*", "number", "string", "name", "(", "{"])? {
+        let v = match self.next_tkn(&["[", "*", "number", "string", "name", "(", "{"])? {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
@@ -302,7 +302,7 @@ impl Parser {
                 | lex::Tkn::Str(_)
                 | lex::Tkn::RParen
                 | lex::Tkn::RBracket => {
-                    self.next_tkn(vec![])?;
+                    self.next_tkn(&[])?;
                 }
                 // `}` は、構造体初期化(`Name { .. }`)や配列リテラル
                 // (`{ .. }`)を閉じる場合にのみ、ここで読み飛ばす。
@@ -312,7 +312,7 @@ impl Parser {
                 lex::Tkn::RBrace
                     if matches!(v, node::Expr::InitStruct { .. } | node::Expr::Array(..)) =>
                 {
-                    self.next_tkn(vec![])?;
+                    self.next_tkn(&[])?;
                 }
                 _ => {}
             }
@@ -340,14 +340,14 @@ impl Parser {
         name: &String, 
         ini_struct: bool
     ) -> Result<node::Expr, err::ErrKind> {
-        if !matches!(self.current_tkn(), lex::Tkn::LParen) {
+        if self.current_tkn() != &lex::Tkn::LParen {
             panic!("call_func_exprを呼び出す際にLParenではない");
         }
         // 引数
         let mut args = Vec::<node::Expr>::new();
 
         // 関数を呼び出す式に引数がない場合は実行されない
-        if !matches!(self.next_tkn_ref(vec!["not `)`"])?, lex::Tkn::RParen) {
+        if !matches!(self.next_tkn_ref(&["not `)`"])?, lex::Tkn::RParen) {
             loop {
                 // 引数の式を取得
                 args.push(self.expr_cmp(ini_struct)?);
@@ -361,7 +361,7 @@ impl Parser {
                         break;
                     }
                     _ => {
-                        panic!("{:?}", self.next_tkn_ref(vec![]));
+                        panic!("{:?}", self.next_tkn_ref(&[]));
                     }
                 }
             }
@@ -369,11 +369,11 @@ impl Parser {
             // 引数がない場合、現在のトークンはまだ`(`のままなので、
             // 引数がある場合のループが`)`を指した状態で抜けるのに
             // 合わせて、ここで`)`まで進めておく
-            self.next_tkn(vec![])?;
+            self.next_tkn(&[])?;
         }
 
         // ')'をスキップ
-        self.next_tkn(vec![])?;
+        self.next_tkn(&[])?;
         Ok(node::Expr::CallFunc(node::CallInfo {
             name: name.clone(),
             // ジェネリクス関数の場合は、呼び出し元(`generic_call_expr`)が

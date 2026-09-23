@@ -12,33 +12,43 @@ impl Parser {
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
-        if !matches!(
-            self.current_tkn(), 
-            lex::Tkn::KeyWordMust
-        ) {
-            panic!();
-        }
-        // `must`の後ろは必ず`=`
-        let found = self.next_tkn(vec!["="])?;
-        if !matches!(found, lex::Tkn::Equal) {
-            crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::MissingEqualsAfterMust { found }
-            )?
+        if self.current_tkn() != &lex::Tkn::KeyWordMust {
+            panic!("{:?}", self.current_tkn());
         }
 
-        match self.advance_tkn().unwrap() {
-            lex::Tkn::Name(val) => {
+        // `must`の後ろは必ず`=`
+        let found = self.next_tkn(&["="])?;
+        if found != lex::Tkn::Equal {
+            return crate::syntax_err!(
+                self.build_err_span(),
+                err::SyntaxErrKind::MissingEqualsAfterMust { 
+                    found
+                }
+            )?
+        }
+         // 3. `advance_tkn` の戻り値を `match` で安全かつスマートに分解
+        match self.advance_tkn() {
+            Some(lex::Tkn::Name(val)) => {
                 let ty = node::ConstractTy::new::<{node::IS_MUST}>(
                     Some(val),
                     None,
                     Box::new(base_ty),
                 );
-                return Ok(ty);
+                Ok(ty)
             }
-            _ => {},
+            // `Name` 以外が来た、または EOF の場合（パニックさせずエラーを返す）
+            Some(other_tkn) => {
+                panic!();
+            }
+            None => {
+                crate::syntax_err!(
+                    self.build_err_span(),
+                    err::SyntaxErrKind::TknIsEof { 
+                        expected: vec!["Name"] 
+                    }
+                )
+            }
         }
-        panic!();
     }
 
     /// 契約を終了する関数の型
@@ -50,14 +60,11 @@ impl Parser {
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
-        if !matches!(
-            self.current_tkn(), 
-            lex::Tkn::KeyWordOf
-        ) {
+        if self.current_tkn() != &lex::Tkn::KeyWordOf {
             panic!();
         }
 
-        match self.next_tkn(vec!["name"])? {
+        match self.next_tkn(&["name"])? {
             lex::Tkn::Name(val) => {
                 let ty: node::TyNode = 
                     node::ConstractTy::new::<{node::IS_OF}>(
@@ -76,11 +83,12 @@ impl Parser {
         }
     }
 
-    pub(in crate::parse) fn is_constract_ty(
+    pub(in crate::parse) 
+    fn is_constract_ty(
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
-        match self.next_tkn_ref(vec![]).unwrap() {
+        match self.next_tkn_ref(&[])? {
             lex::Tkn::KeyWordMust => {
                 self.advance_tkn().unwrap();
                 self.ty_constract_must(base_ty)

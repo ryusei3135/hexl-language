@@ -8,7 +8,7 @@ impl Parser {
     pub(super) fn get_var_addr_node(
         &mut self
     ) -> Result<node::Expr, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn_ref(vec!["name"])? else {
+        let lex::Tkn::Name(name) = self.next_tkn_ref(&["name"])? else {
             panic!()
         };
         let result = self.expr_add(true)?;
@@ -19,7 +19,7 @@ impl Parser {
             }
             // nameの次に、数字が来た場合、それは配列にアクセスする
             lex::Tkn::Number(index) => {
-                let _ = self.next_tkn(vec!["]"])?;
+                let _ = self.next_tkn(&["]"])?;
                 node::Expr::RefArray {
                     name,
                     dst: Box::new(result),
@@ -43,7 +43,7 @@ impl Parser {
         if init_struct == false {
             return Ok(node::Expr::Var(name));
         }
-        let node = match self.next_tkn_ref(vec![".", "(", "`", "::"])? {
+        let node = match self.next_tkn_ref(&[".", "(", "`", "::"])? {
             lex::Tkn::Dot => {
                 let n = self.build_scope_node(&name);
                 return n;
@@ -66,17 +66,17 @@ impl Parser {
             // 構造体の初期化ノードを作成する
             lex::Tkn::LBrace => {
                 // "{"から始まらないといけないので、次に進める
-                self.next_tkn(vec!["{"])?;
+                self.next_tkn(&["{"])?;
                 return self.struct_init_node::<T>(&name);
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
             lex::Tkn::ModPathTkn => {
-                self.next_tkn(vec!["name"])?;
-                let lex::Tkn::Name(mem_name) = self.next_tkn(vec!["name"])?.clone() else {
+                self.next_tkn(&["name"])?;
+                let lex::Tkn::Name(mem_name) = self.next_tkn(&["name"])?.clone() else {
                     panic!();
                 };
-                if matches!(self.next_tkn_ref(vec![])?, lex::Tkn::LParen) {
-                    self.next_tkn(vec!["("])?;
+                if matches!(self.next_tkn_ref(&[])?, lex::Tkn::LParen) {
+                    self.next_tkn(&["("])?;
                     node::Expr::Scope {
                         scope: vec![name],
                         target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
@@ -100,7 +100,7 @@ impl Parser {
     ) -> Result<node::Expr, err::ErrKind> {
         let mut items = Vec::<node::Expr>::new();
 
-        if !matches!(self.next_tkn_ref(vec!["not `}`"])?, lex::Tkn::RBrace) {
+        if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {
             loop {
                 // 初期化構造体のノードを作成可能
                 items.push(self.expr_cmp(true)?);

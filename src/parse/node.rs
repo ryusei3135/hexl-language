@@ -336,7 +336,7 @@ pub struct AssignVar {
 impl AssignVar {
     #[inline(always)]
     pub fn new(
-        name: &String, 
+        name: &str, 
         dst: Expr, 
         value: Expr
     ) -> Expr {

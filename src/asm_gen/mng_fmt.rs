@@ -36,7 +36,10 @@ impl MngAsmFmt {
     }
 
     /// 外部に定義されている物のフォーマット
-    pub fn get_extern_func(&self, name: &String) -> String {
+    pub fn get_extern_func(
+        &self, 
+        name: &str
+    ) -> String {
         self.fmt.func.extern_def.replace("{name}", name)
     }
 

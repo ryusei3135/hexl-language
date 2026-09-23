@@ -44,17 +44,20 @@ impl Parser {
         // `Name "=" ...`の形なら、エイリアス指定として読み取る
         let alias = self.try_take_include_alias()?;
 
-        match self.next_tkn(vec!["string", "name"])? {
+        // match の結果を直接 return する形に統一
+        match self.next_tkn(&["string", "name"])? {
             lex::Tkn::Str(literal) => {
                 self.finish_literal_include(literal, alias)
             }
-            // エイリアスが指定されている場合、パスは必ず
-            // 文字列リテラル(`Literal`形式)でなければならない
+            // match のガード条件 `if` は Rust らしくて非常に綺麗です！
             lex::Tkn::Name(first_seg) if alias.is_none() => {
                 self.build_mod_path_segments(first_seg)
             }
             _ => {
-                crate::preproc_err!(self, ExpectedPathSegment);
+                return crate::preproc_err!(
+                    self, 
+                    ExpectedPathSegment
+                );
             }
         }
     }
@@ -65,10 +68,8 @@ impl Parser {
     fn try_take_include_alias(
         &mut self
     ) -> Result<Option<String>, err::ErrKind> {
-        let is_alias = matches!(
-            self.peek_tkn(), 
-            Some(lex::Tkn::Name(_))
-        ) && matches!(
+        let is_alias =
+            matches!(self.peek_tkn()?, lex::Tkn::Name(_)) && matches!(
             self.peek2_tkn(), 
             Some(lex::Tkn::Equal)
         );
@@ -77,11 +78,11 @@ impl Parser {
             return Ok(None);
         }
 
-        let lex::Tkn::Name(alias_name) = self.next_tkn(vec!["name"])? else {
+        let lex::Tkn::Name(alias_name) = self.next_tkn(&["name"])? else {
             unreachable!();
         };
         // `=`を読み飛ばす
-        self.next_tkn(vec!["="])?;
+        self.next_tkn(&["="])?;
         Ok(Some(alias_name))
     }
 
@@ -96,20 +97,25 @@ impl Parser {
         // `::`が続いていなければ、ファイル全体をモジュールとして
         // 取り込む(エイリアスが無ければファイル名からモジュール名を
         // 自動生成する)
-        if !matches!(self.peek_tkn(), Some(lex::Tkn::ModPathTkn)) {
+        if self.peek_tkn()? != lex::Tkn::ModPathTkn {
             return Ok(node::ModPath::new_literal(
                 literal,
                 node::ImportKind::Module(alias),
             ));
         }
         // `::`を読み飛ばす
-        self.next_tkn(vec![])?;
+        self.advance_tkn().unwrap();
 
-        let kind = match self.next_tkn(vec!["name", "*"])? {
-            lex::Tkn::Name(func_name) => node::ImportKind::Func(func_name),
+        let kind = match self.next_tkn(&["name", "*"])? {
+            lex::Tkn::Name(func_name) => {
+                node::ImportKind::Func(func_name)
+            }
             lex::Tkn::Mul => node::ImportKind::Glob,
             _ => {
-                crate::preproc_err!(self, ExpectedPathSegment);
+                crate::preproc_err!(
+                    self, 
+                    ExpectedPathSegment
+                );
             }
         };
 
@@ -125,12 +131,17 @@ impl Parser {
         let mut mod_path = node::ModPath::new_segments();
         mod_path.add_path(&first_seg);
 
-        while matches!(self.peek_tkn(), Some(lex::Tkn::ModPathTkn)) {
+        while self.peek_tkn()? == lex::Tkn::ModPathTkn {
             // `::`を読み飛ばす
-            self.next_tkn(vec![])?;
-            match self.next_tkn(vec!["name"])? {
-                lex::Tkn::Name(name) => mod_path.add_path(&name),
-                lex::Tkn::Str(val) => mod_path.add_path(&val),
+            // whileでトークンが存在することは確認済み
+            self.advance_tkn().unwrap();
+            match self.next_tkn(&["name"])? {
+                lex::Tkn::Name(name) => {
+                    mod_path.add_path(&name)
+                }
+                lex::Tkn::Str(val) => {
+                    mod_path.add_path(&val)
+                }
                 _ => {
                     crate::preproc_err!(self, ExpectedPathSegment);
                 }
@@ -144,7 +155,7 @@ impl Parser {
     fn get_asm_name(
         &mut self
     ) -> Result<String, err::ErrKind> {
-        if let lex::Tkn::Name(asm_name) = self.next_tkn(vec!["name"])? 
+        if let lex::Tkn::Name(asm_name) = self.next_tkn(&["name"])? 
         {
             Ok(asm_name)
         } else {
@@ -156,18 +167,14 @@ impl Parser {
     fn build_asm_ast(
         &mut self
     ) -> Result<node::Group2Node, err::ErrKind> {
-        
         // #asm(...)なので、(以外が来たらエラー
-        if !matches!(
-            self.next_tkn(vec!["not `(`"])?, 
-            lex::Tkn::LParen
-    ) {
+        if self.next_tkn(&["not `(`"])? != lex::Tkn::LParen {
             crate::preproc_err!(self, ExpectedLParenAfterAsm);
         }
         let asm_name = self.get_asm_name()?;
 
         // #asm(...)なので、(以外が来たらエラー
-        if !matches!(self.next_tkn(vec![")"])?, lex::Tkn::RParen) {
+        if self.next_tkn(&[")"])? != lex::Tkn::RParen {
             crate::preproc_err!(self, ExpectedRParenAfterAsm);
         }
         let nodes = self.gen_asm_preproc()?;
@@ -181,11 +188,8 @@ impl Parser {
     ) -> Result<Vec<node::InlineAsm>, err::ErrKind> {
         let mut nodes = Vec::<node::InlineAsm>::new();
 
-        if matches!(
-            self.next_tkn(vec!["{"])?, 
-            lex::Tkn::LBrace
-        ) {
-            let _ = self.next_tkn(vec![])?;
+        if self.next_tkn(&["{"])? == lex::Tkn::LBrace {
+            let _ = self.next_tkn(&[])?;
             loop {
                 match self
                     .current_tkn()
@@ -195,14 +199,14 @@ impl Parser {
                         nodes.push(self.gen_asm_line(&value)?);
                     }
                     lex::Tkn::RBrace => {
-                        self.next_tkn(vec![])?;
+                        self.next_tkn(&[])?;
                         break;
                     }
                     t => {
                         panic!("{:?}", t);
                     }
                 }
-                self.next_tkn(vec![])?;
+                self.next_tkn(&[])?;
             }
             return Ok(nodes);
         }
