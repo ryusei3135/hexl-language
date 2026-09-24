@@ -44,12 +44,7 @@ impl Parser {
                 let ret_ty = self.define_ty_node()?;
 
                 if self.current_tkn() == &lex::Tkn::LBrace {
-                    Ok(node::FuncDefine::new(
-                        func_name,
-                        arg,
-                        ret_ty,
-                        is_public,
-                    ))
+                    Ok(node::FuncDefine::new(func_name, arg, ret_ty, is_public))
                 } else {
                     Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
                 }

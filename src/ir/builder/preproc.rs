@@ -139,7 +139,7 @@ impl IR {
     fn include_func(
         &mut self,
         path: &node::ModPath,
-        func_name: &String,
+        func_name: &str,
         settings: &crate::cmd_line_args::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();

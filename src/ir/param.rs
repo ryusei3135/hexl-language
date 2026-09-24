@@ -3,10 +3,7 @@ use super::*;
 impl IR {
     /// 関数のノードを生成するときに、引数を登録
     #[inline(always)]
-    pub fn push_param_meta_data(
-        &mut self,
-        params: &Vec<node::ArgsNode>,
-    ) -> Result<(), err::ErrKind> {
+    pub fn push_param_meta_data(&mut self, params: &[node::ArgsNode]) -> Result<(), err::ErrKind> {
         for (index, param) in params.iter().enumerate() {
             let _ = self.var_tree.push::<'p'>(
                 &param.name,

@@ -327,11 +327,7 @@ impl FuncTree {
         let fn_mod = &meta_data.module;
         //  関数がジェネリクスの場合
         let fn_tmp_ty = &meta_data.temp_ty;
-        let key = Self::make_key(
-            &fn_name,
-            fn_mod.as_ref(),
-            &fn_tmp_ty,
-        );
+        let key = Self::make_key(&fn_name, fn_mod.as_ref(), &fn_tmp_ty);
         self.func.insert(
             key,
             FnDefInfo {

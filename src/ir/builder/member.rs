@@ -55,11 +55,10 @@ impl IR {
         // - メゾットの第一引数`self`には、呼び出し元の
         //   変数のアドレス(構造体へのポインタ)を
         //   暗黙的に第一引数として渡す
-        let var_name = scope
+        let var_name: &str = &scope
             .last()
             // スコープ内に関数が存在しない
-            .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInFn, "none".to_string(), None))?
-            .clone();
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInFn, "none".to_string(), None))?;
         let struct_name = self.var_tree.get_ty_name(&var_name);
 
         let mut call_info = call_func_info.clone();
@@ -78,7 +77,7 @@ impl IR {
         name: &str,
         index: &Box<node::Expr>,
     ) -> inst::Inst {
-        let var_name = scope.last().unwrap().clone();
+        let var_name: &str = &scope.last().unwrap();
         let struct_name = self.var_tree.get_ty_name(&var_name);
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める
