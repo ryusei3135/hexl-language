@@ -122,7 +122,7 @@ impl IR {
 
     pub fn builder(
         &mut self,
-        nodes: &Vec<node::Group1Node>,
+        nodes: &[node::Group1Node],
         #[cfg(not(test))] settings: &crate::cmd_line_args::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
         // 構造体・列挙型は、定義された場所より前で使われる場合があるので
@@ -430,21 +430,22 @@ impl IR {
                 self.unwrap_or_report(result)
             }
             node::Expr::Member { scope, target } => {
+                let scope_n_ref: Vec<&str> = scope.iter().map(|s| s.as_str()).collect();
                 match &*target {
                     node::Expr::Var(name) => {
                         // `src/ir/builder/member.rs`
-                        let result = self.member_is_var(&scope, &name);
+                        let result = self.member_is_var(&scope_n_ref, &name);
                         self.unwrap_or_report(result)
                     }
                     node::Expr::CallFunc(call_func_info) => {
                         // `src/ir/builder/member.rs`
-                        let result = self.member_is_fn(&scope, &call_func_info);
+                        let result = self.member_is_fn(&scope_n_ref, &call_func_info);
                         self.unwrap_or_report(result)
                     }
                     // `変数名.[メンバー名 添字]`
                     node::Expr::RefArray { name, index, .. } => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_arr_ref(&scope, &name, &index)
+                        self.member_is_arr_ref(&scope_n_ref, &name, &index)
                     }
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }

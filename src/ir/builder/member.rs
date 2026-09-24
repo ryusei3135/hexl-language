@@ -5,8 +5,8 @@ use super::*;
 impl IR {
     pub fn member_is_var(
         &mut self,
-        scope: &Vec<String>,
-        name: &String,
+        scope: &[&str],
+        name: &str,
     ) -> Result<inst::Inst, err::ErrKind> {
         /*match self.var_tree.get(&scope.last().unwrap()) {
             def_tree::VarType::Local(index) => *index,
@@ -42,7 +42,7 @@ impl IR {
 
     pub fn member_is_fn(
         &mut self,
-        scope: &Vec<String>,
+        scope: &[&str],
         call_func_info: &node::CallInfo,
     ) -> Result<inst::Inst, err::ErrKind> {
         // `変数名.メゾット名(引数, ..)`という、メンバーアクセス
@@ -65,7 +65,7 @@ impl IR {
         let mut call_info = call_func_info.clone();
         call_info.args.insert(
             0,
-            node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
+            node::Expr::GetAddress(Box::new(node::Expr::Var(var_name.to_owned()))),
         );
 
         let r = self.gen_call_fn_ir(Some(&struct_name), &call_info, None)?;
@@ -74,8 +74,8 @@ impl IR {
 
     pub fn member_is_arr_ref(
         &mut self,
-        scope: &Vec<String>,
-        name: &String,
+        scope: &[&str],
+        name: &str,
         index: &Box<node::Expr>,
     ) -> inst::Inst {
         let var_name = scope.last().unwrap().clone();
@@ -115,7 +115,7 @@ impl IR {
         };
 
         inst::Inst::RefStruct {
-            src: var_name,
+            src: var_name.to_owned(),
             size: types::Size::new(&field_ty).unwrap(),
             pos: field_pos + index_num * elem_size,
         }

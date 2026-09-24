@@ -87,7 +87,7 @@ impl VarTree {
         Ok(())
     }
 
-    pub fn get_ty_name(&self, name: &String) -> String {
+    pub fn get_ty_name(&self, name: &str) -> String {
         match &self.hash.get(name).unwrap().size {
             node::TyNode::Ty(name) => name.to_string(),
             node::TyNode::Pointer { ty_name, .. } => {
@@ -192,7 +192,7 @@ impl StructTree {
         self.tree.insert(info.name.to_string(), info.clone());
     }
 
-    pub fn get(&self, name: &String) -> Option<&node::StructDefine> {
+    pub fn get(&self, name: &str) -> Option<&node::StructDefine> {
         self.tree.get(name)
     }
 
@@ -201,13 +201,13 @@ impl StructTree {
     pub fn get_pos(
         &self,
         // 構造体の名前
-        name: &String,
-        field_name: &String,
+        name: &str,
+        field_name: &str,
     ) -> usize {
         let mut byte_counter = 0;
         for member in self.tree.get(name).expect(name).fields.iter() {
             byte_counter += types::Size::new(&member.ty).unwrap().to_bytes();
-            if member.name == field_name.as_str() {
+            if member.name == field_name {
                 return byte_counter;
             }
         }
@@ -215,7 +215,7 @@ impl StructTree {
         panic!();
     }
 
-    pub fn get_mem_size(&self, name: &String, field_name: &String) -> types::Size {
+    pub fn get_mem_size(&self, name: &str, field_name: &str) -> types::Size {
         let ty = self
             .tree
             .get(name)
