@@ -1,6 +1,5 @@
 //! 変数や引数が不変か可変を判定するパーサーのモジュール
 
-
 use super::*;
 
 impl Parser {
@@ -8,8 +7,8 @@ impl Parser {
     /// - 可変の場合、`true`を返す
     #[inline(always)]
     pub fn assign_expr_is_mut(
-        &mut self, 
-        name: &String
+        &mut self,
+        name: &String,
     ) -> Result<VarMutAttr, Result<node::Expr, err::ErrKind>> {
         let attr = match &self.current_tkn() {
             lex::Tkn::KeyWordMut => {
@@ -28,32 +27,28 @@ impl Parser {
                 return Err(Ok(node::AssignVar::new(
                     &name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Add)
-                        .unwrap(),
+                    self.compound_assign_value(&name, node::Expr::Add).unwrap(),
                 )));
             }
             lex::Tkn::SubEq => {
                 return Err(Ok(node::AssignVar::new(
                     &name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Sub)
-                        .unwrap(),
+                    self.compound_assign_value(&name, node::Expr::Sub).unwrap(),
                 )));
             }
             lex::Tkn::MulEq => {
                 return Err(Ok(node::AssignVar::new(
                     &name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Mul)
-                        .unwrap(),
+                    self.compound_assign_value(&name, node::Expr::Mul).unwrap(),
                 )));
             }
             lex::Tkn::DivEq => {
                 return Err(Ok(node::AssignVar::new(
                     &name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Div)
-                        .unwrap(),
+                    self.compound_assign_value(&name, node::Expr::Div).unwrap(),
                 )));
             }
             _ => {
@@ -86,18 +81,12 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub fn args_is_mut(
-        &mut self, 
-        _name: &str
-    ) -> Result<VarMutAttr, err::ErrKind> {// 引数が不変か
+    pub fn args_is_mut(&mut self, _name: &str) -> Result<VarMutAttr, err::ErrKind> {
+        // 引数が不変か
         let attr = match self.next_tkn_ref(&["mut"])? {
-            lex::Tkn::KeyWordMut => {
-                VarMutAttr::Var
-            }
-            lex::Tkn::KeyWordConst => {
-                VarMutAttr::Const
-            }
-            _ => VarMutAttr::Invar
+            lex::Tkn::KeyWordMut => VarMutAttr::Var,
+            lex::Tkn::KeyWordConst => VarMutAttr::Const,
+            _ => VarMutAttr::Invar,
         };
         if attr != VarMutAttr::Invar {
             self.next_tkn(&["mut"])?;

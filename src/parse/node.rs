@@ -2,10 +2,8 @@ use std::collections::HashMap;
 
 use crate::{models::Body, node, parse::VarMutAttr};
 
-
 pub const IS_MUST: usize = 0;
 pub const IS_OF: usize = 1;
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConstractTy {
@@ -16,9 +14,9 @@ pub struct ConstractTy {
 
 impl ConstractTy {
     pub fn new<const K: usize>(
-        must: Option<String>, 
-        of: Option<String>, 
-        ty: Box<TyNode>
+        must: Option<String>,
+        of: Option<String>,
+        ty: Box<TyNode>,
     ) -> TyNode {
         // 自クラス（TyNode）ではなく、内側の構造体を組み立てる
         let base = Self { must, of, ty };
@@ -53,11 +51,9 @@ impl ConstractTy {
     }
 
     /// エラーメッセージ用に、契約の名前を文字列化する
-    pub fn name_or_anon<'a>(
-        name: Option<&'a String>
-    ) -> &'a str {
+    pub fn name_or_anon<'a>(name: Option<&'a str>) -> &'a str {
         match name {
-            Some(name) => name.as_str(),
+            Some(name) => name,
             None => "(名前なし)",
         }
     }
@@ -111,9 +107,7 @@ impl TyNode {
             Self::Stack { name, .. } => name.to_string(),
             Self::Static { name, .. } => name.to_string(),
             Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name(),
-            Self::ConstractMust(ty) | Self::ConstractOf(ty) => {
-                ty.unwrap_ty().get_ty_str_name()
-            }
+            Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty().get_ty_str_name(),
         }
     }
 
@@ -149,8 +143,7 @@ impl TyNode {
     /// 付いていない場合は自分自身をそのまま返す
     pub fn unwrap_constract(&self) -> TyNode {
         match self {
-            Self::ConstractMust(ty) 
-            | Self::ConstractOf(ty) => ty.unwrap_ty(),
+            Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty(),
             t => t.clone(),
         }
     }
@@ -178,15 +171,10 @@ pub struct FuncDefine {
 }
 
 impl FuncDefine {
-    pub fn new(
-        name: String, 
-        args: Vec<ArgsNode>, 
-        ret_ty: TyNode, 
-        public: bool
-    ) -> Group1Node {
+    pub fn new(name: &str, args: Vec<ArgsNode>, ret_ty: TyNode, public: bool) -> Group1Node {
         Group1Node::FuncDefine(Self {
             public,
-            name: name,
+            name: name.to_string(),
             temp_ty: Vec::new(),
             params: args,
             ret_ty: ret_ty,
@@ -197,18 +185,12 @@ impl FuncDefine {
 
     /// ジェネリクス関数から作った関数に、`<>`の中身を登録する
     #[inline(always)]
-    pub fn set_temp_ty(
-        &mut self, 
-        temp_ty: Vec<TyNode>
-    ) {
-        self.temp_ty = temp_ty;
+    pub fn set_temp_ty(&mut self, temp_ty: &[TyNode]) {
+        self.temp_ty = temp_ty.to_vec();
     }
 
-    pub fn self_module_name(
-        &mut self, 
-        name: &String
-    ) {
-        self.module = Some(name.to_string());
+    pub fn self_module_name(&mut self, name: &str) {
+        self.module = Some(name.to_owned());
     }
 
     pub fn add(&mut self, node: Group2Info) {
@@ -224,10 +206,7 @@ pub struct StructField {
 
 impl StructField {
     #[cfg(test)]
-    pub fn make_field(
-        name: &str, 
-        ty: &str
-    ) -> Self {
+    pub fn make_field(name: &str, ty: &str) -> Self {
         Self {
             name: name.to_string(),
             ty: TyNode::Ty(ty.to_string()),
@@ -245,9 +224,9 @@ pub struct StructDefine {
 impl StructDefine {
     #[inline(always)]
     pub const fn new(
-        name: String, 
+        name: String,
         fields: Vec<StructField>,
-        methods: Vec<Group1Node>
+        methods: Vec<Group1Node>,
     ) -> Group1Node {
         Group1Node::StructDefine(Self {
             name,
@@ -265,16 +244,8 @@ pub struct EnumDefine {
 
 impl EnumDefine {
     #[inline(always)]
-    pub fn new(
-        name: String, 
-        variants: Vec<String>
-    ) -> Group1Node {
-        Group1Node::EnumDefine(
-            Self { 
-                name, 
-                variants 
-            }
-        )
+    pub fn new(name: String, variants: Vec<String>) -> Group1Node {
+        Group1Node::EnumDefine(Self { name, variants })
     }
 }
 
@@ -300,12 +271,7 @@ pub struct DefineVar {
 }
 
 impl DefineVar {
-    pub fn new(
-        name: &String, 
-        value: Expr, 
-        ty: &TyNode,
-        var_attr: VarMutAttr,
-    ) -> Self {
+    pub fn new(name: &String, value: Expr, ty: &TyNode, var_attr: VarMutAttr) -> Self {
         Self {
             name: name.to_string(),
             value: Box::new(value),
@@ -335,11 +301,7 @@ pub struct AssignVar {
 
 impl AssignVar {
     #[inline(always)]
-    pub fn new(
-        name: &str, 
-        dst: Expr, 
-        value: Expr
-    ) -> Expr {
+    pub fn new(name: &str, dst: Expr, value: Expr) -> Expr {
         Expr::Assign(Self {
             name: name.to_string(),
             dst: Box::new(dst),
@@ -414,18 +376,13 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn wrap(
-        left: Expr, 
-        right: Expr
-    ) -> (Box<Expr>, Box<Expr>) {
+    pub fn wrap(left: Expr, right: Expr) -> (Box<Expr>, Box<Expr>) {
         (Box::new(left), Box::new(right))
     }
 
     pub fn get_assign_node_name(&self) -> String {
         match &self {
-            Self::Assign(assign_node) => {
-                assign_node.clone().name
-            }
+            Self::Assign(assign_node) => assign_node.clone().name,
             _ => panic!(),
         }
     }
@@ -443,7 +400,6 @@ impl Expr {
         Group2Node::Expr(self)
     }
 }
-
 
 /// `#include`で指定されたパスの実体
 #[derive(Clone, Debug, PartialEq)]
@@ -503,10 +459,7 @@ impl ModPath {
     /// 従来の書き方(`Segments`)でのみ使う。
     /// `Literal`に対して呼び出すとpanicする
     #[inline(always)]
-    pub fn add_path(
-        &mut self, 
-        path_name: &String
-    ) {
+    pub fn add_path(&mut self, path_name: &String) {
         match &mut self.path {
             ImportPath::Segments(segments) => {
                 segments.push(path_name.to_string());
@@ -528,16 +481,11 @@ impl ModPath {
                 const PATH_START: usize = 0;
 
                 let mut path = String::new();
-                for (index, dir) in segments
-                    .iter()
-                    .enumerate() 
-                {
+                for (index, dir) in segments.iter().enumerate() {
                     if index != PATH_START {
                         path.push('/');
                     }
-                    path.push_str(
-                        dir.as_str()
-                    );
+                    path.push_str(dir.as_str());
                 }
                 // 最後に拡張子を追加
                 path.push_str(".hexl");
@@ -566,13 +514,8 @@ impl ModPath {
         };
 
         let mut path = String::new();
-        let parent_len = segments
-            .len()
-            .saturating_sub(1);
-        for (index, dir) in segments[..parent_len]
-            .iter()
-            .enumerate() 
-        {
+        let parent_len = segments.len().saturating_sub(1);
+        for (index, dir) in segments[..parent_len].iter().enumerate() {
             if index != PATH_START {
                 path.push('/');
             }
@@ -589,19 +532,15 @@ impl ModPath {
     pub fn last_segment(&self) -> String {
         match &self.path {
             ImportPath::Literal(literal) => {
-                let file_name = literal
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(literal.as_str());
+                let file_name = literal.rsplit('/').next().unwrap_or(literal.as_str());
                 file_name
                     .strip_suffix(".hexl")
                     .unwrap_or(file_name)
                     .to_string()
             }
-            ImportPath::Segments(segments) => segments
-                .last()
-                .expect("#includeのパスが空です")
-                .clone(),
+            ImportPath::Segments(segments) => {
+                segments.last().expect("#includeのパスが空です").clone()
+            }
         }
     }
 }
@@ -643,24 +582,18 @@ pub struct Group2Info {
 impl Group2Info {
     /// ノードを抽出する
     #[inline(always)]
-    pub fn get_node<'a>(
-        &'a self
-    ) -> &'a Group2Node {
+    pub fn get_node<'a>(&'a self) -> &'a Group2Node {
         &self.node
     }
 }
 
-
 impl Group2Node {
     /// ノードに、何行目かの情報を入れる
     #[inline(always)]
-    pub fn gen_group_info(
-        self, 
-        line: usize
-    ) -> Group2Info {
-        Group2Info { 
-            line: line, 
-            node: self
+    pub fn gen_group_info(self, line: usize) -> Group2Info {
+        Group2Info {
+            line: line,
+            node: self,
         }
     }
 
@@ -682,21 +615,13 @@ pub enum Group1Node {
     Line(String),
 }
 
-
-
-
 #[cfg(test)]
-pub fn gen_var_node(
-    name: &str,
-    value: &str,
-    ty: &str,
-    line: usize,
-) -> Group2Info {
+pub fn gen_var_node(name: &str, value: &str, ty: &str, line: usize) -> Group2Info {
     Group2Node::Expr(Expr::DefVar(DefineVar::new(
         &name.to_string(),
         Expr::Number(value.to_string()),
         &TyNode::Ty(ty.to_string()),
-        &false
+        &false,
     )))
     .gen_group_info(&line)
 }

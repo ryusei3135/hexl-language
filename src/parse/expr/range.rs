@@ -1,11 +1,6 @@
-use crate::err::{
-    ErrKind::UnexpectedToken,
-    syntax_err::SyntaxErrKind,
-};
+use crate::err::{ErrKind::UnexpectedToken, syntax_err::SyntaxErrKind};
 
 use super::*;
-
-
 
 impl Parser {
     pub fn make_range_ptr_node(
@@ -20,9 +15,7 @@ impl Parser {
         let start_tkn = self.advance_tkn().unwrap();
         match start_tkn {
             lex::Tkn::Number(val) => {
-                result.1 = val
-                    .parse::<usize>()
-                    .unwrap();
+                result.1 = val.parse::<usize>().unwrap();
             }
             lex::Tkn::KeyWordConst => {
                 result.1 = self.get_range_start_num()?;
@@ -48,9 +41,7 @@ impl Parser {
 
         let end_tkn = self.advance_tkn().unwrap();
         let end_num = match end_tkn {
-            lex::Tkn::Number(val) => {
-                val.parse::<usize>().unwrap()
-            }
+            lex::Tkn::Number(val) => val.parse::<usize>().unwrap(),
             found => {
                 return crate::syntax_err!(
                     self.build_err_span(),
@@ -62,10 +53,7 @@ impl Parser {
             }
         };
 
-        if !matches!(
-            self.advance_tkn().unwrap(), 
-            lex::Tkn::RBracket
-        ) {
+        if !matches!(self.advance_tkn().unwrap(), lex::Tkn::RBracket) {
             return crate::syntax_err!(
                 self.build_err_span(),
                 err::SyntaxErrKind::ExpectedKind {
@@ -85,20 +73,14 @@ impl Parser {
 
     /// 範囲付きポインタのスタート地点の数字を取得
     #[inline(always)]
-    fn get_range_start_num(
-        &mut self,
-    ) -> Result<usize, err::ErrKind> {
+    fn get_range_start_num(&mut self) -> Result<usize, err::ErrKind> {
         if let lex::Tkn::Number(val) = self.advance_tkn().unwrap() {
-            Ok(
-                val.parse::<usize>().unwrap()
-            )
+            Ok(val.parse::<usize>().unwrap())
         } else {
             Err(err::ErrKind::UnexpectedToken)
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod test {

@@ -7,12 +7,15 @@ pub enum Size {
     DD,
     DQ,
     Struct(Vec<Box<(String, Size)>>),
-    Pointer { 
-        ty: Box<Size>, 
+    Pointer {
+        ty: Box<Size>,
         is_const: bool,
         range: Option<(usize, usize)>,
     },
-    Array { size: Box<Size>, len: usize },
+    Array {
+        size: Box<Size>,
+        len: usize,
+    },
     Void,
 }
 
@@ -20,34 +23,26 @@ impl Size {
     /// 組み込みの型(byte/u16/int/u64)のみを解決する
     /// 構造体や列挙型などのユーザー定義の型を解決する場合は
     /// `builder::IR::size_of` を使用する
-    pub fn new(
-        ty: &node::TyNode
-    ) -> Result<Self, err::undef::UndefKind> {
+    pub fn new(ty: &node::TyNode) -> Result<Self, err::undef::UndefKind> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => {
-                embe_ty_sort(ty_name)?
-            }
+            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, .. }
-            | node::TyNode::Static { name, .. } => {
+            node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 Self::new(&node::TyNode::Ty(name.clone()))?
             }
             node::TyNode::Pointer {
-                is_const, 
-                ty_name ,
+                is_const,
+                ty_name,
                 range,
             } => Self::Pointer {
                 ty: Box::new(Self::new(&*ty_name)?),
                 is_const: is_const.clone(),
                 range: range.clone(),
             },
-            node::TyNode::SelfTy(..) => {
-                Self::DQ
-            }
+            node::TyNode::SelfTy(..) => Self::DQ,
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
-            node::TyNode::ConstractMust(ty)
-            | node::TyNode::ConstractOf(ty) => {
+            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
                 Self::new(&ty.unwrap_ty())?
             }
             _ => panic!(),
@@ -64,10 +59,7 @@ impl Size {
     }
 
     /// ポインタ型を作成する
-    pub fn build_ptr_ty(
-        ty: &node::TyNode, 
-        range: Option<(usize, usize)>
-    ) -> Self {
+    pub fn build_ptr_ty(ty: &node::TyNode, range: Option<(usize, usize)>) -> Self {
         Self::Pointer {
             ty: Box::new(Self::new(&ty).unwrap()),
             is_const: false,
@@ -87,18 +79,8 @@ impl Size {
             Self::DW => 2,
             Self::DD => 4,
             Self::DQ => 8,
-            Self::Array { 
-                size, 
-                len 
-            } => {
-                size.to_bytes() * len
-            }
-            Self::Pointer { 
-                ty, 
-                .. 
-            } => {
-                (*ty).to_bytes()
-            }
+            Self::Array { size, len } => size.to_bytes() * len,
+            Self::Pointer { ty, .. } => (*ty).to_bytes(),
             Self::Struct(struct_size) => {
                 let mut size_counter = 0;
                 for mem in struct_size.iter() {
@@ -122,9 +104,7 @@ impl Size {
 }
 
 #[inline(always)]
-fn embe_ty_sort(
-    ty_name: &String
-) -> Result<Size, err::undef::UndefKind> {
+fn embe_ty_sort(ty_name: &String) -> Result<Size, err::undef::UndefKind> {
     match ty_name.as_str() {
         "byte" => Size::DB,
         "i16" => Size::DW,
@@ -159,25 +139,16 @@ impl IR {
                     let fields = struct_def
                         .fields
                         .iter()
-                        .map(
-                            |field| {
-                                Box::new(
-                                    (
-                                        field.name.clone(), 
-                                        self.size_of(&field.ty)
-                                    )
-                                )
-                            }
-                        )
+                        .map(|field| Box::new((field.name.clone(), self.size_of(&field.ty))))
                         .collect();
                     return types::Size::Struct(fields);
                 }
 
                 panic!("未定義の型です: {}", name);
             }
-            node::TyNode::Pointer { 
-                is_const, 
-                ty_name ,
+            node::TyNode::Pointer {
+                is_const,
+                ty_name,
                 range,
             } => types::Size::Pointer {
                 ty: Box::new(self.size_of(ty_name)),
@@ -185,8 +156,7 @@ impl IR {
                 range: range.clone(),
             },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, len } 
-            | node::TyNode::Static { name, len } => {
+            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
                 let size = self.size_of(&node::TyNode::Ty(name.clone()));
                 // 配列の作成
                 if len >= &1 {
@@ -201,11 +171,8 @@ impl IR {
             node::TyNode::RefTy(inner) => self.size_of(inner),
             // `Self`はIRへ変換する前に、実際の構造体の型
             // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
-            node::TyNode::SelfTy(name) => {
-                self.size_of(&node::TyNode::Ty(name.to_string()))
-            }
-            node::TyNode::ConstractMust(ty) 
-            | node::TyNode::ConstractOf(ty) => {
+            node::TyNode::SelfTy(name) => self.size_of(&node::TyNode::Ty(name.to_string())),
+            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
                 self.size_of(&ty.unwrap_ty())
             }
         }

@@ -43,17 +43,12 @@ pub struct ParamMetaData {
 }
 
 impl ParamMetaData {
-    pub fn new(
-        name: String, 
-        num: usize, 
-        dst: usize, 
-        ty: &node::TyNode
-    ) -> Self {
-        Self { 
-            name, 
-            num, 
-            dst, 
-            ty: types::Size::new(&ty).unwrap()
+    pub fn new(name: String, num: usize, dst: usize, ty: &node::TyNode) -> Self {
+        Self {
+            name,
+            num,
+            dst,
+            ty: types::Size::new(&ty).unwrap(),
         }
     }
 }
@@ -75,11 +70,7 @@ pub struct CallFuncMetaData {
 }
 
 impl CallFuncMetaData {
-    pub fn new(
-        name: String, 
-        start_expr: bool, 
-        stk_capacity: Option<usize>
-    ) -> Self {
+    pub fn new(name: String, start_expr: bool, stk_capacity: Option<usize>) -> Self {
         Self {
             path: Vec::new(),
             public: false,
@@ -209,30 +200,20 @@ impl Inst {
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),
             inst::Inst::Num { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
-            inst::Inst::MemoryValue(
-                inst::MemoryInst::Memory{ size, .. }
-            ) => Some(size.clone()),
+            inst::Inst::MemoryValue(inst::MemoryInst::Memory { size, .. }) => Some(size.clone()),
             inst::Inst::Mov { size, .. } => Some(size.clone()),
-            inst::Inst::Str {value,..} => {
-                Some(
-                    types::Size::Pointer {
-                        is_const:false, 
-                        ty: Box::new(types::Size::DB),
-                        range: Some((0, value.len())),
-                    }
-                )
-            }
+            inst::Inst::Str { value, .. } => Some(types::Size::Pointer {
+                is_const: false,
+                ty: Box::new(types::Size::DB),
+                range: Some((0, value.len())),
+            }),
             t => {
                 panic!("{:?}", t);
             }
         }
     }
 
-    pub fn gen_num(
-        value: &str, 
-        size: &types::Size, 
-        dst: usize
-    ) -> Self {
+    pub fn gen_num(value: &str, size: &types::Size, dst: usize) -> Self {
         match size {
             types::Size::DB => {
                 value.parse::<u8>().unwrap();

@@ -80,23 +80,17 @@ impl Parser {
 
     // 関数の中身などを作成する
     // P は、この関数が公開されるかどうかのbool
-    fn build_func<const P: bool>(
-        &mut self, 
-        func_name: &String
-    ) -> Result<(), err::ErrKind> {
+    fn build_func<const P: bool>(&mut self, func_name: &str) -> Result<(), err::ErrKind> {
         // ジェネリクス関数(`name<T>(..)`)の定義は、呼び出されるまで
         // ノードを作らない。定義は`collect_generic_funcs`で集め済みなので、
         // ここでは本体を閉じる`}`まで読み飛ばすだけ
-        if matches!(
-            self.next_tkn_ref(&["(", "<"])?, 
-            lex::Tkn::LAngleBracket
-        ) {
+        if matches!(self.next_tkn_ref(&["(", "<"])?, lex::Tkn::LAngleBracket) {
             return self.skip_generic_func_def();
         }
 
         // トップレベルの関数定義なので、`Self`が解決される
         // 構造体/列挙型は存在しない
-        let node = self.func_node(&func_name, P)?;
+        let node = self.func_node(func_name, P)?;
         self.gen_nodes.push(node);
 
         self.gen_flag = GenFlag::Group2;
@@ -169,9 +163,7 @@ impl Parser {
 
                     let node: Group2Info = self
                         .one_line_node()?
-                        .gen_group_info(
-                            self.build_err_span().line
-                        );
+                        .gen_group_info(self.build_err_span().line);
 
                     match self.gen_nodes.last_mut().unwrap() {
                         node::Group1Node::FuncDefine(func) => {
@@ -204,14 +196,10 @@ impl Parser {
         //Ok(())
     }
 
-    pub(super) fn one_line_node(
-        &mut self
-    ) -> Result<node::Group2Node, err::ErrKind> {
+    pub(super) fn one_line_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let node = match self.current_tkn().clone() {
             lex::Tkn::CompleSyn => self.comple_syntax()?,
-            lex::Tkn::Name(name) => {
-                node::Group2Node::Expr(self.build_scope_node(&name)?)
-            }
+            lex::Tkn::Name(name) => node::Group2Node::Expr(self.build_scope_node(&name)?),
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
                 let tkn = self.next_tkn(&["name"])?;
@@ -268,12 +256,9 @@ impl Parser {
         Ok(node)
     }
 
-    fn loop_control_node(
-        &mut self,
-        is_continue: bool,
-    ) -> Result<node::Group2Node, err::ErrKind> {
+    fn loop_control_node(&mut self, is_continue: bool) -> Result<node::Group2Node, err::ErrKind> {
         if self.loop_depth == 0 {
-            return Err(err::ErrKind::Syntax(err::SyntaxErr {
+            return Err(err::ErrKind::Syntax(Box::new(err::SyntaxErr {
                 kind: err::SyntaxErrKind::UnexpectTknInStmt {
                     found: self.current_tkn().clone(),
                 },
@@ -281,7 +266,7 @@ impl Parser {
                     self.build_err_span(),
                     "parse::stmt::loop_control_node".to_string(),
                 ),
-            }));
+            })));
         }
         self.next_tkn(&[])?;
         let stmt = if is_continue {
@@ -292,9 +277,7 @@ impl Parser {
         Ok(stmt.wrap())
     }
 
-    fn pub_keyword_node(
-        &mut self
-    ) -> Result<(), err::ErrKind> {
+    fn pub_keyword_node(&mut self) -> Result<(), err::ErrKind> {
         match self.next_tkn(&["name", ".."])? {
             lex::Tkn::Name(name) => self.build_func::<true>(&name),
             unexpect_tkn => {
@@ -312,9 +295,7 @@ impl Parser {
     }
 
     /// 反復処理のノードを作成する関数
-    fn make_loop_node(
-        &mut self
-    ) -> Result<node::Group2Node, err::ErrKind> {
+    fn make_loop_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // 反復処理の条件式
         let pattern = match self.next_tkn_ref(&["{", ".."])? {
             // "{"の場合は条件無し
@@ -343,19 +324,12 @@ impl Parser {
         let body = body_result?;
         self.next_tkn(&["expr"])?;
 
-        let node = node::Group2Node::Expr(
-            node::Expr::Loop { 
-                pattern, 
-                body 
-            }
-        );
+        let node = node::Group2Node::Expr(node::Expr::Loop { pattern, body });
         Ok(node)
     }
 
     /// 同じスコープ内のノードを生成
-    pub(super) fn gen_block_node(
-        &mut self
-    ) -> Result<Body, err::ErrKind> {
+    pub(super) fn gen_block_node(&mut self) -> Result<Body, err::ErrKind> {
         let mut block = Body::new();
 
         // ブロックが空(`{}`)の場合、`one_line_node`を呼ばずに
@@ -366,24 +340,15 @@ impl Parser {
 
         loop {
             let node = self.one_line_node()?;
-            block.push(
-                node.gen_group_info(
-                    self.build_err_span().line
-                )
-            );
-            if matches!(
-                self.current_tkn(), 
-                lex::Tkn::RBrace
-            ) {
+            block.push(node.gen_group_info(self.build_err_span().line));
+            if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                 break;
             }
         }
         Ok(block)
     }
 
-    pub(super) fn comple_syntax(
-        &mut self
-    ) -> Result<node::Group2Node, err::ErrKind> {
+    pub(super) fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(name) = tkn.clone() else {
             return crate::syntax_err!(
@@ -410,10 +375,7 @@ impl Parser {
     ///
     /// ## Errors
     /// `name`の次のトークンが数字(`lex::Tkn::Number`)ではない場合エラー
-    fn make_array_assign_node(
-        &mut self, 
-        name: &String
-    ) -> Result<node::Expr, err::ErrKind> {
+    fn make_array_assign_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
         // `index`は数字である必要がある。そうでなければエラーを返す
         let tkn = self.next_tkn(&["number"])?;
         let lex::Tkn::Number(index) = tkn.clone() else {

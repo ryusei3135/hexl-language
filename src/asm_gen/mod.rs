@@ -4,16 +4,15 @@
 /// self.format_lineで構造体のポインタを渡すところがある
 mod asm_emitter;
 mod call_func;
+mod emit_fn_name;
 mod inline_asm;
 mod mng_fmt;
-mod emit_fn_name;
 
 use crate::ir::{def_tree, inst, types::Size};
 use std::collections::HashMap;
 use std::mem;
 
 pub type SelfPtrInfo = Option<Size>;
-
 
 pub struct AsmEmitter {
     pub(super) asm_text: String,

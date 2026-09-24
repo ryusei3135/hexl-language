@@ -1,11 +1,11 @@
 mod expr_node;
 mod member;
+mod preproc;
 mod proc_fn_info;
 mod scope;
-mod preproc;
 
-use crate::{err::*, models::Body, parse};
 use super::*;
+use crate::{err::*, models::Body, parse};
 
 impl IR {
     pub fn new() -> Self {
@@ -37,18 +37,11 @@ impl IR {
     /// テスト用のヘルパー。
     /// `Self`をメゾットの所属構造体名に解決し、最初の引数が`self`の場合は
     /// そのまま構造体へのポインタ型に変換する。
-    fn resolved_self_ty(
-        &self,
-        mut func: node::FuncDefine
-    ) -> node::FuncDefine {
+    fn resolved_self_ty(&self, mut func: node::FuncDefine) -> node::FuncDefine {
         let first_param_is_self = func
             .params
             .first()
-            .is_some_and(
-                |param| {
-                    Self::ty_contains_self(&param.ty)
-                }
-            );
+            .is_some_and(|param| Self::ty_contains_self(&param.ty));
 
         if let Some(first) = func.params.first_mut() {
             if Self::ty_contains_self(&first.ty) {
@@ -56,12 +49,7 @@ impl IR {
             }
         }
 
-        for (index, param) in func
-            .params
-            .iter()
-            .enumerate()
-            .skip(1) 
-        {
+        for (index, param) in func.params.iter().enumerate().skip(1) {
             if Self::ty_contains_self(&param.ty) {
                 panic!(
                     "Self型は第一引数以外では使えません: param#{index} {:?}",
@@ -83,42 +71,26 @@ impl IR {
     }
 
     #[inline(always)]
-    fn resolve_self_ty(
-        &self, 
-        func: node::FuncDefine
-    ) -> node::FuncDefine {
+    fn resolve_self_ty(&self, func: node::FuncDefine) -> node::FuncDefine {
         self.resolved_self_ty(func)
     }
 
-    fn ty_contains_self(
-        ty: &node::TyNode
-    ) -> bool {
+    fn ty_contains_self(ty: &node::TyNode) -> bool {
         match ty {
             node::TyNode::SelfTy(..) => true,
-            node::TyNode::Pointer { 
-                ty_name, 
-                .. 
-            } => {
-                Self::ty_contains_self(ty_name)
-            }
-            node::TyNode::RefTy(inner) =>{ 
-                Self::ty_contains_self(inner)
-            }
+            node::TyNode::Pointer { ty_name, .. } => Self::ty_contains_self(ty_name),
+            node::TyNode::RefTy(inner) => Self::ty_contains_self(inner),
             _ => false,
         }
     }
 
-    fn resolve_self_like_ty(
-        ty: &node::TyNode
-    ) -> node::TyNode {
+    fn resolve_self_like_ty(ty: &node::TyNode) -> node::TyNode {
         match ty {
-            node::TyNode::SelfTy(name) => {
-                node::TyNode::Pointer {
-                    is_const: false,
-                    ty_name: Box::new(node::TyNode::Ty(name.clone())),
-                    range: None,
-                }
-            }
+            node::TyNode::SelfTy(name) => node::TyNode::Pointer {
+                is_const: false,
+                ty_name: Box::new(node::TyNode::Ty(name.clone())),
+                range: None,
+            },
             node::TyNode::Pointer {
                 is_const,
                 ty_name,
@@ -128,9 +100,7 @@ impl IR {
                     node::TyNode::Pointer {
                         is_const: *is_const,
                         ty_name: Box::new(match &**ty_name {
-                            node::TyNode::SelfTy(name) => {
-                                node::TyNode::Ty(name.clone())
-                            }
+                            node::TyNode::SelfTy(name) => node::TyNode::Ty(name.clone()),
                             other => other.clone(),
                         }),
                         range: range.clone(),
@@ -141,11 +111,7 @@ impl IR {
             }
             node::TyNode::RefTy(inner) => {
                 if Self::ty_contains_self(inner) {
-                    node::TyNode::RefTy(
-                        Box::new(
-                            Self::resolve_self_like_ty(inner)
-                        )
-                    )
+                    node::TyNode::RefTy(Box::new(Self::resolve_self_like_ty(inner)))
                 } else {
                     ty.clone()
                 }
@@ -219,8 +185,8 @@ impl IR {
     /// - それ以外の変換処理は、トップレベルの関数定義
     ///   (`node::Group1Node::FuncDefine`)と全く同じ流れで行う
     fn expand_struct_methods(
-        &mut self, 
-        struct_def: &node::StructDefine
+        &mut self,
+        struct_def: &node::StructDefine,
     ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
         for method in &struct_def.methods {
@@ -237,9 +203,7 @@ impl IR {
             // 関数の情報を登録
             self.entry_fn_info(&method_info);
 
-            let _ = self.push_param_meta_data(
-                &method_info.params
-            )?;
+            let _ = self.push_param_meta_data(&method_info.params)?;
             self.scope_states.clear();
             self.gen_inst(&method_info.body.clone());
 
@@ -253,20 +217,14 @@ impl IR {
         Ok(())
     }
 
-    fn gen_inst(
-        &mut self, 
-        node: &Body
-    ) -> usize {
+    fn gen_inst(&mut self, node: &Body) -> usize {
         for stmt in node {
             self.current_span = err::Span::new(stmt.line, 0);
             self.expr_counter = 0;
             self.constract_flag.reset();
             match stmt.get_node().clone() {
                 node::Group2Node::Expr(expr) => {
-                    let _ = self.gen_expr_ir(
-                        expr, 
-                        &types::Size::DD
-                    );
+                    let _ = self.gen_expr_ir(expr, &types::Size::DD);
                 }
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir(stmt);
@@ -275,47 +233,37 @@ impl IR {
                 node::Group2Node::CompleSyntax((name, lines)) => {
                     self.inline_proc(&lines, &name);
                 }
-                _ => {},
+                _ => {}
             }
         }
         self.id_counter
     }
 
-    fn stack_counter(
-        &mut self, 
-        size: &node::TyNode
-    ) {
-        self.stk_counter += types::Size::new(size)
-            .unwrap()
-            .to_bytes();
+    fn stack_counter(&mut self, size: &node::TyNode) {
+        self.stk_counter += types::Size::new(size).unwrap().to_bytes();
     }
 
     /// 文のノードを生成
-    fn gen_stmt_ir(
-        &mut self,
-        stmt: node::StmtNode
-    ) -> usize {
+    fn gen_stmt_ir(&mut self, stmt: node::StmtNode) -> usize {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
-                let func_ret_ty = self
-                    .func_ret_ty
-                    .as_ref()
-                    .unwrap();
-                let idx = self.gen_expr_ir(
-                    expr, 
-                    &self.size_of(&func_ret_ty)
-                );
+                let func_ret_ty = self.func_ret_ty.as_ref().unwrap();
+                let idx = self.gen_expr_ir(expr, &self.size_of(&func_ret_ty));
                 inst::Inst::Ret(idx)
             }
             node::StmtNode::Continue => {
-                let (continue_label, _) = self.loop_labels.last()
+                let (continue_label, _) = self
+                    .loop_labels
+                    .last()
                     .expect("continueはloopの中でのみ使用できます");
                 inst::Inst::Jmp(format!("L{}", continue_label))
             }
             node::StmtNode::Break => {
                 let result = self.end_scope(false);
                 self.unwrap_or_report(result);
-                let (_, break_label) = self.loop_labels.last()
+                let (_, break_label) = self
+                    .loop_labels
+                    .last()
                     .expect("breakはloopの中でのみ使用できます");
                 inst::Inst::Jmp(format!("L{}", break_label))
             }
@@ -372,11 +320,7 @@ impl IR {
         .new()
     }
 
-    fn gen_expr_ir(
-        &mut self, 
-        expr: node::Expr, 
-        expect_byte: &types::Size
-    ) -> usize {
+    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
         self.expr_counter += 1;
         let inst = match expr {
             // ポインタ関係
@@ -393,7 +337,9 @@ impl IR {
             node::Expr::Sub(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Sub),
             node::Expr::Mul(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Mul),
             node::Expr::Div(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Div),
-            node::Expr::Surplus(node) => self.build_expr_inst(node, &expect_byte, inst::ExprKind::Surplus),
+            node::Expr::Surplus(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::Surplus)
+            }
             node::Expr::LessThen(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::LessThen)
             }
@@ -406,23 +352,11 @@ impl IR {
             node::Expr::NotEq(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::NotEq)
             }
-            node::Expr::Number(value) => {
-                inst::Inst::gen_num(
-                    &value, 
-                    &expect_byte, 
-                    self.id_counter
-                )
-            }
+            node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
             node::Expr::Assign(assign_node) => {
-                let var_attr = self
-                    .var_tree
-                    .is_mut(&assign_node.name);
+                let var_attr = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
-                let result = self.assign_expr_node(
-                    assign_node, 
-                    &expect_byte, 
-                    &var_attr
-                );
+                let result = self.assign_expr_node(assign_node, &expect_byte, &var_attr);
                 self.unwrap_or_report(result)
             }
             node::Expr::Str(value) => inst::Inst::Str {
@@ -432,52 +366,27 @@ impl IR {
             // 配列を初期化する
             node::Expr::Array(init_nodes) => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_array_node(
-                    init_nodes, 
-                    &expect_byte
-                )
+                self.init_array_node(init_nodes, &expect_byte)
             }
             // 配列にアクセスする
-            node::Expr::RefArray { 
-                name, 
-                dst, 
-                index 
-            } => {
+            node::Expr::RefArray { name, dst, index } => {
                 // `src/ir/builder/expr_node.rs`
-                self.ref_array_node(
-                    *dst, 
-                    *index, 
-                    &name, 
-                    &expect_byte
-                )
+                self.ref_array_node(*dst, *index, &name, &expect_byte)
             }
             // ポインタの中身
             node::Expr::DefVar(var) => {
-                let var_attr: parse::VarMutAttr = var
-                    .var_attr
-                    .clone();
+                let var_attr: parse::VarMutAttr = var.var_attr.clone();
                 // `src/ir/builder/expr_node.rs`
-                let result = self.def_var_node(
-                    var, 
-                    &expect_byte, 
-                    &var_attr
-                );
+                let result = self.def_var_node(var, &expect_byte, &var_attr);
                 self.unwrap_or_report(result)
             }
             node::Expr::CallFunc(meta_data) => {
-                let result = self.gen_call_fn_ir(
-                    None, 
-                    &meta_data,
-                    None
-                );
+                let result = self.gen_call_fn_ir(None, &meta_data, None);
                 self.unwrap_or_report(result)
             }
             node::Expr::Var(name) => {
                 // `src/ir/ty_checker/var_ty.rs`
-                self.check_var_ty(
-                    &name, 
-                    &expect_byte
-                );
+                self.check_var_ty(&name, &expect_byte);
 
                 return match self.var_tree.get(&name) {
                     def_tree::VarType::Local(index) => *index,
@@ -492,39 +401,23 @@ impl IR {
                 arms,
                 arm_else,
             } => {
-                return self.gen_match_expr_ir(
-                    &pattern, 
-                    &arms, 
-                    &arm_else
-                );
+                return self.gen_match_expr_ir(&pattern, &arms, &arm_else);
             }
             node::Expr::Loop { pattern, body } => {
-                return self.gen_loop_expr_ir(
-                    pattern, 
-                    &body
-                );
+                return self.gen_loop_expr_ir(pattern, &body);
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
             // メンバの定義順に基いたタグ(整数値)として展開する
             node::Expr::EnumVariant { name, variant } => {
                 // `src/ir/builder/expr_node.rs`
-                self.enum_variant_node(
-                    &name, 
-                    &variant, 
-                    &expect_byte
-                )
+                self.enum_variant_node(&name, &variant, &expect_byte)
             }
             // 構造体の初期化: `Name { field: value, .. }`
             node::Expr::InitStruct {
-                name,
-                mut fields,
-                ..
+                name, mut fields, ..
             } => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_struct_node(
-                    &name, 
-                    &mut fields
-                )
+                self.init_struct_node(&name, &mut fields)
             }
             // ここでは対応する「元の変数名」が分からない文脈
             // (関数の引数や構造体フィールドの初期化式など)から
@@ -533,46 +426,25 @@ impl IR {
             // `gen_named_expr_ir`経由で`scope_node`を直接呼び出し、
             // 変数名を渡している(`src/ir/builder/expr_node.rs`)
             node::Expr::Scope { scope, target } => {
-                let result = self.scope_node(
-                    &scope, 
-                    target, 
-                    None, 
-                    &parse::VarMutAttr::Invar
-                );
+                let result = self.scope_node(&scope, target, None, &parse::VarMutAttr::Invar);
                 self.unwrap_or_report(result)
             }
             node::Expr::Member { scope, target } => {
                 match &*target {
                     node::Expr::Var(name) => {
                         // `src/ir/builder/member.rs`
-                        let result = self.member_is_var(
-                            &scope, 
-                            &name
-                        );
+                        let result = self.member_is_var(&scope, &name);
                         self.unwrap_or_report(result)
                     }
-                    node::Expr::CallFunc(
-                        call_func_info
-                    ) => {
+                    node::Expr::CallFunc(call_func_info) => {
                         // `src/ir/builder/member.rs`
-                        let result = self.member_is_fn(
-                            &scope, 
-                            &call_func_info
-                        );
+                        let result = self.member_is_fn(&scope, &call_func_info);
                         self.unwrap_or_report(result)
                     }
                     // `変数名.[メンバー名 添字]`
-                    node::Expr::RefArray { 
-                        name, 
-                        index, 
-                        .. 
-                    } => {
+                    node::Expr::RefArray { name, index, .. } => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_arr_ref(
-                            &scope, 
-                            &name, 
-                            &index
-                        )
+                        self.member_is_arr_ref(&scope, &name, &index)
                     }
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
@@ -592,10 +464,7 @@ impl IR {
     /// - `name: [ty] = 100` のように長さの指定が無い場合は要素数1
     /// - `name: [ty 4] = {100, 100, 100, 100}` のように配列リテラルが
     ///   与えられた場合は、要素ごとに値を生成する
-    fn gen_mem_def_var(
-        &mut self, 
-        mut var: node::DefineVar
-    ) -> Result<inst::Inst, err::ErrKind> {
+    fn gen_mem_def_var(&mut self, mut var: node::DefineVar) -> Result<inst::Inst, err::ErrKind> {
         let (ref ty_name, len, is_static) = match &var.ty {
             node::TyNode::Stack { name, len } => (name.clone(), *len, false),
             node::TyNode::Static { name, len } => (name.clone(), *len, true),
@@ -640,29 +509,19 @@ impl IR {
         //  変数を参照した際に即値やレジスタが直接使われてしまい、
         //  スタック/静的領域への書き込みが無視されるバグがあった)
         let var_idx = self.id_counter;
-        let _ = self.var_tree
-            .push::<'l'>(
-                &mem::take(&mut var.name),
-                var_idx, 
-                &var.ty, 
-                &var.var_attr,
-                || { 
-                    self.constract_flag
-                        .put_var_def(
-                            &var.ty
-                        ) 
-                },
-            )?;
+        let _ = self.var_tree.push::<'l'>(
+            &mem::take(&mut var.name),
+            var_idx,
+            &var.ty,
+            &var.var_attr,
+            || self.constract_flag.put_var_def(&var.ty),
+        )?;
 
         Ok(inst::Inst::MemoryValue(mem_insts))
     }
 
     #[inline(always)]
-    fn gen_loop_expr_ir(
-        &mut self,
-        pattern: Option<Box<node::Expr>>,
-        body: &Body,
-    ) -> usize {
+    fn gen_loop_expr_ir(&mut self, pattern: Option<Box<node::Expr>>, body: &Body) -> usize {
         // 反復処理が始まる場所を作成
         let start = self.pattern_labels;
         self.pattern_labels += 1;
@@ -725,10 +584,7 @@ impl IR {
         //  ため、全てのアームが同じラベル名(例: `L0`)を共有して
         //  しまい、`jz`の飛び先も本体のラベルも区別できなくなる
         //  バグがあった)
-        let arm_labels: Vec<usize> = arms
-            .iter()
-            .map(|_| self.next_pattern_label())
-            .collect();
+        let arm_labels: Vec<usize> = arms.iter().map(|_| self.next_pattern_label()).collect();
 
         // 全アームの処理が終わった後にジャンプする、一意な終了ラベル
         let end_label = self.next_pattern_label();
@@ -787,21 +643,14 @@ impl IR {
     }
 
     #[cfg(test)]
-    pub(crate) fn test_only_get_func_body(
-        &self, 
-        name: &str
-    ) -> Vec<inst::Inst> {
+    pub(crate) fn test_only_get_func_body(&self, name: &str) -> Vec<inst::Inst> {
         self.func_tree.func.get(name).unwrap().body.clone()
     }
 
     /// 構造体のメゾットとして展開された関数の処理内容を取得する
     /// (テスト用)
     #[cfg(test)]
-    pub(crate) fn test_only_get_method_body(
-        &self, 
-        module: &str, 
-        name: &str
-    ) -> Vec<inst::Inst> {
+    pub(crate) fn test_only_get_method_body(&self, module: &str, name: &str) -> Vec<inst::Inst> {
         self.func_tree
             .func
             .get(&format!("{}::{}", module, name))
@@ -938,24 +787,28 @@ mod mem_var_tests {
     fn check_stack_struct_inst() {
         let body = build_func_body("main(): int { a: [int] = 100 }");
         let name = String::from("a");
-        assert!(body.iter().any(|inst| {
-            if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
-                name: ref mem_name,
-                size,
-                src,
-                kind,
-                dst,
-            }) = inst
-            {
-                mem_name == &name
-                    && *size == types::Size::DD
-                    && src == &vec![0]
-                    && *kind == inst::MemoryKind::Stack
-                    && *dst == 1
-            } else {
-                false
-            }
-        }), "{:?}", body);
+        assert!(
+            body.iter().any(|inst| {
+                if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
+                    name: ref mem_name,
+                    size,
+                    src,
+                    kind,
+                    dst,
+                }) = inst
+                {
+                    mem_name == &name
+                        && *size == types::Size::DD
+                        && src == &vec![0]
+                        && *kind == inst::MemoryKind::Stack
+                        && *dst == 1
+                } else {
+                    false
+                }
+            }),
+            "{:?}",
+            body
+        );
     }
 
     /*#[test]
@@ -980,24 +833,28 @@ mod mem_var_tests {
     fn check_static_struct_inst() {
         let body = build_func_body("main(): int { a: \"\"[int] = 100 }");
         let name = String::from("a");
-        assert!(body.iter().any(|inst| {
-            if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
-                name: ref mem_name,
-                size,
-                src,
-                kind,
-                dst,
-            }) = inst
-            {
-                mem_name == &name
-                    && *size == types::Size::DD
-                    && src == &vec![0]
-                    && *kind == inst::MemoryKind::Static
-                    && *dst == 1
-            } else {
-                false
-            }
-        }), "{:?}", body);
+        assert!(
+            body.iter().any(|inst| {
+                if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
+                    name: ref mem_name,
+                    size,
+                    src,
+                    kind,
+                    dst,
+                }) = inst
+                {
+                    mem_name == &name
+                        && *size == types::Size::DD
+                        && src == &vec![0]
+                        && *kind == inst::MemoryKind::Static
+                        && *dst == 1
+                } else {
+                    false
+                }
+            }),
+            "{:?}",
+            body
+        );
     }
 
     #[test]
@@ -1035,11 +892,12 @@ mod mem_var_tests {
     fn check_combined_struct_enum_program() {
         // 構造体と列挙型を同じプログラム内で型として使えることを確認する
         let body = build_func_body(
-            "enum Color { Red Green Blue } struct Point { x: int y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1 y: 2 } }"
+            "enum Color { Red Green Blue } struct Point { x: int y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1 y: 2 } }",
         );
-        assert!(body
-            .iter()
-            .any(|i| matches!(i, inst::Inst::Num{value, ..} if value == "1")));
+        assert!(
+            body.iter()
+                .any(|i| matches!(i, inst::Inst::Num{value, ..} if value == "1"))
+        );
         assert!(body.iter().any(|i| matches!(
             i,
             inst::Inst::Struct { mem, .. } if mem.len() == 2
@@ -1149,7 +1007,7 @@ mod match_expr_ir_tests {
 mod struct_method_expand_tests {
     use crate::node::StructDefine;
 
-use super::*;
+    use super::*;
 
     /// `self`を第一引数に取るメゾットを持つ構造体`StructDefine`を作る
     fn make_struct_with_method(
@@ -1190,9 +1048,11 @@ use super::*;
                 is_mut: false,
             }],
             node::TyNode::Ty("int".to_string()),
-            vec![node::StmtNode::Return(node::Expr::Number("1".to_string()))
-                .wrap()
-                .gen_group_info(&0)],
+            vec![
+                node::StmtNode::Return(node::Expr::Number("1".to_string()))
+                    .wrap()
+                    .gen_group_info(&0),
+            ],
         );
 
         let mut ir = IR::new();
@@ -1236,9 +1096,11 @@ use super::*;
             "answer",
             vec![],
             node::TyNode::Ty("int".to_string()),
-            vec![node::StmtNode::Return(node::Expr::Number("42".to_string()))
-                .wrap()
-                .gen_group_info(&0)],
+            vec![
+                node::StmtNode::Return(node::Expr::Number("42".to_string()))
+                    .wrap()
+                    .gen_group_info(&0),
+            ],
         );
 
         let main_fn = node::FuncDefine {
@@ -1247,16 +1109,18 @@ use super::*;
             temp_ty: Vec::new(),
             params: vec![],
             ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![node::StmtNode::Return(node::Expr::Scope {
-                scope: vec!["Point".to_string()],
-                target: Box::new(node::Expr::CallFunc(node::CallInfo {
-                    name: "answer".to_string(),
-                    temp_ty: Vec::new(),
-                    args: vec![],
-                })),
-            })
-            .wrap()
-            .gen_group_info(&0)],
+            body: vec![
+                node::StmtNode::Return(node::Expr::Scope {
+                    scope: vec!["Point".to_string()],
+                    target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                        name: "answer".to_string(),
+                        temp_ty: Vec::new(),
+                        args: vec![],
+                    })),
+                })
+                .wrap()
+                .gen_group_info(&0),
+            ],
             module: None,
         };
 
@@ -1283,10 +1147,7 @@ mod method_call_via_member_tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn make_ini_struct_node(
-        name: &String,
-        fields: HashMap<String, Box<node::Expr>>,
-    ) -> node::Expr {
+    fn make_ini_struct_node(name: &String, fields: HashMap<String, Box<node::Expr>>) -> node::Expr {
         node::Expr::InitStruct {
             name: "Point".to_string(),
             fields,
@@ -1309,9 +1170,11 @@ mod method_call_via_member_tests {
                 is_mut: false,
             }],
             ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![node::StmtNode::Return(node::Expr::Number("7".to_string()))
-                .wrap()
-                .gen_group_info(&0)],
+            body: vec![
+                node::StmtNode::Return(node::Expr::Number("7".to_string()))
+                    .wrap()
+                    .gen_group_info(&0),
+            ],
             module: None,
         };
 

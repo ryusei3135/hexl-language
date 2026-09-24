@@ -1,6 +1,5 @@
 use crate::err;
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileErr {
     /// 不変の変数に値を代入しようとした
@@ -44,32 +43,26 @@ pub enum CompileErr {
 #[macro_export]
 macro_rules! GenCompileErr {
     ($kind:ident, $msg:expr) => {
-        Err(
-            err::ErrKind::CompileErr(
-                CompileErr::$kind($msg.to_string())
-            )
-        )
+        Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
+            $msg.to_string(),
+        ))))
     };
 }
 
 impl CompileErr {
-    pub fn assign_to_imm_var(
-        var_name: &String
-    ) -> Result<Self, err::ErrKind> {
-        Err(
-            err::ErrKind::CompileErr(
-                Self::AssignToImmutableVar(var_name.to_string())
-            )
-        )
+    pub fn assign_to_imm_var(var_name: &String) -> Result<Self, err::ErrKind> {
+        Err(err::ErrKind::CompileErr(Box::new(
+            Self::AssignToImmutableVar(var_name.to_string()),
+        )))
     }
 
     pub fn ptr_range_len_mismatch(
         range: (usize, usize),
         value_len: usize,
     ) -> Result<Self, err::ErrKind> {
-        Err(err::ErrKind::CompileErr(
+        Err(err::ErrKind::CompileErr(Box::new(
             Self::PointerRangeLengthMismatch { range, value_len },
-        ))
+        )))
     }
 
     /// `of`の引数に、`must`ではない値が渡された
@@ -78,11 +71,13 @@ impl CompileErr {
         param_name: &String,
         of_name: &str,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Self::ContractOfRequiresMust {
-            fn_name: fn_name.to_string(),
-            param_name: param_name.to_string(),
-            of_name: of_name.to_string(),
-        }))
+        Err(err::ErrKind::CompileErr(Box::new(
+            Self::ContractOfRequiresMust {
+                fn_name: fn_name.to_string(),
+                param_name: param_name.to_string(),
+                of_name: of_name.to_string(),
+            },
+        )))
     }
 
     /// `must`の値が、`of`ではない引数に渡された
@@ -91,11 +86,13 @@ impl CompileErr {
         param_name: &String,
         must_name: &str,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Self::ContractMustRequiresOf {
-            fn_name: fn_name.to_string(),
-            param_name: param_name.to_string(),
-            must_name: must_name.to_string(),
-        }))
+        Err(err::ErrKind::CompileErr(Box::new(
+            Self::ContractMustRequiresOf {
+                fn_name: fn_name.to_string(),
+                param_name: param_name.to_string(),
+                must_name: must_name.to_string(),
+            },
+        )))
     }
 
     /// `must`と`of`の名前が一致していない
@@ -105,12 +102,14 @@ impl CompileErr {
         must_name: &str,
         of_name: &str,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Self::ContractNameMismatch {
-            fn_name: fn_name.to_string(),
-            param_name: param_name.to_string(),
-            must_name: must_name.to_string(),
-            of_name: of_name.to_string(),
-        }))
+        Err(err::ErrKind::CompileErr(Box::new(
+            Self::ContractNameMismatch {
+                fn_name: fn_name.to_string(),
+                param_name: param_name.to_string(),
+                must_name: must_name.to_string(),
+                of_name: of_name.to_string(),
+            },
+        )))
     }
 
     /// `must`の値が、一度も関数へ渡されていない
@@ -118,19 +117,19 @@ impl CompileErr {
         fn_name: &String,
         var_name: &String,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Self::ContractMustNotUsed {
-            fn_name: fn_name.to_string(),
-            var_name: var_name.to_string(),
-        }))
+        Err(err::ErrKind::CompileErr(Box::new(
+            Self::ContractMustNotUsed {
+                fn_name: fn_name.to_string(),
+                var_name: var_name.to_string(),
+            },
+        )))
     }
 
     /// `must`の変数への再代入
-    pub fn assign_to_must_var(
-        var_name: &String
-    ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(
-            Self::AssignToMustVar(var_name.to_string())
-        ))
+    pub fn assign_to_must_var(var_name: &String) -> Result<(), err::ErrKind> {
+        Err(err::ErrKind::CompileErr(Box::new(Self::AssignToMustVar(
+            var_name.to_string(),
+        ))))
     }
 
     /// エラーの内容を表示するための文字列を作る

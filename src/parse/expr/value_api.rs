@@ -5,9 +5,7 @@ use super::*;
 impl Parser {
     /// 変数のアドレス取得などのノードを作成
     /// 呼び出し元では、lex::Tkn::LBracket
-    pub(super) fn get_var_addr_node(
-        &mut self
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn get_var_addr_node(&mut self) -> Result<node::Expr, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn_ref(&["name"])? else {
             panic!()
         };
@@ -56,9 +54,7 @@ impl Parser {
             // ジェネリクス関数を呼びだすノードを作成: `func<int>(..)`
             // (比較の`a < b`と区別するため、`name`が定義済みの
             // ジェネリクス関数で、`<..>(`の形のときだけ)
-            lex::Tkn::LAngleBracket
-                if self.is_generic_call(&name, self.idx + 1) =>
-            {
+            lex::Tkn::LAngleBracket if self.is_generic_call(&name, self.idx + 1) => {
                 // `<`まで進める
                 self.advance_tkn().unwrap();
                 self.generic_call_expr(&name, true)?
@@ -95,9 +91,7 @@ impl Parser {
 
     /// 配列リテラルのノードを作成する
     /// これは配列を初期化するノード
-    pub(super) fn make_array_node(
-        &mut self
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
         let mut items = Vec::<node::Expr>::new();
 
         if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {

@@ -1,11 +1,7 @@
 use super::*;
 
 impl Lexer {
-    pub(super) fn join_sym_tkn(
-        &mut self, 
-        curr_tkn: &LocatedTkn,
-        adjacent: bool,
-    ) -> Option<Tkn> {
+    pub(super) fn join_sym_tkn(&mut self, curr_tkn: &LocatedTkn, adjacent: bool) -> Option<Tkn> {
         if !adjacent {
             return None;
         }

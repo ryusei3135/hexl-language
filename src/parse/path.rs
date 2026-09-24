@@ -3,10 +3,7 @@ use super::*;
 impl Parser {
     /// モジュールのノードを作成
     /// name::mod
-    pub(super) fn build_scope_node(
-        &mut self, 
-        name: &str
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn build_scope_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
         if self.next_tkn_ref(&["{"])? == lex::Tkn::LBrace {
             self.advance_tkn().unwrap();
             let node = self.struct_init_node::<false>(name);
@@ -17,7 +14,7 @@ impl Parser {
             } else {
                 // }が来ていない
                 panic!();
-            }
+            };
         }
         if self.next_tkn_ref(&["."])? == lex::Tkn::Dot {
             return self.build_member_node(name);
@@ -33,10 +30,7 @@ impl Parser {
     /// メゾットなどのノードを作成
     /// name.method
     #[inline(always)]
-    pub(super) fn build_member_node(
-        &mut self, 
-        name: &str
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn build_member_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
         // "."がないので、何も返さない
         if self.next_tkn_ref(&["not `.`"])? != lex::Tkn::Dot {
             return Ok(self.expr_define_var(name.to_string())?);
@@ -44,11 +38,7 @@ impl Parser {
 
         // "."の次のトークンを確認するため一旦"."まで進める
         self.next_tkn(&["."])?;
-        let after_dot_is_bracket =
-            matches!(
-                self.next_tkn_ref(&["name", "["])?,
-                lex::Tkn::LBracket
-            );
+        let after_dot_is_bracket = matches!(self.next_tkn_ref(&["name", "["])?, lex::Tkn::LBracket);
         // まだ"."を消費していない状態(呼び出し時点の位置)に戻す
         self.back_tkn();
 
@@ -76,10 +66,7 @@ impl Parser {
     /// ## Errors
     /// `member`の次のトークンが名前(`lex::Tkn::Name`)、または
     /// その次が数字(`lex::Tkn::Number`)ではない場合エラー
-    fn build_member_array_node(
-        &mut self, 
-        name: &str
-    ) -> Result<node::Expr, err::ErrKind> {
+    fn build_member_array_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::syntax_err!(

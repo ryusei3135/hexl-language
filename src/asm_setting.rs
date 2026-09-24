@@ -97,10 +97,7 @@ pub struct AsmSetting {
 }
 
 impl AsmSetting {
-    pub fn get_asm_fmt(
-        &self, 
-        inline_name: &Option<String>
-    ) -> AsmFormat {
+    pub fn get_asm_fmt(&self, inline_name: &Option<String>) -> AsmFormat {
         // フォーマットするアセンブリコードの情報が入ったファイルの名前を取得
         let file_name = || -> &str {
             if let Some(name) = &inline_name {
@@ -117,10 +114,7 @@ impl AsmSetting {
 
         let asm_fmt_file_name = format!("asm_fmts/{}", file_name());
 
-        serde_yaml::from_str(
-                &fs::read_to_string(&asm_fmt_file_name)
-                .expect(&asm_fmt_file_name)
-            )
+        serde_yaml::from_str(&fs::read_to_string(&asm_fmt_file_name).expect(&asm_fmt_file_name))
             .unwrap()
     }
 
@@ -148,14 +142,6 @@ pub fn gen_asm_text(
     let asm_settings = load_setting();
 
     let asm_fmt = asm_settings.get_asm_fmt(inline_name);
-    let mut writer = asm_gen::AsmEmitter::new(
-        asm_settings, 
-        asm_fmt
-    );
-    writer.to_asm_text(
-        &mut tree, 
-        &inline_name, 
-        &extern_funcs, 
-        &global_funcs
-    )
+    let mut writer = asm_gen::AsmEmitter::new(asm_settings, asm_fmt);
+    writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
 }

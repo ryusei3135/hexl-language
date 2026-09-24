@@ -5,9 +5,7 @@ use std::collections::HashMap;
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
-    pub(super) fn struct_node(
-        &mut self
-    ) -> Result<node::Group1Node, err::ErrKind> {
+    pub(super) fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             return self.struct_name_is_not_found();
         };
@@ -25,11 +23,7 @@ impl Parser {
         // 構造体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
         self.gen_flag = GenFlag::Group1;
-        let r = node::StructDefine::new(
-            name, 
-            fields.0, 
-            fields.1
-        );
+        let r = node::StructDefine::new(name, fields.0, fields.1);
         Ok(r)
     }
 
@@ -39,9 +33,7 @@ impl Parser {
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            self.struct_lbrace_not_found(
-                self.current_tkn().clone()
-            )?;
+            self.struct_lbrace_not_found(self.current_tkn().clone())?;
         }
         // {を飛ばす
         let _ = self.next_tkn(&[])?;
@@ -49,9 +41,7 @@ impl Parser {
 
         loop {
             let name: String = match &self.current_tkn() {
-                lex::Tkn::Name(name) => {
-                    name.to_string()
-                }
+                lex::Tkn::Name(name) => name.to_string(),
                 lex::Tkn::RBrace => {
                     break;
                 }
@@ -64,7 +54,7 @@ impl Parser {
                             context: lex::Tkn::KeyWordStruct
                         }
                     );
-                },
+                }
             };
             // :じゃないとエラー
             if self.next_tkn(&[":"])? != lex::Tkn::Colon {
@@ -93,9 +83,7 @@ impl Parser {
 
     /// `enum name { mem, mem2 }` を解析する
     /// 呼び出し時は current_tkn() が `KeyWordEnum`
-    pub(super) fn enum_node(
-        &mut self
-    ) -> Result<node::Group1Node, err::ErrKind> {
+    pub(super) fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             panic!("列挙型の名前が必要です");
         };
@@ -113,12 +101,9 @@ impl Parser {
     /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace`
     fn define_struct_fields(
         &mut self,
-    ) -> Result<
-        (Vec<node::StructField>, Vec<node::Group1Node>), 
-        err::ErrKind
-    > {
+    ) -> Result<(Vec<node::StructField>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace));
+            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
         }
 
         let mut fields = Vec::<node::StructField>::new();
@@ -161,10 +146,7 @@ impl Parser {
                         }
 
                         lex::Tkn::LParen => {
-                            let mut method = self.func_node(
-                                &name, 
-                                pub_flag
-                            )?;
+                            let mut method = self.func_node(&name, pub_flag)?;
                             self.next_tkn(&[])?;
                             self.scope_counter += 1;
                             // メゾットの本体が空(`{}`)の場合、`one_line_node`を
@@ -173,14 +155,9 @@ impl Parser {
                                 'method_body: loop {
                                     let node = self.one_line_node()?;
 
-                                    if let node::Group1Node::FuncDefine(
-                                        ref mut func
-                                    ) = method {
-                                        func.body.push(
-                                            node.gen_group_info(
-                                                self.build_err_span().line
-                                            )
-                                        );
+                                    if let node::Group1Node::FuncDefine(ref mut func) = method {
+                                        func.body
+                                            .push(node.gen_group_info(self.build_err_span().line));
                                     }
 
                                     if self.current_tkn() == &lex::Tkn::RBrace {
@@ -194,11 +171,7 @@ impl Parser {
                             self.scope_counter -= 1;
                             // モジュールの名前を登録
                             if let node::Group1Node::FuncDefine(ref mut func) = method {
-                                func.self_module_name(
-                                    self.struct_self_name
-                                    .as_ref()
-                                    .unwrap()
-                                );
+                                func.self_module_name(self.struct_self_name.as_ref().unwrap());
                             } else {
                                 panic!();
                             }
@@ -246,7 +219,7 @@ impl Parser {
         &mut self,
     ) -> Result<(Vec<String>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace));
+            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
         }
 
         let mut variants = Vec::<String>::new();
@@ -274,12 +247,7 @@ impl Parser {
                         // `func_node`が`(`を含めて解析するので、
                         // ここではcurrent_tknを`name`のままにしておく
                         lex::Tkn::LParen => {
-                            methods.push(
-                                self.func_node(
-                                    &name, 
-                                    pub_flag.clone()
-                                )?
-                            );
+                            methods.push(self.func_node(&name, pub_flag.clone())?);
                         }
                         // `,`を省略して改行だけで次のメンバーへ続く場合
                         lex::Tkn::KeyWordPub => {}
@@ -298,10 +266,7 @@ impl Parser {
         Ok((variants, methods))
     }
 
-    fn ptr_ty_node(
-        &mut self, 
-        ty: node::TyNode
-    ) -> Result<node::TyNode, err::ErrKind> {
+    fn ptr_ty_node(&mut self, ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
         let range = if self.peek_tkn()? == lex::Tkn::LParen {
             // ポインタの範囲指定がある場合、`(start, end)`を読み込む
             Some((0usize, 0usize))
@@ -314,21 +279,19 @@ impl Parser {
         Ok(node::TyNode::Pointer {
             is_const,
             ty_name: Box::new(ty),
-            range: range
+            range: range,
         })
     }
 
     #[inline(always)]
-    fn is_const_ptr(
-        &mut self
-    ) -> Result<bool, err::ErrKind> {
+    fn is_const_ptr(&mut self) -> Result<bool, err::ErrKind> {
         let is_mut = match self.next_tkn_ref(&["const", "mut"])? {
             lex::Tkn::KeyWordMut => {
-                self.advance_tkn(); 
+                self.advance_tkn();
                 true
             }
             lex::Tkn::KeyWordConst => {
-                self.advance_tkn(); 
+                self.advance_tkn();
                 false
             }
             _ => false,
@@ -345,9 +308,7 @@ impl Parser {
     /// これにより、型として予約語`Self`が使われたとき、
     /// `node::TyNode::SelfTy(self_name)`へ解決できる。
     /// メゾットの外(トップレベルの関数など)では`None`を渡す。
-    pub(super) fn define_ty_node(
-        &mut self
-    ) -> Result<node::TyNode, err::ErrKind> {
+    pub(super) fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
@@ -358,16 +319,15 @@ impl Parser {
     /// トークンが`:`である必要はなく、`current_tkn()`は型の直前の
     /// 区切り(`:`、ジェネリクスの型引数の`<`や`,`)を指していればよい。
     /// 終了時は、型の次のトークンを指す
-    pub(super) fn ty_node_after_delim(
-        &mut self
-    ) -> Result<node::TyNode, err::ErrKind> {
+    pub(super) fn ty_node_after_delim(&mut self) -> Result<node::TyNode, err::ErrKind> {
         match self.next_tkn(&["name", "[", "string", "Self"])?.clone() {
             // 予約語`Self`: 自身の構造体を指す型
             lex::Tkn::KeyWordSelf => {
                 // `Self`の次のトークンへ進める
                 self.next_tkn(&[])?;
 
-                let self_name = self.struct_self_name
+                let self_name = self
+                    .struct_self_name
                     .as_ref()
                     .expect("`Self`は構造体/列挙型のメソッド内でのみ使用できます");
 
@@ -377,48 +337,41 @@ impl Parser {
                         let ty = node::TyNode::SelfTy(self_name.clone());
                         self.ptr_ty_node(ty)?
                     }
-                    _ => {
-                        node::TyNode::SelfTy(
-                            self_name.clone()
-                        )
-                    }
+                    _ => node::TyNode::SelfTy(self_name.clone()),
                 };
 
                 Ok(ty)
             }
             lex::Tkn::Name(name) => {
                 // 契約型かを調べる
-                let base_ty = self.is_constract_ty(
-                    node::TyNode::Ty(name.clone())
-                )?;
-                let ty = match self.next_tkn(&["<", "*", "["])? {
-                    lex::Tkn::LAngleBracket => {
-                        return crate::syntax_err!(
-                            self.build_err_span(),
-                            err::SyntaxErrKind::GenericsNotSupportedYet
-                        );
-                    }
-                    // 境界付きポインタ
-                    lex::Tkn::LBracket => {
-                        self.next_tkn(&["["])?;
-                        self.make_range_ptr_node(base_ty)?
-                    }
-                    // ポインタの型
-                    // var: *.. の `*`
-                    lex::Tkn::Mul => { 
-                        self.ptr_ty_node(base_ty)?
-                    }
-                    _ => {
-                        // ジェネリクスに定義ずみの型がある
-                        if self.other_stk.iter().any(|(stk_name, info)| {
-                            stk_name == &name && info == &StkInfo::Generics
-                        }) {
-                            node::TyNode::make_ref_ty(&name)
-                        } else {
-                            base_ty
+                let base_ty = self.is_constract_ty(node::TyNode::Ty(name.clone()))?;
+                let ty =
+                    match self.next_tkn(&["<", "*", "["])? {
+                        lex::Tkn::LAngleBracket => {
+                            return crate::syntax_err!(
+                                self.build_err_span(),
+                                err::SyntaxErrKind::GenericsNotSupportedYet
+                            );
                         }
-                    }
-                };
+                        // 境界付きポインタ
+                        lex::Tkn::LBracket => {
+                            self.next_tkn(&["["])?;
+                            self.make_range_ptr_node(base_ty)?
+                        }
+                        // ポインタの型
+                        // var: *.. の `*`
+                        lex::Tkn::Mul => self.ptr_ty_node(base_ty)?,
+                        _ => {
+                            // ジェネリクスに定義ずみの型がある
+                            if self.other_stk.iter().any(|(stk_name, info)| {
+                                stk_name == &name && info == &StkInfo::Generics
+                            }) {
+                                node::TyNode::make_ref_ty(&name)
+                            } else {
+                                base_ty
+                            }
+                        }
+                    };
                 Ok(ty)
             }
             // スタック領域: `[ty]` / `[ty 4]`
@@ -440,13 +393,8 @@ impl Parser {
     /// - `[ty N]` -> len == N
     ///
     /// 呼び出し終了時は、`]`の次のトークンを指す
-    fn define_mem_ty_node(
-        &mut self, 
-        is_static: bool
-    ) -> Result<node::TyNode, err::ErrKind> {
-        let ty_name = self
-            .next_tkn(&["name"])?
-            .unwrap_name();
+    fn define_mem_ty_node(&mut self, is_static: bool) -> Result<node::TyNode, err::ErrKind> {
+        let ty_name = self.next_tkn(&["name"])?.unwrap_name();
 
         let len = match self.next_tkn(&["number", "]"])? {
             lex::Tkn::Number(num) => {
@@ -524,11 +472,14 @@ mod ty_tests {
         let node::Group1Node::FuncDefine(ref mut f) = func else {
             panic!();
         };
-        f.add(node::Group2Node::Expr(node::Expr::InitStruct {
-            is_self: false,
-            name: "Name".to_string(),
-            fields: map,
-        }).gen_group_info(&1));
+        f.add(
+            node::Group2Node::Expr(node::Expr::InitStruct {
+                is_self: false,
+                name: "Name".to_string(),
+                fields: map,
+            })
+            .gen_group_info(&1),
+        );
         assert_eq!(
             &build("main(): int { Name { name: 1 name2: 1 } }"),
             &vec![func]

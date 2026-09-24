@@ -2,23 +2,20 @@ use super::*;
 
 impl Parser {
     /// 最初にキーワードのcondが来る必要がある
-    pub(in crate::parse) fn expr_match(
-        &mut self
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
         if self.current_tkn() != &lex::Tkn::KeyWordCond {
             return self.cond_keyword_not_found();
         }
         // match の対象式
-        let cond_expr = 
-            if self.peek_tkn().unwrap() == lex::Tkn::LBrace {
-                self.next_tkn(&[])?;
-                None
-            } else {
-                // 構造体を初期化する式を代入することはできないので、`false`
-                Some(Box::new(self.expr_cmp(STRUCT_NOT_INIT)?))
-            };
+        let cond_expr = if self.peek_tkn().unwrap() == lex::Tkn::LBrace {
+            self.next_tkn(&[])?;
+            None
+        } else {
+            // 構造体を初期化する式を代入することはできないので、`false`
+            Some(Box::new(self.expr_cmp(STRUCT_NOT_INIT)?))
+        };
 
         // 真偽値(比較式)が与えられた場合は、単純なif/elseとして扱う
         // `cond a == 10 { .. } | { .. }`
@@ -31,10 +28,7 @@ impl Parser {
 
         // {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            crate::cond_err!(
-                self.build_err_span(), 
-                CondExprScopeStartLBrace
-            )?
+            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
         }
 
         let mut arms = Vec::new();
@@ -47,10 +41,7 @@ impl Parser {
             // elseのノードを作成する
             if self.peek_tkn()? == lex::Tkn::Or {
                 self.next_tkn(&[])?;
-                return self.build_else_arm_node(
-                    &cond_expr, 
-                    arms
-                );
+                return self.build_else_arm_node(&cond_expr, arms);
             }
             // if
             let pattern = self.expr_cmp(STRUCT_NOT_INIT)?;
@@ -60,10 +51,7 @@ impl Parser {
             self.tkn_checker().is_arrow_tkn()?;
             // {
             if self.next_tkn(&["{"])? != lex::Tkn::LBrace {
-                crate::cond_err!(
-                    self.build_err_span(), 
-                    CondExprPatternLBrace
-                )?
+                crate::cond_err!(self.build_err_span(), CondExprPatternLBrace)?
             }
             self.next_tkn(&[])?;
             // ここでアーム本体を解析
@@ -146,17 +134,11 @@ impl Parser {
     /// }
     /// ```
     /// これは `if` / `else` と同じ意味を持つ
-    fn expr_match_bool(
-        &mut self, 
-        cond: node::Expr
-    ) -> Result<node::Expr, err::ErrKind> {
+    fn expr_match_bool(&mut self, cond: node::Expr) -> Result<node::Expr, err::ErrKind> {
         // match expr {
         // {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            crate::cond_err!(
-                self.build_err_span(), 
-                CondExprScopeStartLBrace
-            )?
+            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
         }
         self.next_tkn(&[])?;
         // trueのときの処理
@@ -166,10 +148,7 @@ impl Parser {
         self.tkn_checker().close_scope_to_rbrace(None)?;
         // |
         if self.next_tkn(&["|"])? != lex::Tkn::Or {
-            crate::cond_err!(
-                self.build_err_span(), 
-                CondElseNotFound
-            )?
+            crate::cond_err!(self.build_err_span(), CondElseNotFound)?
         }
         // {
         if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {

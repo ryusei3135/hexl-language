@@ -15,10 +15,7 @@ impl Parser {
         proc_name: &String,
     ) -> Result<node::Group2Node, err::ErrKind> {
         let result = match proc_name.as_str() {
-            "include" => {
-                node::Group2Node::Include(
-                    self.build_include_path()?)
-            }
+            "include" => node::Group2Node::Include(self.build_include_path()?),
             "preserve" => {
                 println!("{}", proc_name);
                 panic!();
@@ -38,26 +35,17 @@ impl Parser {
     /// - `#include "mod/file.hexl"::func` `func`だけをそのまま取り込む
     /// - `#include "mod/file.hexl"::*`    公開関数を全て、そのまま取り込む
     /// - `#include mod::file`             従来通りの書き方(下位互換)
-    fn build_include_path(
-        &mut self
-    ) -> Result<node::ModPath, err::ErrKind> {
+    fn build_include_path(&mut self) -> Result<node::ModPath, err::ErrKind> {
         // `Name "=" ...`の形なら、エイリアス指定として読み取る
         let alias = self.try_take_include_alias()?;
 
         // match の結果を直接 return する形に統一
         match self.next_tkn(&["string", "name"])? {
-            lex::Tkn::Str(literal) => {
-                self.finish_literal_include(literal, alias)
-            }
+            lex::Tkn::Str(literal) => self.finish_literal_include(literal, alias),
             // match のガード条件 `if` は Rust らしくて非常に綺麗です！
-            lex::Tkn::Name(first_seg) if alias.is_none() => {
-                self.build_mod_path_segments(first_seg)
-            }
+            lex::Tkn::Name(first_seg) if alias.is_none() => self.build_mod_path_segments(first_seg),
             _ => {
-                return crate::preproc_err!(
-                    self, 
-                    ExpectedPathSegment
-                );
+                return crate::preproc_err!(self, ExpectedPathSegment);
             }
         }
     }
@@ -65,14 +53,9 @@ impl Parser {
     /// `Name "=" `の形になっているかどうかを覗き見て判定する。
     /// なっていれば両方のトークンを消費してエイリアス名を返し、
     /// なっていなければ何も消費せず`None`を返す
-    fn try_take_include_alias(
-        &mut self
-    ) -> Result<Option<String>, err::ErrKind> {
-        let is_alias =
-            matches!(self.peek_tkn()?, lex::Tkn::Name(_)) && matches!(
-            self.peek2_tkn(), 
-            Some(lex::Tkn::Equal)
-        );
+    fn try_take_include_alias(&mut self) -> Result<Option<String>, err::ErrKind> {
+        let is_alias = matches!(self.peek_tkn()?, lex::Tkn::Name(_))
+            && matches!(self.peek2_tkn(), Some(lex::Tkn::Equal));
 
         if !is_alias {
             return Ok(None);
@@ -107,15 +90,10 @@ impl Parser {
         self.advance_tkn().unwrap();
 
         let kind = match self.next_tkn(&["name", "*"])? {
-            lex::Tkn::Name(func_name) => {
-                node::ImportKind::Func(func_name)
-            }
+            lex::Tkn::Name(func_name) => node::ImportKind::Func(func_name),
             lex::Tkn::Mul => node::ImportKind::Glob,
             _ => {
-                crate::preproc_err!(
-                    self, 
-                    ExpectedPathSegment
-                );
+                crate::preproc_err!(self, ExpectedPathSegment);
             }
         };
 
@@ -136,12 +114,8 @@ impl Parser {
             // whileでトークンが存在することは確認済み
             self.advance_tkn().unwrap();
             match self.next_tkn(&["name"])? {
-                lex::Tkn::Name(name) => {
-                    mod_path.add_path(&name)
-                }
-                lex::Tkn::Str(val) => {
-                    mod_path.add_path(&val)
-                }
+                lex::Tkn::Name(name) => mod_path.add_path(&name),
+                lex::Tkn::Str(val) => mod_path.add_path(&val),
                 _ => {
                     crate::preproc_err!(self, ExpectedPathSegment);
                 }
@@ -152,11 +126,8 @@ impl Parser {
     }
 
     #[inline(always)]
-    fn get_asm_name(
-        &mut self
-    ) -> Result<String, err::ErrKind> {
-        if let lex::Tkn::Name(asm_name) = self.next_tkn(&["name"])? 
-        {
+    fn get_asm_name(&mut self) -> Result<String, err::ErrKind> {
+        if let lex::Tkn::Name(asm_name) = self.next_tkn(&["name"])? {
             Ok(asm_name)
         } else {
             crate::preproc_err!(self, NotFoundAsmName);
@@ -164,9 +135,7 @@ impl Parser {
     }
     /// ## 戻り値
     /// - Ok inlineアセンブラの名前
-    fn build_asm_ast(
-        &mut self
-    ) -> Result<node::Group2Node, err::ErrKind> {
+    fn build_asm_ast(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // #asm(...)なので、(以外が来たらエラー
         if self.next_tkn(&["not `(`"])? != lex::Tkn::LParen {
             crate::preproc_err!(self, ExpectedLParenAfterAsm);
@@ -183,18 +152,13 @@ impl Parser {
 
     /// アセンブリ言語のプロプロセッサの
     /// 中身(アセンブリ言語本体)を生成する関数
-    fn gen_asm_preproc(
-        &mut self
-    ) -> Result<Vec<node::InlineAsm>, err::ErrKind> {
+    fn gen_asm_preproc(&mut self) -> Result<Vec<node::InlineAsm>, err::ErrKind> {
         let mut nodes = Vec::<node::InlineAsm>::new();
 
         if self.next_tkn(&["{"])? == lex::Tkn::LBrace {
             let _ = self.next_tkn(&[])?;
             loop {
-                match self
-                    .current_tkn()
-                    .clone()
-                {
+                match self.current_tkn().clone() {
                     lex::Tkn::Str(value) => {
                         nodes.push(self.gen_asm_line(&value)?);
                     }
@@ -221,39 +185,31 @@ impl Parser {
     /// 普通の式として書けるもの)は`operands`に出現順で積んでいく。
     /// 同じ行に複数の`${...}`があっても、すべて取り込む
     /// (以前の実装は最後の1つしか保持できなかった)。
-    fn gen_asm_line(
-        &mut self, 
-        value: &String
-    ) -> Result<node::InlineAsm, err::ErrKind> {
-        let inline_var = Regex::new(r"\$\{([^}]+)\}")
-            .unwrap(); // 一度だけコンパイルして使い回してOK
+    fn gen_asm_line(&mut self, value: &String) -> Result<node::InlineAsm, err::ErrKind> {
+        let inline_var = Regex::new(r"\$\{([^}]+)\}").unwrap(); // 一度だけコンパイルして使い回してOK
 
         let mut operands = Vec::<node::Expr>::new();
         let mut parse_err: Option<err::ErrKind> = None;
 
-        let asm = inline_var
-            .replace_all(
-                value,
-                |caps: &Captures| {
-                    if parse_err.is_some() {
-                        return String::new();
-                    }
+        let asm = inline_var.replace_all(value, |caps: &Captures| {
+            if parse_err.is_some() {
+                return String::new();
+            }
 
-                    let inner = &caps[1];
+            let inner = &caps[1];
 
-                    match Parser::parse_asm_operand(inner) {
-                        Ok(expr) => {
-                            let index = operands.len();
-                            operands.push(expr);
-                            format!("{{{}}}", index)
-                        }
-                        Err(e) => {
-                            parse_err = Some(e);
-                            String::new()
-                        }
-                    }
+            match Parser::parse_asm_operand(inner) {
+                Ok(expr) => {
+                    let index = operands.len();
+                    operands.push(expr);
+                    format!("{{{}}}", index)
                 }
-            );
+                Err(e) => {
+                    parse_err = Some(e);
+                    String::new()
+                }
+            }
+        });
 
         if let Some(e) = parse_err {
             return Err(e);
@@ -270,27 +226,19 @@ mod inline_asm_tests {
     /// テスト用に、関数の中に`#asm(...)`ブロックを1つ持つ
     /// プログラムを解析し、`InlineAsm`の一覧を取り出す
     fn gen_inline_asm(asm_body: &str) -> Vec<node::InlineAsm> {
-        let src = format!(
-            "main(): b1 {{ #asm(gas) {{ {} }} }}", 
-            asm_body
-        );
+        let src = format!("main(): b1 {{ #asm(gas) {{ {} }} }}", asm_body);
 
         let mut lexer = lex::Lexer::new();
-        lexer
-            .analy(&src.to_string())
-            .unwrap();
+        lexer.analy(&src.to_string()).unwrap();
 
         let mut p = parse::Parser::new();
-        let nodes = p.parser(lexer.gen_tkns)
-            .expect("parse failed");
+        let nodes = p.parser(lexer.gen_tkns).expect("parse failed");
 
         let node::Group1Node::FuncDefine(func) = &nodes[0] else {
             panic!("not a func define")
         };
 
-        let node::Group2Node::CompleSyntax(
-            (name, lines)
-        ) = &func.body[0].get_node() else {
+        let node::Group2Node::CompleSyntax((name, lines)) = &func.body[0].get_node() else {
             panic!("not an inline asm node: {:?}", func.body[0])
         };
         assert_eq!(name, "gas");

@@ -36,16 +36,13 @@ impl AsmEmitter {
                 inst::Inst::Num { size, .. } => size.clone(),
                 _ => self.get_var_ty(&name),
             },
-            inst::Inst::Pointer(..)
-            | inst::Inst::InsertArr { .. } => self.get_expr_ty(dst),
+            inst::Inst::Pointer(..) | inst::Inst::InsertArr { .. } => self.get_expr_ty(dst),
             _ => self.get_var_ty(&name),
         };
 
-        text = self.asm_fmt.fmt_memory_mnemonic_resize(
-            "mov",
-            &text,
-            &mnemonic_size,
-        );
+        text = self
+            .asm_fmt
+            .fmt_memory_mnemonic_resize("mov", &text, &mnemonic_size);
         self.asm_text.push_str(&text);
     }
 
@@ -59,56 +56,34 @@ impl AsmEmitter {
         // 再代入する場合は、アドレスを求める`lea`ではなく、ポインタの
         // サイズ(64bit)に合わせた`movq`でそのまま即値を書き込む
         if matches!(self.curr_inst[value], inst::Inst::Num { .. }) {
-            let dst_reg = self
-                .asm_fmt
-                .get_fmt_reg(
-                    current_reg, 
-                    &Size::DQ
-                );
-            let value_operand = self.extract_operand_text(
-                value, 
-                &this_is_self
-            );
+            let dst_reg = self.asm_fmt.get_fmt_reg(current_reg, &Size::DQ);
+            let value_operand = self.extract_operand_text(value, &this_is_self);
             let text = self
                 .asm_fmt
                 .get_opcode_tmpl("mov")
                 .replace("{dst}", &dst_reg)
                 .replace("{src1}", &value_operand);
-            return self.asm_fmt
-                .fmt_mnemonic_resize(
-                    "mov", 
-                    &text, 
-                    &Size::DQ
-                );
+            return self.asm_fmt.fmt_mnemonic_resize("mov", &text, &Size::DQ);
         }
 
         let dst_reg = self.asm_fmt.get_fmt_reg(current_reg, &Size::DQ);
 
         let ptr_operand = match &self.curr_inst[value] {
             inst::Inst::GetPtr { size, .. } => {
-                self.asm_fmt
-                    .fmt_ref_operand(
-                        &"rbp".to_string(), 
-                        *size
-                    )
+                self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), *size)
             }
-            _ => {
-                self.extract_operand_text(
-                    value, 
-                    &this_is_self
-                )
-            }
+            _ => self.extract_operand_text(value, &this_is_self),
         };
 
-        self.asm_fmt
-            .fmt_mnemonic_resize(
+        self.asm_fmt.fmt_mnemonic_resize(
             "address",
-            &self.asm_fmt
+            &self
+                .asm_fmt
                 .get_opcode_tmpl("address")
                 .replace("{dst}", &dst_reg)
                 .replace("{src1}", &ptr_operand),
-                &Size::DQ
-            )
+            &Size::DQ,
+        )
     }
 
     pub(super) fn assign_val_is_not_ptr(
@@ -117,20 +92,12 @@ impl AsmEmitter {
         value: usize,
         this_is_self: &SelfPtrInfo,
     ) -> String {
-        let mnemonic = if self.curr_inst[value]
-            .is_pointer() 
-        {
+        let mnemonic = if self.curr_inst[value].is_pointer() {
             "address"
         } else {
             "mov"
         };
 
-        self.format_line(
-            mnemonic, 
-            Some(current_reg), 
-            value, 
-            None, 
-            &this_is_self
-        )
+        self.format_line(mnemonic, Some(current_reg), value, None, &this_is_self)
     }
 }

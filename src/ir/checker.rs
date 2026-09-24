@@ -2,16 +2,13 @@ use super::*;
 use crate::err::PreprocErrs::NotFoundAsmName;
 use crate::ir::IR;
 
-mod var_ty;
 mod constract;
 mod tracking;
+mod var_ty;
 
 use crate::models::Body;
 
-
-
-pub(in crate::ir) 
-struct ConstractFlags {
+pub(in crate::ir) struct ConstractFlags {
     /// 変数を定義
     /// これは戻り値が契約のフラグを立てたときにtrueならOk
     def_var: Option<node::TyNode>,
@@ -36,19 +33,11 @@ impl ConstractFlags {
 
     /// var_treeでフラグを立てる
     #[inline(always)]
-    pub fn put_var_def(
-        &mut self, 
-        var_ty: &node::TyNode,
-    ) {
+    pub fn put_var_def(&mut self, var_ty: &node::TyNode) {
         if self.constract_ret.is_none() {
             self.def_var = Some(var_ty.clone());
         } else {
-            if !matches!(
-                self.constract_ret
-                    .as_ref()
-                    .unwrap(),
-                var_ty
-             ) {
+            if !matches!(self.constract_ret.as_ref().unwrap(), var_ty) {
                 panic!();
             }
             self.reset();
@@ -56,21 +45,15 @@ impl ConstractFlags {
     }
 
     #[inline(always)]
-    pub fn constract_fn(
-        &mut self,
-        fn_ret_ty: Option<&node::TyNode>,
-    ) {
+    pub fn constract_fn(&mut self, fn_ret_ty: Option<&node::TyNode>) {
         if self.def_var.is_none() {
             if self.constract_ret.is_none() {
-                self.constract_ret = fn_ret_ty
-                    .map(|v| v.clone());
+                self.constract_ret = fn_ret_ty.map(|v| v.clone());
                 return ();
             }
         }
         // 型をちぇく
-        if &self.def_var != &fn_ret_ty
-            .map(|v| v.clone()) 
-        {
+        if &self.def_var != &fn_ret_ty.map(|v| v.clone()) {
             panic!("型が違う {:?} {:?}", self.def_var, fn_ret_ty);
         }
         self.def_var = None;

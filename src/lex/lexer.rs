@@ -22,7 +22,6 @@ mod local {
 
         table[0x0A] = CharKind::Ln;
         table
-
     }
 
     #[derive(Clone, Debug, PartialEq, Copy)]
@@ -174,10 +173,8 @@ impl Lexer {
                         match name.as_str() {
                             "if" => {
                                 // `#if #A` のように、条件は `#NAME` の形で書く
-                                let target = rest_of_line
-                                    .trim()
-                                    .trim_start_matches('#')
-                                    .to_string();
+                                let target =
+                                    rest_of_line.trim().trim_start_matches('#').to_string();
                                 cond_stack.push(CondFrame {
                                     parent_active: active_here,
                                     condition: self.preproc_table.is_defined(&target),
@@ -204,10 +201,7 @@ impl Lexer {
                                         preprocessor::sort_preproc(&name, &rest_of_line)
                                     {
                                         // `#define ...` 行: テーブルに登録
-                                        self.preproc_table.add(
-                                            target, 
-                                            kind
-                                        );
+                                        self.preproc_table.add(target, kind);
                                         i = line_end;
                                         continue;
                                     }
@@ -249,10 +243,7 @@ impl Lexer {
         Some(output)
     }
 
-    pub fn analy(
-        &mut self, 
-        content: &String
-    ) -> Result<(), err::lex_err::LexErrs> {
+    pub fn analy(&mut self, content: &String) -> Result<(), err::lex_err::LexErrs> {
         self.gen_tkns = Vec::new();
         self.chr_stk = String::new();
         self.last_kind = None;
@@ -284,9 +275,7 @@ impl Lexer {
                         Ok(tkn) => {
                             let adjacent = !self.saw_gap;
                             let t = LocatedTkn {
-                                tkn: self
-                                    .join_sym_tkn(&tkn, adjacent)
-                                    .unwrap_or(tkn.tkn.clone()),
+                                tkn: self.join_sym_tkn(&tkn, adjacent).unwrap_or(tkn.tkn.clone()),
                                 pos: chr_counter.clone(),
                                 line: line_counter.clone(),
                             };
@@ -340,13 +329,7 @@ impl Lexer {
         self.check_stkable_chr(&CharKind::Other, &'\0');
 
         if self.gen_flag.is_some() {
-            self.gen_tkns
-                .push(
-                    self.gen_tkn(
-                        line_counter, 
-                        chr_counter
-                    )?
-                );
+            self.gen_tkns.push(self.gen_tkn(line_counter, chr_counter)?);
         }
 
         Ok(())
@@ -386,8 +369,13 @@ impl Lexer {
                         // "0xZZ" など）のときにパニックしていた。
                         // gen_tkn は Result を返すので、ここはちゃんと
                         // エラーとして伝播させる。
-                        let Ok(num) = u32::from_str_radix(self.chr_stk.trim_start_matches("0x"), 16) else {
-                            return crate::lex_err!(err::Span::new(line_counter, chr_counter), NumIsInvalid);
+                        let Ok(num) =
+                            u32::from_str_radix(self.chr_stk.trim_start_matches("0x"), 16)
+                        else {
+                            return crate::lex_err!(
+                                err::Span::new(line_counter, chr_counter),
+                                NumIsInvalid
+                            );
                         };
                         Tkn::Number(num.to_string())
                     } else {
@@ -395,25 +383,23 @@ impl Lexer {
                     }
                 }
                 GenFlag::Not => Tkn::Not,
-                GenFlag::Name => {
-                    match self.chr_stk.as_str() {
-                        "ret" => Tkn::KeyWordRet,
-                        "cond" => Tkn::KeyWordCond,
-                        "loop" => Tkn::KeyWordLoop,
-                        "pub" => Tkn::KeyWordPub,
-                        "struct" => Tkn::KeyWordStruct,
-                        "enum" => Tkn::KeyWordEnum,
-                        "const" => Tkn::KeyWordConst,
-                        "static" => Tkn::KeyWordStatic,
-                        "mut" => Tkn::KeyWordMut,
-                        "Self" => Tkn::KeyWordSelf,
-                        "must" => Tkn::KeyWordMust,
-                        "of" => Tkn::KeyWordOf,
-                        "continue" => Tkn::KeyWordContinue,
-                        "break" => Tkn::KeyWordBreak,
-                        _ => Tkn::Name(self.chr_stk.clone()),
-                    }
-                }
+                GenFlag::Name => match self.chr_stk.as_str() {
+                    "ret" => Tkn::KeyWordRet,
+                    "cond" => Tkn::KeyWordCond,
+                    "loop" => Tkn::KeyWordLoop,
+                    "pub" => Tkn::KeyWordPub,
+                    "struct" => Tkn::KeyWordStruct,
+                    "enum" => Tkn::KeyWordEnum,
+                    "const" => Tkn::KeyWordConst,
+                    "static" => Tkn::KeyWordStatic,
+                    "mut" => Tkn::KeyWordMut,
+                    "Self" => Tkn::KeyWordSelf,
+                    "must" => Tkn::KeyWordMust,
+                    "of" => Tkn::KeyWordOf,
+                    "continue" => Tkn::KeyWordContinue,
+                    "break" => Tkn::KeyWordBreak,
+                    _ => Tkn::Name(self.chr_stk.clone()),
+                },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),
             };
             Ok(LocatedTkn {
@@ -422,10 +408,7 @@ impl Lexer {
                 line: line_counter.clone(),
             })
         } else {
-            crate::lex_err!(
-                err::Span::new(line_counter, chr_counter), 
-                FlagNotFound
-            )
+            crate::lex_err!(err::Span::new(line_counter, chr_counter), FlagNotFound)
         }
     }
 
@@ -476,11 +459,7 @@ impl Lexer {
     /// `StkResult::Stackable`  -> 現在の文字をスタックに積んでよい
     /// `StkResult::GenTkn`     -> トークンを生成し、現在の文字は通常通り積む
     /// `StkResult::Consumed`   -> トークンを生成し、現在の文字は消費済み（積まない）
-    fn check_stkable_chr(
-        &mut self, 
-        curr_kind: &CharKind, 
-        chr: &char
-    ) -> StkResult {
+    fn check_stkable_chr(&mut self, curr_kind: &CharKind, chr: &char) -> StkResult {
         if let Some(ref last_kind) = self.last_kind {
             match (last_kind, curr_kind) {
                 // 文字と数字は一緒にスタック可能
@@ -518,10 +497,7 @@ impl Lexer {
                 }
                 (CharKind::Name | CharKind::Num, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
-                        self.get_value_by_flag_ty(
-                            chr, 
-                            StkResult::GenTkn
-                        )
+                        self.get_value_by_flag_ty(chr, StkResult::GenTkn)
                     } else {
                         if self.gen_flag.is_none() {
                             let flag = match last_kind {
@@ -564,12 +540,7 @@ impl Lexer {
                         }
                     }
                 }
-                (_, CharKind::Op) => {
-                    self.get_value_by_flag_ty(
-                        chr, 
-                        StkResult::GenTkn
-                    )
-                }
+                (_, CharKind::Op) => self.get_value_by_flag_ty(chr, StkResult::GenTkn),
                 (_, _) => {
                     if self.gen_flag == Some(GenFlag::Str) {
                         StkResult::Stackable
@@ -586,11 +557,7 @@ impl Lexer {
 
     /// 現在のトークンが文字列のトークンかつ今処理中の文字が'"'なら
     /// 文字のスタックを止める関数
-    fn get_value_by_flag_ty(
-        &self, 
-        chr: &char, 
-        other_flag_value: StkResult
-    ) -> StkResult {
+    fn get_value_by_flag_ty(&self, chr: &char, other_flag_value: StkResult) -> StkResult {
         if self.gen_flag == Some(GenFlag::Str) {
             if *chr == '"' {
                 StkResult::Consumed
@@ -607,10 +574,7 @@ impl Lexer {
     /// がtrueの場合必ず上書きする
     /// OW = "over write"
     #[inline(always)]
-    fn over_write_flag<const OW: bool>(
-        &mut self, 
-        flag: GenFlag
-    ) {
+    fn over_write_flag<const OW: bool>(&mut self, flag: GenFlag) {
         if OW {
             // 上書きモード
             self.gen_flag = Some(flag);
@@ -840,7 +804,8 @@ mod tests {
     #[test]
     fn check_asm_directive_is_not_treated_as_undefined_macro() {
         let mut lex = lexer();
-        lex.analy(&"#asm(gas) { \"mov ${a}\" }".to_string()).unwrap();
+        lex.analy(&"#asm(gas) { \"mov ${a}\" }".to_string())
+            .unwrap();
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
         assert_eq!(
             tkns,
@@ -868,15 +833,10 @@ mod tests {
     #[test]
     fn check_preprocessor_if_defined_takes_if_branch() {
         let mut lex = lexer();
-        lex.analy(
-            &"#define A 10\n#if #A\nret 1\n#else\nret 2\n#endif".to_string(),
-        )
-        .unwrap();
+        lex.analy(&"#define A 10\n#if #A\nret 1\n#else\nret 2\n#endif".to_string())
+            .unwrap();
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
-        assert_eq!(
-            tkns,
-            vec![Tkn::KeyWordRet, Tkn::Number("1".to_string())]
-        );
+        assert_eq!(tkns, vec![Tkn::KeyWordRet, Tkn::Number("1".to_string())]);
     }
 
     #[test]
@@ -885,10 +845,7 @@ mod tests {
         lex.analy(&"#if #A\nret 1\n#else\nret 2\n#endif".to_string())
             .unwrap();
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
-        assert_eq!(
-            tkns,
-            vec![Tkn::KeyWordRet, Tkn::Number("2".to_string())]
-        );
+        assert_eq!(tkns, vec![Tkn::KeyWordRet, Tkn::Number("2".to_string())]);
     }
 
     #[test]
@@ -898,10 +855,7 @@ mod tests {
             .unwrap();
         let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
         // `A` は未定義なので `#if`〜`#endif` はまるごと消える
-        assert_eq!(
-            tkns,
-            vec![Tkn::KeyWordRet, Tkn::Number("2".to_string())]
-        );
+        assert_eq!(tkns, vec![Tkn::KeyWordRet, Tkn::Number("2".to_string())]);
     }
 
     #[test]

@@ -12,7 +12,7 @@ impl Parser {
     /// トップレベルの関数を解析している場合は`None`を渡す。
     pub(super) fn func_node(
         &mut self,
-        func_name: &String,
+        func_name: &str,
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
         let arg = match self.next_tkn(&["(", "<"])? {
@@ -45,19 +45,19 @@ impl Parser {
 
                 if self.current_tkn() == &lex::Tkn::LBrace {
                     Ok(node::FuncDefine::new(
-                        func_name.clone(),
+                        func_name,
                         arg,
                         ret_ty,
                         is_public,
                     ))
                 } else {
-                    Err(err::ErrKind::NotFoundTkn(lex::Tkn::LBrace))
+                    Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
                 }
             }
             // 戻り値の型が指定されていない場合、組み込みの`int`型を
             // デフォルトの戻り値の型として扱う
             lex::Tkn::LBrace => Ok(node::FuncDefine::new(
-                func_name.clone(),
+                func_name,
                 arg,
                 node::TyNode::Ty("int".to_string()),
                 is_public,
@@ -87,11 +87,9 @@ impl Parser {
     /// 場合、`node::TyNode::SelfTy(self_name)`へ解決するために使われる
     /// (実際に`Self`が第一引数以外に使われていないかのチェックは、
     /// IRへの変換時に行う)
-    fn define_arg_node(
-        &mut self
-    ) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
+    fn define_arg_node(&mut self) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
-            return Err(err::ErrKind::NotFoundTkn(lex::Tkn::LParen));
+            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LParen)));
         }
 
         let mut args_params = Vec::<node::ArgsNode>::new();
@@ -195,9 +193,7 @@ impl Parser {
     ///
     /// 呼び出しが定義より前に書かれていても、その型の関数を作れる
     /// ように、本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
-    pub(super) fn collect_generic_funcs(
-        &mut self
-    ) -> Result<(), err::ErrKind> {
+    pub(super) fn collect_generic_funcs(&mut self) -> Result<(), err::ErrKind> {
         let len = self.tkns.as_ref().unwrap().len();
         // `{`の深さ。トップレベル(0)にある`name<`だけが関数の定義
         let mut depth = 0usize;
@@ -228,9 +224,7 @@ impl Parser {
 
     /// 現在のトークン(関数名)から始まるジェネリクス関数の定義を、
     /// 本体を閉じる`}`まで読み飛ばす。終了時は`}`を指す
-    pub(super) fn skip_generic_func_def(
-        &mut self
-    ) -> Result<(), err::ErrKind> {
+    pub(super) fn skip_generic_func_def(&mut self) -> Result<(), err::ErrKind> {
         let (_, _, end) = self.extract_generic_def(self.idx)?;
         self.idx = end;
         Ok(())
@@ -334,8 +328,7 @@ impl Parser {
         let mut def_tkns = vec![tkns[name_idx].clone()];
         def_tkns.extend_from_slice(&tkns[head_start..=end]);
 
-        let is_public =
-            name_idx > 0 && tkns[name_idx - 1].tkn == lex::Tkn::KeyWordPub;
+        let is_public = name_idx > 0 && tkns[name_idx - 1].tkn == lex::Tkn::KeyWordPub;
 
         Ok((
             name,
@@ -357,11 +350,7 @@ impl Parser {
     ///
     /// ## Args
     /// - lt_idx `<`のトークンのインデックス
-    pub(super) fn is_generic_call(
-        &self, 
-        name: &str, 
-        lt_idx: usize
-    ) -> bool {
+    pub(super) fn is_generic_call(&self, name: &str, lt_idx: usize) -> bool {
         if !self.generic_funcs.contains_key(name) {
             return false;
         }
@@ -373,9 +362,9 @@ impl Parser {
             tkns.get(lt_idx + 1).map(|t| &t.tkn),
             Some(
                 lex::Tkn::Name(_)
-                | lex::Tkn::LBracket
-                | lex::Tkn::KeyWordStatic
-                | lex::Tkn::KeyWordSelf
+                    | lex::Tkn::LBracket
+                    | lex::Tkn::KeyWordStatic
+                    | lex::Tkn::KeyWordSelf
             )
         ) {
             return false;
@@ -385,10 +374,7 @@ impl Parser {
         while let Some(t) = tkns.get(k) {
             match &t.tkn {
                 lex::Tkn::RAngleBracket => {
-                    return matches!(
-                        tkns.get(k + 1).map(|t| &t.tkn),
-                        Some(lex::Tkn::LParen)
-                    );
+                    return matches!(tkns.get(k + 1).map(|t| &t.tkn), Some(lex::Tkn::LParen));
                 }
                 // 型を構成するトークン
                 lex::Tkn::Name(_)
@@ -420,8 +406,7 @@ impl Parser {
     fn generic_type_args(
         &mut self,
         param_count: usize,
-    ) -> Result<(Vec<node::TyNode>, Vec<Vec<lex::LocatedTkn>>), err::ErrKind>
-    {
+    ) -> Result<(Vec<node::TyNode>, Vec<Vec<lex::LocatedTkn>>), err::ErrKind> {
         let mut tys = Vec::<node::TyNode>::new();
         let mut ty_tkns = Vec::<Vec<lex::LocatedTkn>>::new();
 
@@ -501,11 +486,7 @@ impl Parser {
             return self.not_found_lparen();
         }
 
-        self.instantiate_generic_func(
-            name, 
-            &ty_args, 
-            &ty_tkns
-        )?;
+        self.instantiate_generic_func(name, &ty_args, &ty_tkns)?;
 
         let mut call = self.call_func_expr(name, ini_struct)?;
         if let node::Expr::CallFunc(ref mut info) = call {
@@ -609,14 +590,10 @@ impl Parser {
         result?;
 
         // 置き換え後のトークン列は関数1つ分なので、作られるノードも1つ
-        let Some(node::Group1Node::FuncDefine(mut func)) =
-            made.into_iter().next()
-        else {
-            unreachable!(
-                "instantiate_generic_func: 関数のノードが作られていません"
-            );
+        let Some(node::Group1Node::FuncDefine(mut func)) = made.into_iter().next() else {
+            unreachable!("instantiate_generic_func: 関数のノードが作られていません");
         };
-        func.set_temp_ty(ty_args.clone());
+        func.set_temp_ty(ty_args);
         func.public = generic.is_public;
         self.pending_funcs.push(node::Group1Node::FuncDefine(func));
         Ok(())
@@ -695,9 +672,11 @@ mod generic_tests {
         assert_eq!(nodes.len(), 3);
 
         // 定義そのもの(`func<T>`)はノードにならない
-        assert!(funcs(&nodes)
-            .iter()
-            .all(|f| f.name != "func" || !f.temp_ty.is_empty()));
+        assert!(
+            funcs(&nodes)
+                .iter()
+                .all(|f| f.name != "func" || !f.temp_ty.is_empty())
+        );
 
         for t in ["int", "byte"] {
             let f = find(&nodes, "func", vec![ty(t)]);
@@ -736,14 +715,22 @@ mod generic_tests {
         };
         assert_eq!(
             *v.value,
-            call("func", vec![ty("int")], vec![node::Expr::Number("10".to_string())])
+            call(
+                "func",
+                vec![ty("int")],
+                vec![node::Expr::Number("10".to_string())]
+            )
         );
         let node::Group2Node::Expr(node::Expr::DefVar(v)) = main.body[1].get_node() else {
             panic!("{:?}", main.body[1]);
         };
         assert_eq!(
             *v.value,
-            call("func", vec![ty("byte")], vec![node::Expr::Var("var".to_string())])
+            call(
+                "func",
+                vec![ty("byte")],
+                vec![node::Expr::Var("var".to_string())]
+            )
         );
     }
 
@@ -807,8 +794,12 @@ mod generic_tests {
         let main = find(&nodes, "main", vec![]);
         assert_eq!(
             main.body[0].get_node(),
-            &call("func", vec![ty("int")], vec![node::Expr::Number("10".to_string())])
-                .wrap_group2()
+            &call(
+                "func",
+                vec![ty("int")],
+                vec![node::Expr::Number("10".to_string())]
+            )
+            .wrap_group2()
         );
         assert_eq!(
             main.body[1].get_node(),
@@ -905,10 +896,7 @@ mod generic_tests {
         p.collect_generic_funcs().unwrap();
         let generic = p.generic_funcs.get("func").unwrap().clone();
 
-        let replaced = parse::Parser::substitute_ty_params(
-            &generic,
-            &vec![lex_tkns("int")],
-        );
+        let replaced = parse::Parser::substitute_ty_params(&generic, &vec![lex_tkns("int")]);
         let name = |s: &str| lex::Tkn::Name(s.to_string());
         assert_eq!(
             replaced.iter().map(|t| t.tkn.clone()).collect::<Vec<_>>(),
@@ -974,13 +962,15 @@ mod generic_tests {
     #[test]
     fn growing_recursion_is_an_error_not_a_hang() {
         // `f<T>`が`f<T*>`を呼ぶと、型が無限に増える
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             f<T>(n: T): T { ret f<T*>(n) }
             main(): int { f<int>(1) }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     // ---- 既存の構文への影響 ----
@@ -1025,21 +1015,25 @@ mod generic_tests {
     #[test]
     fn wrong_number_of_type_args_is_an_error() {
         // 多い
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             func<T>(arg: T): T { ret arg }
             main(): int { func<int, byte>(1) }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
         // 少ない
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             two<A, B>(a: A, b: B): A { ret a }
             main(): int { two<int>(1, 2) }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     #[test]

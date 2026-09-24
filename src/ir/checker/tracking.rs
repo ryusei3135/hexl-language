@@ -1,30 +1,18 @@
-
 //! 配列やポインタが契約した範囲にいるかを
 //! 探索
 
 use super::*;
-
 
 impl IR {
     /// 範囲付きポインタや配列の長さを超えて数を指定しているかを
     /// 調べるためにインタプリタを実行
     fn eval_expr(&self, n: &node::Expr) -> usize {
         match n {
-            node::Expr::Number(val) => {
-                val.parse::<usize>().unwrap()
-            }
-            node::Expr::Add((l, r)) => {
-                self.eval_expr(l) + self.eval_expr(r)
-            }
-            node::Expr::Sub((l, r)) => {
-                self.eval_expr(l) - self.eval_expr(r)
-            }
-            node::Expr::Mul((l, r)) => {
-                self.eval_expr(l) * self.eval_expr(r)
-            }
-            node::Expr::Div((l, r)) => {
-                self.eval_expr(l) / self.eval_expr(r)
-            }
+            node::Expr::Number(val) => val.parse::<usize>().unwrap(),
+            node::Expr::Add((l, r)) => self.eval_expr(l) + self.eval_expr(r),
+            node::Expr::Sub((l, r)) => self.eval_expr(l) - self.eval_expr(r),
+            node::Expr::Mul((l, r)) => self.eval_expr(l) * self.eval_expr(r),
+            node::Expr::Div((l, r)) => self.eval_expr(l) / self.eval_expr(r),
             _ => panic!(),
         }
     }
@@ -34,17 +22,13 @@ impl IR {
     ///
     /// 変数などを含む添字は実行時にしか値が分からないため、
     /// ここでの静的な範囲チェックの対象外として扱う
-    fn is_const_index(
-        n: &node::Expr
-    ) -> bool {
+    fn is_const_index(n: &node::Expr) -> bool {
         match n {
             node::Expr::Number(_) => true,
             node::Expr::Add((l, r))
             | node::Expr::Sub((l, r))
             | node::Expr::Mul((l, r))
-            | node::Expr::Div((l, r)) => {
-                Self::is_const_index(l) && Self::is_const_index(r)
-            }
+            | node::Expr::Div((l, r)) => Self::is_const_index(l) && Self::is_const_index(r),
             _ => false,
         }
     }
@@ -55,19 +39,12 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や`name`が配列型でない場合は判定できない
     /// ため`true`を返す(配列型でない場合は`range_ptr_checker`に任せる)
-    pub(in crate::ir) fn arr_idx_checker(
-        &mut self,
-        name: &String,
-        index: &node::Expr,
-    ) -> bool {
-        if Self::is_const_index(index) == false{
+    pub(in crate::ir) fn arr_idx_checker(&mut self, name: &String, index: &node::Expr) -> bool {
+        if Self::is_const_index(index) == false {
             return true;
         }
 
-        let ty = self
-            .var_tree
-            .get_ty_node(name)
-            .unwrap();
+        let ty = self.var_tree.get_ty_node(name).unwrap();
         let len = match types::Size::new(&ty) {
             Ok(types::Size::Array { len, .. }) => len,
             // 配列型でなければこのチェックの対象外
@@ -90,21 +67,16 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や、`name`が範囲指定付きのポインタ型
     /// でない場合は判定できないため`true`を返す
-    pub(in crate::ir) fn range_ptr_checker(
-        &mut self,
-        name: &String,
-        index: &node::Expr,
-    ) -> bool {
+    pub(in crate::ir) fn range_ptr_checker(&mut self, name: &String, index: &node::Expr) -> bool {
         if Self::is_const_index(index) == false {
             return true;
         }
 
-        let ty = self
-            .var_tree
-            .get_ty_node(name)
-            .unwrap();
+        let ty = self.var_tree.get_ty_node(name).unwrap();
         let range = match types::Size::new(&ty) {
-            Ok(types::Size::Pointer { range: Some(range), .. }) => range,
+            Ok(types::Size::Pointer {
+                range: Some(range), ..
+            }) => range,
             // 範囲指定のないポインタ、またはポインタ型でなければ対象外
             _ => return true,
         };

@@ -4,9 +4,9 @@ use super::*;
 
 impl IR {
     pub fn member_is_var(
-        &mut self, 
-        scope: &Vec<String>, 
-        name: &String
+        &mut self,
+        scope: &Vec<String>,
+        name: &String,
     ) -> Result<inst::Inst, err::ErrKind> {
         /*match self.var_tree.get(&scope.last().unwrap()) {
             def_tree::VarType::Local(index) => *index,
@@ -18,34 +18,20 @@ impl IR {
         let member_name = scope
             .last()
             // スコープないに」変数が存在しない
-            .ok_or_else(|| {
-                crate::GenUndefErrResult!(
-                    UndefMemberInVar, 
-                    name.to_string(), 
-                    None
-                )
-            })?
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInVar, name.to_string(), None))?
             .to_string();
-        let pos: usize = self
-            .struct_tree
-            .get_pos(
-                // 変数の名前で登録されている変数の型を取得する
-                // （変数）の名前の文字列
-                &self.var_tree
-                    .get_ty_name(
-                        &member_name),
-                &name,
-            );
-        let size: types::Size = self
-            .struct_tree
-            .get_mem_size(
-                // 変数の名前で登録されている変数の型を取得する
-                // （変数）の名前の文字列
-                &self.var_tree
-                    .get_ty_name(
-                        &member_name),
-                &name,
-            );
+        let pos: usize = self.struct_tree.get_pos(
+            // 変数の名前で登録されている変数の型を取得する
+            // （変数）の名前の文字列
+            &self.var_tree.get_ty_name(&member_name),
+            &name,
+        );
+        let size: types::Size = self.struct_tree.get_mem_size(
+            // 変数の名前で登録されている変数の型を取得する
+            // （変数）の名前の文字列
+            &self.var_tree.get_ty_name(&member_name),
+            &name,
+        );
         let r = inst::Inst::RefStruct {
             src: member_name,
             size,
@@ -72,17 +58,9 @@ impl IR {
         let var_name = scope
             .last()
             // スコープ内に関数が存在しない
-            .ok_or_else(|| {
-                crate::GenUndefErrResult!(
-                    UndefMemberInFn,
-                    "none".to_string(),
-                    None
-                )
-            })?
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInFn, "none".to_string(), None))?
             .clone();
-        let struct_name = self
-            .var_tree
-            .get_ty_name(&var_name);
+        let struct_name = self.var_tree.get_ty_name(&var_name);
 
         let mut call_info = call_func_info.clone();
         call_info.args.insert(
@@ -90,11 +68,7 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name))),
         );
 
-        let r = self.gen_call_fn_ir(
-            Some(&struct_name), 
-            &call_info, 
-            None
-        )?;
+        let r = self.gen_call_fn_ir(Some(&struct_name), &call_info, None)?;
         Ok(r)
     }
 
@@ -104,24 +78,14 @@ impl IR {
         name: &String,
         index: &Box<node::Expr>,
     ) -> inst::Inst {
-        let var_name = scope
-            .last()
-            .unwrap()
-            .clone();
-        let struct_name = self
-            .var_tree
-            .get_ty_name(&var_name);
+        let var_name = scope.last().unwrap().clone();
+        let struct_name = self.var_tree.get_ty_name(&var_name);
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める
         let field_ty = self
             .struct_tree
             .get(&struct_name)
-            .unwrap_or_else(
-                || panic!(
-                    "未定義の構造体です: {}", 
-                    struct_name
-                )
-            )
+            .unwrap_or_else(|| panic!("未定義の構造体です: {}", struct_name))
             .fields
             .iter()
             .find(|field| &field.name == name)
@@ -133,9 +97,7 @@ impl IR {
             })
             .ty
             .clone();
-        let elem_size = self
-            .size_of(&field_ty)
-            .to_bytes();
+        let elem_size = self.size_of(&field_ty).to_bytes();
 
         // 配列メンバー自身の、構造体先頭から見た(1要素目までの)オフセット
         let field_pos = self.struct_tree.get_pos(&struct_name, name);
@@ -143,17 +105,9 @@ impl IR {
         // 添字は数字リテラルとしてのみ許可されているので、
         // ここでそのまま定数として解決する
         let index_num = match &**index {
-            node::Expr::Number(val) => {
-                val.parse::<usize>()
-                .unwrap_or_else(|_| 
-                    {
-                        panic!(
-                            "配列のインデックスは数字である必要があります: {}", 
-                            val
-                        )
-                    }
-                )
-            }
+            node::Expr::Number(val) => val.parse::<usize>().unwrap_or_else(|_| {
+                panic!("配列のインデックスは数字である必要があります: {}", val)
+            }),
             t => panic!(
                 "配列のインデックスは数字リテラルである必要があります: {:?}",
                 t

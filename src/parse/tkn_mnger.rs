@@ -7,25 +7,22 @@ use stmt::*;
 
 impl Parser {
     /// 現在の位置から1つ先のトークンを取得する。
-    pub(super) fn peek_tkn(
-        &self
-    ) -> Result<lex::Tkn, err::ErrKind> {
+    pub(super) fn peek_tkn(&self) -> Result<lex::Tkn, err::ErrKind> {
         if let Some(tkn) = &self.tkns {
-            if let Some(r) = tkn.get(self.idx + 1)
-                .map(|v| v.tkn.clone()) {
-                    Ok(r)
+            if let Some(r) = tkn.get(self.idx + 1).map(|v| v.tkn.clone()) {
+                Ok(r)
             } else {
                 crate::syntax_err!(
-                    self.build_err_span(), 
-                    err::SyntaxErrKind::TknIsEof { 
+                    self.build_err_span(),
+                    err::SyntaxErrKind::TknIsEof {
                         expected: Vec::new(),
                     }
                 )
             }
         } else {
             crate::syntax_err!(
-                self.build_err_span(), 
-                err::SyntaxErrKind::TknIsEof { 
+                self.build_err_span(),
+                err::SyntaxErrKind::TknIsEof {
                     expected: Vec::new(),
                 }
             )
@@ -45,9 +42,7 @@ impl Parser {
 
     /// 次のトークンが存在する場合だけ位置を1つ進める。
     /// 存在しない場合は位置を変えずに`None`を返す
-    pub(super) fn advance_tkn(
-        &mut self
-    ) -> Option<lex::Tkn> {
+    pub(super) fn advance_tkn(&mut self) -> Option<lex::Tkn> {
         if let Some(tkns) = &self.tkns {
             if let Some(next) = tkns.get(self.idx + 1) {
                 self.idx += 1;
@@ -65,38 +60,32 @@ impl Parser {
         self.idx -= 1;
     }
     /// なにのトークンが期待されていたかは呼び出し元で決める
-    pub(super) fn next_tkn(
-        &mut self,
-        expected: &[&'static str],
-    ) -> Result<lex::Tkn, err::ErrKind> {
+    pub(super) fn next_tkn(&mut self, expected: &[&'static str]) -> Result<lex::Tkn, err::ErrKind> {
         self.idx += 1;
 
         if let Some(tkns) = &self.tkns {
             if let Some(val) = tkns.get(self.idx) {
-                return Ok(val.tkn.clone())
+                return Ok(val.tkn.clone());
             }
         }
         crate::syntax_err!(
-            self.build_err_span(), 
-            err::SyntaxErrKind::TknIsEof { 
+            self.build_err_span(),
+            err::SyntaxErrKind::TknIsEof {
                 expected: expected.to_vec()
             }
         )
     }
 
     /// なにのトークンが期待されていたかは呼び出し元で決める
-    pub(super) fn next_tkn_ref(
-        &self,
-        expected: &[&'static str],
-    ) -> Result<lex::Tkn, err::ErrKind> {
+    pub(super) fn next_tkn_ref(&self, expected: &[&'static str]) -> Result<lex::Tkn, err::ErrKind> {
         if let Some(tkns) = &self.tkns {
             if let Some(val) = tkns.get(self.idx + 1) {
-                return Ok(val.tkn.clone())
+                return Ok(val.tkn.clone());
             }
         }
         crate::syntax_err!(
-            self.build_err_span(), 
-            err::SyntaxErrKind::TknIsEof { 
+            self.build_err_span(),
+            err::SyntaxErrKind::TknIsEof {
                 expected: expected.to_vec()
             }
         )
@@ -106,8 +95,8 @@ impl Parser {
     /// 確認する構造体を作成する
     pub(super) fn build_err_span(&self) -> err::Span {
         err::Span::new(
-            self.current_line(self.idx.saturating_sub(1)), 
-            self.tkn_chr_pos()
+            self.current_line(self.idx.saturating_sub(1)),
+            self.tkn_chr_pos(),
         )
     }
 

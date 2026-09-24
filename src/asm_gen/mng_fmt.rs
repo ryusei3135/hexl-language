@@ -16,18 +16,10 @@ pub struct MngAsmFmt {
 }
 
 impl MngAsmFmt {
-    pub fn new(
-        asm_setting: asm_setting::AsmSetting, 
-        asm_fmt: asm_setting::AsmFormat
-    ) -> Self {
+    pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: asm_setting::AsmFormat) -> Self {
         // === アセンブラのフォーマットの設定 ===
         Self {
-            param_fmt: asm_fmt
-                .args
-                .fmt
-                .get("linux")
-                .unwrap()
-                .clone(),
+            param_fmt: asm_fmt.args.fmt.get("linux").unwrap().clone(),
             reg_fmt: asm_fmt.reg.clone(),
             opcode_fmt: asm_fmt.op.clone(),
             asm_setting: Some(asm_setting),
@@ -36,10 +28,7 @@ impl MngAsmFmt {
     }
 
     /// 外部に定義されている物のフォーマット
-    pub fn get_extern_func(
-        &self, 
-        name: &str
-    ) -> String {
+    pub fn get_extern_func(&self, name: &str) -> String {
         self.fmt.func.extern_def.replace("{name}", name)
     }
 
@@ -49,43 +38,25 @@ impl MngAsmFmt {
     /// - usizeの場合はレジスタの番号が返される
     /// ## 引数
     /// - param_idx = 引数の場所
-    pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(
-        &self, 
-        param_idx: usize, 
-        size: Size
-    ) -> R {
-        if TypeId::of::<R>() != TypeId::of::<usize>()
-            && TypeId::of::<R>() != TypeId::of::<String>() {
+    pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(&self, param_idx: usize, size: Size) -> R {
+        if TypeId::of::<R>() != TypeId::of::<usize>() && TypeId::of::<R>() != TypeId::of::<String>()
+        {
             panic!("この型は無効です,")
         }
 
-        if TypeId::of::<R>() == TypeId::of::<String>()
-        {
+        if TypeId::of::<R>() == TypeId::of::<String>() {
             let result: Box<dyn Any> = Box::new(
-                self.get_fmt_reg(
-                        self.param_fmt[param_idx], 
-                        &size
-                    )
+                self.get_fmt_reg(self.param_fmt[param_idx], &size)
                     .to_string(),
             );
-            result.downcast::<R>()
-                .ok()
-                .map(|b| *b)
-                .unwrap()
+            result.downcast::<R>().ok().map(|b| *b).unwrap()
         } else {
             let result: Box<dyn Any> = Box::new(self.param_fmt[param_idx]);
-            result.downcast::<R>()
-                .ok()
-                .map(|b| *b)
-                .unwrap()
+            result.downcast::<R>().ok().map(|b| *b).unwrap()
         }
     }
 
-    pub fn fmt_ref_operand(
-        &self, 
-        reg: &String, 
-        size: usize
-    ) -> String {
+    pub fn fmt_ref_operand(&self, reg: &String, size: usize) -> String {
         self.fmt
             .fmt
             .ref_stack
@@ -146,7 +117,7 @@ impl MngAsmFmt {
             types::Size::DD => crate::mov_size_fmt!(self, dd),
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
             types::Size::Array { size, .. } => {
-                return self.get_fmt_struct_member(value, &size, offset)
+                return self.get_fmt_struct_member(value, &size, offset);
             }
             _ => panic!(),
         };
@@ -160,12 +131,7 @@ impl MngAsmFmt {
         value: &String,
         size: &types::Size,
     ) -> String {
-        self.fmt_mnemonic_resize_inner(
-            mnemonic, 
-            value, 
-            size, 
-            false
-        )
+        self.fmt_mnemonic_resize_inner(mnemonic, value, size, false)
     }
 
     /// メモリを読み書きする命令は、フォーマット設定に関係なく
@@ -176,12 +142,7 @@ impl MngAsmFmt {
         value: &String,
         size: &types::Size,
     ) -> String {
-        self.fmt_mnemonic_resize_inner(
-            mnemonic, 
-            value, 
-            size, 
-            true
-        )
+        self.fmt_mnemonic_resize_inner(mnemonic, value, size, true)
     }
 
     fn fmt_mnemonic_resize_inner(
@@ -211,12 +172,7 @@ impl MngAsmFmt {
             types::Size::DQ => crate::mov_size_fmt!(self, dq),
             types::Size::Pointer { .. } => unreachable!(),
             types::Size::Array { size, .. } => {
-                return self.fmt_mnemonic_resize_inner(
-                    mnemonic,
-                    value,
-                    size,
-                    is_memory_access,
-                );
+                return self.fmt_mnemonic_resize_inner(mnemonic, value, size, is_memory_access);
             }
             t => panic!("{:?}", t),
         };
@@ -233,11 +189,7 @@ impl MngAsmFmt {
             .replace("{dst}", reg)
     }
 
-    pub fn get_str_fmt(
-        &self, 
-        value: &String, 
-        label: &String
-    ) -> String {
+    pub fn get_str_fmt(&self, value: &String, label: &String) -> String {
         self.fmt
             .fmt
             .string
@@ -255,10 +207,7 @@ impl MngAsmFmt {
     }
 
     #[inline(always)]
-    pub fn get_global_fmt(
-        &self, 
-        name: &String
-    ) -> String {
+    pub fn get_global_fmt(&self, name: &String) -> String {
         self.fmt.fmt.global.replace("{name}", name)
     }
 
@@ -302,17 +251,13 @@ impl MngAsmFmt {
         self.fmt.func.call.replace("{name}", func_name)
     }
 
-    pub fn get_fmt_reg(
-        &self, 
-        reg_num: usize, 
-        size: &Size
-    ) -> String {
+    pub fn get_fmt_reg(&self, reg_num: usize, size: &Size) -> String {
         let reg = match &size {
             Size::DB => &self.reg_fmt.db,
             Size::DW => &self.reg_fmt.dw,
             Size::DD => &self.reg_fmt.dd,
             Size::DQ => &self.reg_fmt.dq,
-            Size::Pointer{..} => &self.reg_fmt.dq,
+            Size::Pointer { .. } => &self.reg_fmt.dq,
             _ => panic!(),
         };
         self.fmt
@@ -324,7 +269,7 @@ impl MngAsmFmt {
 
     // /// レジスタ文字列からレジスタのサイズを取得する
     // pub fn get_reg_size(
-    //     &self, 
+    //     &self,
     //     reg_name: &str
     // ) -> Option<Size> {
     //     for (size, registers) in [
@@ -349,33 +294,17 @@ impl MngAsmFmt {
     ///
     /// `operand`がレジスタでない場合(即値やメモリ参照`-8(%rbp)`など)
     /// は、`get_reg_size`が`None`を返すのでそのまま変更せず返す。
-    pub fn resize_reg_operand(
-        &self,
-        operand: &str,
-        size: &Size,
-    ) -> String {
+    pub fn resize_reg_operand(&self, operand: &str, size: &Size) -> String {
         for (_, registers) in [
             (Size::DB, &self.reg_fmt.db),
             (Size::DW, &self.reg_fmt.dw),
             (Size::DD, &self.reg_fmt.dd),
             (Size::DQ, &self.reg_fmt.dq),
         ] {
-            for (reg_num, register) 
-                in registers
-                    .iter()
-                    .enumerate() 
-            {
-                let formatted = self
-                    .fmt
-                    .fmt
-                    .reg
-                    .replace("{}", register);
+            for (reg_num, register) in registers.iter().enumerate() {
+                let formatted = self.fmt.fmt.reg.replace("{}", register);
                 if formatted == operand {
-                    return self
-                        .get_fmt_reg(
-                            reg_num, 
-                            size
-                        );
+                    return self.get_fmt_reg(reg_num, size);
                 }
             }
         }

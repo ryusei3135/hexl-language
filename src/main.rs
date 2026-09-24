@@ -1,14 +1,14 @@
+mod asm_gen;
 mod asm_setting;
 mod err;
-mod asm_gen;
 mod ir;
 mod lex;
 mod macros;
-mod parse;
 mod models;
+mod parse;
 
-use std::{env, fs, process};
 pub use parse::node;
+use std::{env, fs, process};
 
 // ファイルやオプション管理
 pub mod cmd_line_args {
@@ -36,22 +36,16 @@ pub mod cmd_line_args {
             }
         }
 
-        pub fn new_file(
-            &self, 
-            file_name: &String
-        ) -> Self {
+        pub fn new_file(&self, file_name: &str) -> Self {
             Self {
                 fmt_name: self.fmt_name.clone(),
-                file_name: Some(file_name.clone()),
+                file_name: Some(file_name.to_owned()),
                 opt_flags: Some(OptFlags::SetFile),
             }
         }
 
         /// 値を渡す、フラグがすでに立っているなら成功
-        pub fn set_value(
-            &mut self, 
-            value: String
-        ) -> Result<(), err::opt::OptErrs> {
+        pub fn set_value(&mut self, value: String) -> Result<(), err::opt::OptErrs> {
             if let Some(flag) = self.opt_flags.take() {
                 let _ = match flag {
                     OptFlags::FmtAsm => self.fmt_name.insert(value),
@@ -65,10 +59,7 @@ pub mod cmd_line_args {
 
         /// フラグを立てる
         /// もしフラグがすでに立っている場合はエラーになる
-        pub fn set_flag(
-            &mut self, 
-            flag_name: OptFlags
-        ) -> Result<(), err::opt::OptErrs> {
+        pub fn set_flag(&mut self, flag_name: OptFlags) -> Result<(), err::opt::OptErrs> {
             if self.opt_flags.is_none() {
                 let _ = self.opt_flags.insert(flag_name);
                 Ok(())
@@ -79,11 +70,8 @@ pub mod cmd_line_args {
     }
 
     /// オプション管理
-    pub fn mng_opt_cmd(
-        args: &[&str]
-    ) -> OptSettings {
-        let mut settings 
-            = OptSettings::new(OptFlags::SetFile);
+    pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
+        let mut settings = OptSettings::new(OptFlags::SetFile);
 
         for (index, opt) in args.iter().enumerate() {
             // 1以下の数はオプションをつけれない
@@ -173,14 +161,11 @@ pub fn build(
 fn main() -> process::ExitCode {
     let args_vec: Vec<String> = env::args().collect();
     // 各 String への参照（&str）を集めた Vec を作る
-    let args_refs: Vec<&str> = args_vec
-        .iter()
-        .map(|s| s.as_str())
-        .collect();
+    let args_refs: Vec<&str> = args_vec.iter().map(|s| s.as_str()).collect();
     // スライス（&[&str]）にする
     let args: &[&str] = &args_refs;
     // オプションなどの設定
-    let settings = cmd_line_args::mng_opt_cmd(&args);
+    let settings = cmd_line_args::mng_opt_cmd(args);
 
     asm_setting::load_setting();
 

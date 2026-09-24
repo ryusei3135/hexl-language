@@ -1,14 +1,11 @@
 //! スコープのノードを処理する
 
-
 use super::*;
 
 impl IR {
     /// スコープをスタート
     #[inline(always)]
-    pub(in crate::ir::builder) fn begin_scope(
-        &mut self
-    ) {
+    pub(in crate::ir::builder) fn begin_scope(&mut self) {
         self.scope_states.push(self.var_tree.clone());
     }
 
@@ -16,18 +13,12 @@ impl IR {
     /// 契約が終了しているかも検査
     pub(in crate::ir::builder) fn end_scope(
         &mut self,
-        from_break: bool
+        from_break: bool,
     ) -> Result<(), err::ErrKind> {
         let states = if from_break {
-            self.scope_states
-                .iter()
-                .rev()
-                .collect::<Vec<_>>()
+            self.scope_states.iter().rev().collect::<Vec<_>>()
         } else {
-            self.scope_states
-                .last()
-                .into_iter()
-                .collect::<Vec<_>>()
+            self.scope_states.last().into_iter().collect::<Vec<_>>()
         };
 
         for state in states {
@@ -39,24 +30,18 @@ impl IR {
                 {
                     continue;
                 }
-                return crate::GenCompileErr!(
-                    VariableConstractExpired, 
-                    name
-                );
+                return crate::GenCompileErr!(VariableConstractExpired, name);
             }
         }
 
         if from_break == false {
-            let state = self.scope_states
+            let state = self
+                .scope_states
                 .pop()
                 .expect("スコープが開始されていません");
             self.var_tree
                 .hash
-                .retain(
-                    |name, _| {
-                        state.hash.contains_key(name)
-                    }
-                );
+                .retain(|name, _| state.hash.contains_key(name));
         }
         Ok(())
     }
@@ -83,19 +68,9 @@ impl IR {
         var_name: Option<&String>,
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
-        if let node::Expr::CallFunc(
-            mut call_func_node
-        ) = *target {
+        if let node::Expr::CallFunc(mut call_func_node) = *target {
             if self.expr_counter != 1 {
-                if let Some(struct_info) = self
-                    .struct_tree
-                    .get(
-                        scope
-                            .last()
-                            .unwrap()
-                    )
-                    .cloned() 
-                {
+                if let Some(struct_info) = self.struct_tree.get(scope.last().unwrap()).cloned() {
                     let mut size = 0;
                     for field in &struct_info.fields {
                         // 確保するスタックを増やす
@@ -119,42 +94,24 @@ impl IR {
                         Some(name) => name.clone(),
                         None => format!("$self_area_{}", self_idx),
                     };
-                    let self_area_ty = node::TyNode::Ty(
-                        struct_info
-                            .name
-                            .clone()
-                    );
-                    let _ = self
-                        .var_tree
-                        .push::<'l'>(
-                            &tmp_name,
-                            self_idx,
-                            &self_area_ty,
-                            &var_attr,
-                            || { 
-                                self
-                                    .constract_flag
-                                    .put_var_def(&self_area_ty) 
-                            },
-                        )?;
+                    let self_area_ty = node::TyNode::Ty(struct_info.name.clone());
+                    let _ = self.var_tree.push::<'l'>(
+                        &tmp_name,
+                        self_idx,
+                        &self_area_ty,
+                        &var_attr,
+                        || self.constract_flag.put_var_def(&self_area_ty),
+                    )?;
 
                     // メゾットの第一引数(`self`)として、今確保した
                     // スタックへのポインタを暗黙的に先頭へ渡す
                     call_func_node.args.insert(
                         0,
-                        node::Expr::GetAddress(
-                            Box::new(node::Expr::Var(tmp_name))
-                        ),
+                        node::Expr::GetAddress(Box::new(node::Expr::Var(tmp_name))),
                     );
                 }
             }
-            Ok(
-                self.gen_call_fn_ir(
-                    scope.last(), 
-                    &call_func_node,
-                    None
-                )?
-            )
+            Ok(self.gen_call_fn_ir(scope.last(), &call_func_node, None)?)
         } else {
             panic!();
         }

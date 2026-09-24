@@ -1,4 +1,3 @@
-
 //! # 未定義で使うエラー型
 //!
 //! ## 公開
@@ -37,25 +36,21 @@ pub struct UndefErrs {
 
 impl UndefErrs {
     pub fn undef_fn(found: &String) -> err::ErrKind {
-        err::ErrKind::Undef(
-            Self {
-                kind: UndefKind::UndefFunc,
-                found: found.to_string(),
-                expect: None,
-            }
-        )
+        err::ErrKind::Undef(Box::new(Self {
+            kind: UndefKind::UndefFunc,
+            found: found.to_string(),
+            expect: None,
+        }))
     }
 }
 
 #[macro_export]
 macro_rules! GenUndefErrResult {
     ($kind:ident, $found:expr, $expect:expr) => {
-        err::ErrKind::Undef(
-            crate::err::undef::UndefErrs {
-                kind: $kind,
-                found: $found,
-                expect: $expect,
-            }
-        )
+        err::ErrKind::Undef(Box::new(crate::err::undef::UndefErrs {
+            kind: $kind,
+            found: $found,
+            expect: $expect,
+        }))
     };
 }

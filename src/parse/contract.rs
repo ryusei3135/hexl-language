@@ -1,17 +1,13 @@
 use super::*;
 use crate::lex;
 
-
 impl Parser {
     /// 契約元の型を作成する関数
     /// ```
     /// var: T must=func
     /// ```
     #[inline(always)]
-    fn ty_constract_must(
-        &mut self,
-        base_ty: node::TyNode,
-    ) -> Result<node::TyNode, err::ErrKind> {
+    fn ty_constract_must(&mut self, base_ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordMust {
             panic!("{:?}", self.current_tkn());
         }
@@ -21,19 +17,14 @@ impl Parser {
         if found != lex::Tkn::Equal {
             return crate::syntax_err!(
                 self.build_err_span(),
-                err::SyntaxErrKind::MissingEqualsAfterMust { 
-                    found
-                }
-            )?
+                err::SyntaxErrKind::MissingEqualsAfterMust { found }
+            )?;
         }
-         // 3. `advance_tkn` の戻り値を `match` で安全かつスマートに分解
+        // 3. `advance_tkn` の戻り値を `match` で安全かつスマートに分解
         match self.advance_tkn() {
             Some(lex::Tkn::Name(val)) => {
-                let ty = node::ConstractTy::new::<{node::IS_MUST}>(
-                    Some(val),
-                    None,
-                    Box::new(base_ty),
-                );
+                let ty =
+                    node::ConstractTy::new::<{ node::IS_MUST }>(Some(val), None, Box::new(base_ty));
                 Ok(ty)
             }
             // `Name` 以外が来た、または EOF の場合（パニックさせずエラーを返す）
@@ -43,8 +34,8 @@ impl Parser {
             None => {
                 crate::syntax_err!(
                     self.build_err_span(),
-                    err::SyntaxErrKind::TknIsEof { 
-                        expected: vec!["Name"] 
+                    err::SyntaxErrKind::TknIsEof {
+                        expected: vec!["Name"]
                     }
                 )
             }
@@ -56,35 +47,25 @@ impl Parser {
     /// func(var: T of Func)
     /// ```
     #[inline(always)]
-    fn ty_constract_of(
-        &mut self,
-        base_ty: node::TyNode,
-    ) -> Result<node::TyNode, err::ErrKind> {
+    fn ty_constract_of(&mut self, base_ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordOf {
             panic!();
         }
 
         match self.next_tkn(&["name"])? {
             lex::Tkn::Name(val) => {
-                let ty: node::TyNode = 
-                    node::ConstractTy::new::<{node::IS_OF}>(
-                        None,
-                        Some(val),
-                        Box::new(base_ty),
-                    );
-                return Ok(ty);
+                let ty: node::TyNode =
+                    node::ConstractTy::new::<{ node::IS_OF }>(None, Some(val), Box::new(base_ty));
+                Ok(ty)
             }
-            found => {
-                crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::MissingIdentAfterOf { found }
-                )?
-            }
+            found => crate::syntax_err!(
+                self.build_err_span(),
+                err::SyntaxErrKind::MissingIdentAfterOf { found }
+            )?,
         }
     }
 
-    pub(in crate::parse) 
-    fn is_constract_ty(
+    pub(in crate::parse) fn is_constract_ty(
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
@@ -101,7 +82,6 @@ impl Parser {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -126,8 +106,8 @@ mod test {
             &node::Group2Node::Expr(node::Expr::DefVar(node::DefineVar {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::Number("10".to_string())),
-                ty: node::ConstractTy::new::<{node::IS_MUST}>(
-                    Some("a".to_string()), 
+                ty: node::ConstractTy::new::<{ node::IS_MUST }>(
+                    Some("a".to_string()),
                     None,
                     Box::new(node::TyNode::Ty("int".to_string()))
                 ),

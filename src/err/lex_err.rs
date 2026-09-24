@@ -37,7 +37,7 @@ macro_rules! lex_err {
     ($span:expr, $kind:ident) => {
         Err(crate::err::lex_err::LexErrs {
             span: $span,
-            kind: crate::err::lex_err::LexErrKind::$kind
+            kind: crate::err::lex_err::LexErrKind::$kind,
         })
     };
 }

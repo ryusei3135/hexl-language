@@ -1,33 +1,21 @@
 use super::*;
 
-pub(in crate::parse) 
-struct MatchErr {
+pub(in crate::parse) struct MatchErr {
     span: err::Span,
     tkn: lex::Tkn,
 }
 
 impl MatchErr {
     #[inline(always)]
-    pub fn new(
-        span: err::Span, 
-        tkn: lex::Tkn
-    ) -> Self {
+    pub fn new(span: err::Span, tkn: lex::Tkn) -> Self {
         Self { span, tkn }
     }
 
     /// スコープが`}`で閉じられているかを確認するAPI
-    pub fn close_scope_to_rbrace(
-        self, 
-        target: Option<lex::Tkn>
-    ) -> Result<(), err::ErrKind> {
+    pub fn close_scope_to_rbrace(self, target: Option<lex::Tkn>) -> Result<(), err::ErrKind> {
         if !matches!(self.tkn, lex::Tkn::RBrace) {
             // match構文が`}`で閉じられていない
-            crate::syntax_err!(
-                self.span, 
-                err::SyntaxErrKind::UnenclosedScope { 
-                    target 
-                }
-            )
+            crate::syntax_err!(self.span, err::SyntaxErrKind::UnenclosedScope { target })
         } else {
             Ok(())
         }
@@ -55,24 +43,17 @@ impl MatchErr {
 impl Parser {
     /// 条件分岐のエラーのバリアントを生成するAPIを提供する
     #[inline(always)]
-    pub(in crate::parse) 
-    fn tkn_checker(&self) -> MatchErr {
-        MatchErr::new(
-            self.build_err_span(), 
-            self.current_tkn().clone()
-        )
+    pub(in crate::parse) fn tkn_checker(&self) -> MatchErr {
+        MatchErr::new(self.build_err_span(), self.current_tkn().clone())
     }
 
-    pub(in crate::parse)
-    fn cond_keyword_not_found(
-        &self
-    ) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) fn cond_keyword_not_found(&self) -> Result<node::Expr, err::ErrKind> {
         crate::syntax_err!(
-            self.build_err_span(), 
-            err::SyntaxErrKind::UnexpectedTkn { 
-                found: self.current_tkn().clone(), 
-                expected: lex::Tkn::KeyWordCond, 
-                context: lex::Tkn::KeyWordCond 
+            self.build_err_span(),
+            err::SyntaxErrKind::UnexpectedTkn {
+                found: self.current_tkn().clone(),
+                expected: lex::Tkn::KeyWordCond,
+                context: lex::Tkn::KeyWordCond
             }
         )
     }

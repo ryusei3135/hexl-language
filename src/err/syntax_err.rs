@@ -22,7 +22,9 @@ use std::fmt;
 /// 位置・関数名は[`ErrLoc`]としてまとめて[`SyntaxErr`]に持たせる。
 #[derive(Debug, Clone, PartialEq)]
 pub enum SyntaxErrKind {
-    TknIsEof { expected: Vec<&'static str> },
+    TknIsEof {
+        expected: Vec<&'static str>,
+    },
     /// 現在のトークンが、期待していたトークンと異なる
     UnexpectedTkn {
         /// 実際に出現したトークン
@@ -49,13 +51,17 @@ pub enum SyntaxErrKind {
     /// 見つかるべきトークンが見つからなかった
     NotFoundTkn(lex::Tkn),
     /// 式の途中で、予期しないトークンが出現した
-    UnexpectTknInExpr { found: lex::Tkn },
+    UnexpectTknInExpr {
+        found: lex::Tkn,
+    },
     /// 式の解析中にトークン列が終了した(EOF)
     TknIsEofInExpr,
     /// `cond`(match)式特有の構文エラー
     Cond(CondErrKinds),
     /// 文(stmt)/トップレベルの解析中に、予期しないトークンが出現した
-    UnexpectTknInStmt { found: lex::Tkn },
+    UnexpectTknInStmt {
+        found: lex::Tkn,
+    },
     /// ある種類のトークン(名前・数字・記号など)が期待されていた
     /// 場所に、それとは異なるトークンが出現した(汎用)
     ///
@@ -124,11 +130,9 @@ impl fmt::Display for SyntaxErrKind {
             Self::UnexpectTknInStmt { found } => {
                 write!(f, "文の中で予期しないトークン`{:?}`が見つかりました", found)
             }
-            Self::ExpectedKind { expected, found } => write!(
-                f,
-                "{}が必要ですが、`{:?}`が見つかりました",
-                expected, found
-            ),
+            Self::ExpectedKind { expected, found } => {
+                write!(f, "{}が必要ですが、`{:?}`が見つかりました", expected, found)
+            }
             Self::NotImplemented { feature } => {
                 write!(f, "`{}`はまだ実装されていません", feature)
             }
@@ -178,10 +182,12 @@ impl fmt::Display for SyntaxErr {
 #[macro_export]
 macro_rules! syntax_err {
     ($span:expr, $kind:expr) => {
-        Err::<_, $crate::err::ErrKind>($crate::err::ErrKind::Syntax($crate::err::SyntaxErr {
-            kind: $kind,
-            loc: $crate::err::ErrLoc::new($span, $crate::func_name!()),
-        }))
+        Err::<_, $crate::err::ErrKind>($crate::err::ErrKind::Syntax(Box::new(
+            $crate::err::SyntaxErr {
+                kind: $kind,
+                loc: $crate::err::ErrLoc::new($span, $crate::func_name!()),
+            },
+        )))
     };
 }
 
@@ -303,10 +309,12 @@ impl fmt::Display for PreprocErrDetail {
 #[macro_export]
 macro_rules! preproc_err {
     ($parser:expr, $kind:ident) => {
-        return Err($crate::err::ErrKind::Preproc($crate::err::PreprocErrDetail {
-            kind: $crate::err::PreprocErrs::$kind,
-            loc: $crate::err::ErrLoc::new($parser.build_err_span(), $crate::func_name!()),
-        }))
+        return Err($crate::err::ErrKind::Preproc(Box::new(
+            $crate::err::PreprocErrDetail {
+                kind: $crate::err::PreprocErrs::$kind,
+                loc: $crate::err::ErrLoc::new($parser.build_err_span(), $crate::func_name!()),
+            },
+        )))
     };
 }
 
@@ -322,9 +330,9 @@ macro_rules! preproc_err {
 #[macro_export]
 macro_rules! preproc_err_at {
     ($span:expr, $kind:ident) => {
-        $crate::err::ErrKind::Preproc($crate::err::PreprocErrDetail {
+        $crate::err::ErrKind::Preproc(Box::new($crate::err::PreprocErrDetail {
             kind: $crate::err::PreprocErrs::$kind,
             loc: $crate::err::ErrLoc::new($span, $crate::func_name!()),
-        })
+        }))
     };
 }

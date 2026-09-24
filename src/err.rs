@@ -1,10 +1,10 @@
-use crate::lex;
+use crate::{err, lex};
 use std::fmt;
 
-pub mod syntax_err;
-pub mod opt;
-pub mod undef;
 pub mod lex_err;
+pub mod opt;
+pub mod syntax_err;
+pub mod undef;
 pub use syntax_err::*;
 pub mod compile;
 pub use compile::*;
@@ -85,28 +85,30 @@ macro_rules! func_name {
     }};
 }
 
-
 // ---------------------------------------------------------------------
 // 集約されたエラー
 // ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ErrAt {
+    pub error: CompileErr,
+    pub span: Span,
+}
 
 /// `parse`クレート全体で使う、集約されたエラー型。
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrKind {
     /// 見つかるべきトークンが見つからなかった(簡易版)
-    NotFoundTkn(lex::Tkn),
+    NotFoundTkn(Box<lex::Tkn>),
     /// 予期しないトークンだった(簡易版、詳細情報なし)
     UnexpectedToken,
-    CompileErr(CompileErr),
-    CompileErrAt {
-        error: CompileErr,
-        span: Span,
-    },
+    CompileErr(Box<CompileErr>),
+    CompileErrAt(Box<ErrAt>),
     /// トークン管理・式解析など、構文解析全般のエラー
-    Syntax(SyntaxErr),
-    Undef(undef::UndefErrs),
+    Syntax(Box<SyntaxErr>),
+    Undef(Box<undef::UndefErrs>),
     /// プリプロセッサ特有のエラー
-    Preproc(PreprocErrDetail),
+    Preproc(Box<PreprocErrDetail>),
 }
 
 impl fmt::Display for ErrKind {
@@ -117,8 +119,8 @@ impl fmt::Display for ErrKind {
             Self::Syntax(e) => write!(f, "{}", e),
             Self::Preproc(e) => write!(f, "{}", e),
             Self::CompileErr(e) => write!(f, "{:?}", e),
-            Self::CompileErrAt { error, span } => {
-                write!(f, "コンパイルエラー: {} [{}]", error.message(), span)
+            Self::CompileErrAt(e) => {
+                write!(f, "コンパイルエラー: {} [{}]", e.error.message(), e.span)
             }
             Self::Undef(e) => panic!("{:?}", e),
         }
@@ -128,9 +130,10 @@ impl fmt::Display for ErrKind {
 impl ErrKind {
     pub fn with_span(self, span: Span) -> Self {
         match self {
-            Self::CompileErr(error) => {
-                Self::CompileErrAt { error, span }
-            }
+            Self::CompileErr(error) => Self::CompileErrAt(Box::new(ErrAt {
+                error: *error,
+                span: span,
+            })),
             other => other,
         }
     }
@@ -140,13 +143,13 @@ impl std::error::Error for ErrKind {}
 
 impl From<SyntaxErr> for ErrKind {
     fn from(e: SyntaxErr) -> Self {
-        ErrKind::Syntax(e)
+        ErrKind::Syntax(Box::new(e))
     }
 }
 
 impl From<PreprocErrDetail> for ErrKind {
     fn from(e: PreprocErrDetail) -> Self {
-        ErrKind::Preproc(e)
+        ErrKind::Preproc(Box::new(e))
     }
 }
 
@@ -156,10 +159,10 @@ mod tests {
 
     #[test]
     fn display_includes_position_and_func_name() {
-        let e = ErrKind::Syntax(SyntaxErr {
+        let e = ErrKind::Syntax(Box::new(SyntaxErr {
             kind: SyntaxErrKind::TknIsEofInExpr,
             loc: ErrLoc::new(Span::new(&3, &10), "expr_value".to_string()),
-        });
+        }));
         let msg = e.to_string();
         assert!(msg.contains("3行目"));
         assert!(msg.contains("10文字目"));

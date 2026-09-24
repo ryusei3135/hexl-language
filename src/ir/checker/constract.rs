@@ -23,9 +23,7 @@ impl IR {
         arg: &node::Expr,
     ) -> Result<(), err::ErrKind> {
         let arg_ty = self.expr_ty_node(arg);
-        let arg_must = arg_ty
-            .as_ref()
-            .and_then(node::TyNode::as_constract_must);
+        let arg_must = arg_ty.as_ref().and_then(node::TyNode::as_constract_must);
         let param_of = param.ty.as_constract_of();
 
         match (param_of, arg_must) {
@@ -35,18 +33,12 @@ impl IR {
                 // の型が契約じゃない
                 if must
                     .must_name()
-                    .is_some_and(
-                        |name| {
-                            name.as_str() != fn_name
-                        }
-                    ) 
+                    .is_some_and(|name| name.as_str() != fn_name)
                 {
                     CompileErr::constract_name_mismatch(
                         &fn_name,
                         &param.name,
-                        node::ConstractTy::name_or_anon(
-                            must.must_name()
-                        ),
+                        node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                         &fn_name,
                     )
                     .map_err(|err| err.with_span(self.current_span))?
@@ -61,32 +53,27 @@ impl IR {
                 }
             }
             // `of`の引数には、`must`の値しか渡せない
-            (Some(of), None) => {
-                CompileErr::constract_of_requires_must(
-                    &fn_name,
-                    &param.name,
-                    node::ConstractTy::name_or_anon(of.of_name()),
-                )
-                .map_err(|err| err.with_span(self.current_span))
-            }
+            (Some(of), None) => CompileErr::constract_of_requires_must(
+                &fn_name,
+                &param.name,
+                node::ConstractTy::name_or_anon(of.of_name().map(|v| v.as_str())),
+            )
+            .map_err(|err| err.with_span(self.current_span)),
             // `must`の値は、`of`の引数にしか渡せない
             (None, Some(must)) => {
                 // 引数が契約を譲渡するならOk
-                if self.move_constract_next_fn(
-                    &param, 
-                    &arg, 
-                    must.must_name()
-                )? {return Ok(());};
+                if self.move_constract_next_fn(&param, &arg, must.must_name())? {
+                    return Ok(());
+                };
                 //
                 CompileErr::constract_must_requires_of(
                     &fn_name,
                     &param.name,
-                    node::ConstractTy::name_or_anon(
-                        must.must_name()),
+                    node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                 )
                 .map_err(|err| err.with_span(self.current_span))
             }
-            (None, None) => Ok(())
+            (None, None) => Ok(()),
         }
     }
 
@@ -106,23 +93,14 @@ impl IR {
         must: Option<&String>,
     ) -> Result<bool, err::ErrKind> {
         // 引数が契約を譲渡するならOk
-        if param.ty
+        if param
+            .ty
             .as_constract_must()
-            .is_some_and(
-                |v| {
-                    v.must_name() == must
-                }
-            ) 
+            .is_some_and(|v| v.must_name() == must)
         {
             self.var_tree
-                .finish_constract_var(
-                Self::arg_var_name(&arg)
-                        .unwrap()
-                )
-                .map_err(
-                    |err| {
-                        err.with_span(
-                            self.current_span)})?;
+                .finish_constract_var(Self::arg_var_name(&arg).unwrap())
+                .map_err(|err| err.with_span(self.current_span))?;
             Ok(true)
         } else {
             Ok(false)
@@ -131,20 +109,14 @@ impl IR {
 
     /// 式が変数を指している場合、その変数の型を返す
     /// (`&var`や`*var`のように、間接的に指している場合も辿る)
-    fn expr_ty_node(
-        &self, 
-        expr: &node::Expr
-    ) -> Option<node::TyNode> {
+    fn expr_ty_node(&self, expr: &node::Expr) -> Option<node::TyNode> {
         match expr {
-            node::Expr::Var(name) => {
-                self.var_tree.get_ty_node(name)
-            }
+            node::Expr::Var(name) => self.var_tree.get_ty_node(name),
             node::Expr::CallFunc(call) => self
                 .func_tree
                 .get(&call.name, None)
                 .and_then(|func| func.ret_ty),
-            node::Expr::GetAddress(target)
-            | node::Expr::ConnectAddr(target) => {
+            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
                 self.expr_ty_node(target)
             }
             _ => None,
@@ -157,10 +129,7 @@ impl IR {
     /// 渡した先の引数が本当に`of`かどうか(名前が一致するか)は、
     /// IRを生成する時点で`check_constract_arg`が確認するので、
     /// ここでは「そもそも関数に渡されているか」だけを見る
-    pub(crate) fn check_must_var_used(
-        &self, 
-        func: &node::FuncDefine
-    ) {
+    pub(crate) fn check_must_var_used(&self, func: &node::FuncDefine) {
         let mut must_vars: Vec<MustVar> = Vec::new();
 
         // 引数として受け取った`must`の値も、この関数の中で
@@ -174,65 +143,37 @@ impl IR {
             }
         }
 
-        Self::walk_group2_nodes(
-            &func.body, 
-            &mut must_vars
-        );
+        Self::walk_group2_nodes(&func.body, &mut must_vars);
 
         for var in must_vars.iter() {
             if !var.used {
-                CompileErr::constract_must_not_used(
-                    &func.name, 
-                    &var.name
-                )
-                .unwrap();
+                CompileErr::constract_must_not_used(&func.name, &var.name).unwrap();
             }
         }
     }
 
-    fn walk_group2_nodes(
-        nodes: &Body,
-        must_vars: &mut Vec<MustVar>,
-    ) {
+    fn walk_group2_nodes(nodes: &Body, must_vars: &mut Vec<MustVar>) {
         for n in nodes.iter() {
             match n.get_node() {
                 node::Group2Node::Expr(expr) => {
-                    Self::walk_expr(
-                        &expr, 
-                        must_vars
-                    );
+                    Self::walk_expr(&expr, must_vars);
                 }
-                node::Group2Node::Stmt(
-                    node::StmtNode::Return(expr)
-                ) => {
-                    Self::walk_expr(
-                        &expr, 
-                        must_vars
-                    );
+                node::Group2Node::Stmt(node::StmtNode::Return(expr)) => {
+                    Self::walk_expr(&expr, must_vars);
                 }
-                node::Group2Node::Stmt(
-                    node::StmtNode::Continue 
-                    | node::StmtNode::Break
-                ) => {}
+                node::Group2Node::Stmt(node::StmtNode::Continue | node::StmtNode::Break) => {}
                 _ => {}
             }
         }
     }
 
-    fn walk_expr(
-        expr: &node::Expr, 
-        must_vars: &mut Vec<MustVar>
-    ) {
+    fn walk_expr(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
         match expr {
             // 変数の定義: `must`の型ならここから追跡を始める
             node::Expr::DefVar(var) => {
                 Self::walk_expr(&var.value, must_vars);
                 if var.ty.is_constract_must() {
-                    if must_vars
-                        .iter()
-                        .rev()
-                        .any(|entry| entry.name == var.name)
-                    {
+                    if must_vars.iter().rev().any(|entry| entry.name == var.name) {
                         // 同名の契約変数がブロックや分岐ごとに再定義された場合、
                         // 直近のスコープで使われる変数だけを追跡対象にする。
                         let shadowed = must_vars
@@ -242,12 +183,10 @@ impl IR {
                             .unwrap();
                         shadowed.used = false;
                     } else {
-                        must_vars.push(
-                            MustVar {
-                                name: var.name.clone(),
-                                used: false,
-                            }
-                        );
+                        must_vars.push(MustVar {
+                            name: var.name.clone(),
+                            used: false,
+                        });
                     }
                 }
             }
@@ -260,16 +199,14 @@ impl IR {
                     Self::walk_expr(arg, must_vars);
                 }
             }
-            node::Expr::Scope { target, .. }
-            | node::Expr::Member { target, .. } => {
+            node::Expr::Scope { target, .. } | node::Expr::Member { target, .. } => {
                 Self::walk_expr(target, must_vars);
             }
             node::Expr::Assign(assign) => {
                 Self::walk_expr(&assign.dst, must_vars);
                 Self::walk_expr(&assign.value, must_vars);
             }
-            node::Expr::GetAddress(target)
-            | node::Expr::ConnectAddr(target) => {
+            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
                 Self::walk_expr(target, must_vars);
             }
             node::Expr::Add(pair)
@@ -307,10 +244,7 @@ impl IR {
             node::Expr::Loop { pattern, body } => {
                 let scope_start = must_vars.len();
                 if let Some(pattern) = pattern {
-                    Self::walk_expr(
-                        pattern, 
-                        must_vars
-                    );
+                    Self::walk_expr(pattern, must_vars);
                 }
                 Self::walk_group2_nodes(body, must_vars);
                 must_vars.truncate(scope_start);
@@ -325,10 +259,7 @@ impl IR {
                     Self::walk_expr(value, must_vars);
                 }
             }
-            node::Expr::RefArray { 
-                dst, 
-                index, .. 
-            } => {
+            node::Expr::RefArray { dst, index, .. } => {
                 Self::walk_expr(dst, must_vars);
                 Self::walk_expr(index, must_vars);
             }
@@ -338,28 +269,18 @@ impl IR {
 
     /// 引数の式が指している変数の名前を返す
     /// (`&var`や`*var`のように包まれていても中身を辿る)
-    fn arg_var_name(
-        arg: &node::Expr
-    ) -> Option<&String> {
+    fn arg_var_name(arg: &node::Expr) -> Option<&String> {
         match arg {
             node::Expr::Var(name) => Some(name),
-            node::Expr::GetAddress(target)
-            | node::Expr::ConnectAddr(target) => {
+            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
                 Self::arg_var_name(target)
             }
             _ => None,
         }
     }
 
-    fn mark_used(
-        name: &String, 
-        must_vars: &mut Vec<MustVar>
-    ) {
-        if let Some(ref mut var) = must_vars
-            .iter_mut()
-            .rev()
-            .find(|var| &var.name == name)
-        {
+    fn mark_used(name: &String, must_vars: &mut Vec<MustVar>) {
+        if let Some(ref mut var) = must_vars.iter_mut().rev().find(|var| &var.name == name) {
             var.used = true;
         }
     }

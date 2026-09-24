@@ -19,21 +19,13 @@ impl AsmEmitter {
             let member_size = Some(size.clone());
 
             let value = self
-                .extract_operand_text(
-                    *value_idx, 
-                    &member_size
-                )
+                .extract_operand_text(*value_idx, &member_size)
                 .to_string();
             if value.is_empty() {
                 let inst::Inst::InitArr(arr) = self.curr_inst[*value_idx].clone() else {
                     panic!();
                 };
-                struct_txt.push_str(
-                    self.init_arr_txt::<true>(
-                        &arr, 
-                        &member_size
-                    ).as_str()
-                );
+                struct_txt.push_str(self.init_arr_txt::<true>(&arr, &member_size).as_str());
                 continue;
             }
             // このメンバー分を足した「累積」サイズ
@@ -51,30 +43,14 @@ impl AsmEmitter {
                 self.stk_use_counter + add_size
             };
 
-            let fmted = self.asm_fmt
-                .get_fmt_struct_member(
-                    value, 
-                    &size, 
-                    offset
-                );
+            let fmted = self.asm_fmt.get_fmt_struct_member(value, &size, offset);
 
             if this_is_self {
                 // 第一引数(`self`のポインタ)のレジスタを取得し、
                 // `%rbp`をそのレジスタに置き換える
                 // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
-                let self_ptr_reg = &self
-                    .asm_fmt
-                    .get_fmt_param::<String>(
-                        0, 
-                        Size::DQ
-                    );
-                struct_txt
-                    .push_str(
-                        &fmted.replace(
-                            "%rbp", 
-                            &self_ptr_reg
-                        )
-                    );
+                let self_ptr_reg = &self.asm_fmt.get_fmt_param::<String>(0, Size::DQ);
+                struct_txt.push_str(&fmted.replace("%rbp", &self_ptr_reg));
             } else {
                 struct_txt.push_str(&fmted);
             }
