@@ -188,7 +188,7 @@ impl IR {
     }
 
     #[inline(always)]
-    pub fn inline_proc(&mut self, lines: &Vec<node::InlineAsm>, name: &String) {
+    pub fn inline_proc(&mut self, lines: &[node::InlineAsm], name: &str) {
         let mut gen_ir = |expr: Expr| {
             let ty: types::Size = 
             // 変数のノードを取得
