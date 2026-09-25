@@ -69,6 +69,8 @@ add(a mut: int, b: int) {
 _start(): int {
     h: int must=func5 = func4()
     a: static[int] = 30
+    ptr mut: int[* 0..5] = [a]
+    ptr += 6
     s: Name = Name {
         name: 10
         aa: 10

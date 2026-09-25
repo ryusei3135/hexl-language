@@ -64,6 +64,12 @@ impl IR {
                 .map_err(|err| err.with_span(self.current_span))?;
         }
 
+        // 範囲付きポインタ変数への再代入が範囲を超えていないかを確認する
+        // (`src/ir/checker/tracking.rs`)
+        self.range_ptr_reassign_checker(&assign_node.name, &assign_node.value);
+        // 静的に分かる値であれば、以降の範囲チェックで使えるよう記録しておく
+        self.record_var_value(&assign_node.name, &assign_node.value);
+
         let right_expr_idx: usize =
             self.gen_named_expr_ir(&assign_node.name, *assign_node.value, &expect_byte, &attr);
         let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
@@ -175,6 +181,10 @@ impl IR {
             }
             node::TyNode::Static { .. } => self.gen_mem_def_var(var),
             node::TyNode::Ty(ty_name) => {
+                // 静的に分かる初期値であれば、以降の範囲チェックで
+                // 使えるよう記録しておく(`src/ir/checker/tracking.rs`)
+                self.record_var_value(&var.name, &var.value);
+
                 let value_idx = self.gen_named_expr_ir(
                     &var.name,
                     *var.value,
@@ -204,8 +214,15 @@ impl IR {
                 // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
                 // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
                 let val = *var.value;
-                // 実際の長さ
-                let base_range = self.get_ast_len(&val).unwrap();
+                // 実際の長さ: 配列/文字列リテラルであればここで取得できるが、
+                // それ以外の初期値(`0`のような数値など)の場合は`None`になる。
+                // `var_tree`への登録後、そちらから長さを取得する(下記参照)
+                let literal_len = self.get_ast_len(&val);
+
+                // 範囲付きポインタの初期値が静的に分かる場合、以降の
+                // 再代入チェック(`range_ptr_reassign_checker`)などで
+                // 使えるよう記録しておく(`src/ir/checker/tracking.rs`)
+                self.record_var_value(&var.name, &val);
 
                 let value_idx =
                     self.gen_named_expr_ir(&var.name, val, &self.size_of(&var.ty), &var_attr);
@@ -221,6 +238,13 @@ impl IR {
                     &var_attr,
                     || self.constract_flag.put_var_def(ty_to_register),
                 )?;
+
+                // リテラルから長さが取れなかった場合は、たった今`var_tree`へ
+                // 登録した型(=宣言時に指定された範囲)から長さを取得する
+                // (`src/ir/checker/tracking.rs`)。リテラルでも範囲指定でも
+                // 長さが分からない場合はここでpanicする
+                let base_range =
+                    literal_len.unwrap_or_else(|| self.range_len_from_var_tree(&var.name));
 
                 if r.is_none() {
                     r = Some((0, base_range));

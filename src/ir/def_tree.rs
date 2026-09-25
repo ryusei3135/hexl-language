@@ -39,6 +39,14 @@ impl VarMetaData {
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
     hash: HashMap<String, VarMetaData>,
+    /// 変数の"現在値"が定数式として分かっている場合に記録しておくための
+    /// テーブル(範囲付きポインタなどの静的な範囲チェックで使用する)。
+    ///
+    /// `checker/tracking.rs`の`record_var_value`から更新され、
+    /// `eval_expr`/`is_const_index`が変数を含む式を評価・判定する際に
+    /// 参照される。値が実行時にしか分からない式で更新された場合は
+    /// `forget_value`でここから取り除かれる
+    values: HashMap<String, usize>,
 }
 
 /// `must`かどうかは、型に情報がある
@@ -46,6 +54,7 @@ impl VarTree {
     pub fn new() -> Self {
         Self {
             hash: HashMap::new(),
+            values: HashMap::new(),
         }
     }
 
@@ -211,6 +220,30 @@ impl VarTree {
     /// 指定された変数が引数か、ローカル変数かなどを返す
     pub fn get(&self, name: &str) -> &VarType {
         &self.hash.get(name).expect(name).attribute
+    }
+
+    /// 変数の"現在値"が定数式として分かっている場合に記録する
+    ///
+    /// 範囲付きポインタへの再代入(`a += 10`など)を静的にチェックする際、
+    /// 右辺の式が変数自身を参照していても値を評価できるようにするために使う
+    pub(in crate::ir) fn record_value(&mut self, name: &str, value: usize) {
+        self.values.insert(name.to_owned(), value);
+    }
+
+    /// `record_value`で記録された、変数の現在値を取得する
+    ///
+    /// まだ一度も定数値として記録されていない変数や、実行時にしか
+    /// 値が分からない式で更新された変数は`None`を返す
+    pub(in crate::ir) fn get_value(&self, name: &str) -> Option<usize> {
+        self.values.get(name).copied()
+    }
+
+    /// 記録済みの変数の値を消す
+    ///
+    /// 変数が実行時にしか値の分からない式で更新された場合、古い記録が
+    /// 残ったまま以降の静的チェックに誤って使われないようにするために呼ぶ
+    pub(in crate::ir) fn forget_value(&mut self, name: &str) {
+        self.values.remove(name);
     }
 }
 
