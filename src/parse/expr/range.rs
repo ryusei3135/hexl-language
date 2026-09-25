@@ -112,9 +112,9 @@ mod test {
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: Some((1, 10)),
                 },
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             }))
-            .gen_group_info(&1)
+            .gen_group_info(1)
         );
     }
 
@@ -137,9 +137,9 @@ mod test {
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: Some((1, 10)),
                 },
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             }))
-            .gen_group_info(&1)
+            .gen_group_info(1)
         );
     }
 

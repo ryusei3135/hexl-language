@@ -621,9 +621,9 @@ pub fn gen_var_node(name: &str, value: &str, ty: &str, line: usize) -> Group2Inf
         &name.to_string(),
         Expr::Number(value.to_string()),
         &TyNode::Ty(ty.to_string()),
-        &false,
+        VarMutAttr::Invar,
     )))
-    .gen_group_info(&line)
+    .gen_group_info(line)
 }
 
 #[cfg(test)]

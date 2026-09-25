@@ -111,7 +111,7 @@ mod test {
                     None,
                     Box::new(node::TyNode::Ty("int".to_string()))
                 ),
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             }))
         );
     }

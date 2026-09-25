@@ -366,7 +366,7 @@ mod expr_tests {
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: None,
                 },
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()
         );
@@ -409,7 +409,7 @@ mod expr_tests {
                     name: "int".to_string(),
                     len: 1
                 },
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()
         );
@@ -436,7 +436,7 @@ mod expr_tests {
                     name: "int".to_string(),
                     len: 4
                 },
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()
         );
@@ -458,7 +458,7 @@ mod expr_tests {
                     name: "int".to_string(),
                     len: 1
                 },
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()
         );
@@ -593,7 +593,7 @@ mod expr_tests {
                     variant: "Green".to_string(),
                 }),
                 ty: node::TyNode::Ty("Color".to_string()),
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()
         );

@@ -452,7 +452,7 @@ mod ty_tests {
     #[test]
     fn struct_init() {
         let mut func = node::FuncDefine::new(
-            "main".to_string(),
+            "main",
             Vec::new(),
             node::TyNode::Ty("int".to_string()),
             false,
@@ -478,7 +478,7 @@ mod ty_tests {
                 name: "Name".to_string(),
                 fields: map,
             })
-            .gen_group_info(&1),
+            .gen_group_info(1),
         );
         assert_eq!(
             &build("main(): int { Name { name: 1 name2: 1 } }"),
@@ -489,7 +489,7 @@ mod ty_tests {
     #[test]
     fn struct_method() {
         let mut f = vec![node::FuncDefine::new(
-            "new".to_string(),
+            "new",
             Vec::new(),
             node::TyNode::Ty("ty".to_string()),
             false,
