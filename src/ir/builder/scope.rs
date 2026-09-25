@@ -63,7 +63,7 @@ impl IR {
     ///   仮の名前を使う
     pub fn scope_node(
         &mut self,
-        scope: &Vec<String>,
+        scope: &[String],
         target: Box<node::Expr>,
         var_name: Option<&String>,
         var_attr: &parse::VarMutAttr,

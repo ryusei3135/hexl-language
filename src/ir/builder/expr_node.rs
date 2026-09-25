@@ -23,20 +23,20 @@ impl IR {
     /// (詳細は`src/ir/builder/scope.rs`の`scope_node`を参照)。
     fn gen_named_expr_ir(
         &mut self,
-        var_name: &String,
+        var_name: &str,
         expr: node::Expr,
         expect_byte: &types::Size,
         attr: &VarMutAttr,
     ) -> usize {
         if let node::Expr::Scope { scope, target } = expr {
             self.expr_counter += 1;
-            let result = self.scope_node(&scope, target, Some(var_name), &attr);
+            let result = self.scope_node(&scope, target, Some(&var_name.to_string()), &attr);
             let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
             self.id_counter - 1
         } else if let node::Expr::CallFunc(call) = expr {
-            let result = self.gen_call_fn_ir(None, &call, Some(var_name));
+            let result = self.gen_call_fn_ir(None, &call, Some(&var_name.to_owned()));
             let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
@@ -246,7 +246,7 @@ impl IR {
     pub(super) fn enum_variant_node(
         &mut self,
         name: &str,
-        variant: &String,
+        variant: &str,
         expect_byte: &types::Size,
     ) -> inst::Inst {
         let enum_def = self
@@ -263,7 +263,7 @@ impl IR {
 
     pub(super) fn init_struct_node(
         &mut self,
-        name: &String,
+        name: &str,
         fields: &mut HashMap<String, Box<node::Expr>>,
     ) -> Result<inst::Inst, err::ErrKind> {
         // 構造体のメゾットを処理中かつ初期化する構造体が`self`
