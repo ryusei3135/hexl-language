@@ -22,6 +22,7 @@ use crate::err;
 #[derive(Debug, Clone, PartialEq)]
 pub enum UndefKind {
     UndefVarTy,
+    UndefVar,
     UndefFunc,
     UndefMemberInVar,
     UndefMemberInFn,
@@ -35,10 +36,10 @@ pub struct UndefErrs {
 }
 
 impl UndefErrs {
-    pub fn undef_fn(found: &String) -> err::ErrKind {
+    pub fn undef_fn(found: &str) -> err::ErrKind {
         err::ErrKind::Undef(Box::new(Self {
             kind: UndefKind::UndefFunc,
-            found: found.to_string(),
+            found: found.to_owned(),
             expect: None,
         }))
     }

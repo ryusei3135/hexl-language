@@ -12,7 +12,7 @@ mod param;
 mod checker;
 pub mod types;
 
-use crate::err;
+use crate::err::{self, undef::UndefKind::*};
 
 pub struct IR {
     pub var_tree: def_tree::VarTree,

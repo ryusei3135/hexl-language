@@ -39,7 +39,7 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や`name`が配列型でない場合は判定できない
     /// ため`true`を返す(配列型でない場合は`range_ptr_checker`に任せる)
-    pub(in crate::ir) fn arr_idx_checker(&mut self, name: &String, index: &node::Expr) -> bool {
+    pub(in crate::ir) fn arr_idx_checker(&mut self, name: &str, index: &node::Expr) -> bool {
         if Self::is_const_index(index) == false {
             return true;
         }
@@ -67,7 +67,7 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や、`name`が範囲指定付きのポインタ型
     /// でない場合は判定できないため`true`を返す
-    pub(in crate::ir) fn range_ptr_checker(&mut self, name: &String, index: &node::Expr) -> bool {
+    pub(in crate::ir) fn range_ptr_checker(&mut self, name: &str, index: &node::Expr) -> bool {
         if Self::is_const_index(index) == false {
             return true;
         }

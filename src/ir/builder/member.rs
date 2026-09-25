@@ -23,13 +23,13 @@ impl IR {
         let pos: usize = self.struct_tree.get_pos(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
-            &self.var_tree.get_ty_name(&member_name),
+            &self.var_tree.get_ty_name(&member_name)?,
             &name,
         );
         let size: types::Size = self.struct_tree.get_mem_size(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
-            &self.var_tree.get_ty_name(&member_name),
+            &self.var_tree.get_ty_name(&member_name)?,
             &name,
         );
         let r = inst::Inst::RefStruct {
@@ -59,7 +59,7 @@ impl IR {
             .last()
             // スコープ内に関数が存在しない
             .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInFn, "none".to_string(), None))?;
-        let struct_name = self.var_tree.get_ty_name(&var_name);
+        let struct_name = self.var_tree.get_ty_name(&var_name)?;
 
         let mut call_info = call_func_info.clone();
         call_info.args.insert(
@@ -67,7 +67,7 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name.to_owned()))),
         );
 
-        let r = self.gen_call_fn_ir(Some(&struct_name), &call_info, None)?;
+        let r = self.gen_call_fn_ir(Some(&struct_name.to_owned()), &call_info, None)?;
         Ok(r)
     }
 
@@ -76,9 +76,9 @@ impl IR {
         scope: &[&str],
         name: &str,
         index: &Box<node::Expr>,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         let var_name: &str = &scope.last().unwrap();
-        let struct_name = self.var_tree.get_ty_name(&var_name);
+        let struct_name = self.var_tree.get_ty_name(&var_name)?;
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める
         let field_ty = self
@@ -113,10 +113,10 @@ impl IR {
             ),
         };
 
-        inst::Inst::RefStruct {
+        Ok(inst::Inst::RefStruct {
             src: var_name.to_owned(),
             size: types::Size::new(&field_ty).unwrap(),
             pos: field_pos + index_num * elem_size,
-        }
+        })
     }
 }

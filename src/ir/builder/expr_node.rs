@@ -97,7 +97,7 @@ impl IR {
         &mut self,
         dst: node::Expr,
         index: node::Expr,
-        name: &String,
+        name: &str,
         expect_byte: &types::Size,
     ) -> inst::Inst {
         // 配列/範囲付きポインタの添字が範囲を超えていないかを確認する
@@ -265,10 +265,10 @@ impl IR {
         &mut self,
         name: &String,
         fields: &mut HashMap<String, Box<node::Expr>>,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         // 構造体のメゾットを処理中かつ初期化する構造体が`self`
-        let struct_name = if self.this_is_self {
-            self.var_tree.get_ty_name(name)
+        let struct_name: String = if self.this_is_self {
+            self.var_tree.get_ty_name(name)?.to_owned()
         } else {
             name.to_string()
         };
@@ -299,10 +299,10 @@ impl IR {
                 size: field_size,
             });
         }
-        inst::Inst::Struct {
+        Ok(inst::Inst::Struct {
             name: name.to_string(),
             mem: mem_insts,
             is_self: { self.this_is_self && self.var_tree.is_self_ty(&name) },
-        }
+        })
     }
 }

@@ -417,7 +417,7 @@ impl IR {
                 name, mut fields, ..
             } => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_struct_node(&name, &mut fields)
+                self.init_struct_node(&name, &mut fields).unwrap()
             }
             // ここでは対応する「元の変数名」が分からない文脈
             // (関数の引数や構造体フィールドの初期化式など)から
@@ -445,7 +445,7 @@ impl IR {
                     // `変数名.[メンバー名 添字]`
                     node::Expr::RefArray { name, index, .. } => {
                         // `src/ir/builder/member.rs`
-                        self.member_is_arr_ref(&scope_n_ref, &name, &index)
+                        self.member_is_arr_ref(&scope_n_ref, &name, &index).unwrap()
                     }
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
