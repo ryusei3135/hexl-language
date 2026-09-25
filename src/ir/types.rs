@@ -104,8 +104,8 @@ impl Size {
 }
 
 #[inline(always)]
-fn embe_ty_sort(ty_name: &String) -> Result<Size, err::undef::UndefKind> {
-    match ty_name.as_str() {
+fn embe_ty_sort(ty_name: &str) -> Result<Size, err::undef::UndefKind> {
+    match ty_name {
         "byte" => Size::DB,
         "i16" => Size::DW,
         "int" => Size::DD,

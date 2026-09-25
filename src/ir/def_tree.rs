@@ -38,7 +38,7 @@ impl VarMetaData {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarTree {
-    pub hash: HashMap<String, VarMetaData>,
+    hash: HashMap<String, VarMetaData>,
 }
 
 /// `must`かどうかは、型に情報がある
@@ -55,7 +55,7 @@ impl VarTree {
     /// - 'p' = param
     pub fn push<const K: char>(
         &mut self,
-        var_name: &String,
+        var_name: &str,
         var_index: usize,
         var_ty: &node::TyNode,
         var_attr: &parse::VarMutAttr,
@@ -83,7 +83,7 @@ impl VarTree {
         }
         put_flag();
         self.hash
-            .insert(var_name.clone(), VarMetaData::new(&var, &var_ty, &var_attr));
+            .insert(var_name.to_owned(), VarMetaData::new(&var, &var_ty, &var_attr));
         Ok(())
     }
 
@@ -186,6 +186,26 @@ impl VarTree {
             _ => false,
         };
         self.hash.get(var_name).is_some_and(&mut b)
+    }
+
+    #[inline(always)]
+    pub fn all_var_is_end_constract(&self, state: &VarTree) -> Result<(), err::ErrKind> {
+        for (name, var) in &self.hash {
+            if state.hash.contains_key(name)
+                || !var.size.is_constract_must()
+                || var.life != def_tree::VarLife::Constracting
+            {
+                continue;
+            } else {
+                return crate::GenCompileErr!(VariableConstractExpired, name);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn contains_key(&mut self, state: &VarTree) {
+        self.hash
+            .retain(|name, _| state.hash.contains_key(name));
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す

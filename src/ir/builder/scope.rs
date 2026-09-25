@@ -23,15 +23,7 @@ impl IR {
 
         for state in states {
             // 契約が終了しているかを確認
-            for (name, var) in &self.var_tree.hash {
-                if state.hash.contains_key(name)
-                    || !var.size.is_constract_must()
-                    || var.life != def_tree::VarLife::Constracting
-                {
-                    continue;
-                }
-                return crate::GenCompileErr!(VariableConstractExpired, name);
-            }
+            self.var_tree.all_var_is_end_constract(state)?;
         }
 
         if from_break == false {
@@ -39,9 +31,7 @@ impl IR {
                 .scope_states
                 .pop()
                 .expect("スコープが開始されていません");
-            self.var_tree
-                .hash
-                .retain(|name, _| state.hash.contains_key(name));
+            self.var_tree.contains_key(&state);
         }
         Ok(())
     }
