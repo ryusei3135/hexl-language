@@ -307,6 +307,7 @@ impl AsmEmitter {
     fn gen_resize_mnemonic(&self, formated: &String, opcode: &str, src1: usize) -> Option<String> {
         let mut resize = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
         let mnemonic: &str = if opcode == "address" {
+            resize = Size::DQ;
             "lea"
         } else if self.check_node_is_struct(src1) {
             "mov"
@@ -461,6 +462,9 @@ impl AsmEmitter {
             }
             inst::Inst::AssignVar { ref name, .. } => {
                 let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
+                if var_info.is_stack {
+                    return self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), var_info.reg);
+                }
                 let size = if var_info.size.is_pointer().is_some() {
                     Size::DQ
                 } else {

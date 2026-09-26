@@ -1,5 +1,6 @@
 mod asm_gen;
 mod asm_setting;
+mod assembler;
 mod err;
 mod ir;
 mod lex;
@@ -149,6 +150,8 @@ pub fn build(
         &ir_builder.public_func_tree,
         &settings.fmt_name,
     );
+    
+    assembler::x64::emitter_x64("-c", &asm_text);
 
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");

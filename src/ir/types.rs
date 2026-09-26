@@ -52,18 +52,15 @@ impl Size {
 
     /// 構造体の型を作成する
     pub fn emit_struct_ty_node(
-        f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>, 
-        ty: &node::TyNode
+        f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
+        ty: &node::TyNode,
     ) -> Result<Self, err::ErrKind> {
         let binding = ty.get_ty_str_name();
         let target = f(&binding)?;
         let mut struct_ty = Vec::new();
 
         for field in target.fields.iter() {
-            let ty = Box::new((
-                field.name.clone(), 
-                Size::new(&field.ty).unwrap()
-            ));
+            let ty = Box::new((field.name.clone(), Size::new(&field.ty).unwrap()));
             struct_ty.push(ty);
         }
 

@@ -21,10 +21,8 @@ impl IR {
                 let mut err_stored = None;
 
                 let emitted_size = types::Size::emit_struct_ty_node(
-                    &mut |name| {
-                        self.struct_tree.get_struct_size(name)
-                    },
-                    &param.ty
+                    &mut |name| self.struct_tree.get_struct_size(name),
+                    &param.ty,
                 );
                 if let Some(err) = err_stored {
                     return Err(err);

@@ -84,15 +84,16 @@ impl VarTree {
                     )
                 }
                 VarLife::EndConstract => {
-                    **var_info =
-                        VarMetaData::new(&var, &var_ty, &var_attr);
+                    **var_info = VarMetaData::new(&var, &var_ty, &var_attr);
                     Ok(())
                 }
             };
         }
         put_flag();
-        self.hash
-            .insert(var_name.to_owned(), VarMetaData::new(&var, &var_ty, &var_attr));
+        self.hash.insert(
+            var_name.to_owned(),
+            VarMetaData::new(&var, &var_ty, &var_attr),
+        );
         Ok(())
     }
 
@@ -107,7 +108,8 @@ impl VarTree {
                         // ポインタ型の場合も、実際の構造体名を返す
                         node::TyNode::SelfTy(name) => name,
                         _ => panic!(),
-                    }.to_string()
+                    }
+                    .to_string()
                 }
                 node::TyNode::SelfTy(name) => name.to_string(),
                 // 契約(`must`/`of`)が付いた型は、内側の型の名前を返す
@@ -161,13 +163,11 @@ impl VarTree {
             }
             Ok(())
         } else {
-            Err(
-                crate::GenUndefErrResult!(
-                    UndefVar,
-                    "none var".to_string(),
-                    Some(var_name.to_owned())
-                )
-            )
+            Err(crate::GenUndefErrResult!(
+                UndefVar,
+                "none var".to_string(),
+                Some(var_name.to_owned())
+            ))
         }
     }
 
@@ -213,8 +213,7 @@ impl VarTree {
     }
 
     pub fn contains_key(&mut self, state: &VarTree) {
-        self.hash
-            .retain(|name, _| state.hash.contains_key(name));
+        self.hash.retain(|name, _| state.hash.contains_key(name));
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す

@@ -399,9 +399,9 @@ impl Parser {
         let value = self.expr_branch()?;
         Ok(node::AssignVar::new(
             name,
-            node::Expr::ConnectAddr(Box::new(node::Expr::GetAddress(Box::new(
-                node::Expr::Var(name.to_string()),
-            )))),
+            node::Expr::ConnectAddr(Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
+                name.to_string(),
+            ))))),
             value,
         )
         .wrap_group2())

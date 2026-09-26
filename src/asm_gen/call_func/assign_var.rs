@@ -68,18 +68,31 @@ impl AsmEmitter {
 
         let dst_reg = self.asm_fmt.get_fmt_reg(current_reg, &Size::DQ);
 
-        let ptr_operand = match &self.curr_inst[value] {
-            inst::Inst::GetPtr { size, .. } => {
-                self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), *size)
+        // `value`が実際に「メモリ上の場所」を指している場合のみ、その
+        // アドレスを`lea`で求める必要がある。`value`が既にアドレス値
+        // そのもの(ポインタ演算の結果やレジスタに載ったポインタ変数
+        // など)を持っている場合は、それをそのまま`mov`でコピーすれば
+        // よく、`lea`をかけると`lea %rdx, %rbx`のような、メモリでは
+        // ないソースを持つ不正な命令になってしまう。
+        let (ptr_operand, needs_address) = match &self.curr_inst[value] {
+            inst::Inst::GetPtr { stk, .. } => (
+                self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), *stk),
+                true,
+            ),
+            _ => {
+                let operand = self.extract_operand_text(value, &this_is_self);
+                let needs_address = self.check_node_is_mem_val(value).is_some();
+                (operand, needs_address)
             }
-            _ => self.extract_operand_text(value, &this_is_self),
         };
 
+        let opcode = if needs_address { "address" } else { "mov" };
+
         self.asm_fmt.fmt_mnemonic_resize(
-            "address",
+            opcode,
             &self
                 .asm_fmt
-                .get_opcode_tmpl("address")
+                .get_opcode_tmpl(opcode)
                 .replace("{dst}", &dst_reg)
                 .replace("{src1}", &ptr_operand),
             &Size::DQ,
