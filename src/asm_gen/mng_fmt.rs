@@ -56,11 +56,11 @@ impl MngAsmFmt {
         }
     }
 
-    pub fn fmt_ref_operand(&self, reg: &String, size: usize) -> String {
+    pub fn fmt_ref_operand(&self, reg: &str, size: usize) -> String {
         self.fmt
             .fmt
             .ref_stack
-            .replace("{src}", reg.as_str())
+            .replace("{src}", reg)
             .replace("{size}", size.to_string().as_str())
     }
 
@@ -128,7 +128,7 @@ impl MngAsmFmt {
     pub fn fmt_mnemonic_resize(
         &self,
         mnemonic: &str,
-        value: &String,
+        value: &str,
         size: &types::Size,
     ) -> String {
         self.fmt_mnemonic_resize_inner(mnemonic, value, size, false)
@@ -139,7 +139,7 @@ impl MngAsmFmt {
     pub fn fmt_memory_mnemonic_resize(
         &self,
         mnemonic: &str,
-        value: &String,
+        value: &str,
         size: &types::Size,
     ) -> String {
         self.fmt_mnemonic_resize_inner(mnemonic, value, size, true)
@@ -148,12 +148,12 @@ impl MngAsmFmt {
     fn fmt_mnemonic_resize_inner(
         &self,
         mnemonic: &str,
-        value: &String,
+        value: &str,
         size: &types::Size,
         is_memory_access: bool,
     ) -> String {
         if is_memory_access == false && self.fmt.fmt.mnemonic_size == false {
-            return value.clone();
+            return value.to_string();
         }
 
         if matches!(size, types::Size::Pointer { .. }) {
@@ -179,17 +179,17 @@ impl MngAsmFmt {
         value.replace(mnemonic, &format!("{}{}", mnemonic, s_fmt))
     }
 
-    pub fn get_push(&self, reg: &String) -> String {
+    pub fn get_push(&self, reg: &str) -> String {
         self.get_opcode_tmpl(&"push".to_string())
             .replace("{dst}", reg)
     }
 
-    pub fn get_pop(&self, reg: &String) -> String {
+    pub fn get_pop(&self, reg: &str) -> String {
         self.get_opcode_tmpl(&"pop".to_string())
             .replace("{dst}", reg)
     }
 
-    pub fn get_str_fmt(&self, value: &String, label: &String) -> String {
+    pub fn get_str_fmt(&self, value: &str, label: &str) -> String {
         self.fmt
             .fmt
             .string
@@ -199,21 +199,21 @@ impl MngAsmFmt {
 
     pub fn get_static_num_fmt(
         &self,
-        value: &String,
-        label: &String,
+        value: &str,
+        label: &str,
         _size: &types::Size,
     ) -> String {
         format!(".align 4\n{}: .long {}\n", label, value.replace("$", ""))
     }
 
     #[inline(always)]
-    pub fn get_global_fmt(&self, name: &String) -> String {
+    pub fn get_global_fmt(&self, name: &str) -> String {
         self.fmt.fmt.global.replace("{name}", name)
     }
 
     /// 静的領域の変数に%ripをつけて返す
     #[inline(always)]
-    pub fn fmt_static_var_rip(&self, name: &String) -> String {
+    pub fn fmt_static_var_rip(&self, name: &str) -> String {
         self.fmt.fmt.static_var.replace("{name}", name)
     }
 
@@ -242,12 +242,12 @@ impl MngAsmFmt {
 
     /// 数字のフォーマット
     #[inline(always)]
-    pub fn get_fmt_num(&self, value: &String) -> String {
+    pub fn get_fmt_num(&self, value: &str) -> String {
         self.fmt.fmt.num.replace("{}", value).to_string()
     }
 
     #[inline(always)]
-    pub fn get_call_func_fmt(&self, func_name: &String) -> String {
+    pub fn get_call_func_fmt(&self, func_name: &str) -> String {
         self.fmt.func.call.replace("{name}", func_name)
     }
 

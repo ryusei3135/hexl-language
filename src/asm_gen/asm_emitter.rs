@@ -174,7 +174,7 @@ impl AsmEmitter {
     }
 
     /// 指定された名前の変数の型を返す
-    pub fn get_var_ty(&self, var_name: &String) -> Size {
+    pub fn get_var_ty(&self, var_name: &str) -> Size {
         self.var_hash_map
             .get(var_name)
             .expect(&format!("not found {}", var_name))
@@ -183,19 +183,19 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) fn insert_var_info(&mut self, name: &String, var: VarIndexInfo) {
+    pub(super) fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
         self.used_reg.mark_used(var.reg);
-        self.expr_vars.push(name.clone());
-        self.var_hash_map.insert(name.clone(), var);
+        self.expr_vars.push(name.to_string());
+        self.var_hash_map.insert(name.to_owned(), var);
     }
 
     #[inline(always)]
-    pub(super) fn update_value_info(&mut self, name: &String, index: usize) {
+    pub(super) fn update_value_info(&mut self, name: &str, index: usize) {
         self.var_hash_map.get_mut(name).unwrap().index = index;
     }
 
     #[inline(always)]
-    pub(super) fn update_value_reg(&mut self, name: &String, reg: usize) {
+    pub(super) fn update_value_reg(&mut self, name: &str, reg: usize) {
         self.used_reg.mark_used(reg);
         self.var_hash_map.get_mut(name).unwrap().reg = reg;
     }
@@ -304,7 +304,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn gen_resize_mnemonic(&self, formated: &String, opcode: &str, src1: usize) -> Option<String> {
+    fn gen_resize_mnemonic(&self, formated: &str, opcode: &str, src1: usize) -> Option<String> {
         let mut resize = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
         let mnemonic: &str = if opcode == "address" {
             resize = Size::DQ;
@@ -322,7 +322,7 @@ impl AsmEmitter {
                 .fmt_memory_mnemonic_resize(mnemonic, &formated, &resize)
         } else {
             self.asm_fmt
-                .fmt_mnemonic_resize(mnemonic, &formated, &resize)
+                .fmt_mnemonic_resize(mnemonic, formated, &resize)
         };
         Some(resized)
     }
