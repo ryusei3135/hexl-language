@@ -373,6 +373,14 @@ pub enum Expr {
         scope: Vec<String>,
         target: Box<Expr>,
     },
+    /// ポインタが指す構造体のメンバー/メゾットへのアクセス
+    /// `[name].member` (フィールドの参照/代入) / `[name].method(..)` (メゾット呼び出し)
+    /// - name: ポインタ変数の名前
+    /// - target: `Var(メンバー名)`(フィールドアクセス)、または`CallFunc(..)`(メゾット呼び出し)
+    PtrMember {
+        name: String,
+        target: Box<Expr>,
+    },
 }
 
 impl Expr {

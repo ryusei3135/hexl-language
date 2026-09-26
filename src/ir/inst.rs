@@ -43,12 +43,12 @@ pub struct ParamMetaData {
 }
 
 impl ParamMetaData {
-    pub fn new(name: String, num: usize, dst: usize, ty: &node::TyNode) -> Self {
+    pub fn new(name: String, num: usize, dst: usize, ty: &types::Size) -> Self {
         Self {
             name,
             num,
             dst,
-            ty: types::Size::new(&ty).unwrap(),
+            ty: ty.to_owned(),
         }
     }
 }
@@ -143,6 +143,18 @@ pub enum Inst {
         pos: usize,
         size: types::Size,
     },
+    /// ポインタが指す構造体のメンバーに、ポインタ経由でアクセスする
+    /// (`RefStruct`と同じ意味を持つが、`src`は構造体そのものではなく
+    /// 構造体へのポインタが入っている変数名である点が異なる。
+    /// アクセス時にまず`src`の値(アドレス)を読み取り、そのアドレスに
+    /// 対して`pos`だけオフセットした場所を参照する)
+    RefStructPtr {
+        /// ポインタ変数の名前
+        src: String,
+        /// 指定された、メンバーの場所
+        pos: usize,
+        size: types::Size,
+    },
     Stacks {
         size: usize,
     },
@@ -200,6 +212,7 @@ impl Inst {
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),
             inst::Inst::Num { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
+            inst::Inst::RefStructPtr { size, .. } => Some(size.clone()),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { size, .. }) => Some(size.clone()),
             inst::Inst::Mov { size, .. } => Some(size.clone()),
             inst::Inst::Str { value, .. } => Some(types::Size::Pointer {

@@ -61,7 +61,7 @@ impl IR {
 
         let ty = self.var_tree.get_ty_node(name).unwrap();
         let len = match types::Size::new(&ty) {
-            Ok(types::Size::Array { len, .. }) => len,
+            Some(types::Size::Array { len, .. }) => len,
             // 配列型でなければこのチェックの対象外
             _ => return true,
         };
@@ -89,7 +89,7 @@ impl IR {
 
         let ty = self.var_tree.get_ty_node(name).unwrap();
         let range = match types::Size::new(&ty) {
-            Ok(types::Size::Pointer {
+            Some(types::Size::Pointer {
                 range: Some(range), ..
             }) => range,
             // 範囲指定のないポインタ、またはポインタ型でなければ対象外
@@ -126,7 +126,7 @@ impl IR {
 
         let ty = self.var_tree.get_ty_node(name).unwrap();
         let range = match types::Size::new(&ty) {
-            Ok(types::Size::Pointer {
+            Some(types::Size::Pointer {
                 range: Some(range), ..
             }) => range,
             // 範囲指定のないポインタ、またはポインタ型でなければ対象外
@@ -153,10 +153,10 @@ impl IR {
     pub(in crate::ir) fn range_len_from_var_tree(&self, name: &str) -> usize {
         let ty = self.var_tree.get_ty_node(name).unwrap();
         match types::Size::new(&ty) {
-            Ok(types::Size::Pointer {
+            Some(types::Size::Pointer {
                 range: Some(range), ..
             }) => range.1 - range.0,
-            Ok(types::Size::Array { len, .. }) => len,
+            Some(types::Size::Array { len, .. }) => len,
             _ => panic!(
                 "変数 `{}` の長さを決定できません: 配列/文字列リテラルでの初期化か、範囲の指定が必要です",
                 name,

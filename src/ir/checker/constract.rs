@@ -199,7 +199,9 @@ impl IR {
                     Self::walk_expr(arg, must_vars);
                 }
             }
-            node::Expr::Scope { target, .. } | node::Expr::Member { target, .. } => {
+            node::Expr::Scope { target, .. }
+            | node::Expr::Member { target, .. }
+            | node::Expr::PtrMember { target, .. } => {
                 Self::walk_expr(target, must_vars);
             }
             node::Expr::Assign(assign) => {

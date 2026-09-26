@@ -24,6 +24,13 @@ impl Parser {
                     index: Box::new(node::Expr::Number(index)),
                 }
             }
+            // `]`の次が`.`の場合、アドレスの取得ではなく、ポインタが
+            // 指す構造体のメンバー/メゾットへのアクセス
+            // `[name].member` / `[name].method(..)`
+            _ if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) => {
+                self.next_tkn(&["."])?;
+                self.ptr_member_node(&name)?
+            }
             _ => node::Expr::GetAddress(Box::new(result)),
         };
         Ok(node)

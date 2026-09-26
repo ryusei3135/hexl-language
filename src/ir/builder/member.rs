@@ -71,6 +71,52 @@ impl IR {
         Ok(r)
     }
 
+    /// `[ptr].member`: ポインタ`ptr`が指す構造体のメンバー(フィールド)へ
+    /// アクセスする
+    ///
+    /// `member_is_var`と違い、`ptr`自身の場所に構造体があるのではなく、
+    /// `ptr`の値(アドレス)が指す先に構造体があるので`RefStructPtr`を使う
+    pub fn member_is_var_via_ptr(
+        &mut self,
+        ptr_name: &str,
+        name: &str,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        // `get_ty_name`はポインタ型の変数に対しては、指す先の
+        // 構造体名を返す(`src/ir/def_tree.rs`)
+        let struct_name = self.var_tree.get_ty_name(ptr_name)?;
+
+        let pos: usize = self.struct_tree.get_pos(&struct_name, name);
+        let size: types::Size = self.struct_tree.get_mem_size(&struct_name, name);
+
+        let r = inst::Inst::RefStructPtr {
+            src: ptr_name.to_string(),
+            size,
+            pos,
+        };
+        Ok(r)
+    }
+
+    /// `[ptr].method(..)`: ポインタ`ptr`が指す構造体のメゾットを呼び出す
+    ///
+    /// `member_is_fn`と違い、`ptr`はすでに構造体へのアドレスそのものを
+    /// 持っているので、暗黙のself引数には`ptr`自身のアドレスではなく
+    /// `ptr`の値をそのまま渡す
+    pub fn member_is_fn_via_ptr(
+        &mut self,
+        ptr_name: &str,
+        call_func_info: &node::CallInfo,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        let struct_name = self.var_tree.get_ty_name(ptr_name)?;
+
+        let mut call_info = call_func_info.clone();
+        call_info
+            .args
+            .insert(0, node::Expr::Var(ptr_name.to_owned()));
+
+        let r = self.gen_call_fn_ir(Some(&struct_name.to_owned()), &call_info, None)?;
+        Ok(r)
+    }
+
     pub fn member_is_arr_ref(
         &mut self,
         scope: &[&str],

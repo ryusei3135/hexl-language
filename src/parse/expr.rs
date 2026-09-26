@@ -237,7 +237,7 @@ impl Parser {
         fn already_positioned_after_call(v: &node::Expr) -> bool {
             match v {
                 node::Expr::CallFunc(..) | node::Expr::Scope { .. } => true,
-                node::Expr::Member { target, .. } => {
+                node::Expr::Member { target, .. } | node::Expr::PtrMember { target, .. } => {
                     matches!(**target, node::Expr::CallFunc(..))
                 }
                 _ => false,
@@ -573,6 +573,74 @@ mod expr_tests {
                 ],
                 arm_else: Some(vec![gen_var_node("a", "10", "int", 11)]),
             }
+            .wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_ptr_member_assign() {
+        // ポインタが指す構造体のメンバーへの代入: `[ptr].name = 10`
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): b1 { [ptr].name = 10 }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
+        assert_eq!(
+            node.body[0].get_node(),
+            &node::Expr::Assign(node::AssignVar {
+                name: "ptr".to_string(),
+                dst: Box::new(node::Expr::PtrMember {
+                    name: "ptr".to_string(),
+                    target: Box::new(node::Expr::Var("name".to_string())),
+                }),
+                value: Box::new(node::Expr::Number("10".to_string())),
+            })
+            .wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_ptr_member_call() {
+        // ポインタが指す構造体のメゾットの呼び出し: `[ptr].f()`
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): b1 { [ptr].f() }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
+        assert_eq!(
+            node.body[0].get_node(),
+            &node::Expr::PtrMember {
+                name: "ptr".to_string(),
+                target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                    name: "f".to_string(),
+                    temp_ty: Vec::new(),
+                    args: Vec::new(),
+                })),
+            }
+            .wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_ptr_member_value() {
+        // 式の中でポインタが指す構造体のメンバーを読み取る:
+        // `a: int = [ptr].name`
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): b1 { a: int = [ptr].name }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
+        assert_eq!(
+            node.body[0].get_node(),
+            &node::Expr::DefVar(node::DefineVar {
+                name: "a".to_string(),
+                value: Box::new(node::Expr::PtrMember {
+                    name: "ptr".to_string(),
+                    target: Box::new(node::Expr::Var("name".to_string())),
+                }),
+                ty: node::TyNode::Ty("int".to_string()),
+                var_attr: parse::VarMutAttr::Invar,
+            })
             .wrap_group2()
         );
     }

@@ -55,6 +55,47 @@ impl Parser {
         crate::scope_node!(self, Dot, Member, &name);
     }
 
+    /// ポインタが指す構造体のメンバー/メゾットへアクセスするノードを作成する
+    /// `[name].member` / `[name].method(..)`
+    ///
+    /// ## 呼び出し時の前提
+    /// 呼び出し元で`current_tkn()`が`.`を指している状態で呼び出す
+    /// (`.`自体はまだ読み飛ばしていない)
+    ///
+    /// ## 戻り値の状態
+    /// - フィールドアクセスの場合、`current_tkn()`はメンバー名を
+    ///   指した状態のまま返す(呼び出し元で`=`の有無を確認できるように)
+    /// - メゾット呼び出しの場合、`call_func_expr`の仕様通り
+    ///   `current_tkn()`は呼び出し式の次のトークンを指した状態で返る
+    pub(super) fn ptr_member_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+        let member_tkn = self.next_tkn(&["name"])?;
+        let lex::Tkn::Name(member) = member_tkn.clone() else {
+            return crate::syntax_err!(
+                self.build_err_span(),
+                err::SyntaxErrKind::ExpectedKind {
+                    expected: "name",
+                    found: member_tkn,
+                }
+            );
+        };
+
+        // メゾットの呼び出し: `[name].method(..)`
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::LParen)) {
+            self.next_tkn(&["("])?;
+            let call = self.call_func_expr(&member, true)?;
+            return Ok(node::Expr::PtrMember {
+                name: name.to_string(),
+                target: Box::new(call),
+            });
+        }
+
+        // フィールドへのアクセス: `[name].member`
+        Ok(node::Expr::PtrMember {
+            name: name.to_string(),
+            target: Box::new(node::Expr::Var(member)),
+        })
+    }
+
     /// 構造体の配列メンバーの要素にアクセス、または代入するノードを作成する
     /// - 読み取り: `name.[member index]`
     /// - 代入:     `name.[member index] = value`

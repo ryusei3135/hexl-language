@@ -299,6 +299,18 @@ impl StructTree {
             .clone();
         types::Size::new(&ty).unwrap()
     }
+
+    pub fn get_struct_size(&self, name: &str) -> Result<node::StructDefine, err::ErrKind> {
+        if let Some(target) = self.tree.get(name) {
+            Ok(target.clone())
+        } else {
+            Err(crate::GenUndefErrResult!(
+                UndefStruct,
+                name.to_string(),
+                None
+            ))
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

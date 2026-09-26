@@ -23,9 +23,9 @@ impl Size {
     /// 組み込みの型(byte/u16/int/u64)のみを解決する
     /// 構造体や列挙型などのユーザー定義の型を解決する場合は
     /// `builder::IR::size_of` を使用する
-    pub fn new(ty: &node::TyNode) -> Result<Self, err::undef::UndefKind> {
+    pub fn new(ty: &node::TyNode) -> Option<Self> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name)?,
+            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name).ok()?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 Self::new(&node::TyNode::Ty(name.clone()))?
@@ -45,9 +45,29 @@ impl Size {
             node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
                 Self::new(&ty.unwrap_ty())?
             }
-            _ => panic!(),
+            t => panic!("{:?}", t),
         };
-        Ok(size_ty)
+        Some(size_ty)
+    }
+
+    /// 構造体の型を作成する
+    pub fn emit_struct_ty_node(
+        f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>, 
+        ty: &node::TyNode
+    ) -> Result<Self, err::ErrKind> {
+        let binding = ty.get_ty_str_name();
+        let target = f(&binding)?;
+        let mut struct_ty = Vec::new();
+
+        for field in target.fields.iter() {
+            let ty = Box::new((
+                field.name.clone(), 
+                Size::new(&field.ty).unwrap()
+            ));
+            struct_ty.push(ty);
+        }
+
+        Ok(Self::Struct(struct_ty))
     }
 
     pub fn is_pointer(&self) -> Option<Size> {

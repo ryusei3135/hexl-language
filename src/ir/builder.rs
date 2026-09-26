@@ -450,6 +450,19 @@ impl IR {
                     t => panic!("{:?}", t), // 構造体の配列型メンバーの要素にアクセスする
                 }
             }
+            // ポインタが指す構造体のメンバー/メゾットへのアクセス
+            // `[name].member` / `[name].method(..)`
+            node::Expr::PtrMember { name, target } => match &*target {
+                node::Expr::Var(member) => {
+                    let result = self.member_is_var_via_ptr(&name, &member);
+                    self.unwrap_or_report(result)
+                }
+                node::Expr::CallFunc(call_func_info) => {
+                    let result = self.member_is_fn_via_ptr(&name, &call_func_info);
+                    self.unwrap_or_report(result)
+                }
+                t => panic!("{:?}", t),
+            },
             node::Expr::RangeNode(..) => panic!(),
         };
 

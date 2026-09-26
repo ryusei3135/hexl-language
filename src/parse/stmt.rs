@@ -210,16 +210,10 @@ impl Parser {
                         Ok(lex::Tkn::Number(_)) => {
                             self.make_array_assign_node(&name)?.wrap_group2()
                         }
-                        // それ以外の場合、ポインタへの代入
-                        // `[name] = value`
-                        _ => {
-                            let mut ptr_connect = self.expr_define_var(name.to_string())?;
-                            ptr_connect.get_assign_node().name = name.to_string();
-                            let dst = ptr_connect.get_assign_node().clone().dst;
-                            ptr_connect.get_assign_node().dst =
-                                Box::new(node::Expr::ConnectAddr(dst));
-                            ptr_connect.wrap_group2()
-                        }
+                        // それ以外の場合、ポインタへの代入、または
+                        // ポインタが指す構造体のメンバー/メゾットへのアクセス
+                        // `[name] = value` / `[name].member = value` / `[name].method(..)`
+                        _ => self.ptr_stmt_node(&name)?,
                     }
                 } else {
                     return crate::syntax_err!(
@@ -360,6 +354,57 @@ impl Parser {
             );
         };
         self.make_preproc(&name)
+    }
+
+    /// `[name]`から始まる文のノードを作成する
+    ///
+    /// ## 対応する構文
+    /// - `[name] = value`             : ポインタが指す値へ代入
+    /// - `[name].member = value`      : ポインタが指す構造体のメンバーへ代入
+    /// - `[name].method(..)`          : ポインタが指す構造体のメゾットを呼び出す
+    ///
+    /// ## 呼び出し時の前提
+    /// 呼び出し元(`one_line_node`)で`lex::Tkn::LBracket`の次の
+    /// `lex::Tkn::Name(name)`まで読み進めた状態で呼び出す。
+    /// つまり`current_tkn()`が`name`を指している必要がある。
+    fn ptr_stmt_node(&mut self, name: &String) -> Result<node::Group2Node, err::ErrKind> {
+        // `]`まで進める
+        self.next_tkn(&["]"])?;
+
+        // `]`の次が`.`の場合、ポインタが指す構造体のメンバー/メゾットへアクセスする
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) {
+            self.next_tkn(&["."])?;
+            let member_node = self.ptr_member_node(name)?;
+
+            // メゾット呼び出しの場合、`ptr_member_node`の時点ですでに
+            // 呼び出し式の次のトークンまで進んでいるので、そのまま式として返す
+            if matches!(&member_node, node::Expr::PtrMember { target, .. } if matches!(**target, node::Expr::CallFunc(..)))
+            {
+                return Ok(member_node.wrap_group2());
+            }
+
+            // フィールドアクセスの場合、続く`=`の有無で代入か参照かを判断する
+            // `[name].member = value`
+            return if matches!(self.peek_tkn(), Ok(lex::Tkn::Equal)) {
+                self.next_tkn(&["="])?;
+                let value = self.expr_branch()?;
+                Ok(node::AssignVar::new(name, member_node, value).wrap_group2())
+            } else {
+                Ok(member_node.wrap_group2())
+            };
+        }
+
+        // 既存通り: ポインタが指す値そのものへの代入 `[name] = value`
+        self.next_tkn(&["="])?;
+        let value = self.expr_branch()?;
+        Ok(node::AssignVar::new(
+            name,
+            node::Expr::ConnectAddr(Box::new(node::Expr::GetAddress(Box::new(
+                node::Expr::Var(name.to_string()),
+            )))),
+            value,
+        )
+        .wrap_group2())
     }
 
     /// 配列に値を代入するノードを作成する
