@@ -50,7 +50,7 @@ macro_rules! GenCompileErr {
 }
 
 impl CompileErr {
-    pub fn assign_to_imm_var(var_name: &String) -> Result<Self, err::ErrKind> {
+    pub fn assign_to_imm_var(var_name: &str) -> Result<Self, err::ErrKind> {
         Err(err::ErrKind::CompileErr(Box::new(
             Self::AssignToImmutableVar(var_name.to_string()),
         )))
@@ -68,7 +68,7 @@ impl CompileErr {
     /// `of`の引数に、`must`ではない値が渡された
     pub fn constract_of_requires_must(
         fn_name: &str,
-        param_name: &String,
+        param_name: &str,
         of_name: &str,
     ) -> Result<(), err::ErrKind> {
         Err(err::ErrKind::CompileErr(Box::new(
@@ -83,7 +83,7 @@ impl CompileErr {
     /// `must`の値が、`of`ではない引数に渡された
     pub fn constract_must_requires_of(
         fn_name: &str,
-        param_name: &String,
+        param_name: &str,
         must_name: &str,
     ) -> Result<(), err::ErrKind> {
         Err(err::ErrKind::CompileErr(Box::new(
@@ -98,7 +98,7 @@ impl CompileErr {
     /// `must`と`of`の名前が一致していない
     pub fn constract_name_mismatch(
         fn_name: &str,
-        param_name: &String,
+        param_name: &str,
         must_name: &str,
         of_name: &str,
     ) -> Result<(), err::ErrKind> {
@@ -114,8 +114,8 @@ impl CompileErr {
 
     /// `must`の値が、一度も関数へ渡されていない
     pub fn constract_must_not_used(
-        fn_name: &String,
-        var_name: &String,
+        fn_name: &str,
+        var_name: &str,
     ) -> Result<(), err::ErrKind> {
         Err(err::ErrKind::CompileErr(Box::new(
             Self::ContractMustNotUsed {
@@ -126,7 +126,7 @@ impl CompileErr {
     }
 
     /// `must`の変数への再代入
-    pub fn assign_to_must_var(var_name: &String) -> Result<(), err::ErrKind> {
+    pub fn assign_to_must_var(var_name: &str) -> Result<(), err::ErrKind> {
         Err(err::ErrKind::CompileErr(Box::new(Self::AssignToMustVar(
             var_name.to_string(),
         ))))
