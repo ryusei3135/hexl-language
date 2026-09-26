@@ -215,7 +215,7 @@ impl Parser {
             return Err(e);
         }
 
-        Ok(node::InlineAsm { asm, operands })
+        Ok(node::InlineAsm { asm: asm.to_string(), operands })
     }
 }
 

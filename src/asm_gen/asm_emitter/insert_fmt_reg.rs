@@ -23,6 +23,7 @@ impl AsmEmitter {
                 )
             })
             .to_owned()
+            .to_string()
     }
 
     /// レジスタの「番号」だけを一時的に埋め込むための、目印付きの

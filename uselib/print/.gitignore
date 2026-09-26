@@ -1,6 +1,0 @@
-*.lock
-*.o
-*.exe
-target
-*.a
-build

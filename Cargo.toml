@@ -7,6 +7,4 @@ edition = "2024"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-
-print = { path = "uselib/print" }
-regex = { path = "uselib/regex" }
+regex = "1.0"
