@@ -143,6 +143,7 @@ pub fn build(
             &settings,
         )
         .map_err(|e| format!("IRの生成に失敗しました: {:?}", e))?;
+    // dbg!(&ir_builder);
 
     let asm_text = asm_setting::gen_asm_text(
         ir_builder.func_tree,

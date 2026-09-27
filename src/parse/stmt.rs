@@ -199,7 +199,14 @@ impl Parser {
     pub(super) fn one_line_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let node = match self.current_tkn().clone() {
             lex::Tkn::CompleSyn => self.comple_syntax()?,
-            lex::Tkn::Name(name) => node::Group2Node::Expr(self.build_scope_node(&name)?),
+            lex::Tkn::Name(name) => {
+                let r = node::Group2Node::Expr(self.build_scope_node(&name)?);
+                println!("{:?}", self.current_tkn());
+                if self.current_tkn() == &lex::Tkn::Equal {
+                    println!("JJJJJJJJJJJJ");
+                }
+                r
+            }
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
                 let tkn = self.next_tkn(&["name"])?;

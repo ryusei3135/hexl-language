@@ -8,6 +8,7 @@ mod var_ty;
 
 use crate::models::Body;
 
+#[derive(Debug)]
 pub(in crate::ir) struct ConstractFlags {
     /// 変数を定義
     /// これは戻り値が契約のフラグを立てたときにtrueならOk

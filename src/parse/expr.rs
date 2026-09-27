@@ -22,7 +22,17 @@ impl Parser {
         {
             match &self.current_tkn() {
                 lex::Tkn::Dot | lex::Tkn::ModPathTkn => {
-                    return self.build_scope_node(&name);
+                    let dst = self.build_scope_node(&name)?;
+                    println!("{:?}", self.next_tkn_ref(&[]));
+                    if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
+                        return Ok(node::AssignVar::new(
+                            &name,
+                            dst,
+                            self.expr_branch()?,
+                        ));
+                    } else {
+                        return Ok(dst);
+                    }
                 }
                 lex::Tkn::RBrace => {
                     return Ok(node::Expr::Var(name));

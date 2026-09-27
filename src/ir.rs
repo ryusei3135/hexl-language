@@ -14,6 +14,7 @@ pub mod types;
 
 use crate::err::{self, undef::UndefKind::*};
 
+#[derive(Debug)]
 pub struct IR {
     pub var_tree: def_tree::VarTree,
     pub extern_funcs: Vec<inst::Inst>,
