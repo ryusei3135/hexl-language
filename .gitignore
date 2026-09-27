@@ -10,3 +10,5 @@ test.sh
 *.zip
 log.txt
 hexl/
+*.elf
+*.exe

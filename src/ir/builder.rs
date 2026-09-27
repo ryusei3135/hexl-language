@@ -204,6 +204,8 @@ impl IR {
             // 関数の情報を登録
             self.entry_fn_info(&method_info);
 
+            self.var_tree = def_tree::VarTree::new();
+
             let _ = self.push_param_meta_data(&method_info.params)?;
             self.scope_states.clear();
             self.gen_inst(&method_info.body);

@@ -59,8 +59,32 @@ impl IR {
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
         if let node::Expr::CallFunc(mut call_func_node) = *target {
-            if self.expr_counter != 1 {
-                if let Some(struct_info) = self.struct_tree.get(scope.last().unwrap()).cloned() {
+            let struct_name = scope.last().unwrap();
+
+            let needs_self_area = self
+                .func_tree
+                .get_with_temp(&call_func_node.name, Some(struct_name), &call_func_node.temp_ty)
+                .or_else(|| {
+                    self.extern_func_tree
+                        .iter()
+                        .find(|v| {
+                            v.name.as_str() == call_func_node.name.as_str()
+                                && v.module() == Some(struct_name)
+                        })
+                        .map(|def| def.gen_fn_def(self.stk_counter))
+                })
+                .is_some_and(|def| {
+                    def.args.first().is_some_and(|arg| {
+                        matches!(
+                            &arg.ty,
+                            node::TyNode::Pointer { ty_name, .. }
+                                if matches!(&**ty_name, node::TyNode::Ty(name) if name == struct_name)
+                        )
+                    })
+                });
+
+            if needs_self_area {
+                if let Some(struct_info) = self.struct_tree.get(struct_name).cloned() {
                     let mut size = 0;
                     for field in &struct_info.fields {
                         // 確保するスタックを増やす

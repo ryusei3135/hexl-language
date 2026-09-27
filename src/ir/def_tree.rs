@@ -76,14 +76,16 @@ impl VarTree {
             _ => panic!("system err VarTree::AddのKには、`l`か`p`以外入れられません"),
         };
         if let Some(ref mut var_info) = self.hash.get_mut(var_name) {
+            let is_constract_ty =
+                var_info.size.is_constract_must() || var_info.size.is_constract_of();
             return match var_info.life {
-                VarLife::Constracting => {
+                VarLife::Constracting if is_constract_ty => {
                     crate::GenCompileErr!(
                         ReassignActiveContract,
                         format!("{} 契約中の変数klkj", var_name)
                     )
                 }
-                VarLife::EndConstract => {
+                VarLife::Constracting | VarLife::EndConstract => {
                     **var_info = VarMetaData::new(&var, &var_ty, &var_attr);
                     Ok(())
                 }
