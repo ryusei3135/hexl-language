@@ -8,7 +8,7 @@ impl Parser {
     #[inline(always)]
     pub fn assign_expr_is_mut(
         &mut self,
-        name: &String,
+        name: &str,
     ) -> Result<VarMutAttr, Result<node::Expr, err::ErrKind>> {
         let attr = match &self.current_tkn() {
             lex::Tkn::KeyWordMut => {
@@ -25,36 +25,36 @@ impl Parser {
             // 通常の代入ノード(`AssignVar`)にする。
             lex::Tkn::AddEq => {
                 return Err(Ok(node::AssignVar::new(
-                    &name,
+                    name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Add).unwrap(),
+                    self.compound_assign_value(name, node::Expr::Add).unwrap(),
                 )));
             }
             lex::Tkn::SubEq => {
                 return Err(Ok(node::AssignVar::new(
-                    &name,
+                    name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Sub).unwrap(),
+                    self.compound_assign_value(name, node::Expr::Sub).unwrap(),
                 )));
             }
             lex::Tkn::MulEq => {
                 return Err(Ok(node::AssignVar::new(
-                    &name,
+                    name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Mul).unwrap(),
+                    self.compound_assign_value(name, node::Expr::Mul).unwrap(),
                 )));
             }
             lex::Tkn::DivEq => {
                 return Err(Ok(node::AssignVar::new(
-                    &name,
+                    name,
                     node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(&name, node::Expr::Div).unwrap(),
+                    self.compound_assign_value(name, node::Expr::Div).unwrap(),
                 )));
             }
             _ => {
                 // define assign var node
                 return Err(Ok(node::AssignVar::new(
-                    &name,
+                    name,
                     node::Expr::Var(name.to_string()),
                     self.expr_branch().unwrap(),
                 )));
@@ -71,7 +71,7 @@ impl Parser {
     #[inline(always)]
     fn compound_assign_value(
         &mut self,
-        name: &String,
+        name: &str,
         op: fn((Box<node::Expr>, Box<node::Expr>)) -> node::Expr,
     ) -> Result<node::Expr, err::ErrKind> {
         Ok(op(node::Expr::wrap(

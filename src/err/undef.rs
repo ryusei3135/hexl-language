@@ -25,6 +25,8 @@ pub enum UndefKind {
     UndefVar,
     UndefFunc,
     UndefStruct,
+    UndefEnum,
+    UndefEnumMember,
     UndefMemberInVar,
     UndefMemberInFn,
 }

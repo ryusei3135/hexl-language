@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-09-27
+### Added
+- `[src/ir/builder/err_factory]`を追加
+- `[src/ir/builder/expr_node.rs]`にErrを返す処理を追加
+
+
 ## [0.12.3] - 2026-09-26
 ### Fixed
 - 構造体のポインタからメゾットが呼べないバグを修正

@@ -3,6 +3,7 @@ mod member;
 mod preproc;
 mod proc_fn_info;
 mod scope;
+mod err_factory;
 
 use super::*;
 use crate::{err::*, models::Body, parse};
@@ -71,8 +72,8 @@ impl IR {
     }
 
     #[inline(always)]
-    fn resolve_self_ty(&self, func: node::FuncDefine) -> node::FuncDefine {
-        self.resolved_self_ty(func)
+    fn resolve_self_ty(&self, func: &node::FuncDefine) -> node::FuncDefine {
+        self.resolved_self_ty(func.to_owned())
     }
 
     fn ty_contains_self(ty: &node::TyNode) -> bool {
@@ -197,7 +198,7 @@ impl IR {
                 );
             };
 
-            let mut method_info = self.resolve_self_ty(method_info.clone());
+            let mut method_info = self.resolve_self_ty(&method_info);
             method_info.module = Some(struct_def.name.clone());
 
             // 関数の情報を登録
@@ -205,7 +206,7 @@ impl IR {
 
             let _ = self.push_param_meta_data(&method_info.params)?;
             self.scope_states.clear();
-            self.gen_inst(&method_info.body.clone());
+            self.gen_inst(&method_info.body);
 
             // 関数の処理内容をpush
             self.push_fn_ir_tree(&method_info);
@@ -410,7 +411,7 @@ impl IR {
             // メンバの定義順に基いたタグ(整数値)として展開する
             node::Expr::EnumVariant { name, variant } => {
                 // `src/ir/builder/expr_node.rs`
-                self.enum_variant_node(&name, &variant, &expect_byte)
+                *self.enum_variant_node(&name, &variant, &expect_byte).unwrap()
             }
             // 構造体の初期化: `Name { field: value, .. }`
             node::Expr::InitStruct {

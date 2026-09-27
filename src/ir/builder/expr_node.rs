@@ -4,6 +4,7 @@ use crate::{
 };
 
 use super::*;
+use err_factory::expr_node;
 
 impl IR {
     fn get_ast_len(&self, ast: &node::Expr) -> Option<usize> {
@@ -272,17 +273,21 @@ impl IR {
         name: &str,
         variant: &str,
         expect_byte: &types::Size,
-    ) -> inst::Inst {
+    ) -> Result<Box<inst::Inst>, err::ErrKind> {
         let enum_def = self
             .enum_tree
             .get(name)
-            .unwrap_or_else(|| panic!("未定義の列挙型です: {}", name));
+            .ok_or_else(|| expr_node::this_enum_is_undefined(name).unwrap_err())?;
         let variant_index = enum_def
             .variants
             .iter()
             .position(|v| &v == &variant)
-            .unwrap_or_else(|| panic!("列挙型 `{}` にメンバ `{}` は存在しません", name, variant));
-        inst::Inst::gen_num(&variant_index.to_string(), &expect_byte, self.id_counter)
+            .ok_or_else(|| expr_node::this_enum_member_is_undefined(variant).unwrap_err())?;
+        Ok(Box::new(inst::Inst::gen_num(
+            &variant_index.to_string(), 
+            &expect_byte, 
+            self.id_counter
+        )))
     }
 
     pub(super) fn init_struct_node(
@@ -300,7 +305,7 @@ impl IR {
             .struct_tree
             .get(&struct_name)
             .cloned()
-            .unwrap_or_else(|| panic!("未定義の構造体です: {}", name));
+            .ok_or_else(|| expr_node::this_struct_is_undefined(&struct_name).unwrap_err())?;
 
         let mut mem_insts = Vec::with_capacity(struct_def.fields.len());
         // フィールドは構造体で定義された順番通りに展開する

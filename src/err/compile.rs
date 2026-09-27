@@ -2,6 +2,10 @@ use crate::err;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileErr {
+    /// 配列の指定しているindexが数字じゃない
+    InvalidIndexType {
+        val: String,
+    },
     /// 不変の変数に値を代入しようとした
     AssignToImmutableVar(String),
     /// ポインタに指定された範囲と初期値の長さが一致しない
@@ -46,6 +50,14 @@ macro_rules! GenCompileErr {
         Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
             $msg.to_string(),
         ))))
+    };
+}
+
+/// 渡されたエラーを直接変換
+#[macro_export]
+macro_rules! GenCompileErr2 {
+    ($kind:expr) => {
+        Err(err::ErrKind::CompileErr(Box::new($kind)))
     };
 }
 
@@ -195,6 +207,7 @@ impl CompileErr {
             Self::ReassignActiveContract(var_name) => {
                 format!("{var_name}")
             }
+            t => panic!("{:?}", t),
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::err::undef::UndefKind::*;
 
 use super::*;
+use err_factory::member;
 
 impl IR {
     pub fn member_is_var(
@@ -130,16 +131,13 @@ impl IR {
         let field_ty = self
             .struct_tree
             .get(&struct_name)
-            .unwrap_or_else(|| panic!("未定義の構造体です: {}", struct_name))
+            .ok_or_else(|| member::this_struct_is_undefined(&struct_name).unwrap_err())?
             .fields
             .iter()
             .find(|field| &field.name == name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "構造体 `{}` にメンバー `{}` は存在しません",
-                    struct_name, name
-                )
-            })
+            .ok_or_else(|| {
+                member::this_member_is_not_found_struct(name).unwrap_err()
+            })?
             .ty
             .clone();
         let elem_size = self.size_of(&field_ty).to_bytes();
@@ -150,13 +148,14 @@ impl IR {
         // 添字は数字リテラルとしてのみ許可されているので、
         // ここでそのまま定数として解決する
         let index_num = match &**index {
-            node::Expr::Number(val) => val.parse::<usize>().unwrap_or_else(|_| {
-                panic!("配列のインデックスは数字である必要があります: {}", val)
-            }),
-            t => panic!(
-                "配列のインデックスは数字リテラルである必要があります: {:?}",
-                t
-            ),
+            node::Expr::Number(val) => {
+                if let Ok(num) = val.parse::<usize>() {
+                    num
+                } else {
+                    return member::arr_index_is_not_num::<inst::Inst>(&val);
+                }
+            }
+            t => panic!(),
         };
 
         Ok(inst::Inst::RefStruct {
