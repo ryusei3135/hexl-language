@@ -200,12 +200,7 @@ impl Parser {
         let node = match self.current_tkn().clone() {
             lex::Tkn::CompleSyn => self.comple_syntax()?,
             lex::Tkn::Name(name) => {
-                let r = node::Group2Node::Expr(self.build_scope_node(&name)?);
-                println!("{:?}", self.current_tkn());
-                if self.current_tkn() == &lex::Tkn::Equal {
-                    println!("JJJJJJJJJJJJ");
-                }
-                r
+                node::Group2Node::Expr(self.build_scope_node(&name)?)
             }
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {

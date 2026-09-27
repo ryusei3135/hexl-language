@@ -39,33 +39,28 @@ macro_rules! scope_node {
             let after_name = $self.next_tkn_ref(&[])?;
             if !matches!(after_name, lex::Tkn::$target) {
                 let expr = match after_name {
-                    // これらのトークンが続く場合のみ、代入/呼び出し/
-                    // 初期化の可能性があるので`expr_define_var`に委ねる
-                    lex::Tkn::Equal
-                    | lex::Tkn::Colon
+                    lex::Tkn::Equal => {
+                        $self.next_tkn(&["="])?;
+                        let value = $self.expr_branch()?;
+
+                        let target_name = path_node.pop().unwrap();
+                        let node = node::Expr::$result {
+                            scope: path_node.clone(),
+                            target: Box::new(node::Expr::Var(target_name)),
+                        };
+                        return Ok(node::AssignVar::new($start, node, value));
+                    }
+
+                    lex::Tkn::Colon
                     | lex::Tkn::LParen
                     | lex::Tkn::LBrace
                     | lex::Tkn::RBracket => {
-                        match
                         $self.expr_define_var(
                             path_node
-                            .last()
-                            .unwrap()
-                            .to_string()
+                                .last()
+                                .unwrap()
+                                .to_string()
                         )?
-                        {
-                            node::Expr::Assign { .. } => {
-                                node::Expr::Var(
-                                    path_node
-                                        .last()
-                                        .unwrap()
-                                        .to_string()
-                                )
-                            }
-                            n => {
-                                n
-                            }
-                        }
                     }
                     // それ以外(二項演算子や式の終端記号など)が続く場合、
                     // ここではただ値を読み取るだけなので、`expr_define_var`
