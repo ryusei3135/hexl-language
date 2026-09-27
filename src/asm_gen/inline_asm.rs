@@ -73,12 +73,16 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) fn deploy_inline_asm(&mut self, name: &String, lines: &Vec<(String, Vec<usize>)>) {
+    pub(super) fn deploy_inline_asm(
+        &mut self, 
+        name: &str, 
+        lines: &[(String, Vec<usize>)]
+    ) {
         if self
             .asm_fmt
             .inline_asm_list()
             .iter()
-            .find(|v| v.as_str() == name.as_str())
+            .find(|v| v.as_str() == name)
             .is_some()
         {
             // === 1. インラインアセンブラ中で使われているレジスタを検出する ===
@@ -159,7 +163,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn gen_inline_asm_txt(&mut self, lines: &Vec<(String, Vec<usize>)>) {
+    fn gen_inline_asm_txt(&mut self, lines: &[(String, Vec<usize>)]) {
         // === インラインアセンブラ本体を展開する ===
         for (template, operand_ids) in lines.iter() {
             let mut asm_line = template.clone();

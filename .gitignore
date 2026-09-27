@@ -12,3 +12,4 @@ log.txt
 hexl/
 *.elf
 *.exe
+library

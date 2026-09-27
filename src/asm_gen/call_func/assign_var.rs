@@ -4,7 +4,7 @@ impl AsmEmitter {
     /// メモリに値を書き込むアセンブリ言語を生成
     pub(super) fn write_mem(
         &mut self,
-        name: &String,
+        name: &str,
         dst: usize,
         value: usize,
         this_is_self: &SelfPtrInfo,
