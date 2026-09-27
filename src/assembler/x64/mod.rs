@@ -2,6 +2,7 @@ mod convert;
 pub mod elf;
 mod emitter;
 mod parse;
+pub mod pe;
 
 use emitter::Emitter;
 use parse::{Lexer, Parser};
@@ -9,12 +10,16 @@ use parse::{Lexer, Parser};
 /// アセンブリソースをアセンブルしてファイルに書き出す。
 ///
 /// - `mode` に `"-o"` を渡すと再配置可能オブジェクトファイル (`a.o`) を生成する。
-/// - `mode` に `"-c"` を渡すと単独で実行可能な ELF 実行ファイル (`a.out`) を生成する。
+///   (オブジェクトファイルは ELF 固定。`os` の値には依存しない)
+/// - `mode` に `"-c"` を渡すと単独で実行可能なファイルを生成する。
+///   出力フォーマットは `os` で選択する:
+///     - `"linux"` -> ELF 実行ファイル (`a.elf`)
+///     - `"win"`   -> Windows PE32+ 実行ファイル (`a.exe`, Windows 11 でも動作)
 /// - `source` には AT&T 構文の x64 アセンブリコードをそのまま渡す。
 ///
-/// この関数はレキサ/パーサ/コード生成/ELF出力までをすべて内部で行うため、
-/// 呼び出し側はモードとソースコードを渡すだけでよい。
-pub fn emitter_x64(mode: &str, source: &str) -> Result<(), String> {
+/// この関数はレキサ/パーサ/コード生成/バイナリ出力までをすべて内部で行うため、
+/// 呼び出し側はモード・ソースコード・対象OSを渡すだけでよい。
+pub fn emitter_x64(mode: &str, source: &str, os: &str) -> Result<(), String> {
     let tokens = Lexer::new(source).tokenize();
 
     // 2. 構文解析
@@ -30,7 +35,7 @@ pub fn emitter_x64(mode: &str, source: &str) -> Result<(), String> {
     emit.emit_program(&program).unwrap();
     emit.finish()?;
 
-    // 5. モードに応じてファイルへ書き出す
+    // 5. モード/OSに応じてファイルへ書き出す
     match mode {
         "-o" => {
             let bytes = elf::write_object(&emit)?;
@@ -41,16 +46,36 @@ pub fn emitter_x64(mode: &str, source: &str) -> Result<(), String> {
             println!("wrote a.o ({} bytes)", bytes.len());
         }
 
-        "-c" => {
-            let bytes = elf::write_executable(&emit)?;
+        "-c" => match os {
+            "linux" => {
+                let bytes = elf::write_executable(&emit)?;
 
-            std::fs::write("a.out", &bytes)
-                .map_err(|e| format!("a.out の書き込みに失敗しました: {}", e))?;
+                std::fs::write("a.elf", &bytes)
+                    .map_err(|e| format!("a.elf の書き込みに失敗しました: {}", e))?;
 
-            make_executable("a.out")?;
+                make_executable("a.elf")?;
 
-            println!("wrote a.out ({} bytes)", bytes.len());
-        }
+                println!("wrote a.elf ({} bytes)", bytes.len());
+            }
+
+            "win" => {
+                let bytes = pe::write_executable(&emit)?;
+
+                std::fs::write("a.exe", &bytes)
+                    .map_err(|e| format!("a.exe の書き込みに失敗しました: {}", e))?;
+
+                make_executable("a.exe")?;
+
+                println!("wrote a.exe ({} bytes)", bytes.len());
+            }
+
+            other => {
+                return Err(format!(
+                    "不明なOSです: {} (\"win\" または \"linux\" を指定してください)",
+                    other
+                ));
+            }
+        },
 
         other => {
             return Err(format!(
