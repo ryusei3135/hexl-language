@@ -190,17 +190,17 @@ impl IR {
     #[inline(always)]
     pub fn inline_proc(&mut self, lines: &[node::InlineAsm], name: &str) {
         let mut gen_ir = |expr: Expr| {
-            let ty: types::Size = 
+            let ty: types::Size =
             // 変数のノードを取得
             if let node::Expr::Var(
                 ref var_name
-                ) = expr 
+                ) = expr
             {
                 let ty_node = self
                     .var_tree
                     .get_ty_node(&var_name)
                     .unwrap();
-                types::Size::new(&ty_node)
+                ty_node.try_into()
                     .unwrap()
             } else {
                 types::Size::DD

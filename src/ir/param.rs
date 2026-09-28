@@ -14,7 +14,7 @@ impl IR {
             )?;
             // 型がポインタの先に構造体がある場合、その構造体のサイズを取得する
             // types::Struct(struct_ty)
-            let size = if let Some(s) = types::Size::new(&param.ty) {
+            let size = if let Ok(s) = (&param.ty).try_into() {
                 s
             } else {
                 // get_struct_size で発生したエラーを一時的に保存する変数

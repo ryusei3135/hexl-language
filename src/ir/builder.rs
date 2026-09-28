@@ -1,11 +1,12 @@
+mod err_factory;
 mod expr_node;
 mod member;
 mod preproc;
 mod proc_fn_info;
 mod scope;
-mod err_factory;
 
 use super::*;
+use crate::ir::types::*;
 use crate::{err::*, models::Body, parse};
 
 impl IR {
@@ -243,7 +244,8 @@ impl IR {
     }
 
     fn stack_counter(&mut self, size: &node::TyNode) {
-        self.stk_counter += types::Size::new(size).unwrap().to_bytes();
+        let ty: types::Size = size.try_into().unwrap();
+        self.stk_counter += ty.to_bytes();
     }
 
     /// 文のノードを生成
@@ -413,7 +415,9 @@ impl IR {
             // メンバの定義順に基いたタグ(整数値)として展開する
             node::Expr::EnumVariant { name, variant } => {
                 // `src/ir/builder/expr_node.rs`
-                *self.enum_variant_node(&name, &variant, &expect_byte).unwrap()
+                *self
+                    .enum_variant_node(&name, &variant, &expect_byte)
+                    .unwrap()
             }
             // 構造体の初期化: `Name { field: value, .. }`
             node::Expr::InitStruct {
@@ -967,13 +971,13 @@ mod match_expr_ir_tests {
         // 1. 真偽値(比較式)を与えるパターンは、その式がそのまま
         //    条件分岐の判定に使われる (単純なif/else)
         let body = build_func_body(
-            "main(): int { 
+            "main(): int {
                 a: int = 10
                 cond a == 10 {
                     b: int = 1
                 } | {
-                    b: int = 0 
-                } 
+                    b: int = 0
+                }
             }",
         );
         assert!(

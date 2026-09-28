@@ -1,4 +1,6 @@
 use super::*;
+use crate::parse::node::TyNode;
+use std::convert::TryFrom;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Size {
@@ -19,23 +21,24 @@ pub enum Size {
     Void,
 }
 
-impl Size {
+impl TryFrom<&TyNode> for Size {
+    type Error = err::ErrKind;
     /// 組み込みの型(byte/u16/int/u64)のみを解決する
     /// 構造体や列挙型などのユーザー定義の型を解決する場合は
     /// `builder::IR::size_of` を使用する
-    pub fn new(ty: &node::TyNode) -> Option<Self> {
+    fn try_from(ty: &TyNode) -> Result<Self, Self::Error> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name).ok()?,
+            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name).unwrap(),
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
-                Self::new(&node::TyNode::Ty(name.clone()))?
+                node::TyNode::Ty(name.to_owned()).try_into()?
             }
             node::TyNode::Pointer {
                 is_const,
                 ty_name,
                 range,
             } => Self::Pointer {
-                ty: Box::new(Self::new(&*ty_name)?),
+                ty: Box::new((*ty_name.to_owned()).try_into()?),
                 is_const: is_const.clone(),
                 range: range.clone(),
             },
@@ -43,13 +46,48 @@ impl Size {
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
             node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
-                Self::new(&ty.unwrap_ty())?
+                ty.unwrap_ty().try_into().unwrap()
             }
             t => panic!("{:?}", t),
         };
-        Some(size_ty)
+        Ok(size_ty)
     }
+}
 
+impl TryFrom<TyNode> for Size {
+    type Error = err::ErrKind;
+    /// 組み込みの型(byte/u16/int/u64)のみを解決する
+    /// 構造体や列挙型などのユーザー定義の型を解決する場合は
+    /// `builder::IR::size_of` を使用する
+    fn try_from(ty: TyNode) -> Result<Self, Self::Error> {
+        let size_ty = match ty {
+            node::TyNode::Ty(ty_name) => embe_ty_sort(&ty_name).unwrap(),
+            // スタック/静的領域の型は、要素の型と同じサイズを持つ
+            node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
+                node::TyNode::Ty(name.to_owned()).try_into()?
+            }
+            node::TyNode::Pointer {
+                is_const,
+                ty_name,
+                range,
+            } => Self::Pointer {
+                ty: Box::new((*ty_name).try_into()?),
+                is_const: is_const,
+                range: range,
+            },
+            node::TyNode::SelfTy(..) => Self::DQ,
+            // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
+            // サイズとしては内側の型と全く同じものとして扱う
+            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
+                ty.unwrap_ty().try_into().unwrap()
+            }
+            t => panic!("{:?}", t),
+        };
+        Ok(size_ty)
+    }
+}
+
+impl Size {
     /// 構造体の型を作成する
     pub fn emit_struct_ty_node(
         f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
@@ -60,7 +98,7 @@ impl Size {
         let mut struct_ty = Vec::new();
 
         for field in target.fields.iter() {
-            let ty = Box::new((field.name.clone(), Size::new(&field.ty).unwrap()));
+            let ty = Box::new((field.name.clone(), (&field.ty).try_into().unwrap()));
             struct_ty.push(ty);
         }
 
@@ -78,7 +116,7 @@ impl Size {
     /// ポインタ型を作成する
     pub fn build_ptr_ty(ty: &node::TyNode, range: Option<(usize, usize)>) -> Self {
         Self::Pointer {
-            ty: Box::new(Self::new(&ty).unwrap()),
+            ty: Box::new(ty.try_into().unwrap()),
             is_const: false,
             range,
         }
@@ -144,7 +182,7 @@ impl IR {
         match ty {
             node::TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {
-                    return types::Size::new(ty).unwrap();
+                    return ty.try_into().unwrap();
                 }
 
                 if self.enum_tree.contains_key(name) {

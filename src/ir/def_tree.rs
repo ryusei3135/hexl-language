@@ -3,6 +3,7 @@ use crate::{
     parse::{self, VarMutAttr},
 };
 
+use super::types::*;
 use super::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,8 +278,9 @@ impl StructTree {
         field_name: &str,
     ) -> usize {
         let mut byte_counter = 0;
-        for member in self.tree.get(name).expect(name).fields.iter() {
-            byte_counter += types::Size::new(&member.ty).unwrap().to_bytes();
+        for ref member in self.tree.get(name).expect(name).fields.iter() {
+            let ty: types::Size = member.ty.clone().try_into().unwrap();
+            byte_counter += ty.to_bytes();
             if member.name == field_name {
                 return byte_counter;
             }
@@ -298,7 +300,7 @@ impl StructTree {
             .unwrap()
             .ty
             .clone();
-        types::Size::new(&ty).unwrap()
+        ty.try_into().unwrap()
     }
 
     pub fn get_struct_size(&self, name: &str) -> Result<node::StructDefine, err::ErrKind> {
@@ -346,7 +348,7 @@ impl FnDefInfo {
         match self.ret_ty.as_ref().unwrap() {
             node::TyNode::SelfTy(..) => None,
             node::TyNode::Ty(name) if !types::Size::is_builtin_ty_name(name) => None,
-            ty => Some(types::Size::new(ty).unwrap()),
+            ty => Some(ty.try_into().unwrap()),
         }
     }
 }

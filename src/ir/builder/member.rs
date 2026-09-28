@@ -135,9 +135,7 @@ impl IR {
             .fields
             .iter()
             .find(|field| &field.name == name)
-            .ok_or_else(|| {
-                member::this_member_is_not_found_struct(name).unwrap_err()
-            })?
+            .ok_or_else(|| member::this_member_is_not_found_struct(name).unwrap_err())?
             .ty
             .clone();
         let elem_size = self.size_of(&field_ty).to_bytes();
@@ -160,7 +158,7 @@ impl IR {
 
         Ok(inst::Inst::RefStruct {
             src: var_name.to_owned(),
-            size: types::Size::new(&field_ty).unwrap(),
+            size: field_ty.try_into().unwrap(),
             pos: field_pos + index_num * elem_size,
         })
     }

@@ -4,8 +4,13 @@ impl IR {
     pub fn check_var_ty(&self, var_name: &String, expect_ty: &types::Size) {
         let ty = self.var_tree.get_ty_node(&var_name).unwrap();
 
-        if types::Size::new(&ty).is_some_and(|result| !matches!(result, expect_ty)) {
-            panic!("{:?} fond {:?}", expect_ty, types::Size::new(&ty));
+        if ty
+            .clone()
+            .try_into()
+            .is_ok_and(|result: types::Size| !matches!(result, expect_ty))
+        {
+            let ty: types::Size = ty.try_into().unwrap();
+            panic!("{:?} fond {:?}", expect_ty, ty);
         }
     }
 }
