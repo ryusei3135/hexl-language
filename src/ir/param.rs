@@ -18,7 +18,7 @@ impl IR {
 
             self.ir_tree
                 .push(inst::Inst::Param(inst::ParamMetaData::new(
-                    param.name.to_string(),
+                    &param.name,
                     index,
                     self.ir_tree.len(),
                     &size,

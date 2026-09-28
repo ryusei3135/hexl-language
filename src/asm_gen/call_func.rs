@@ -51,6 +51,12 @@ impl AsmEmitter {
                 "address"
             } else if self.curr_inst[*param].is_pointer() {
                 "address"
+            } else if matches!(self.curr_inst[*param], inst::Inst::Str { .. }) {
+                // 文字列の実体は静的領域(`M0`など)にあり、引数には
+                // その「アドレス」を渡す必要がある。`mov`だとラベルの指す
+                // 中身を読み込んでしまうので、`leaq M0(%rip), %rdi`のように
+                // `lea`(=`address`)でアドレスを求める
+                "address"
             } else {
                 "mov"
             };
@@ -242,7 +248,9 @@ impl AsmEmitter {
             }
         }
         // retがない場合つけたす
-        if !self.asm_text.ends_with("ret\n") {
+        // `_start`はOSから直接呼ばれるエントリーポイントで、`ret`で戻る先が
+        // 無い(終了は`exit`のsyscallで行う)ため、`leave; ret`は付けない
+        if fn_meta_data.0 != "_start" && !self.asm_text.ends_with("ret\n") {
             self.asm_text.push_str("leave\nret\n");
         }
     }

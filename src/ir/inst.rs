@@ -43,9 +43,9 @@ pub struct ParamMetaData {
 }
 
 impl ParamMetaData {
-    pub fn new(name: String, num: usize, dst: usize, ty: &types::Size) -> Self {
+    pub fn new(name: &str, num: usize, dst: usize, ty: &types::Size) -> Self {
         Self {
-            name,
+            name: name.to_owned(),
             num,
             dst,
             ty: ty.to_owned(),

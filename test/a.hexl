@@ -3,7 +3,7 @@ print(msg: byte*const, len: i64) {
     #asm(gcc_x64) {
         "mov $1, %rax"
         "mov $1, %rdi"
-        "mov ${msg}, %rsi"
+        "leaq ${msg}, %rsi"
         "mov ${len}, %rdx"
         "syscall"
     }
@@ -28,9 +28,15 @@ fizzbuzz(n: i64) {
 }
 
 _start() {
-    i: i64 = 1
+    i mut: i64 = 1
     loop i < 10 {
         fizzbuzz(i)
         i = i + 1
+    }
+
+    #asm(gcc_x64) {
+        "mov $60, %rax"
+        "mov $0, %rdi"
+        "syscall"
     }
 }

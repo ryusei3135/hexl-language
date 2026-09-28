@@ -64,6 +64,21 @@ impl MngAsmFmt {
             .replace("{size}", size.to_string().as_str())
     }
 
+    /// オフセット無しのメモリ参照(AT&T構文なら`(%rbx)`)を作る。
+    ///
+    /// `ref_stack`のテンプレート(`-{size}({src})`など)から、オフセット部分
+    /// (`-{size}`/`+{size}`/`{size}`)だけを取り除いて使うため、
+    /// フォーマットごとの書き方(`[{src}-{size}]`など)にもそのまま対応できる
+    pub fn fmt_ref_operand_no_offset(&self, reg: &str) -> String {
+        self.fmt
+            .fmt
+            .ref_stack
+            .replace("{src}", reg)
+            .replace("-{size}", "")
+            .replace("+{size}", "")
+            .replace("{size}", "")
+    }
+
     pub fn func_frame_fmt(&self) -> String {
         self.fmt.fmt.frame.to_string()
     }

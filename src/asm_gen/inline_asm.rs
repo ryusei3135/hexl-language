@@ -46,6 +46,19 @@ impl AsmEmitter {
         }
     }
 
+    /// インラインアセンブラ内の`${var}`が、ポインタ型の引数(`Inst::Param`)
+    /// を指している場合のオペランドを返す。
+    fn inline_ptr_param_operand(&self, node_idx: usize) -> Option<String> {
+        let inst::Inst::Param(param) = &self.curr_inst[node_idx] else {
+            return None;
+        };
+        let var_info = self.var_hash_map.get(&param.name)?;
+        var_info.size.is_pointer()?;
+
+        let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
+        Some(self.asm_fmt.fmt_ref_operand_no_offset(&reg))
+    }
+
     fn extract_operand_text_sized(
         &mut self,
         node_idx: usize,
@@ -60,9 +73,9 @@ impl AsmEmitter {
             }
             inst::Inst::Param(param) => {
                 let var_info = self.var_hash_map.get(&param.name).unwrap();
-                if let Some(ty) = var_info.size.is_pointer() {
+                if var_info.size.is_pointer().is_some() {
                     let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
-                    self.asm_fmt.fmt_ref_operand(&reg, ty.to_bytes())
+                    self.asm_fmt.fmt_ref_operand_no_offset(&reg)
                 } else {
                     self.asm_fmt.get_fmt_reg(var_info.reg, forced_size)
                 }
@@ -102,7 +115,7 @@ impl AsmEmitter {
             for reg in literal_regs.iter() {
                 if let Some((var_name, size)) = self.var_using_reg(*reg) {
                     if let Some(free_reg) = self.find_free_reg(&literal_regs) {
-                        self.mov_register_val_to_reg(free_reg, &size, var_name, *reg);
+                        self.mov_register_val_to_reg(free_reg, &size, &var_name, *reg);
                     } else {
                         self.mov_register_val_to_stack(*reg, &mut stacked_regs);
                     }
@@ -130,7 +143,7 @@ impl AsmEmitter {
         &mut self,
         free_reg: usize,
         size: &Size,
-        var_name: String,
+        var_name: &str,
         reg: usize,
     ) {
         // --- 2-a. 空いているレジスタが見つかった場合 ---
@@ -177,11 +190,18 @@ impl AsmEmitter {
             let last_index = operand_ids.len().saturating_sub(1);
 
             for (index, operand_id) in operand_ids.iter().enumerate() {
-                let operand_text = match (index != last_index, &dst_size) {
-                    (true, Some(size)) => {
-                        self.extract_operand_text_sized(*operand_id, &dst_size, size)
+                let operand_text = if let Some(ptr_operand) =
+                    // ポインタ型の引数は、オフセット無しの参照にする
+                    self.inline_ptr_param_operand(*operand_id)
+                {
+                    ptr_operand
+                } else {
+                    match (index != last_index, &dst_size) {
+                        (true, Some(size)) => {
+                            self.extract_operand_text_sized(*operand_id, &dst_size, size)
+                        }
+                        _ => self.extract_operand_text(*operand_id, &dst_size),
                     }
-                    _ => self.extract_operand_text(*operand_id, &dst_size),
                 };
                 // `{0}`, `{1}`, ... という数字のプレースホルダーを置換
                 // (`${var}`はパーサー側(preproc.rs)の時点で既に
