@@ -244,7 +244,8 @@ impl IR {
     }
 
     fn stack_counter(&mut self, size: &node::TyNode) {
-        let ty: types::Size = size.try_into().unwrap();
+        let result = self.try_size_or_emit_struct(size);
+        let ty = self.unwrap_or_report(result);
         self.stk_counter += ty.to_bytes();
     }
 

@@ -279,7 +279,11 @@ impl StructTree {
     ) -> usize {
         let mut byte_counter = 0;
         for ref member in self.tree.get(name).expect(name).fields.iter() {
-            let ty: types::Size = member.ty.clone().try_into().unwrap();
+            let ty = types::Size::try_from_or_emit_struct(
+                &mut |name| self.get_struct_size(name),
+                &member.ty,
+            )
+            .unwrap();
             byte_counter += ty.to_bytes();
             if member.name == field_name {
                 return byte_counter;
@@ -300,7 +304,7 @@ impl StructTree {
             .unwrap()
             .ty
             .clone();
-        ty.try_into().unwrap()
+        types::Size::try_from_or_emit_struct(&mut |name| self.get_struct_size(name), &ty).unwrap()
     }
 
     pub fn get_struct_size(&self, name: &str) -> Result<node::StructDefine, err::ErrKind> {

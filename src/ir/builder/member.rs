@@ -158,7 +158,7 @@ impl IR {
 
         Ok(inst::Inst::RefStruct {
             src: var_name.to_owned(),
-            size: field_ty.try_into().unwrap(),
+            size: self.try_size_or_emit_struct(&field_ty)?,
             pos: field_pos + index_num * elem_size,
         })
     }

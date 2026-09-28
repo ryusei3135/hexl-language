@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-09-28
+### Added
+- `[src/assemblier/*]`を拡張性を持たせた
+### Changed
+- `TyNode`から`Size`に変換するAPIを`TryFrom`で実装
+### Fixed
+- メゾットでの初期化のバグ
+    ```
+    a mut: A = A::new()
+    ```
+    - これをやると変数`a`が未定義とバグが出る
+
+
 ## [0.12.6] - 2026-09-27
 ### Added
 - 出力するバイナリにPEを追加

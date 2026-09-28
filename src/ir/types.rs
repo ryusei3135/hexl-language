@@ -1,4 +1,5 @@
 use super::*;
+use crate::err::undef::UndefKind;
 use crate::parse::node::TyNode;
 use std::convert::TryFrom;
 
@@ -28,7 +29,7 @@ impl TryFrom<&TyNode> for Size {
     /// `builder::IR::size_of` を使用する
     fn try_from(ty: &TyNode) -> Result<Self, Self::Error> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name).unwrap(),
+            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 node::TyNode::Ty(name.to_owned()).try_into()?
@@ -46,7 +47,7 @@ impl TryFrom<&TyNode> for Size {
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
             node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
-                ty.unwrap_ty().try_into().unwrap()
+                ty.unwrap_ty().try_into()?
             }
             t => panic!("{:?}", t),
         };
@@ -61,7 +62,7 @@ impl TryFrom<TyNode> for Size {
     /// `builder::IR::size_of` を使用する
     fn try_from(ty: TyNode) -> Result<Self, Self::Error> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => embe_ty_sort(&ty_name).unwrap(),
+            node::TyNode::Ty(ty_name) => embe_ty_sort(&ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
                 node::TyNode::Ty(name.to_owned()).try_into()?
@@ -79,7 +80,7 @@ impl TryFrom<TyNode> for Size {
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
             node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
-                ty.unwrap_ty().try_into().unwrap()
+                ty.unwrap_ty().try_into()?
             }
             t => panic!("{:?}", t),
         };
@@ -103,6 +104,22 @@ impl Size {
         }
 
         Ok(Self::Struct(struct_ty))
+    }
+
+    /// `TyNode`を`Size`へ変換し、変換に失敗(`Err`)した場合は
+    /// `emit_struct_ty_node`で構造体の型として解決し直す
+    ///
+    /// `try_into`は組み込み型しか解決できないため、構造体などの
+    /// ユーザー定義の型では`Err`が返ってくる。その場合に`f`
+    /// (構造体の定義を名前から取得する関数)を使って構造体の型を作成する
+    pub fn try_from_or_emit_struct(
+        f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
+        ty: &node::TyNode,
+    ) -> Result<Self, err::ErrKind> {
+        match Self::try_from(ty) {
+            Ok(size) => Ok(size),
+            Err(_) => Self::emit_struct_ty_node(f, ty),
+        }
     }
 
     pub fn is_pointer(&self) -> Option<Size> {
@@ -159,20 +176,35 @@ impl Size {
 }
 
 #[inline(always)]
-fn embe_ty_sort(ty_name: &str) -> Result<Size, err::undef::UndefKind> {
+fn embe_ty_sort(ty_name: &str) -> Result<Size, err::ErrKind> {
     match ty_name {
         "byte" => Size::DB,
         "i16" => Size::DW,
         "int" => Size::DD,
         "i64" => Size::DQ,
         _ => {
-            return Err(err::undef::UndefKind::UndefVarTy);
+            return Err(crate::GenUndefErrResult!(
+                UndefVarTy,
+                ty_name.to_string(),
+                None
+            ));
         }
     }
-    .wrap_ok::<err::undef::UndefKind>()
+    .wrap_ok::<err::ErrKind>()
 }
 
 impl IR {
+    /// `TyNode`を`Size`へ変換する
+    ///
+    /// `try_into`が`Err`を返した場合(構造体などのユーザー定義の型)は、
+    /// `struct_tree`を参照して`Size::emit_struct_ty_node`で構造体の型を作成する
+    pub(super) fn try_size_or_emit_struct(
+        &self,
+        ty: &node::TyNode,
+    ) -> Result<types::Size, err::ErrKind> {
+        types::Size::try_from_or_emit_struct(&mut |name| self.struct_tree.get_struct_size(name), ty)
+    }
+
     /// 型からサイズを求める
     ///
     /// 組み込み型(`byte`/`u16`/`int`/`u64`)は`types::Size::new`と

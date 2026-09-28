@@ -1,6 +1,8 @@
 //! 配列やポインタが契約した範囲にいるかを
 //! 探索
 
+use crate::err::undef;
+
 use super::*;
 
 impl IR {

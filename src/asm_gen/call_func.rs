@@ -191,7 +191,19 @@ impl AsmEmitter {
                     dst,
                     src,
                 } => {
+                    // 戻り値として返される構造体の初期化かどうか。
+                    //
+                    // `returned_struct_idx`が`None`(=この関数は構造体を返さない)
+                    // の場合に、`resolve_struct_idx(*dst)`も`None`(=`dst`が
+                    // `a: A = A::new()`のようなコンストラクタ呼び出しで、
+                    // `Inst::Struct`を直接指していない)だと、`None == None`で
+                    // 「返される構造体」と誤判定されていた。その結果
+                    // `mov_value_ir`が呼ばれず、変数`a`が`var_hash_map`へ
+                    // 登録されないまま、以降の参照で「存在しない変数」に
+                    // なってしまっていた。
+                    // そのため、構造体が実際に返される場合(`Some`)のみ比較する
                     let is_returned_struct = matches!(size, types::Size::Struct(..))
+                        && returned_struct_idx.is_some()
                         && returned_struct_idx == self.resolve_struct_idx(*dst);
                     if !is_returned_struct {
                         self.mov_value_ir(size, *dst, *src, &name, &Some(size.clone()));

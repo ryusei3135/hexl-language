@@ -200,8 +200,8 @@ impl IR {
                     .var_tree
                     .get_ty_node(&var_name)
                     .unwrap();
-                ty_node.try_into()
-                    .unwrap()
+                let result = self.try_size_or_emit_struct(&ty_node);
+                self.unwrap_or_report(result)
             } else {
                 types::Size::DD
             };

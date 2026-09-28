@@ -1,8 +1,10 @@
 mod convert;
 pub mod elf;
 mod emitter;
+mod format_table;
 mod parse;
 pub mod pe;
+mod reg;
 
 use emitter::Emitter;
 use parse::{Lexer, Parser};
@@ -32,58 +34,23 @@ pub fn emitter_x64(mode: &str, source: &str, os: &str) -> Result<(), String> {
 
     // 4. 機械語の生成 + ラベル/シンボルの解決
     let mut emit = Emitter::new();
-    emit.emit_program(&program).unwrap();
+    emit.emit_program(&program)?;
     emit.finish()?;
 
     // 5. モード/OSに応じてファイルへ書き出す
-    match mode {
-        "-o" => {
-            let bytes = elf::write_object(&emit)?;
+    //    (対応する出力形式は `format_table.rs` の表で管理している)
+    let format = format_table::find(mode, os)?;
 
-            std::fs::write("a.o", &bytes)
-                .map_err(|e| format!("a.o の書き込みに失敗しました: {}", e))?;
+    let bytes = (format.write)(&emit)?;
 
-            println!("wrote a.o ({} bytes)", bytes.len());
-        }
+    std::fs::write(format.file_name, &bytes)
+        .map_err(|e| format!("{} の書き込みに失敗しました: {}", format.file_name, e))?;
 
-        "-c" => match os {
-            "linux" => {
-                let bytes = elf::write_executable(&emit)?;
-
-                std::fs::write("a.elf", &bytes)
-                    .map_err(|e| format!("a.elf の書き込みに失敗しました: {}", e))?;
-
-                make_executable("a.elf")?;
-
-                println!("wrote a.elf ({} bytes)", bytes.len());
-            }
-
-            "win" => {
-                let bytes = pe::write_executable(&emit)?;
-
-                std::fs::write("a.exe", &bytes)
-                    .map_err(|e| format!("a.exe の書き込みに失敗しました: {}", e))?;
-
-                make_executable("a.exe")?;
-
-                println!("wrote a.exe ({} bytes)", bytes.len());
-            }
-
-            other => {
-                return Err(format!(
-                    "不明なOSです: {} (\"win\" または \"linux\" を指定してください)",
-                    other
-                ));
-            }
-        },
-
-        other => {
-            return Err(format!(
-                "不明なモードです: {} (\"-o\" または \"-c\" を指定してください)",
-                other
-            ));
-        }
+    if format.executable {
+        make_executable(format.file_name)?;
     }
+
+    println!("wrote {} ({} bytes)", format.file_name, bytes.len());
 
     Ok(())
 }
