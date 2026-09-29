@@ -567,10 +567,7 @@ impl IR {
         self.loop_labels.push((start.clone(), end.clone()));
         self.begin_scope();
         self.gen_inst(&body);
-        {
-            let result = self.end_scope(true);
-            self.unwrap_or_report(result);
-        }
+        self.end_block_scope();
         self.loop_labels.pop();
         crate::push_jmp_code!(self, Jmp, &start);
         crate::push_jmp_code!(self, Block, &end);
@@ -623,10 +620,7 @@ impl IR {
         if let Some(arm) = arm_else.clone() {
             self.begin_scope();
             self.gen_inst(&arm);
-            {
-                let result = self.end_scope(true);
-                self.unwrap_or_report(result);
-            }
+            self.end_block_scope();
         }
         crate::push_jmp_code!(self, Jmp, &end_label);
 
@@ -636,10 +630,7 @@ impl IR {
             crate::push_jmp_code!(self, Block, label);
             self.begin_scope();
             self.gen_inst(&arm.body);
-            {
-                let result = self.end_scope(true);
-                self.unwrap_or_report(result);
-            }
+            self.end_block_scope();
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
 

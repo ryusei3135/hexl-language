@@ -134,7 +134,7 @@ pub fn build(
     // アセンブリ言語のデータを作成
     lexer.analy(&content)?;
 
-    let nodes = parser.parser(lexer.gen_tkns.clone())?;
+    let nodes = parser.parser(&lexer.gen_tkns)?;
 
     let func_def_meta_data = ir_builder
         .builder(
@@ -152,7 +152,7 @@ pub fn build(
         &settings.fmt_name,
     );
     
-    assembler::x64::emitter_x64("-c", &asm_text, "linux");
+    assembler::x64::emitter_x64("-c", &asm_text, "linux").unwrap();
 
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");

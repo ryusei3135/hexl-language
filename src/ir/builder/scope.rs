@@ -4,9 +4,27 @@ use super::*;
 
 impl IR {
     /// スコープをスタート
+    /// irに`StartScope`を挿入する
     #[inline(always)]
     pub(in crate::ir::builder) fn begin_scope(&mut self) {
         self.scope_states.push(self.var_tree.clone());
+        self.push_scope_inst(inst::Inst::StartScope);
+    }
+
+    /// ブロックの終わりで、スコープを終了する
+    /// 契約の検査をしたあと、irに`EndScope`を挿入する
+    pub(in crate::ir::builder) fn end_block_scope(&mut self) {
+        let result = self.end_scope(true);
+        self.unwrap_or_report(result);
+        self.push_scope_inst(inst::Inst::EndScope);
+    }
+
+    /// `StartScope`/`EndScope`をirに追加する
+    /// (他のノードと同様に、`id_counter`も進める)
+    #[inline(always)]
+    fn push_scope_inst(&mut self, node: inst::Inst) {
+        self.ir_tree.push(node);
+        self.id_counter += 1;
     }
 
     /// スコープが終了したときの処理

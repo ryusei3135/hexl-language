@@ -457,9 +457,9 @@ impl ModPath {
 
     /// 新しい書き方(`"mod/file.hexl"`)用の`ModPath`を作る
     #[inline(always)]
-    pub fn new_literal(literal: String, kind: ImportKind) -> Self {
+    pub fn new_literal(literal: &str, kind: ImportKind) -> Self {
         Self {
-            path: ImportPath::Literal(literal),
+            path: ImportPath::Literal(literal.to_string()),
             kind,
         }
     }
@@ -467,7 +467,7 @@ impl ModPath {
     /// 従来の書き方(`Segments`)でのみ使う。
     /// `Literal`に対して呼び出すとpanicする
     #[inline(always)]
-    pub fn add_path(&mut self, path_name: &String) {
+    pub fn add_path(&mut self, path_name: &str) {
         match &mut self.path {
             ImportPath::Segments(segments) => {
                 segments.push(path_name.to_string());

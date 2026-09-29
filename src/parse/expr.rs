@@ -296,7 +296,7 @@ impl Parser {
     /// である必要がある
     pub(super) fn call_func_expr(
         &mut self,
-        name: &String,
+        name: &str,
         ini_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
@@ -306,7 +306,7 @@ impl Parser {
         let mut args = Vec::<node::Expr>::new();
 
         // 関数を呼び出す式に引数がない場合は実行されない
-        if !matches!(self.next_tkn_ref(&["not `)`"])?, lex::Tkn::RParen) {
+        if self.next_tkn_ref(&["not `)`"])? != lex::Tkn::RParen {
             loop {
                 // 引数の式を取得
                 args.push(self.expr_cmp(ini_struct)?);
@@ -334,7 +334,7 @@ impl Parser {
         // ')'をスキップ
         self.next_tkn(&[])?;
         Ok(node::Expr::CallFunc(node::CallInfo {
-            name: name.clone(),
+            name: name.to_owned(),
             // ジェネリクス関数の場合は、呼び出し元(`generic_call_expr`)が
             // `<>`の中身を入れる
             temp_ty: Vec::new(),

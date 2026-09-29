@@ -59,6 +59,8 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "cltd" | "cdq" => e.emit_cltd(),
 
+        "cqto" | "cqo" => e.emit_cqto(&inst.operands),
+
         "cmp" | "cmpq" | "cmpl" | "cmpw" | "cmpb" => e.emit_cmp(&inst.operands),
 
         "lea" | "leaq" | "leal" => e.emit_lea(&inst.operands),
@@ -105,6 +107,23 @@ impl Emitter {
             return Err("nop takes no operands".into());
         }
         self.emit_u8(0x90);
+
+        Ok(())
+    }
+
+    // --------------------------------------------------------
+    // cqto / cqo  (REX.W 0x99)
+    //
+    // `%rax`の符号ビットを`%rdx`全体へ拡張する(`%rdx:%rax`を作る)。
+    // 64bitの`idiv`の前に使う。32bit版の`cltd`/`cdq`(0x99)に
+    // REX.Wプレフィックスを付けたもの
+    // --------------------------------------------------------
+    fn emit_cqto(&mut self, operands: &[Operand]) -> Result<(), String> {
+        if !operands.is_empty() {
+            return Err("cqto takes no operands".into());
+        }
+        self.emit_rex(true, false, false, false);
+        self.emit_u8(0x99);
 
         Ok(())
     }

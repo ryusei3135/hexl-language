@@ -38,7 +38,7 @@ impl MngAsmFmt {
     /// - usizeの場合はレジスタの番号が返される
     /// ## 引数
     /// - param_idx = 引数の場所
-    pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(&self, param_idx: usize, size: Size) -> R {
+    pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(&self, param_idx: usize, size: &Size) -> R {
         if TypeId::of::<R>() != TypeId::of::<usize>() && TypeId::of::<R>() != TypeId::of::<String>()
         {
             panic!("この型は無効です,")
@@ -77,6 +77,12 @@ impl MngAsmFmt {
             .replace("-{size}", "")
             .replace("+{size}", "")
             .replace("{size}", "")
+    }
+
+    /// ニーモニックにサイズ接尾辞を付けるフォーマット(AT&T構文)かどうか
+    #[inline(always)]
+    pub fn mnemonic_size(&self) -> bool {
+        self.fmt.fmt.mnemonic_size
     }
 
     pub fn func_frame_fmt(&self) -> String {

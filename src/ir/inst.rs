@@ -126,6 +126,12 @@ pub enum Inst {
 
     ExternFunc(String),
     Expr(ExprInst),
+    /// スコープの開始位置
+    /// アセンブリ言語の生成時、これ以降に使用中として登録された
+    /// レジスタを、対応する`EndScope`で解放するための目印になる
+    StartScope,
+    /// `StartScope`に対応するスコープの終了位置
+    EndScope,
     Block(String),
     Jmp(String),
     ExpectJmp(String), // ジャンプする場所

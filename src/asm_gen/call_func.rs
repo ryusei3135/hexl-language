@@ -31,6 +31,10 @@ impl AsmEmitter {
             call_func.push_str(&self.asm_fmt.get_push(&reg_name));
         }
 
+        // 各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
+        // 後で、引数レジスタを壊さない順序に並べ替えて出力する
+        let mut arg_lines: Vec<(usize, String, String)> = Vec::new();
+
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数の実際の型のサイズ
             // (レジスタの取得だけでなく、後段のニーモニックの
@@ -39,13 +43,14 @@ impl AsmEmitter {
             // 引数のレジスタを取得
             let param_reg = self
                 .asm_fmt
-                .get_fmt_param::<String>(index, param_ty.clone());
+                .get_fmt_param::<String>(index, &param_ty);
             // 引数のレジスタと値のidを挿入
             let src1_idx = if let Some(struct_idx) = self.resolve_struct_idx(*param) {
                 struct_idx
             } else {
                 *param
             };
+            self.used_reg.mark_used(self.asm_fmt.get_fmt_param::<usize>(index, &param_ty));
 
             let opcode = if expand_struct_return && index == 0 {
                 "address"
@@ -82,8 +87,30 @@ impl AsmEmitter {
             } else {
                 self.asm_fmt.fmt_mnemonic_resize(opcode, &asm, &resize_size)
             };
-            call_func.push_str(&asm);
+            let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty);
+            arg_lines.push((param_reg_num, src1_text, asm));
         }
+
+        // === 引数のレジスタへ値を設定する順番を決める ===
+        // 先に`%rdi`へ値を書いてしまうと、後ろの引数が元の`%rdi`の値を
+        // 読む場合(`f(y, x)`で、`x`が`%rdi`にある場合など)に、
+        // 壊れた値を読んでしまう。「他の未出力の引数から読まれていない
+        // 引数レジスタ」を持つ引数から順に出力する。
+        // (引数同士が循環している場合だけは、元の順のまま出力する)
+        let mut pending: Vec<usize> = (0..arg_lines.len()).collect();
+        while !pending.is_empty() {
+            let pos = pending
+                .iter()
+                .position(|&i| {
+                    pending
+                        .iter()
+                        .all(|&j| j == i || !self.text_reads_reg(&arg_lines[j].1, arg_lines[i].0))
+                })
+                .unwrap_or(0);
+            let i = pending.remove(pos);
+            call_func.push_str(&arg_lines[i].2);
+        }
+
         let fn_label = if meta_data.temp_ty.is_empty() {
             emit_fn_name_id(&meta_data.name)
         } else {
@@ -130,6 +157,8 @@ impl AsmEmitter {
             emit_generic_fn_name_id(&fn_meta_data.1.name, &generic_args)
         };
         self.asm_text.push_str(&format!("{}:\n", &fn_label));
+        // 前の関数の変数・レジスタの状態を持ち越さない
+        self.reset_fn_state();
         // 関数ごとにスタックの使用量をリセットする
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)
@@ -175,6 +204,12 @@ impl AsmEmitter {
                 inst::Inst::InitArr(_) => {}
                 inst::Inst::Block(name) => {
                     self.asm_text.push_str(&format!("{}:\n", name));
+                }
+                inst::Inst::StartScope => {
+                    self.start_scope_asm();
+                }
+                inst::Inst::EndScope => {
+                    self.end_scope_asm();
                 }
                 inst::Inst::Comple { name, lines } => {
                     // build_fn_proc.rs
@@ -222,7 +257,7 @@ impl AsmEmitter {
                 inst::Inst::Param(param) => {
                     let ty = node.get_param_ty().unwrap();
                     // 引数に使うレジスタを取得する
-                    let reg_num = self.asm_fmt.get_fmt_param::<usize>(param.num, ty.clone());
+                    let reg_num = self.asm_fmt.get_fmt_param::<usize>(param.num, &ty);
                     self.insert_var_info(
                         &param.name,
                         asm_emitter::VarIndexInfo::new(reg_num, &ty, param.dst),
@@ -257,6 +292,15 @@ impl AsmEmitter {
 }
 
 impl AsmEmitter {
+    /// オペランドのテキストが、レジスタ`reg`(どのサイズの名前でも)を
+    /// 読み出しに使っているか(`(%rbx)`のようなメモリ参照も含む)
+    pub(super) fn text_reads_reg(&self, text: &str, reg: usize) -> bool {
+        self.asm_fmt
+            .all_reg_names()
+            .iter()
+            .any(|(num, name)| *num == reg && text.contains(name.as_str()))
+    }
+
     #[inline(always)]
     pub(super) fn expect_jmp(&mut self, name: &str) {
         // 次のフォーマットに使うラベルの名前を予約する
@@ -279,14 +323,24 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
+        // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
+        // 結果)と`%rax`/`%rdx`を避けて確保する。
+        // (以前は`reg_idx`を進めるだけだったため、引数の`%rdi`などまで
+        //  上書きしていた)
+        let dst = self.alloc_reg();
+        self.reg_idx = dst;
+
         let asm = self.format_expr_inst(&expr);
 
         self.asm_text.push_str(&asm);
 
         // 式の結果を置いたレジスタを使用中として記録する
-        self.used_reg.mark_used(self.reg_idx);
-        self.last_inst_idx.push((expr.dst, self.reg_idx));
-        self.reg_idx += 1;
+        self.used_reg.mark_used(dst);
+        self.last_inst_idx.push((expr.dst, dst));
+
+        // この式が使い終わった、オペランドの一時的な結果のレジスタを解放する
+        self.release_expr_temp(expr.ls);
+        self.release_expr_temp(expr.rs);
     }
 
     #[inline(always)]
@@ -326,7 +380,14 @@ impl AsmEmitter {
             // 通常の変数への再代入(`b = 10`など)
             self.update_value_info(&name, value);
 
-            let current_reg = self.reg_idx;
+            // レジスタに置かれている変数は、そのレジスタへそのまま書き込む。
+            // (以前は`reg_idx`のレジスタへ変数を「引っ越し」させていたため、
+            //  引数や他の変数のレジスタを壊したり、ループの先頭が
+            //  参照するレジスタと食い違ったりしていた)
+            let current_reg = match self.var_hash_map.get(name) {
+                Some(var) if !var.is_stack => var.reg,
+                _ => self.reg_idx,
+            };
             let s: SelfPtrInfo = if this_is_self {
                 None
             } else {
@@ -342,10 +403,9 @@ impl AsmEmitter {
                 self.assign_val_is_not_ptr(current_reg, value, &s)
             };
 
-            if self.expr_vars.iter().find(|v| v == &name).is_some() {
-                self.update_value_reg(&name, current_reg);
-            }
             self.asm_text.push_str(&text);
+            // 代入する値が式の結果だった場合、そのレジスタはもう不要
+            self.release_expr_temp(value);
         }
     }
 

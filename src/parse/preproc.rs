@@ -12,14 +12,14 @@ use regex::{Captures, Regex};
 impl Parser {
     pub(super) fn make_preproc(
         &mut self,
-        proc_name: &String,
+        proc_name: &str,
     ) -> Result<node::Group2Node, err::ErrKind> {
-        let result = match proc_name.as_str() {
+        let result = match proc_name {
             "include" => node::Group2Node::Include(self.build_include_path()?),
-            "preserve" => {
-                println!("{}", proc_name);
-                panic!();
-            }
+            // "preserve" => {
+            //     println!("{}", proc_name);
+            //     panic!();
+            // }
             "asm" => self.build_asm_ast()?,
             _ => panic!(),
         };
@@ -41,7 +41,7 @@ impl Parser {
 
         // match の結果を直接 return する形に統一
         match self.next_tkn(&["string", "name"])? {
-            lex::Tkn::Str(literal) => self.finish_literal_include(literal, alias),
+            lex::Tkn::Str(literal) => self.finish_literal_include(&literal, alias),
             // match のガード条件 `if` は Rust らしくて非常に綺麗です！
             lex::Tkn::Name(first_seg) if alias.is_none() => self.build_mod_path_segments(first_seg),
             _ => {
@@ -74,7 +74,7 @@ impl Parser {
     /// 読み込み済み(`current_tkn`がその文字列を指している)
     fn finish_literal_include(
         &mut self,
-        literal: String,
+        literal: &str,
         alias: Option<String>,
     ) -> Result<node::ModPath, err::ErrKind> {
         // `::`が続いていなければ、ファイル全体をモジュールとして
@@ -185,7 +185,7 @@ impl Parser {
     /// 普通の式として書けるもの)は`operands`に出現順で積んでいく。
     /// 同じ行に複数の`${...}`があっても、すべて取り込む
     /// (以前の実装は最後の1つしか保持できなかった)。
-    fn gen_asm_line(&mut self, value: &String) -> Result<node::InlineAsm, err::ErrKind> {
+    fn gen_asm_line(&mut self, value: &str) -> Result<node::InlineAsm, err::ErrKind> {
         let inline_var = Regex::new(r"\$\{([^}]+)\}").unwrap(); // 一度だけコンパイルして使い回してOK
 
         let mut operands = Vec::<node::Expr>::new();

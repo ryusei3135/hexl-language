@@ -7,6 +7,7 @@ mod call_func;
 mod emit_fn_name;
 mod inline_asm;
 mod mng_fmt;
+mod reg_mnger;
 
 use crate::ir::{def_tree, inst, types::Size};
 use std::collections::HashMap;
@@ -30,7 +31,11 @@ pub struct AsmEmitter {
     pub(super) last_inst_idx: Vec<(usize, usize)>,
     pub(super) var_hash_map: HashMap<String, asm_emitter::VarIndexInfo>,
     // 現在使用中のレジスタを管理する
-    pub(super) used_reg: asm_emitter::UsedRegManager,
+    pub(super) used_reg: reg_mnger::UsedRegManager,
+    /// `StartScope`の時点で既に存在した変数の名前のスタック
+    /// `EndScope`で、スコープの外の変数が使うレジスタを
+    /// 解放してしまわないようにするために使う
+    pub(super) scope_outer_vars: Vec<Vec<String>>,
     pub(super) stk_use_counter: usize,
     /// `build_fn_process`が、関数呼び出しのノードとして既に
     /// アセンブリを生成済みの`Inst::CallFunc`のid。

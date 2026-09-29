@@ -100,9 +100,9 @@ impl Parser {
 
     pub fn parser(
         &mut self,
-        tkns: Vec<lex::LocatedTkn>,
-    ) -> Result<&Vec<node::Group1Node>, err::ErrKind> {
-        self.tkns = Some(tkns);
+        tkns: &[lex::LocatedTkn],
+    ) -> Result<&[node::Group1Node], err::ErrKind> {
+        self.tkns = Some(tkns.to_owned());
 
         // 呼び出しが定義より前に書かれていても、その型の関数を
         // 作れるように、先にジェネリクス関数の定義を集めておく

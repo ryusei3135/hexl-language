@@ -98,7 +98,10 @@ impl AsmEmitter {
             }
         }
 
-        self.reg_idx = reg_num.clone();
+        // (以前はここで`self.reg_idx`を変数のレジスタへ書き換えていたため、
+        //  `x + 1`のような式の結果が、変数`x`自身のレジスタへ
+        //  書き込まれて`x`を壊していた。式の結果のレジスタは
+        //  `alloc_reg`で別に確保するので、ここでは何もしない)
         self.asm_fmt.get_fmt_reg(reg_num, &size)
     }
 
@@ -139,7 +142,7 @@ impl AsmEmitter {
     ) -> String {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
         let assign_reg = if this_is_self.is_none() {
-            self.asm_fmt.get_fmt_param::<String>(0, Size::DQ)
+            self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ)
         } else {
             "%rbp".to_string()
         };

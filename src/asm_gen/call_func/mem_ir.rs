@@ -56,9 +56,10 @@ impl AsmEmitter {
                 asm_emitter::VarIndexInfo::new(self.reg_idx, &size, dst),
             );
         } else {
-            self.reg_idx += 1;
             // レジスタに置く変数
-            let reg = self.reg_idx.clone();
+            // 使用中のレジスタ(引数など)と`%rax`/`%rdx`を避けて確保する
+            let reg = self.alloc_reg();
+            self.reg_idx = reg;
             // このレジスタを使用中として記録する
             self.used_reg.mark_used(reg);
             // ポインタ型の変数へ数値リテラル(`ptr: int* = 0`の
@@ -90,6 +91,8 @@ impl AsmEmitter {
             };
 
             self.asm_text.push_str(&formated);
+            // 初期値が式の結果だった場合、そのレジスタはもう不要
+            self.release_expr_temp(src);
 
             if let Some(var_name) = name {
                 self.insert_var_info(

@@ -1,3 +1,4 @@
+mod div_ir;
 mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
@@ -17,14 +18,25 @@ use crate::ir::types;
 /// レジスタの「番号」だけを埋め込んでおき([`AsmEmitter::replace_insert_fmt_reg`]
 /// を参照)、サイズが確定してから改めて実際のレジスタ名へ展開し直す
 /// 必要がある。
-pub(super) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
+#[allow(dead_code)]
+pub(in crate::asm_gen) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
     inst::ExprKind::Mul,
     inst::ExprKind::Div,
     inst::ExprKind::Surplus,
 ];
 
+/// 式の結果や変数を置くレジスタとして、自動では割り当てないレジスタ。
+///
+/// - `0`: `%rax` 戻り値・`idiv`の商・システムコール番号
+/// - `2`: `%rdx` `idiv`の余り・`cqto`/`cltd`の結果・第3引数
+///
+/// `/`と`%`は、この2つのレジスタを必ず書き換える。一般の式の結果を
+/// ここに置いてしまうと、割り算のたびに壊れてしまう(引数のレジスタが
+/// 破壊されるバグの原因の一つだった)ので、割り当て対象から外す。
+pub(in crate::asm_gen) const RESERVED_REGS: [usize; 2] = [0, 2];
+
 #[derive(Debug, Clone)]
-pub struct VarIndexInfo {
+pub(in crate::asm_gen) struct VarIndexInfo {
     /// `is_stack`が`false`の場合はレジスタ番号(従来通り)、
     /// `true`の場合は`%rbp`からのバイトオフセットを表す
     pub reg: usize,
@@ -54,37 +66,6 @@ impl VarIndexInfo {
     }
 }
 
-/// 現在使用中のレジスタを管理する
-#[derive(Debug, Clone, Default)]
-pub struct UsedRegManager {
-    used: Vec<usize>,
-}
-
-impl UsedRegManager {
-    pub fn new() -> Self {
-        Self { used: Vec::new() }
-    }
-
-    /// 指定したレジスタを使用中として記録する
-    pub fn mark_used(&mut self, reg: usize) {
-        if !self.used.contains(&reg) {
-            self.used.push(reg);
-        }
-    }
-
-    /// 現在使用中のレジスタ番号を、使用され始めた順(昇順)に取得する
-    pub fn used_regs(&self) -> Vec<usize> {
-        let mut regs = self.used.clone();
-        regs.sort();
-        regs
-    }
-
-    /// 記録している使用中のレジスタの情報を全て消去する
-    /// (関数一つ分のアセンブリ言語の生成が終わった際などに使う)
-    pub fn clear(&mut self) {
-        self.used.clear();
-    }
-}
 
 impl AsmEmitter {
     pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: asm_setting::AsmFormat) -> Self {
@@ -101,7 +82,8 @@ impl AsmEmitter {
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
             var_hash_map: HashMap::new(),
-            used_reg: UsedRegManager::new(),
+            used_reg: reg_mnger::UsedRegManager::new(),
+            scope_outer_vars: Vec::new(),
             stk_use_counter: 0,
             emitted_calls: Vec::new(),
         };
@@ -143,6 +125,7 @@ impl AsmEmitter {
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
             self.used_reg.clear();
+            self.scope_outer_vars.clear();
         }
         format!(
             "{}\n{}\n{}",
@@ -189,6 +172,119 @@ impl AsmEmitter {
         self.var_hash_map.insert(name.to_owned(), var);
     }
 
+    /// 式の結果や変数を置く、空いているレジスタを1つ確保して返す。
+    ///
+    /// 以前は`self.reg_idx`を単純にインクリメントしていたため、
+    /// 引数が入っているレジスタ(`%rdi`/`%rsi`など)や、他の変数が
+    /// 使っているレジスタまで上書きしていた。ここでは
+    /// - 使用中(引数・変数・まだ使う式の結果)のレジスタ
+    /// - `RESERVED_REGS`(`%rax`/`%rdx`)
+    /// を避けて、最も小さい番号の空きレジスタを返す。
+    ///
+    /// 返したレジスタを使用中にするのは呼び出し側の責任
+    /// (`mark_used`を呼ぶ)。
+    pub(super) fn alloc_reg(&self) -> usize {
+        (0..self.asm_fmt.reg_count())
+            .find(|reg| !RESERVED_REGS.contains(reg) && !self.used_reg.is_used(*reg))
+            .expect("使用できるレジスタが足りません")
+    }
+
+    /// `node_idx`が式(`Inst::Expr`)の場合、その結果を持っていた一時的な
+    /// レジスタを解放する。親の式や代入が、その値を使い終わった時点で
+    /// 呼ぶ。
+    ///
+    /// 変数がそのレジスタを持っている場合は解放しない。
+    pub(super) fn release_expr_temp(&mut self, node_idx: usize) {
+        if !matches!(self.curr_inst[node_idx], inst::Inst::Expr(..)) {
+            return;
+        }
+        let Some(reg) = self
+            .last_inst_idx
+            .iter()
+            .find(|(id, _)| *id == node_idx)
+            .map(|(_, reg)| *reg)
+        else {
+            return;
+        };
+        let held_by_var = self
+            .var_hash_map
+            .values()
+            .any(|var| !var.is_stack && var.reg == reg);
+        if !held_by_var {
+            self.used_reg.release(reg);
+        }
+    }
+
+    /// 現在`reg`を使っている値を、`push`で退避するためのレジスタ名の一覧
+    /// (`dst`は除く)。`/`や`%`が書き換える`%rax`/`%rdx`のうち、
+    /// 使用中のものを退避するために使う。
+    pub(super) fn live_reserved_regs(&self, dst: usize) -> Vec<usize> {
+        RESERVED_REGS
+            .iter()
+            .copied()
+            .filter(|reg| *reg != dst && self.used_reg.is_used(*reg))
+            .collect()
+    }
+
+    /// 関数一つ分のアセンブリ言語を生成し始める前に、前の関数の
+    /// 状態を全て捨てる。
+    ///
+    /// 以前は`_start`を最初に生成した後に、この初期化をしていなかった
+    /// ため、`_start`の変数(`var_hash_map`)や使用中のレジスタ、
+    /// 式の結果のレジスタ(`last_inst_idx`)が次の関数へ持ち越されていた。
+    /// (`last_inst_idx`は関数ごとに振り直される式のidで引くので、
+    ///  前の関数の同じidの式のレジスタを誤って使うことがあった)
+    pub(super) fn reset_fn_state(&mut self) {
+        self.var_hash_map = HashMap::new();
+        self.reg_idx = 0;
+        self.used_reg.clear();
+        self.scope_outer_vars.clear();
+        self.expr_vars.clear();
+        self.last_inst_idx.clear();
+        self.reserved_label_name = None;
+    }
+
+    /// `Inst::StartScope`の処理
+    /// これ以降に登録されたレジスタを記録し始める
+    pub(super) fn start_scope_asm(&mut self) {
+        self.used_reg.start_scope();
+        self.scope_outer_vars
+            .push(self.var_hash_map.keys().cloned().collect());
+    }
+
+    /// `Inst::EndScope`の処理
+    /// `StartScope`以降に登録されたレジスタを全て解放する。
+    ///
+    /// 解放したレジスタのうち、空いている最小の番号を`self.reg_idx`に
+    /// 設定するので、スコープ内で使ったレジスタを次の式が再利用できる。
+    ///
+    /// ただし、スコープの外で宣言された変数が(スコープ内での再代入などで)
+    /// レジスタを使うようになった場合、そのレジスタはスコープが終わっても
+    /// 生きているので、解放せずに残す
+    pub(super) fn end_scope_asm(&mut self) {
+        let released = self.used_reg.end_scope();
+        let outer_vars = self
+            .scope_outer_vars
+            .pop()
+            .expect("StartScopeに対応しないEndScopeです");
+        let live_regs: Vec<usize> = outer_vars
+            .iter()
+            .filter_map(|name| self.var_hash_map.get(name))
+            .filter(|var| !var.is_stack)
+            .map(|var| var.reg)
+            .collect();
+        self.used_reg.restore(&live_regs);
+
+        // 次の式の結果を置くレジスタ(`reg_idx`)を、解放したレジスタに戻す。
+        // 外側の変数が使っているレジスタ(上で登録し直したもの)は
+        // 除き、`reg_idx`より小さい番号に限る(番号を進めることはしない)
+        if let Some(reg) = self.used_reg.lowest_free(&released) {
+            if reg < self.reg_idx {
+                self.reg_idx = reg;
+            }
+        }
+    }
+
     #[inline(always)]
     pub(super) fn update_value_info(&mut self, name: &str, index: usize) {
         self.var_hash_map.get_mut(name).unwrap().index = index;
@@ -216,7 +312,7 @@ impl AsmEmitter {
             let mut txt = self.extract_operand_text(struct_idx, &this_is_self);
 
             let ret_line = if this_is_self.is_none() {
-                let self_ptr_reg = self.asm_fmt.get_fmt_param::<String>(0, Size::DQ);
+                let self_ptr_reg = self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ);
                 let line = self
                     .asm_fmt
                     .get_opcode_tmpl("address")
@@ -555,12 +651,23 @@ impl AsmEmitter {
     }
 
     pub(super) fn format_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
+        // `/`と`%`は`%rax`/`%rdx`を使う専用の手順で生成する
+        // (`div_ir.rs`)。テンプレートでは、割られる数を`%rax`ではなく
+        // `%rdx`に置いてしまい、さらに`%rdx`にある引数を壊していた
+        if matches!(
+            expr.kind,
+            inst::ExprKind::Div | inst::ExprKind::Surplus
+        ) {
+            return self.format_div_expr_inst(expr);
+        }
+
         let key = match expr.kind {
             inst::ExprKind::Add => "add",
             inst::ExprKind::Sub => "sub",
-            inst::ExprKind::Mul => "mul",
-            inst::ExprKind::Div => "div",
-            inst::ExprKind::Surplus => "sur",
+            // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
+            // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
+            inst::ExprKind::Mul => "add",
+            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
             inst::ExprKind::LessThen => "cmp_l",
             inst::ExprKind::GreaterThen => "cmp_g",
             inst::ExprKind::Equal => "cmp_e",
@@ -573,9 +680,8 @@ impl AsmEmitter {
         let mnemonic = match expr.kind {
             inst::ExprKind::Add => "add",
             inst::ExprKind::Sub => "sub",
-            inst::ExprKind::Mul => "mul",
-            inst::ExprKind::Div => "div",
-            inst::ExprKind::Surplus => "sur",
+            inst::ExprKind::Mul => "imul",
+            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
             inst::ExprKind::LessThen
             | inst::ExprKind::GreaterThen
             | inst::ExprKind::NotEq
@@ -585,15 +691,14 @@ impl AsmEmitter {
         let resolved_size: Size = self.get_expr_ty(expr.ls);
         let wrap_size = resolved_size.wrap_dst_size();
 
-        let dst_text = if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
-            Self::insert_fmt_reg_placeholder(self.reg_idx)
-        } else {
-            self.get_reg(Some(self.reg_idx), &resolved_size)
-        };
+        let dst_text = self.get_reg(Some(self.reg_idx), &resolved_size);
 
-        let mut formated = self
-            .asm_fmt
-            .get_opcode_tmpl(key)
+        let mut tmpl = self.asm_fmt.get_opcode_tmpl(key);
+        if expr.kind == inst::ExprKind::Mul {
+            tmpl = tmpl.replace("add", "imul");
+        }
+
+        let mut formated = tmpl
             .replace("{dst}", &dst_text)
             .replace("{src1}", &self.extract_operand_text(expr.ls, &wrap_size))
             .replace("{src2}", &self.extract_operand_text(expr.rs, &wrap_size))
@@ -607,10 +712,6 @@ impl AsmEmitter {
             mnemonic,
             is_memory_access,
         );
-
-        if DEFERRED_REG_FMT_OPS.contains(&expr.kind) {
-            formated = self.replace_insert_fmt_reg(&formated, &resolved_size);
-        }
 
         // サイズがSelfでない場合
         if self.reserved_label_name.is_some() && formated.contains("{label}") {
