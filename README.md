@@ -71,6 +71,7 @@ gcc 生成したアセンブリソースコード -nostdlib
     - `await`制御
     - `extern`構造
     - `where`契約
+    - `allow`
 
 ### プロプロセッサ
 - #include
