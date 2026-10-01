@@ -328,6 +328,9 @@ impl IR {
 
     fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
         self.expr_counter += 1;
+        // 配列/ポインタのアクセスやポインタの加算の範囲チェック
+        // (`src/ir/checker/access_mem.rs`)
+        self.check_mem_access(&expr);
         let inst = match expr {
             // ポインタ関係
             node::Expr::GetAddress(target) => {
@@ -578,7 +581,7 @@ impl IR {
     fn gen_match_expr_ir(
         &mut self,
         pattern: &Option<Box<node::Expr>>,
-        arms: &Vec<node::MatchArm>,
+        arms: &[node::MatchArm],
         arm_else: &Option<Body>,
     ) -> usize {
         // 各armの条件式を作成する
@@ -657,21 +660,20 @@ impl IR {
 
     #[cfg(test)]
     pub(crate) 
-    fn test_only_get_func_body(&self, name: &str) -> Vec<inst::Inst> {
-        self.func_tree.func.get(name).unwrap().body.clone()
+    fn test_only_get_func_body(&self, name: &str) -> &[inst::Inst] {
+        self.func_tree.func.get(name).unwrap().body
     }
 
     /// 構造体のメゾットとして展開された関数の処理内容を取得する
     /// (テスト用)
     #[cfg(test)]
     pub(crate) 
-    fn test_only_get_method_body(&self, module: &str, name: &str) -> Vec<inst::Inst> {
+    fn test_only_get_method_body(&self, module: &str, name: &str) -> &[inst::Inst] {
         self.func_tree
             .func
             .get(&format!("{}::{}", module, name))
             .unwrap()
             .body
-            .clone()
     }
 }
 

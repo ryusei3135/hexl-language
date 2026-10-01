@@ -13,6 +13,7 @@ impl IR {
     /// `var_tree`に記録されている現在値に置き換えて評価する。
     /// 呼び出し前に`is_const_index`で評価可能かどうかを確認しておくこと
     /// (記録の無い変数を評価しようとした場合はここで`panic`する)
+    pub(in crate::ir)
     fn eval_expr(&self, n: &node::Expr) -> usize {
         match n {
             node::Expr::Number(val) => val.parse::<usize>().unwrap(),
@@ -38,6 +39,7 @@ impl IR {
     /// 扱う。記録が無い変数(実行時にしか値の分からない式で更新された
     /// 変数や、一度も記録されていない変数)を含む場合は、実行時にしか
     /// 値が分からないため、ここでの静的な範囲チェックの対象外として扱う
+    pub(in crate::ir)
     fn is_const_index(&self, n: &node::Expr) -> bool {
         match n {
             node::Expr::Number(_) => true,

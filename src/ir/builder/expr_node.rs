@@ -109,10 +109,7 @@ impl IR {
         name: &str,
         expect_byte: &types::Size,
     ) -> inst::Inst {
-        // 配列/範囲付きポインタの添字が範囲を超えていないかを確認する
-        self.arr_idx_checker(name, &index);
-        self.range_ptr_checker(name, &index);
-
+        // 添字の範囲チェックは`gen_expr_ir`の`check_mem_access`で行う
         inst::Inst::InsertArr {
             name: name.to_string(),
             dst: self.gen_expr_ir(dst, &expect_byte),

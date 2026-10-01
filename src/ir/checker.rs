@@ -2,6 +2,7 @@ use super::*;
 use crate::err::PreprocErrs::NotFoundAsmName;
 use crate::ir::IR;
 
+mod access_mem;
 mod constract;
 mod tracking;
 mod var_ty;
