@@ -139,9 +139,16 @@ pub fn gen_asm_text(
     global_funcs: &Vec<String>,
     inline_name: &Option<String>,
 ) -> String {
-    let asm_settings = load_setting();
+    if let Some(n) = inline_name {
+        let asm_settings = load_setting();
 
-    let asm_fmt = asm_settings.get_asm_fmt(inline_name);
-    let mut writer = asm_gen::AsmEmitter::new(asm_settings, asm_fmt);
-    writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
+        let asm_fmt = asm_settings.get_asm_fmt(inline_name);
+        let mut writer = asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt));
+        writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
+    } else {
+        println!("現在アセンブリコードのフォーマットをハードコード `asm_setting`");
+        let asm_settings = load_setting();
+        let mut writer = asm_gen::AsmEmitter::new(asm_settings, None);
+        writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
+    }
 }

@@ -68,7 +68,7 @@ impl VarIndexInfo {
 
 
 impl AsmEmitter {
-    pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: asm_setting::AsmFormat) -> Self {
+    pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData) -> Self {
         let mut me = Self {
             asm_text: String::new(),
             data_sec_text: String::new(),
@@ -77,7 +77,7 @@ impl AsmEmitter {
             expr_vars: Vec::new(),
             reserved_label_name: None,
 
-            asm_fmt: mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt),
+            asm_fmt: asm_fmt::mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt),
             curr_inst: Vec::new(),
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),

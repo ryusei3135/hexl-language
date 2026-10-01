@@ -1,10 +1,13 @@
 //! 出力するアセンブリ言語のフォーマットを管理する
 //! アセンブリ言語のフォーマットを提供する:
 
+use std::collections::HashMap;
+
 use super::*;
 use crate::asm_setting;
 use crate::ir::types;
 use std::any::{Any, TypeId};
+use crate::models::AsmFmtData;
 
 /// アセンブリ言語のフォーマットをするAPIを提供
 pub struct MngAsmFmt {
@@ -16,15 +19,26 @@ pub struct MngAsmFmt {
 }
 
 impl MngAsmFmt {
-    pub(in crate::asm_gen) 
-    fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: asm_setting::AsmFormat) -> Self {
+    pub(in crate::asm_gen)
+    fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData) -> Self {
         // === アセンブラのフォーマットの設定 ===
-        Self {
-            param_fmt: asm_fmt.args.fmt.get("linux").unwrap().clone(),
-            reg_fmt: asm_fmt.reg.clone(),
-            opcode_fmt: asm_fmt.op.clone(),
-            asm_setting: Some(asm_setting),
-            fmt: asm_fmt,
+        if let Some(s) = asm_fmt {
+            Self {
+                param_fmt: s.args.fmt.get("linux").unwrap().clone(),
+                reg_fmt: s.reg.clone(),
+                opcode_fmt: s.op.clone(),
+                asm_setting: Some(asm_setting),
+                fmt: s,
+            }
+        } else {
+            let s = x64::GCC_X64.to_asm_format();
+            Self {
+                param_fmt: s.args.fmt.get("linux").unwrap().clone(),
+                reg_fmt: s.reg.clone(),
+                opcode_fmt: s.op.clone(),
+                asm_setting: Some(asm_setting),
+                fmt: s,
+            }
         }
     }
 

@@ -6,12 +6,13 @@ mod asm_emitter;
 mod call_func;
 mod emit_fn_name;
 mod inline_asm;
-mod mng_fmt;
+mod asm_fmt;
 mod reg_mnger;
 
 use crate::ir::{def_tree, inst, types::Size};
 use std::collections::HashMap;
 use std::mem;
+use crate::models::AsmFmtData;
 
 pub type SelfPtrInfo = Option<Size>;
 
@@ -23,7 +24,7 @@ pub struct AsmEmitter {
     pub(super) expr_vars: Vec<String>,
     pub(super) reserved_label_name: Option<String>,
 
-    pub(super) asm_fmt: mng_fmt::MngAsmFmt,
+    pub(super) asm_fmt: asm_fmt::mng_fmt::MngAsmFmt,
 
     pub(in crate::asm_gen) curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
