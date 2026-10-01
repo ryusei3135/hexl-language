@@ -65,7 +65,8 @@ impl Parser {
         }
     }
 
-    pub(in crate::parse) fn is_constract_ty(
+    pub(in crate::parse) 
+    fn is_constract_ty(
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {

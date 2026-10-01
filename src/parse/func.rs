@@ -10,7 +10,8 @@ impl Parser {
     /// 構造体/列挙型自身の名前を渡す。引数や戻り値の型に予約語
     /// `Self`が使われたとき、この名前へ解決するために使われる。
     /// トップレベルの関数を解析している場合は`None`を渡す。
-    pub(super) fn func_node(
+    pub(in crate::parse) 
+    fn func_node(
         &mut self,
         func_name: &str,
         is_public: bool,

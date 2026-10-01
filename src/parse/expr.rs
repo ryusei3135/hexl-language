@@ -11,7 +11,8 @@ pub(in crate::parse) mod range;
 mod value_api;
 
 impl Parser {
-    pub(super) fn expr_define_var(
+    pub(in crate::parse) 
+    fn expr_define_var(
         &mut self,
         // 呼び出す前にでた、変数や関数などの名前
         name: String,
@@ -108,7 +109,8 @@ impl Parser {
     }
 
     /// 式に代入する物が、構文の式 例(match)かどうかで
-    pub(super) fn expr_branch(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) 
+    fn expr_branch(&mut self) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.next_tkn_ref(&["match"])?, lex::Tkn::KeyWordCond) {
             self.next_tkn(&[])?;
             self.expr_match()
@@ -117,7 +119,7 @@ impl Parser {
         }
     }
 
-    pub(super) fn expr_cmp(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) fn expr_cmp(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
         let mut left = self.expr_add(ini_struct)?;
 
         loop {
@@ -141,7 +143,8 @@ impl Parser {
         Ok(left)
     }
 
-    pub(super) fn expr_add(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) 
+    fn expr_add(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
         let mut left = self.expr_mul(ini_struct)?;
 
         // expr_mulですでにトークンを進めているので現在のトークンを参照
@@ -294,7 +297,8 @@ impl Parser {
     /// ## Safety
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
     /// である必要がある
-    pub(super) fn call_func_expr(
+    pub(in crate::parse) 
+    fn call_func_expr(
         &mut self,
         name: &str,
         ini_struct: bool,
