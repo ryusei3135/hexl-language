@@ -31,7 +31,7 @@ pub(super) struct OutputFormat {
     pub write: fn(&Emitter) -> Result<Vec<u8>, String>,
 }
 
-pub(super) static FORMATS: &[OutputFormat] = &[
+pub(super) static FORMATS: &[OutputFormat; 3] = &[
     // 再配置可能オブジェクトファイル (ELF固定。`os`には依存しない)
     OutputFormat {
         mode: "-o",

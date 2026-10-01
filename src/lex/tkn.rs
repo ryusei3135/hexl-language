@@ -59,6 +59,9 @@ pub enum Tkn {
 
     KeyWordContinue,
     KeyWordBreak,
+
+    KeyWordWhere,
+    KeyWordAllow,
 }
 
 impl Tkn {

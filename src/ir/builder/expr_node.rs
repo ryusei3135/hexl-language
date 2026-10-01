@@ -47,7 +47,8 @@ impl IR {
         }
     }
 
-    pub(super) fn assign_expr_node(
+    pub(super) 
+    fn assign_expr_node(
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
@@ -100,7 +101,8 @@ impl IR {
     }
 
     #[inline(always)]
-    pub(super) fn ref_array_node(
+    pub(super) 
+    fn ref_array_node(
         &mut self,
         dst: node::Expr,
         index: node::Expr,
@@ -118,7 +120,8 @@ impl IR {
         }
     }
 
-    pub(super) fn def_var_node(
+    pub(super) 
+    fn def_var_node(
         &mut self,
         var: node::DefineVar,
         expect_byte: &types::Size,
@@ -268,7 +271,8 @@ impl IR {
         }
     }
 
-    pub(super) fn enum_variant_node(
+    pub(super) 
+    fn enum_variant_node(
         &mut self,
         name: &str,
         variant: &str,
@@ -290,7 +294,8 @@ impl IR {
         )))
     }
 
-    pub(super) fn init_struct_node(
+    pub(super) 
+    fn init_struct_node(
         &mut self,
         name: &str,
         fields: &mut HashMap<String, Box<node::Expr>>,

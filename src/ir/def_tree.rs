@@ -27,7 +27,8 @@ pub struct VarMetaData {
 }
 
 impl VarMetaData {
-    pub fn new(attribute: &VarType, size: &node::TyNode, var_attr: &parse::VarMutAttr) -> Self {
+    pub(in crate::ir) 
+    fn new(attribute: &VarType, size: &node::TyNode, var_attr: &parse::VarMutAttr) -> Self {
         Self {
             attribute: attribute.clone(),
             size: size.clone(),
@@ -52,7 +53,8 @@ pub struct VarTree {
 
 /// `must`かどうかは、型に情報がある
 impl VarTree {
-    pub fn new() -> Self {
+    pub(in crate::ir) 
+    fn new() -> Self {
         Self {
             hash: HashMap::new(),
             values: HashMap::new(),
@@ -63,7 +65,8 @@ impl VarTree {
     /// - `usize`の場合 local変数
     /// - 'l' = local
     /// - 'p' = param
-    pub fn push<const K: char>(
+    pub(in crate::ir) 
+    fn push<const K: char>(
         &mut self,
         var_name: &str,
         var_index: usize,
@@ -100,7 +103,8 @@ impl VarTree {
         Ok(())
     }
 
-    pub fn get_ty_name(&self, var_name: &str) -> Result<String, err::ErrKind> {
+    pub(in crate::ir) 
+    fn get_ty_name(&self, var_name: &str) -> Result<String, err::ErrKind> {
         if let Some(ref var) = self.hash.get(var_name) {
             let r = match &var.size {
                 node::TyNode::Ty(name) => name.to_string(),
@@ -132,7 +136,8 @@ impl VarTree {
     }
 
     #[inline(always)]
-    pub fn is_mut(&self, name: &String) -> parse::VarMutAttr {
+    pub(in crate::ir) 
+    fn is_mut(&self, name: &String) -> parse::VarMutAttr {
         self.hash.get(name).unwrap().var_attr.clone()
     }
 
@@ -141,7 +146,8 @@ impl VarTree {
     /// 契約(`must`/`of`)が付いた変数は、値の生成自体は
     /// 内側の型として行うため、登録後に契約付きの型へ戻すのに使う
     /// (`src/ir/builder/expr_node.rs`の`def_var_node`)
-    pub fn overwrite_ty(&mut self, var_name: &str, ty: &node::TyNode) {
+    pub(in crate::ir) 
+    fn overwrite_ty(&mut self, var_name: &str, ty: &node::TyNode) {
         if let Some(var) = self.hash.get_mut(var_name) {
             var.size = ty.clone();
         }
@@ -176,20 +182,23 @@ impl VarTree {
 
     /// 指定された変数が`must`の契約を持つかどうか
     #[inline(always)]
-    pub fn is_constract_must(&self, var_name: &str) -> bool {
+    pub(in crate::ir) 
+    fn is_constract_must(&self, var_name: &str) -> bool {
         self.hash
             .get(var_name)
             .is_some_and(|var| var.size.is_constract_must())
     }
 
     #[inline(always)]
-    pub fn get_ty_node(&self, var_name: &str) -> Option<node::TyNode> {
+    pub(in crate::ir) 
+    fn get_ty_node(&self, var_name: &str) -> Option<node::TyNode> {
         self.hash.get(var_name).map(|var| var.size.clone())
     }
 
     /// 指定された変数が`Self`型、または`Self`を指すポインタ型
     /// (`Self*` / `Self*mut`)かどうかを判定する
-    pub fn is_self_ty(&self, var_name: &str) -> bool {
+    pub(in crate::ir) 
+    fn is_self_ty(&self, var_name: &str) -> bool {
         let mut b = move |v: &VarMetaData| match &v.size {
             node::TyNode::SelfTy(_) => true,
             node::TyNode::Pointer { ty_name, .. } => {
@@ -201,7 +210,8 @@ impl VarTree {
     }
 
     #[inline(always)]
-    pub fn all_var_is_end_constract(&self, state: &VarTree) -> Result<(), err::ErrKind> {
+    pub(in crate::ir) 
+    fn all_var_is_end_constract(&self, state: &VarTree) -> Result<(), err::ErrKind> {
         for (name, var) in &self.hash {
             if state.hash.contains_key(name)
                 || !var.size.is_constract_must()
@@ -215,12 +225,14 @@ impl VarTree {
         Ok(())
     }
 
-    pub fn contains_key(&mut self, state: &VarTree) {
+    pub(in crate::ir) 
+    fn contains_key(&mut self, state: &VarTree) {
         self.hash.retain(|name, _| state.hash.contains_key(name));
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
-    pub fn get(&self, name: &str) -> &VarType {
+    pub(in crate::ir) 
+    fn get(&self, name: &str) -> &VarType {
         &self.hash.get(name).expect(name).attribute
     }
 
@@ -255,23 +267,27 @@ pub struct StructTree {
 }
 
 impl StructTree {
-    pub fn new() -> Self {
+    pub(in crate::ir) 
+    fn new() -> Self {
         Self {
             tree: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, info: &node::StructDefine) {
+    pub(in crate::ir) 
+    fn add(&mut self, info: &node::StructDefine) {
         self.tree.insert(info.name.to_string(), info.clone());
     }
 
-    pub fn get(&self, name: &str) -> Option<&node::StructDefine> {
+    pub(in crate::ir) 
+    fn get(&self, name: &str) -> Option<&node::StructDefine> {
         self.tree.get(name)
     }
 
     /// 任意の構造体を指定し、その構造体にあるメンバー
     /// のバイトの位置を取得し返す関数
-    pub fn get_pos(
+    pub(in crate::ir) 
+    fn get_pos(
         &self,
         // 構造体の名前
         name: &str,
@@ -293,7 +309,8 @@ impl StructTree {
         panic!();
     }
 
-    pub fn get_mem_size(&self, name: &str, field_name: &str) -> types::Size {
+    pub(in crate::ir) 
+    fn get_mem_size(&self, name: &str, field_name: &str) -> types::Size {
         let ty = self
             .tree
             .get(name)
@@ -307,7 +324,8 @@ impl StructTree {
         types::Size::try_from_or_emit_struct(&mut |name| self.get_struct_size(name), &ty).unwrap()
     }
 
-    pub fn get_struct_size(&self, name: &str) -> Result<node::StructDefine, err::ErrKind> {
+    pub(in crate::ir) 
+    fn get_struct_size(&self, name: &str) -> Result<node::StructDefine, err::ErrKind> {
         if let Some(target) = self.tree.get(name) {
             Ok(target.clone())
         } else {
@@ -363,7 +381,8 @@ pub struct FuncTree {
 }
 
 impl FuncTree {
-    pub fn new() -> Self {
+    pub(in crate::ir) 
+    fn new() -> Self {
         Self {
             func: HashMap::new(),
         }
@@ -388,12 +407,14 @@ impl FuncTree {
         }
     }
 
-    pub fn get(&self, name: &str, mod_name: Option<&String>) -> Option<FnDefInfo> {
+    pub(in crate::ir) 
+    fn get(&self, name: &str, mod_name: Option<&String>) -> Option<FnDefInfo> {
         let no_temp_ty: &[node::TyNode] = &[];
         self.get_with_temp(name, mod_name, no_temp_ty)
     }
 
-    pub fn get_with_temp(
+    pub(in crate::ir) 
+    fn get_with_temp(
         &self,
         name: &str,
         module_name: Option<&String>,
@@ -404,7 +425,8 @@ impl FuncTree {
             .cloned()
     }
 
-    pub fn add(
+    pub(in crate::ir) 
+    fn add(
         &mut self,
         body: &[inst::Inst],
         meta_data: &node::FuncDefine,
@@ -435,7 +457,8 @@ impl FuncTree {
         );
     }
 
-    pub fn declare(&mut self, meta_data: &node::FuncDefine) {
+    pub(in crate::ir) 
+    fn declare(&mut self, meta_data: &node::FuncDefine) {
         let key = Self::make_key(
             &meta_data.name,
             meta_data.module.as_ref(),
@@ -469,7 +492,8 @@ impl FnDefMetaData {
     /// moduleは自分自身がどのモジュールに属しているか
     /// Noneの場合は、#includeで関数の名前ごと指定しているか
     /// 自分のファイルの中にあるかのどちらか
-    pub fn new(info: &node::FuncDefine, module: Option<&String>) -> Self {
+    pub(in crate::ir) 
+    fn new(info: &node::FuncDefine, module: Option<&String>) -> Self {
         Self {
             module: module.map(|v| v.clone()),
             name: info.name.clone(),
@@ -480,17 +504,20 @@ impl FnDefMetaData {
     }
 
     #[inline(always)]
-    pub fn add_self_module_name(&mut self, self_name: &str) {
+    pub(in crate::ir) 
+    fn add_self_module_name(&mut self, self_name: &str) {
         self.module = Some(self_name.to_string());
     }
 
     /// この関数がどのモジュール名で登録されているかを返す
     /// (`#include`でモジュール名を指定せず取り込んだ関数は`None`)
-    pub fn module(&self) -> Option<&String> {
+    pub(in crate::ir) 
+    fn module(&self) -> Option<&String> {
         self.module.as_ref()
     }
 
-    pub fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
+    pub(in crate::ir) 
+    fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
         FnDefInfo {
             name: self.name.clone(),
             module: None,

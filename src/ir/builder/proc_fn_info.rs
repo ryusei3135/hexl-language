@@ -7,7 +7,8 @@ use super::*;
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
-    pub(super) fn ini_def_fn_info(&mut self, info: &node::FuncDefine) -> Result<(), err::ErrKind> {
+    pub(super) 
+    fn ini_def_fn_info(&mut self, info: &node::FuncDefine) -> Result<(), err::ErrKind> {
         // 関数の情報を登録
         self.entry_fn_info(&info);
         self.var_tree = def_tree::VarTree::new();
@@ -24,7 +25,8 @@ impl IR {
     }
 
     /// 関数の情報を関数ツリーに登録
-    pub(super) fn push_fn_ir_tree(&mut self, info: &node::FuncDefine) {
+    pub(super) 
+    fn push_fn_ir_tree(&mut self, info: &node::FuncDefine) {
         // 関数のデータをpush
         self.func_tree.add(
             // 関数の処理
@@ -40,7 +42,8 @@ impl IR {
 
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
-    pub(super) fn entry_fn_info(&mut self, info: &node::FuncDefine) {
+    pub(super) 
+    fn entry_fn_info(&mut self, info: &node::FuncDefine) {
         self.check_must_var_used(&info);
         self.func_ret_ty = Some(info.ret_ty.clone());
 
@@ -57,7 +60,8 @@ impl IR {
     /// 外部の関数を定義するノードを
     /// 作成し、スタックする関数
     /// アセンブリ言語を出力する際にだけ使う
-    pub(super) fn make_extern_func_inst(&mut self, fn_tree: &[def_tree::FnDefMetaData]) {
+    pub(super) 
+    fn make_extern_func_inst(&mut self, fn_tree: &[def_tree::FnDefMetaData]) {
         for func in fn_tree {
             self.extern_funcs
                 .push(inst::Inst::ExternFunc(func.name.clone()));
@@ -65,7 +69,8 @@ impl IR {
     }
 
     /// もし戻り値が契約ならフラグを立てる
-    pub(super) fn gen_call_fn_ir(
+    pub(super) 
+    fn gen_call_fn_ir(
         &mut self,
         module_name: Option<&String>,
         meta_data: &node::CallInfo,

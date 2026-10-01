@@ -398,6 +398,8 @@ impl Lexer {
                     "of" => Tkn::KeyWordOf,
                     "continue" => Tkn::KeyWordContinue,
                     "break" => Tkn::KeyWordBreak,
+                    "where" => Tkn::KeyWordWhere,
+                    "allow" => Tkn::KeyWordAllow,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),

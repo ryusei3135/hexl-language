@@ -34,7 +34,8 @@ impl ConstractFlags {
 
     /// var_treeでフラグを立てる
     #[inline(always)]
-    pub fn put_var_def(&mut self, var_ty: &node::TyNode) {
+    pub(in crate::ir) 
+    fn put_var_def(&mut self, var_ty: &node::TyNode) {
         if self.constract_ret.is_none() {
             self.def_var = Some(var_ty.clone());
         } else {
@@ -46,7 +47,8 @@ impl ConstractFlags {
     }
 
     #[inline(always)]
-    pub fn constract_fn(&mut self, fn_ret_ty: Option<&node::TyNode>) {
+    pub(in crate::ir) 
+    fn constract_fn(&mut self, fn_ret_ty: Option<&node::TyNode>) {
         if self.def_var.is_none() {
             if self.constract_ret.is_none() {
                 self.constract_ret = fn_ret_ty.map(|v| v.clone());

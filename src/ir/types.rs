@@ -90,7 +90,8 @@ impl TryFrom<TyNode> for Size {
 
 impl Size {
     /// 構造体の型を作成する
-    pub fn emit_struct_ty_node(
+    pub(in crate::ir) 
+    fn emit_struct_ty_node(
         f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
         ty: &node::TyNode,
     ) -> Result<Self, err::ErrKind> {
@@ -112,7 +113,8 @@ impl Size {
     /// `try_into`は組み込み型しか解決できないため、構造体などの
     /// ユーザー定義の型では`Err`が返ってくる。その場合に`f`
     /// (構造体の定義を名前から取得する関数)を使って構造体の型を作成する
-    pub fn try_from_or_emit_struct(
+    pub(in crate::ir) 
+    fn try_from_or_emit_struct(
         f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
         ty: &node::TyNode,
     ) -> Result<Self, err::ErrKind> {
@@ -122,7 +124,8 @@ impl Size {
         }
     }
 
-    pub fn is_pointer(&self) -> Option<Size> {
+    pub(crate) 
+    fn is_pointer(&self) -> Option<Size> {
         if let Self::Pointer { ty, .. } = self {
             Some(*ty.clone())
         } else {
@@ -131,7 +134,8 @@ impl Size {
     }
 
     /// ポインタ型を作成する
-    pub fn build_ptr_ty(ty: &node::TyNode, range: Option<(usize, usize)>) -> Self {
+    pub(in crate::ir) 
+    fn build_ptr_ty(ty: &node::TyNode, range: Option<(usize, usize)>) -> Self {
         Self::Pointer {
             ty: Box::new(ty.try_into().unwrap()),
             is_const: false,
@@ -140,12 +144,14 @@ impl Size {
     }
 
     /// 組み込み型かどうかを判定する
-    pub fn is_builtin_ty_name(name: &str) -> bool {
+    pub(in crate::ir) 
+    fn is_builtin_ty_name(name: &str) -> bool {
         matches!(name, "byte" | "i16" | "int" | "i64")
     }
 
     /// このサイズがバイト単位で何バイトかを返す
-    pub fn to_bytes(&self) -> usize {
+    pub(crate) 
+    fn to_bytes(&self) -> usize {
         match self {
             Self::DB => 1,
             Self::DW => 2,
@@ -165,12 +171,14 @@ impl Size {
     }
 
     #[inline(always)]
-    pub fn wrap_dst_size(&self) -> crate::asm_gen::SelfPtrInfo {
+    pub(crate) 
+    fn wrap_dst_size(&self) -> crate::asm_gen::SelfPtrInfo {
         Some(self.clone())
     }
 
     #[inline(always)]
-    pub fn wrap_ok<E>(self) -> Result<Self, E> {
+    pub(in crate::ir) 
+    fn wrap_ok<E>(self) -> Result<Self, E> {
         Ok(self)
     }
 }
@@ -198,7 +206,8 @@ impl IR {
     ///
     /// `try_into`が`Err`を返した場合(構造体などのユーザー定義の型)は、
     /// `struct_tree`を参照して`Size::emit_struct_ty_node`で構造体の型を作成する
-    pub(super) fn try_size_or_emit_struct(
+    pub(in crate::ir) 
+    fn try_size_or_emit_struct(
         &self,
         ty: &node::TyNode,
     ) -> Result<types::Size, err::ErrKind> {
@@ -210,7 +219,8 @@ impl IR {
     /// 組み込み型(`byte`/`u16`/`int`/`u64`)は`types::Size::new`と
     /// 同じ結果を返すが、構造体・列挙型などのユーザー定義の型名が渡された
     /// 場合は`struct_tree`/`enum_tree`を参照して解決する
-    pub(super) fn size_of(&self, ty: &node::TyNode) -> types::Size {
+    pub(in crate::ir) 
+    fn size_of(&self, ty: &node::TyNode) -> types::Size {
         match ty {
             node::TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {

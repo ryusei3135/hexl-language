@@ -13,16 +13,16 @@ print(msg: byte*const, len: i64) {
 fizzbuzz(n: i64) {
     cond {
         n % 15 == 0 => {
-            print("fb", 2)
+            print("fb\n", 3)
         }
         n % 3 == 0 => {
-            print("fz", 2)
+            print("fz\n", 3)
         }
         n % 5 == 0 => {
-            print("bz", 2)
+            print("bz\n",3)
         }
         | => {
-            print("n", 1)
+            print("n\n", 2)
         }
     }
 }
@@ -31,7 +31,7 @@ _start() {
     i mut: i64 = 1
     loop i < 10 {
         fizzbuzz(i)
-        i = i + 1
+        i += 1
     }
 
     #asm(gcc_x64) {

@@ -56,7 +56,8 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や`name`が配列型でない場合は判定できない
     /// ため`true`を返す(配列型でない場合は`range_ptr_checker`に任せる)
-    pub(in crate::ir) fn arr_idx_checker(&mut self, name: &str, index: &node::Expr) -> bool {
+    pub(in crate::ir) 
+    fn arr_idx_checker(&mut self, name: &str, index: &node::Expr) -> bool {
         if self.is_const_index(index) == false {
             return true;
         }
@@ -84,7 +85,8 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や、`name`が範囲指定付きのポインタ型
     /// でない場合は判定できないため`true`を返す
-    pub(in crate::ir) fn range_ptr_checker(&mut self, name: &str, index: &node::Expr) -> bool {
+    pub(in crate::ir) 
+    fn range_ptr_checker(&mut self, name: &str, index: &node::Expr) -> bool {
         if self.is_const_index(index) == false {
             return true;
         }
@@ -118,7 +120,8 @@ impl IR {
     /// 値を同じ`Size::Pointer.range`と照らし合わせてチェックする。
     /// 値が定数式として評価できない場合や、`name`が範囲指定付きの
     /// ポインタ型でない場合は判定できないため`true`を返す
-    pub(in crate::ir) fn range_ptr_reassign_checker(
+    pub(in crate::ir) 
+    fn range_ptr_reassign_checker(
         &mut self,
         name: &str,
         value: &node::Expr,
@@ -154,7 +157,8 @@ impl IR {
     /// 配列の長さ)から長さを求めるために使う
     /// (`src/ir/builder/expr_node.rs`の`def_var_node_with_register_ty`)。
     /// `name`が範囲指定付きのポインタ型でも配列型でもない場合はpanicする
-    pub(in crate::ir) fn range_len_from_var_tree(&self, name: &str) -> usize {
+    pub(in crate::ir) 
+    fn range_len_from_var_tree(&self, name: &str) -> usize {
         let ty = self.var_tree.get_ty_node(name).unwrap();
         match &ty.try_into() {
             Ok(types::Size::Pointer {
@@ -177,7 +181,8 @@ impl IR {
     /// `value`が定数式として評価できる場合はその結果を記録し、
     /// 評価できない(実行時にしか値が分からない)場合は、古い記録が
     /// 残って以降の静的チェックに誤って使われないよう記録を消す
-    pub(in crate::ir) fn record_var_value(&mut self, name: &str, value: &node::Expr) {
+    pub(in crate::ir) 
+    fn record_var_value(&mut self, name: &str, value: &node::Expr) {
         if self.is_const_index(value) {
             let v = self.eval_expr(value);
             self.var_tree.record_value(name, v);
