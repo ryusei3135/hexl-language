@@ -62,6 +62,7 @@ pub enum Tkn {
 
     KeyWordWhere,
     KeyWordAllow,
+    KeyWordElse,
 }
 
 impl Tkn {

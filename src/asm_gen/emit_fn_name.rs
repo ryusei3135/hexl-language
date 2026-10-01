@@ -24,7 +24,8 @@ fn join_sanitized_parts(parts: &[&str]) -> String {
 
 /// 通常の関数ラベルを生成する。
 /// 記号は無視して、英字・数字・`_`だけを残す。
-pub fn emit_fn_name_id(base: &str) -> String {
+pub(in crate::asm_gen) 
+fn emit_fn_name_id(base: &str) -> String {
     if base == "_start" {
         base.to_string()
     } else {
@@ -35,7 +36,8 @@ pub fn emit_fn_name_id(base: &str) -> String {
 
 /// ジェネリクス関数のラベルを生成する。
 /// 型引数の情報もラベルに含めるが、記号は無視して英字・数字・`_`だけを残す。
-pub fn emit_generic_fn_name_id(base: &str, generic_args: &[String]) -> String {
+pub(in crate::asm_gen) 
+fn emit_generic_fn_name_id(base: &str, generic_args: &[String]) -> String {
     let base_label = join_sanitized_parts(&base.split("::").collect::<Vec<_>>());
     let generic_label = generic_args
         .iter()

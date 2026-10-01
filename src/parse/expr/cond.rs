@@ -2,7 +2,8 @@ use super::*;
 
 impl Parser {
     /// 最初にキーワードのcondが来る必要がある
-    pub(in crate::parse) fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) 
+    fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
         if self.current_tkn() != &lex::Tkn::KeyWordCond {
@@ -18,7 +19,7 @@ impl Parser {
         };
 
         // 真偽値(比較式)が与えられた場合は、単純なif/elseとして扱う
-        // `cond a == 10 { .. } | { .. }`
+        // `cond a == 10 { .. } else { .. }`
         if let Some(ref target_expr) = cond_expr {
             if Self::is_bool_expr(target_expr) {
                 let cond = *cond_expr.unwrap();
@@ -39,7 +40,7 @@ impl Parser {
             //    break;
             //}
             // elseのノードを作成する
-            if self.peek_tkn()? == lex::Tkn::Or {
+            if self.peek_tkn()? == lex::Tkn::KeyWordElse {
                 self.next_tkn(&[])?;
                 return self.build_else_arm_node(&cond_expr, arms);
             }
@@ -127,9 +128,9 @@ impl Parser {
 
     /// `match` に真偽値(比較式)が渡された場合の解析
     /// ```
-    /// match a == 10 {
+    /// cond a == 10 {
     ///     // a が 10 のとき
-    /// } | {
+    /// } else {
     ///     // それ以外
     /// }
     /// ```
@@ -144,10 +145,10 @@ impl Parser {
         // trueのときの処理
         let body = self.gen_block_node()?;
         // }
-        // } | {
+        // } else {
         self.tkn_checker().close_scope_to_rbrace(None)?;
-        // |
-        if self.next_tkn(&["|"])? != lex::Tkn::Or {
+        // else
+        if self.next_tkn(&["else"])? != lex::Tkn::KeyWordElse {
             crate::cond_err!(self.build_err_span(), CondElseNotFound)?
         }
         // {

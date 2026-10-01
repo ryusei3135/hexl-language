@@ -400,6 +400,7 @@ impl Lexer {
                     "break" => Tkn::KeyWordBreak,
                     "where" => Tkn::KeyWordWhere,
                     "allow" => Tkn::KeyWordAllow,
+                    "else" => Tkn::KeyWordElse,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),

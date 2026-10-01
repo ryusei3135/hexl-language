@@ -5,7 +5,8 @@ use std::collections::HashMap;
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
-    pub(super) fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(super) 
+    fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             return self.struct_name_is_not_found();
         };
@@ -28,7 +29,8 @@ impl Parser {
     }
 
     /// 構造体を初期化する式を生成
-    pub(super) fn struct_init_node<const T: bool>(
+    pub(super) 
+    fn struct_init_node<const T: bool>(
         &mut self,
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
@@ -83,7 +85,8 @@ impl Parser {
 
     /// `enum name { mem, mem2 }` を解析する
     /// 呼び出し時は current_tkn() が `KeyWordEnum`
-    pub(super) fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(super) 
+    fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             panic!("列挙型の名前が必要です");
         };
@@ -308,7 +311,8 @@ impl Parser {
     /// これにより、型として予約語`Self`が使われたとき、
     /// `node::TyNode::SelfTy(self_name)`へ解決できる。
     /// メゾットの外(トップレベルの関数など)では`None`を渡す。
-    pub(super) fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    pub(super) 
+    fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
         }
@@ -319,7 +323,8 @@ impl Parser {
     /// トークンが`:`である必要はなく、`current_tkn()`は型の直前の
     /// 区切り(`:`、ジェネリクスの型引数の`<`や`,`)を指していればよい。
     /// 終了時は、型の次のトークンを指す
-    pub(super) fn ty_node_after_delim(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    pub(super) 
+    fn ty_node_after_delim(&mut self) -> Result<node::TyNode, err::ErrKind> {
         match self.next_tkn(&["name", "[", "string", "Self"])?.clone() {
             // 予約語`Self`: 自身の構造体を指す型
             lex::Tkn::KeyWordSelf => {
