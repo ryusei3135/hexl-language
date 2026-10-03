@@ -117,6 +117,94 @@ impl IR {
         }
     }
 
+    /// 添字が可変な配列アクセス(`[arr idx else 0]`)のIRを生成する
+    ///
+    /// 次の形になるように、条件分岐を差し込む:
+    /// ```text
+    /// if lo <= idx < hi { arr[idx] = dst } else { arr[else_idx] = dst }
+    /// ```
+    ///
+    /// IR上では`ExpectJmp(L)`+条件式が「条件が真なら`L`へ」を表すので、
+    /// 範囲外になる条件(`idx < lo`と`idx > hi - 1`)を順に判定して
+    /// どちらかが真なら`else`のブロックへ飛ばす。
+    /// ```text
+    ///   (dst, idxを評価)
+    ///   ExpectJmp(else); idx < lo
+    ///   ExpectJmp(else); idx > hi - 1
+    ///   InsertArr(arr, dst, idx)        // 範囲内
+    ///   Jmp(end)
+    /// else:
+    ///   InsertArr(arr, dst, else_idx)   // 範囲外
+    /// end:
+    /// ```
+    /// `dst`と`idx`は副作用が二重に起きないよう、分岐の前に一度だけ評価する
+    pub(super)
+    fn ref_array_guarded_node(
+        &mut self,
+        guard: checker::ArrIdxGuard,
+        dst: node::Expr,
+        expect_byte: &types::Size,
+    ) -> usize {
+        let else_label = self.next_pattern_label();
+        let end_label = self.next_pattern_label();
+
+        // 代入する値と添字は、分岐の前に一度だけ評価する
+        let dst_idx = self.gen_expr_ir(dst, &expect_byte);
+        let index_idx = self.gen_expr_ir(guard.index.clone(), &expect_byte);
+
+        // `idx < lo`なら範囲外
+        crate::push_jmp_code!(self, ExpectJmp, &else_label);
+        self.push_cmp_with_num(index_idx, guard.lo, inst::ExprKind::LessThen);
+        // `idx > hi - 1`(= `idx >= hi`)なら範囲外
+        // (`hi > lo`は`check_ref_array`で確認済みなので`hi - 1`は underflow しない)
+        crate::push_jmp_code!(self, ExpectJmp, &else_label);
+        self.push_cmp_with_num(index_idx, guard.hi - 1, inst::ExprKind::GreaterThen);
+
+        // 範囲内: `arr[idx] = dst`
+        self.push_inst(inst::Inst::InsertArr {
+            name: guard.name.clone(),
+            dst: dst_idx,
+            index: index_idx,
+        });
+        crate::push_jmp_code!(self, Jmp, &end_label);
+
+        // 範囲外: `arr[else_idx] = dst`
+        crate::push_jmp_code!(self, Block, &else_label);
+        let else_idx = self.gen_expr_ir(guard.else_idx.clone(), &expect_byte);
+        self.push_inst(inst::Inst::InsertArr {
+            name: guard.name,
+            dst: dst_idx,
+            index: else_idx,
+        });
+
+        crate::push_jmp_code!(self, Block, &end_label);
+        self.id_counter - 1
+    }
+
+    /// 命令を`ir_tree`へ積み、その命令のidを返す
+    fn push_inst(&mut self, inst: inst::Inst) -> usize {
+        self.ir_tree.push(inst);
+        self.id_counter += 1;
+        self.id_counter - 1
+    }
+
+    /// `value_idx <kind> n`(`n`は即値)の比較命令を積む
+    /// (条件分岐の判定用なので、即値の型は`DD`にしている)
+    fn push_cmp_with_num(&mut self, value_idx: usize, n: usize, kind: inst::ExprKind) -> usize {
+        let num_idx = self.id_counter;
+        self.push_inst(inst::Inst::gen_num(&n.to_string(), &types::Size::DD, num_idx));
+        let dst = self.id_counter;
+        self.push_inst(
+            inst::ExprInst {
+                dst,
+                ls: value_idx,
+                rs: num_idx,
+                kind,
+            }
+            .new(),
+        )
+    }
+
     pub(super) 
     fn def_var_node(
         &mut self,

@@ -89,6 +89,15 @@ impl IR {
             );
         }
 
+        // 有効な範囲が空だと、どの添字でもアクセスできない
+        // (IR側で`hi - 1`を使うので、ここで弾いておく)
+        if hi <= lo {
+            panic!(
+                "`{}` の有効範囲が空なので、可変な添字ではアクセスできません: {}..{}",
+                name, lo, hi,
+            );
+        }
+
         // `else_idx`自体が範囲外だと、フォールバックが範囲外アクセスになる
         if self.is_const_index(else_expr) {
             let v = self.eval_expr(else_expr);

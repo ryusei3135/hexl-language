@@ -330,7 +330,9 @@ impl IR {
         self.expr_counter += 1;
         // 配列/ポインタのアクセスやポインタの加算の範囲チェック
         // (`src/ir/checker/access_mem.rs`)
-        self.check_mem_access(&expr);
+        // 添字が可変な配列アクセスのときは、範囲外のときの分岐を
+        // IRに差し込むためのガードが返る
+        let arr_guard = self.check_mem_access(&expr);
         let inst = match expr {
             // ポインタ関係
             node::Expr::GetAddress(target) => {
@@ -378,8 +380,14 @@ impl IR {
                 self.init_array_node(init_nodes, &expect_byte)
             }
             // 配列にアクセスする
-            // else_idxはchecker/access_mem.rsでチェック済みなので、ここではunwrapして使う
+            // else_idxはchecker/access_mem.rsでチェック済み
             node::Expr::RefArray { name, dst, index, .. } => {
+                // 添字が可変: `if lo <= idx < hi { arr[idx] } else { arr[else_idx] }`
+                // `src/ir/builder/expr_node.rs`
+                if let Some(guard) = arr_guard {
+                    return self.ref_array_guarded_node(guard, *dst, &expect_byte);
+                }
+                // 添字が`const`/即値: 静的検査済みなのでそのまま
                 // `src/ir/builder/expr_node.rs`
                 self.ref_array_node(*dst, *index, &name, &expect_byte)
             }

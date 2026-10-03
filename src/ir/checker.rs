@@ -7,6 +7,10 @@ mod constract;
 mod tracking;
 mod var_ty;
 
+// `builder`が、範囲外のときの分岐IRを生成するために使う
+pub(in crate::ir) 
+use access_mem::ArrIdxGuard;
+
 use crate::models::Body;
 
 #[derive(Debug)]

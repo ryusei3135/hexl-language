@@ -154,7 +154,8 @@ impl VarTree {
     }
 
     /// 契約を終わらせる
-    pub(in crate::ir) fn finish_constract_var(
+    pub(in crate::ir) 
+    fn finish_constract_var(
         &mut self,
         var_name: &str,
     ) -> Result<(), err::ErrKind> {
@@ -240,7 +241,8 @@ impl VarTree {
     ///
     /// 範囲付きポインタへの再代入(`a += 10`など)を静的にチェックする際、
     /// 右辺の式が変数自身を参照していても値を評価できるようにするために使う
-    pub(in crate::ir) fn record_value(&mut self, name: &str, value: usize) {
+    pub(in crate::ir) 
+    fn record_value(&mut self, name: &str, value: usize) {
         self.values.insert(name.to_owned(), value);
     }
 
@@ -248,7 +250,8 @@ impl VarTree {
     ///
     /// まだ一度も定数値として記録されていない変数や、実行時にしか
     /// 値が分からない式で更新された変数は`None`を返す
-    pub(in crate::ir) fn get_value(&self, name: &str) -> Option<usize> {
+    pub(in crate::ir) 
+    fn get_value(&self, name: &str) -> Option<usize> {
         self.values.get(name).copied()
     }
 
@@ -256,7 +259,8 @@ impl VarTree {
     ///
     /// 変数が実行時にしか値の分からない式で更新された場合、古い記録が
     /// 残ったまま以降の静的チェックに誤って使われないようにするために呼ぶ
-    pub(in crate::ir) fn forget_value(&mut self, name: &str) {
+    pub(in crate::ir) 
+    fn forget_value(&mut self, name: &str) {
         self.values.remove(name);
     }
 }
