@@ -21,7 +21,7 @@ impl AsmEmitter {
     ///
     /// 添字を載せた一時レジスタは`self.arr_index_temp`に記録し、
     /// 書き込み後に`write_mem`が解放する
-    pub(in crate::asm_gen::asm_emitter)
+    pub(in crate::compiler::asm_gen::asm_emitter)
     fn ref_arr_for_struct_member(
         &mut self,
         name: &str,

@@ -4,8 +4,8 @@ use std::fs;
 
 use serde::{Deserialize, Serialize};
 
-use crate::asm_gen;
-use crate::ir;
+use crate::compiler::asm_gen;
+use crate::compiler::ir;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Reg {

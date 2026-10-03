@@ -1,8 +1,10 @@
 
 
 
-pub(in crate::asm_gen) const MARKED_REG: bool = true;
-pub(in crate::asm_gen) const UNMARKED_REG: bool = false;
+pub(in crate::compiler::asm_gen) 
+const MARKED_REG: bool = true;
+pub(in crate::compiler::asm_gen) 
+const UNMARKED_REG: bool = false;
 
 /// 現在使用中のレジスタを管理する
 #[derive(Debug, Clone, Default)]

@@ -2,8 +2,8 @@ mod assign_var;
 mod mem_ir;
 
 use super::*;
-use crate::asm_gen::emit_fn_name::*;
-use crate::ir::{self, types};
+use crate::compiler::asm_gen::emit_fn_name::*;
+use crate::compiler::ir::{self, types};
 
 impl AsmEmitter {
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する
@@ -11,7 +11,8 @@ impl AsmEmitter {
     /// `gen/asm_emitter.rs`の`extract_operand_text`から、関数呼び出しの
     /// 結果を値として使う(戻り値を任意のレジスタへ代入する)際にも
     /// 使われるため`pub(super)`にしている
-    pub(super) fn emit_call_func(
+    pub(super) 
+    fn emit_call_func(
         &mut self,
         meta_data: &inst::CallFuncMetaData,
         expand_struct_return: bool,
@@ -137,7 +138,8 @@ impl AsmEmitter {
     /// - func_meta_data
     /// - asm_fmt_name
     ///     出力するアセンブリ言語のフォーマットの名前
-    pub(super) fn build_fn_process(
+    pub(super) 
+    fn build_fn_process(
         &mut self,
         fn_meta_data: &mut (String, def_tree::FnDefInfo),
         asm_fmt_name: &Option<String>,

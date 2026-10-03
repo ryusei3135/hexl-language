@@ -28,7 +28,7 @@ macro_rules! scope_node {
             } else {
                 return crate::syntax_err!(
                     $self.build_err_span(),
-                    crate::err::SyntaxErrKind::ExpectedKind {
+                    crate::compiler::err::SyntaxErrKind::ExpectedKind {
                         expected: "name",
                         found: scope_tkn,
                     }

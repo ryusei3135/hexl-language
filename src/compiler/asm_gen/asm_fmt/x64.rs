@@ -71,7 +71,8 @@ pub struct StaticAsmFormat {
     pub func: StaticFunc,
 }
 
-pub(in crate::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = StaticAsmFormat {
+pub(in crate::compiler::asm_gen::asm_fmt) 
+static GCC_X64: StaticAsmFormat = StaticAsmFormat {
     reg: StaticReg {
         db: &[
             "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b",

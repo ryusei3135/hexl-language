@@ -42,7 +42,8 @@ impl AsmEmitter {
     /// 結果は`self.reg_idx`のレジスタに置く。
     /// (`gen_expr_asm`が、`%rax`/`%rdx`以外の空きレジスタを
     /// `self.reg_idx`へ設定してから呼ぶ)
-    pub(super) fn format_div_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
+    pub(super) 
+    fn format_div_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
         let dst = self.reg_idx;
         let ty = self.get_expr_ty(expr.ls);
         let wrap_size = ty.wrap_dst_size();

@@ -7,7 +7,7 @@ mod arr;
 
 use super::*;
 use crate::asm_setting;
-use crate::ir::types;
+use crate::compiler::ir::types;
 
 /// 演算結果を格納するレジスタの「適切なサイズ」が、テンプレートを
 /// 組み立てる時点ではまだ決まらない演算子の一覧。
@@ -20,7 +20,8 @@ use crate::ir::types;
 /// を参照)、サイズが確定してから改めて実際のレジスタ名へ展開し直す
 /// 必要がある。
 #[allow(dead_code)]
-pub(in crate::asm_gen) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
+pub(in crate::compiler::asm_gen) 
+const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
     inst::ExprKind::Mul,
     inst::ExprKind::Div,
     inst::ExprKind::Surplus,
@@ -34,10 +35,11 @@ pub(in crate::asm_gen) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
 /// `/`と`%`は、この2つのレジスタを必ず書き換える。一般の式の結果を
 /// ここに置いてしまうと、割り算のたびに壊れてしまう(引数のレジスタが
 /// 破壊されるバグの原因の一つだった)ので、割り当て対象から外す。
-pub(in crate::asm_gen) const RESERVED_REGS: [usize; 2] = [0, 2];
+pub(in crate::compiler::asm_gen) 
+const RESERVED_REGS: [usize; 2] = [0, 2];
 
 #[derive(Debug, Clone)]
-pub(in crate::asm_gen) struct VarIndexInfo {
+pub(in crate::compiler::asm_gen) struct VarIndexInfo {
     /// `is_stack`が`false`の場合はレジスタ番号(従来通り)、
     /// `true`の場合は`%rbp`からのバイトオフセットを表す
     pub reg: usize,
@@ -209,7 +211,7 @@ impl AsmEmitter {
     /// 最大のメンバーのサイズ(8byte)だけ余分に確保する。
     /// `N`は現在のスタック使用量を8byteに切り上げた値に8を足した値とし、
     /// 使用量を`N + bytes`まで進める。これで先にある配列などと重ならない
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn alloc_struct_stk(&mut self, ptr_idx: usize, bytes: usize) -> usize {
         if let Some(offset) = self.struct_stk_map.get(&ptr_idx) {
             return *offset;
@@ -222,7 +224,7 @@ impl AsmEmitter {
 
     /// `GetPtr`のノードの`%rbp`からのオフセット。`alloc_struct_stk`で
     /// 確保済みならそれを、そうでなければIRの`stk`を返す
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn ptr_stk(&self, ptr_idx: usize, ir_stk: usize) -> usize {
         self.struct_stk_map.get(&ptr_idx).copied().unwrap_or(ir_stk)
     }
@@ -238,7 +240,7 @@ impl AsmEmitter {
     ///
     /// 返したレジスタを使用中にするのは呼び出し側の責任
     /// (`mark_used`を呼ぶ)。
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn alloc_reg(&self) -> usize {
         (0..self.asm_fmt.reg_count())
             .find(|reg| !RESERVED_REGS.contains(reg) && !self.used_reg.is_used(*reg))
@@ -290,7 +292,7 @@ impl AsmEmitter {
     /// 式の結果のレジスタ(`last_inst_idx`)が次の関数へ持ち越されていた。
     /// (`last_inst_idx`は関数ごとに振り直される式のidで引くので、
     ///  前の関数の同じidの式のレジスタを誤って使うことがあった)
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn reset_fn_state(&mut self) {
         self.var_hash_map = HashMap::new();
         self.struct_stk_map.clear();
@@ -304,7 +306,7 @@ impl AsmEmitter {
 
     /// `Inst::StartScope`の処理
     /// これ以降に登録されたレジスタを記録し始める
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn start_scope_asm(&mut self) {
         self.used_reg.start_scope();
         self.scope_outer_vars
@@ -320,7 +322,7 @@ impl AsmEmitter {
     /// ただし、スコープの外で宣言された変数が(スコープ内での再代入などで)
     /// レジスタを使うようになった場合、そのレジスタはスコープが終わっても
     /// 生きているので、解放せずに残す
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn end_scope_asm(&mut self) {
         let released = self.used_reg.end_scope();
         let outer_vars = self
@@ -346,13 +348,13 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn update_value_info(&mut self, name: &str, index: usize) {
         self.var_hash_map.get_mut(name).unwrap().index = index;
     }
 
     #[inline(always)]
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn update_value_reg(&mut self, name: &str, reg: usize) {
         self.used_reg.mark_used(reg);
         self.var_hash_map.get_mut(name).unwrap().reg = reg;
@@ -360,7 +362,7 @@ impl AsmEmitter {
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
     /// 通りに加工する。
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn format_line(
         &mut self,
         opcode: &str,
@@ -424,7 +426,7 @@ impl AsmEmitter {
     /// - `DB`/`DW`/`DD`/`DQ`: そのままのサイズ
     /// - 配列: 要素のサイズ
     /// - ポインタ/構造体など: アドレスを持つので64bit(`DQ`)
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn value_reg_size(ty: &Size) -> Size {
         match ty {
             Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
@@ -532,7 +534,7 @@ impl AsmEmitter {
     /// `Inst::Struct`を指している場合、その`Inst::Struct`自身のidxを返す。
     /// `format_line`が構造体の生成を特別扱いする際、ラップされた
     /// ノードの内側までたどれるようにするためのヘルパー
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn resolve_struct_idx(&self, idx: usize) -> Option<usize> {
         match self.curr_inst[idx] {
             inst::Inst::Struct { .. } => Some(idx),
@@ -555,7 +557,7 @@ impl AsmEmitter {
     /// これは`mov`命令に付けるサイズ接尾辞(`movl`など)を
     /// 決定するために使う。
     #[inline(always)]
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn check_node_is_mem_val(&self, node_idx: usize) -> Option<Size> {
         self.check_node_is_mem_val_inner(node_idx, false)
     }
@@ -607,7 +609,7 @@ impl AsmEmitter {
         self.asm_fmt.get_fmt_reg(num, &size)
     }
 
-    pub(in crate::asm_gen) 
+    pub(in crate::compiler::asm_gen) 
     fn extract_operand_text(
         &mut self,
         parent_id: usize,

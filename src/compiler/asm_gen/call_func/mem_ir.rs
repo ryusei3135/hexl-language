@@ -1,5 +1,5 @@
 use super::*;
-use crate::ir::types;
+use crate::compiler::ir::types;
 
 impl AsmEmitter {
     pub(super) 

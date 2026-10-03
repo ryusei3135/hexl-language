@@ -1,5 +1,4 @@
 use super::*;
-use crate::err;
 use regex::{Captures, Regex};
 
 impl AsmEmitter {
@@ -7,7 +6,7 @@ impl AsmEmitter {
     /// ファイル側に書いてあるレジスタを埋め込む処理を実行
     pub fn replace_insert_fmt_reg(&self, val: &str, size: &types::Size) -> String {
         let insert_reg = Regex::new(r"%\{([^}]+)\}").unwrap();
-        let parse_err: Option<err::ErrKind> = None;
+        let parse_err: Option<crate::compiler::err::ErrKind> = None;
         insert_reg
             .replace_all(val, |caps: &Captures| {
                 if parse_err.is_some() {
