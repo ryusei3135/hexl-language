@@ -50,6 +50,9 @@ pub enum Directive {
     Text,
     Data,
 
+    // `.section test` : `test` セクションに切り替える
+    Test,
+
     Extern(String),
     Global(String),
 
@@ -80,6 +83,7 @@ pub enum DataValue {
 pub enum Section {
     Text,
     Data,
+    Test,
 }
 
 // ============================================================
@@ -109,11 +113,16 @@ pub struct Fixup {
 pub struct Emitter {
     pub text: Vec<u8>,
     pub data: Vec<u8>,
+    pub test: Vec<u8>,
+
+    /// `.section test` が一度でも使われたか (出力にセクションヘッダを足すかの判定用)
+    pub uses_test: bool,
 
     pub current_section: Section,
 
     pub text_labels: HashMap<String, usize>,
     pub data_labels: HashMap<String, usize>,
+    pub test_labels: HashMap<String, usize>,
 
     pub globals: Vec<String>,
     pub externs: Vec<String>,
@@ -126,11 +135,14 @@ impl Emitter {
         Self {
             text: Vec::new(),
             data: Vec::new(),
+            test: Vec::new(),
+            uses_test: false,
 
             current_section: Section::Text,
 
             text_labels: HashMap::new(),
             data_labels: HashMap::new(),
+            test_labels: HashMap::new(),
 
             globals: Vec::new(),
             externs: Vec::new(),
@@ -169,6 +181,7 @@ impl Emitter {
         let table = match self.current_section {
             Section::Text => &mut self.text_labels,
             Section::Data => &mut self.data_labels,
+            Section::Test => &mut self.test_labels,
         };
 
         if table.contains_key(name) {
@@ -188,6 +201,10 @@ impl Emitter {
             }
             Directive::Data => {
                 self.current_section = Section::Data;
+            }
+            Directive::Test => {
+                self.current_section = Section::Test;
+                self.uses_test = true;
             }
             Directive::Extern(name) => {
                 if !self.externs.contains(name) {
@@ -232,6 +249,7 @@ impl Emitter {
         match self.current_section {
             Section::Text => &mut self.text,
             Section::Data => &mut self.data,
+            Section::Test => &mut self.test,
         }
     }
 
@@ -243,7 +261,7 @@ impl Emitter {
         // .text は NOP (0x90)、それ以外は 0 で埋める
         let pad_byte = match self.current_section {
             Section::Text => 0x90,
-            Section::Data => 0x00,
+            Section::Data | Section::Test => 0x00,
         };
 
         let buffer = self.current_buffer();
@@ -263,16 +281,18 @@ impl Emitter {
     }
 
     fn emit_data(&mut self, values: &[DataValue], size: usize) -> Result<(), String> {
-        if self.current_section != Section::Data {
-            return Err("data directive outside .data".into());
+        if self.current_section == Section::Text {
+            return Err("data directive outside .data / .section test".into());
         }
+
+        let section = self.current_section;
 
         for value in values {
             match value {
                 DataValue::Integer(value) => {
                     let bytes = value.to_le_bytes();
 
-                    self.data.extend_from_slice(&bytes[..size]);
+                    self.current_buffer().extend_from_slice(&bytes[..size]);
                 }
 
                 DataValue::String(bytes) => {
@@ -280,18 +300,18 @@ impl Emitter {
                         return Err("string is only valid for db".into());
                     }
 
-                    self.data.extend_from_slice(bytes);
+                    self.current_buffer().extend_from_slice(bytes);
                 }
 
                 DataValue::Symbol(symbol) => {
-                    let offset = self.data.len();
+                    let offset = self.current_buffer().len();
 
                     for _ in 0..size {
-                        self.data.push(0);
+                        self.current_buffer().push(0);
                     }
 
                     self.fixups.push(Fixup {
-                        section: Section::Data,
+                        section,
                         offset,
                         symbol: symbol.clone(),
                         kind: match size {
@@ -1421,6 +1441,10 @@ impl Emitter {
             return Some((Section::Data, *offset));
         }
 
+        if let Some(offset) = self.test_labels.get(symbol) {
+            return Some((Section::Test, *offset));
+        }
+
         None
     }
 
@@ -1440,6 +1464,7 @@ impl Emitter {
         let buffer = match section {
             Section::Text => &mut self.text,
             Section::Data => &mut self.data,
+            Section::Test => &mut self.test,
         };
 
         let end = offset + bytes.len();
@@ -1461,6 +1486,7 @@ impl Emitter {
         match self.current_section {
             Section::Text => self.text.len(),
             Section::Data => self.data.len(),
+            Section::Test => self.test.len(),
         }
     }
 
@@ -1468,6 +1494,7 @@ impl Emitter {
         match self.current_section {
             Section::Text => &mut self.text,
             Section::Data => &mut self.data,
+            Section::Test => &mut self.test,
         }
     }
 

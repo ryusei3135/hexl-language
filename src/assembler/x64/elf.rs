@@ -292,11 +292,16 @@ fn pad_to(buffer: &mut Vec<u8>, align: usize) {
 
 /// Emitter の結果から ET_REL (再配置可能オブジェクトファイル) を組み立てる。
 ///
-/// 生成されるセクション: .text, .data, (.rela.text), (.rela.data),
-/// .symtab, .strtab, .shstrtab
+/// 生成されるセクション: .text, .data, (test), (.rela.text), (.rela.data),
+/// (.rela.test), .symtab, .strtab, .shstrtab
+///
+/// `test` セクションは `.section test` が使われたときだけ出力する。
 pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
     const SHNDX_TEXT: u16 = 1;
     const SHNDX_DATA: u16 = 2;
+    const SHNDX_TEST: u16 = 3; // `.section test` を使ったときだけ存在する
+
+    let uses_test = emitter.uses_test;
 
     // --------------------------------------------------------
     // シンボルテーブルの構築
@@ -332,6 +337,21 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
         let entry = SymEntry {
             name: name.clone(),
             shndx: SHNDX_DATA,
+            value: offset as u64,
+            kind: STT_OBJECT,
+        };
+
+        if emitter.globals.contains(name) {
+            globals.push(entry);
+        } else {
+            locals.push(entry);
+        }
+    }
+
+    for (name, &offset) in emitter.test_labels.iter() {
+        let entry = SymEntry {
+            name: name.clone(),
+            shndx: SHNDX_TEST,
             value: offset as u64,
             kind: STT_OBJECT,
         };
@@ -430,15 +450,18 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
     let mut rela_text: Vec<u8> = Vec::new();
     let mut rela_data: Vec<u8> = Vec::new();
+    let mut rela_test: Vec<u8> = Vec::new();
 
     for fixup in &emitter.fixups {
         let defined_locally = emitter.text_labels.contains_key(&fixup.symbol)
-            || emitter.data_labels.contains_key(&fixup.symbol);
+            || emitter.data_labels.contains_key(&fixup.symbol)
+            || emitter.test_labels.contains_key(&fixup.symbol);
 
         let same_section_as = |section: Section| -> bool {
             match section {
                 Section::Text => emitter.text_labels.contains_key(&fixup.symbol),
                 Section::Data => emitter.data_labels.contains_key(&fixup.symbol),
+                Section::Test => emitter.test_labels.contains_key(&fixup.symbol),
             }
         };
 
@@ -473,6 +496,7 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
         match fixup.section {
             Section::Text => rela_text.extend_from_slice(&rela.to_bytes()),
             Section::Data => rela_data.extend_from_slice(&rela.to_bytes()),
+            Section::Test => rela_test.extend_from_slice(&rela.to_bytes()),
         }
     }
 
@@ -492,6 +516,12 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
     let name_text = push_name(&mut shstrtab, ".text");
     let name_data = push_name(&mut shstrtab, ".data");
 
+    let name_test = if uses_test {
+        Some(push_name(&mut shstrtab, "test"))
+    } else {
+        None
+    };
+
     let name_rela_text = if !rela_text.is_empty() {
         Some(push_name(&mut shstrtab, ".rela.text"))
     } else {
@@ -504,11 +534,18 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
         None
     };
 
+    let name_rela_test = if !rela_test.is_empty() {
+        Some(push_name(&mut shstrtab, ".rela.test"))
+    } else {
+        None
+    };
+
     let name_symtab = push_name(&mut shstrtab, ".symtab");
     let name_strtab = push_name(&mut shstrtab, ".strtab");
     let name_shstrtab = push_name(&mut shstrtab, ".shstrtab");
 
-    let mut next_shndx: u16 = 3; // 1=.text, 2=.data は確定済み
+    // 1=.text, 2=.data (, 3=test) は確定済み
+    let mut next_shndx: u16 = if uses_test { 4 } else { 3 };
 
     let rela_text_shndx = if !rela_text.is_empty() {
         let idx = next_shndx;
@@ -519,6 +556,14 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
     };
 
     let rela_data_shndx = if !rela_data.is_empty() {
+        let idx = next_shndx;
+        next_shndx += 1;
+        Some(idx)
+    } else {
+        None
+    };
+
+    let rela_test_shndx = if !rela_test.is_empty() {
         let idx = next_shndx;
         next_shndx += 1;
         Some(idx)
@@ -592,6 +637,25 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
         sh_entsize: 0,
     });
 
+    // test (`.section test`)
+    if uses_test {
+        pad_to(&mut file, 8);
+        let test_off = file.len();
+        file.extend_from_slice(&emitter.test);
+        headers.push(Elf64Shdr {
+            sh_name: name_test.unwrap(),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_addr: 0,
+            sh_offset: test_off as u64,
+            sh_size: emitter.test.len() as u64,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: 0,
+        });
+    }
+
     // .rela.text
     if let Some(shndx) = rela_text_shndx {
         pad_to(&mut file, 8);
@@ -626,6 +690,26 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
             sh_size: rela_data.len() as u64,
             sh_link: symtab_shndx as u32,
             sh_info: SHNDX_DATA as u32,
+            sh_addralign: 8,
+            sh_entsize: 24,
+        });
+        let _ = shndx;
+    }
+
+    // .rela.test
+    if let Some(shndx) = rela_test_shndx {
+        pad_to(&mut file, 8);
+        let off = file.len();
+        file.extend_from_slice(&rela_test);
+        headers.push(Elf64Shdr {
+            sh_name: name_rela_test.unwrap(),
+            sh_type: SHT_RELA,
+            sh_flags: 0,
+            sh_addr: 0,
+            sh_offset: off as u64,
+            sh_size: rela_test.len() as u64,
+            sh_link: symtab_shndx as u32,
+            sh_info: SHNDX_TEST as u32,
             sh_addralign: 8,
             sh_entsize: 24,
         });
@@ -705,8 +789,11 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
 // 実行ファイル (`-c`)
 // ============================================================
 
-/// Emitter の結果から、単一の PT_LOAD セグメントに .text/.data を
+/// Emitter の結果から、単一の PT_LOAD セグメントに .text/.data (/test) を
 /// そのまま詰め込んだ最小構成の ET_EXEC 実行ファイルを組み立てる。
+///
+/// セクションヘッダテーブル (.text, .data, (test), .shstrtab) を
+/// ファイル末尾に付ける。`test` は `.section test` が使われた場合だけ。
 ///
 /// 外部リンクは行わないため、未解決の外部シンボル (`.extern`) が
 /// 残っている場合はエラーになる。その場合は `-o` でオブジェクトを
@@ -718,9 +805,18 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
     let text_off = EHDR_SIZE + PHDR_SIZE;
     let data_off = text_off + emitter.text.len() as u64;
+    let uses_test = emitter.uses_test;
+
+    // test は 8 バイト境界に置く (パディングは data 側に含める)
+    let test_off = if uses_test {
+        (data_off + emitter.data.len() as u64 + 7) & !7
+    } else {
+        data_off + emitter.data.len() as u64
+    };
 
     let mut text = emitter.text.clone();
     let mut data = emitter.data.clone();
+    let mut test = emitter.test.clone();
 
     let resolve = |symbol: &str| -> Option<u64> {
         if let Some(&off) = emitter.text_labels.get(symbol) {
@@ -729,6 +825,10 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
         if let Some(&off) = emitter.data_labels.get(symbol) {
             return Some(BASE + data_off + off as u64);
+        }
+
+        if let Some(&off) = emitter.test_labels.get(symbol) {
+            return Some(BASE + test_off + off as u64);
         }
 
         None
@@ -747,6 +847,7 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
         let section_base = match fixup.section {
             Section::Text => BASE + text_off,
             Section::Data => BASE + data_off,
+            Section::Test => BASE + test_off,
         };
 
         let fixup_addr = section_base + fixup.offset as u64;
@@ -754,6 +855,7 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
         let buffer = match fixup.section {
             Section::Text => &mut text,
             Section::Data => &mut data,
+            Section::Test => &mut test,
         };
 
         match fixup.kind {
@@ -783,21 +885,84 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
         }
     }
 
-    let filesz = data_off + data.len() as u64;
+    let filesz = if uses_test {
+        test_off + test.len() as u64
+    } else {
+        data_off + data.len() as u64
+    };
 
     let entry = match emitter.text_labels.get("_start") {
         Some(&off) => BASE + text_off + off as u64,
         None => BASE + text_off,
     };
 
+    // ---- セクションヘッダ (test セクションを使ったときだけ) ----
+    let mut shdr_bytes: Vec<u8> = Vec::new();
+    let mut shstrtab: Vec<u8> = vec![0];
+    let mut shnum: u16 = 0;
+    let mut shstrndx: u16 = 0;
+    let mut shstr_off = 0u64;
+    let mut shoff = 0u64;
+
+    {
+        let mut name = |s: &str| -> u32 {
+            let off = shstrtab.len() as u32;
+            shstrtab.extend_from_slice(s.as_bytes());
+            shstrtab.push(0);
+            off
+        };
+        let n_text = name(".text");
+        let n_data = name(".data");
+        let n_test = if uses_test { Some(name("test")) } else { None };
+        let n_shstr = name(".shstrtab");
+
+        // .shstrtab 本体は最後のセクションの直後、セクションヘッダテーブルはその後ろ (8 バイト境界)
+        shstr_off = filesz;
+        shoff = (shstr_off + shstrtab.len() as u64 + 7) & !7;
+
+        let mk = |name: u32, ty: u32, flags: u64, addr: u64, off: u64, size: u64, align: u64| {
+            Elf64Shdr {
+                sh_name: name,
+                sh_type: ty,
+                sh_flags: flags,
+                sh_addr: addr,
+                sh_offset: off,
+                sh_size: size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: align,
+                sh_entsize: 0,
+            }
+        };
+
+        let mut headers = vec![
+            mk(0, SHT_NULL, 0, 0, 0, 0, 0),
+            mk(n_text, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, BASE + text_off, text_off, text.len() as u64, 16),
+            mk(n_data, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, BASE + data_off, data_off, data.len() as u64, 8),
+        ];
+
+        if let Some(n_test) = n_test {
+            headers.push(mk(n_test, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, BASE + test_off, test_off, test.len() as u64, 8));
+        }
+
+        headers.push(mk(n_shstr, SHT_STRTAB, 0, 0, shstr_off, shstrtab.len() as u64, 1));
+
+        for h in &headers {
+            shdr_bytes.extend_from_slice(&h.to_bytes());
+        }
+
+        shnum = headers.len() as u16;
+        shstrndx = shnum - 1;
+    }
+
     let mut ehdr = Elf64Ehdr::new();
     ehdr.e_type = ET_EXEC;
     ehdr.e_entry = entry;
     ehdr.e_phoff = EHDR_SIZE;
     ehdr.e_phnum = 1;
-    ehdr.e_shoff = 0;
-    ehdr.e_shnum = 0;
-    ehdr.e_shstrndx = 0;
+    ehdr.e_shoff = shoff;
+    ehdr.e_shnum = shnum;
+    ehdr.e_shstrndx = shstrndx;
 
     let phdr = Elf64Phdr {
         p_type: PT_LOAD,
@@ -815,6 +980,16 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
     out.extend_from_slice(&phdr.to_bytes());
     out.extend_from_slice(&text);
     out.extend_from_slice(&data);
+
+    if uses_test {
+        out.resize(test_off as usize, 0); // data と test の間のパディング
+        out.extend_from_slice(&test);
+    }
+
+    debug_assert_eq!(out.len() as u64, shstr_off);
+    out.extend_from_slice(&shstrtab);
+    out.resize(shoff as usize, 0);
+    out.extend_from_slice(&shdr_bytes);
 
     Ok(out)
 }

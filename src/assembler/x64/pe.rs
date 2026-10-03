@@ -28,6 +28,7 @@ const IMAGE_OPTIONAL_HDR64_MAGIC: u16 = 0x20b;
 const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
+const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
@@ -61,6 +62,9 @@ fn align_up(value: u32, align: u32) -> u32 {
 /// Emitter の結果から、単一セクション (.text) に .text/.data を
 /// そのまま詰め込んだ最小構成の PE32+ (x64) 実行ファイルを組み立てる。
 ///
+/// `.section test` が使われた場合は、名前 `test` の独立したセクション
+/// (とそのセクションヘッダ) を .text の後ろに追加する。
+///
 /// elf.rs の `write_executable` と同様、外部リンクは行わないため、
 /// 未解決の外部シンボル (`.extern`) が残っている場合はエラーになる。
 pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
@@ -71,6 +75,17 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
     let mut text = emitter.text.clone();
     let mut data = emitter.data.clone();
+    let mut test = emitter.test.clone();
+
+    let uses_test = emitter.uses_test;
+
+    // .text/.data をまとめたセクションの実サイズ
+    let main_len = (text.len() + data.len()) as u32;
+
+    // test セクションは .text セクションの次のページから始める。
+    // 以降のアドレス計算は SECTION_RVA からの相対値 (test_off) で扱う。
+    let test_rva = SECTION_RVA + align_up(main_len, SECTION_ALIGNMENT);
+    let test_off = (test_rva - SECTION_RVA) as usize;
 
     let resolve = |symbol: &str| -> Option<u64> {
         if let Some(&off) = emitter.text_labels.get(symbol) {
@@ -79,6 +94,10 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
         if let Some(&off) = emitter.data_labels.get(symbol) {
             return Some(IMAGE_BASE + SECTION_RVA as u64 + data_off as u64 + off as u64);
+        }
+
+        if let Some(&off) = emitter.test_labels.get(symbol) {
+            return Some(IMAGE_BASE + SECTION_RVA as u64 + test_off as u64 + off as u64);
         }
 
         None
@@ -96,6 +115,7 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
         let section_local_base = match fixup.section {
             Section::Text => text_off,
             Section::Data => data_off,
+            Section::Test => test_off,
         };
 
         let fixup_addr =
@@ -104,6 +124,7 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
         let buffer = match fixup.section {
             Section::Text => &mut text,
             Section::Data => &mut data,
+            Section::Test => &mut test,
         };
 
         match fixup.kind {
@@ -153,23 +174,34 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
     const DATA_DIR_SIZE: u32 = IMAGE_NUMBEROF_DIRECTORY_ENTRIES * 8;
     const OPT_HEADER_SIZE: u32 = OPT_HEADER_FIXED_SIZE + DATA_DIR_SIZE;
     const SECTION_HEADER_SIZE: u32 = 40;
-    const NUM_SECTIONS: u16 = 1;
+    let num_sections: u16 = if uses_test { 2 } else { 1 };
 
     let headers_size_raw = DOS_HEADER_SIZE
         + PE_SIG_SIZE
         + COFF_HEADER_SIZE
         + OPT_HEADER_SIZE
-        + SECTION_HEADER_SIZE * (NUM_SECTIONS as u32);
+        + SECTION_HEADER_SIZE * (num_sections as u32);
 
     let size_of_headers = align_up(headers_size_raw, FILE_ALIGNMENT);
 
     let size_of_raw_data = align_up(section_raw.len() as u32, FILE_ALIGNMENT);
     let virtual_size = section_raw.len() as u32;
 
-    let size_of_image = align_up(
-        SECTION_RVA + align_up(virtual_size, SECTION_ALIGNMENT),
-        SECTION_ALIGNMENT,
-    );
+    // test セクション (使う場合) の大きさ
+    let test_virtual_size = test.len() as u32;
+    let test_raw_size = align_up(test_virtual_size, FILE_ALIGNMENT);
+
+    let size_of_image = if uses_test {
+        align_up(
+            test_rva + align_up(test_virtual_size, SECTION_ALIGNMENT),
+            SECTION_ALIGNMENT,
+        )
+    } else {
+        align_up(
+            SECTION_RVA + align_up(virtual_size, SECTION_ALIGNMENT),
+            SECTION_ALIGNMENT,
+        )
+    };
 
     // --------------------------------------------------------
     // DOS header (MZ) — スタブは省略し、直後に PE ヘッダを置く
@@ -193,7 +225,7 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
     // --------------------------------------------------------
 
     file.extend_from_slice(&IMAGE_FILE_MACHINE_AMD64.to_le_bytes());
-    file.extend_from_slice(&NUM_SECTIONS.to_le_bytes());
+    file.extend_from_slice(&num_sections.to_le_bytes());
     file.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
     file.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable
     file.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
@@ -211,7 +243,8 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
     file.push(0); // MajorLinkerVersion
     file.push(0); // MinorLinkerVersion
     file.extend_from_slice(&size_of_raw_data.to_le_bytes()); // SizeOfCode (概算値)
-    file.extend_from_slice(&0u32.to_le_bytes()); // SizeOfInitializedData
+    let size_of_initialized_data = if uses_test { test_raw_size } else { 0 };
+    file.extend_from_slice(&size_of_initialized_data.to_le_bytes()); // SizeOfInitializedData
     file.extend_from_slice(&0u32.to_le_bytes()); // SizeOfUninitializedData
     file.extend_from_slice(&entry_rva.to_le_bytes()); // AddressOfEntryPoint
     file.extend_from_slice(&SECTION_RVA.to_le_bytes()); // BaseOfCode
@@ -264,6 +297,29 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
         IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
     file.extend_from_slice(&section_characteristics.to_le_bytes());
 
+    // --------------------------------------------------------
+    // Section header (test — `.section test` を使ったときだけ)
+    // --------------------------------------------------------
+
+    if uses_test {
+        let mut name = [0u8; 8];
+        name[..4].copy_from_slice(b"test");
+        file.extend_from_slice(&name);
+
+        file.extend_from_slice(&test_virtual_size.to_le_bytes()); // VirtualSize
+        file.extend_from_slice(&test_rva.to_le_bytes()); // VirtualAddress
+        file.extend_from_slice(&test_raw_size.to_le_bytes()); // SizeOfRawData
+        file.extend_from_slice(&(size_of_headers + size_of_raw_data).to_le_bytes()); // PointerToRawData
+        file.extend_from_slice(&0u32.to_le_bytes()); // PointerToRelocations
+        file.extend_from_slice(&0u32.to_le_bytes()); // PointerToLinenumbers
+        file.extend_from_slice(&0u16.to_le_bytes()); // NumberOfRelocations
+        file.extend_from_slice(&0u16.to_le_bytes()); // NumberOfLinenumbers
+
+        let test_characteristics =
+            IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+        file.extend_from_slice(&test_characteristics.to_le_bytes());
+    }
+
     debug_assert_eq!(file.len(), headers_size_raw as usize);
 
     // ヘッダ全体を FileAlignment まで0埋め
@@ -275,6 +331,18 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
     file.extend_from_slice(&section_raw);
     file.resize(size_of_headers as usize + size_of_raw_data as usize, 0);
+
+    // --------------------------------------------------------
+    // セクション本体 (test)
+    // --------------------------------------------------------
+
+    if uses_test {
+        file.extend_from_slice(&test);
+        file.resize(
+            size_of_headers as usize + size_of_raw_data as usize + test_raw_size as usize,
+            0,
+        );
+    }
 
     Ok(file)
 }

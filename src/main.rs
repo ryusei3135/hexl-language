@@ -1,12 +1,9 @@
 mod asm_gen;
 mod asm_setting;
 mod assembler;
-mod err;
-mod ir;
+mod compiler;
 mod lex;
 mod macros;
-mod models;
-mod parse;
 
 pub use parse::node;
 use std::{env, fs, process};

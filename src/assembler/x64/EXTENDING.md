@@ -12,3 +12,18 @@
 
 各ファイルの先頭のコメントに、具体的な手順と見本があります。
 命令の見本は `emitter/inst_table.rs` の `nop` です。
+
+## `test` セクション (`.section test`)
+
+`.section test` (または `.test`) で、名前 `test` の独立したデータセクションに切り替わります
+(`.byte` / `.quad` / `.ascii` などのデータ定義やラベルが使えます)。
+
+| 出力 | `test` を使ったときの結果 |
+|---|---|
+| `-o` (ELF オブジェクト) | セクションヘッダ `test` (PROGBITS, WA) を追加。必要なら `.rela.test` も出力 |
+| `-c linux` (ELF 実行ファイル) | セクションヘッダテーブル (.text / .data / .shstrtab) を常に出力。`test` 使用時は `test` も追加 |
+| `-c win` (PE32+) | セクションヘッダ `test` (初期化済みデータ, RW) を追加し、次のページに配置 |
+
+`-o` と `-c win` は `test` を使わなければ従来と同一です (`-c linux` はヘッダ追加のため末尾が増えます)。
+他のセクション名を足したい場合は `emitter.rs` の `enum Section` と `convert/directives.rs`
+の `.section` の `match` に足し、`elf.rs` / `pe.rs` に同様のヘッダ出力を追加してください。

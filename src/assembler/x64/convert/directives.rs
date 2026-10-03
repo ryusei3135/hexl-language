@@ -32,6 +32,21 @@ pub(super) fn convert_directive(
     match name {
         ".text" => Ok(vec![directive(Directive::Text)]),
         ".data" => Ok(vec![directive(Directive::Data)]),
+        // `.section test` / `.section .test` / `.test`
+        ".test" => Ok(vec![directive(Directive::Test)]),
+        ".section" => {
+            let names = symbol_args(name, operands)?;
+
+            match names.as_slice() {
+                [n] => match n.as_str() {
+                    "test" | ".test" => Ok(vec![directive(Directive::Test)]),
+                    ".text" => Ok(vec![directive(Directive::Text)]),
+                    ".data" => Ok(vec![directive(Directive::Data)]),
+                    other => Err(format!("unsupported section: {}", other)),
+                },
+                _ => Err("`.section` requires exactly one section name".into()),
+            }
+        }
         ".global" | ".globl" => {
             let names = symbol_args(name, operands)?;
 
