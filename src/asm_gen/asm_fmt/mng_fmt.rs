@@ -122,12 +122,23 @@ impl MngAsmFmt {
     /// フォーマットに`neg`が定義されていなければ`neg {dst}`を使う
     pub(in crate::asm_gen) 
     fn get_neg(&self, reg: &str) -> String {
-        String::new()
-        // self.opcode_fmt
-        //     .get("neg")
-        //     .map(|o| o.template.clone())
-        //     .unwrap_or_else(|| "{space}neg {dst}\n".to_string())
-        //     .replace("{dst}", reg)
+        self.opcode_fmt
+            .get("neg")
+            .map(|o| o.template.clone())
+            .unwrap_or_else(|| "{space}neg {dst}\n".to_string())
+            .replace("{dst}", reg)
+    }
+
+    /// レジスタに即値を足す命令を返す(AT&Tなら`add $4, %rcx`)。
+    /// フォーマットに`add_imm`が定義されていればそのテンプレートを使う
+    pub(in crate::asm_gen) 
+    fn get_add_imm(&self, imm: &str, reg: &str) -> String {
+        self.opcode_fmt
+            .get("add_imm")
+            .map(|o| o.template.clone())
+            .unwrap_or_else(|| "{space}add {src1}, {dst}\n".to_string())
+            .replace("{src1}", imm)
+            .replace("{dst}", reg)
     }
 
     /// 符号拡張して64bitレジスタへ読み込む命令を返す

@@ -6,7 +6,7 @@ impl AsmEmitter {
     /// 引数を参照するアセンブリコードの一部
     /// を生成する
     pub(super) 
-    fn param_ref(&mut self, param_name: &str) -> String {
+    fn param_ref(&mut self, param_name: &String) -> String {
         let var_info = self.var_hash_map.get(&param_name.to_string()).unwrap();
 
         if let Some(ty) = var_info.size.is_pointer() {
@@ -35,7 +35,7 @@ impl AsmEmitter {
     pub(super) 
     fn insert_arr_txt(
         &mut self,
-        name: &str,
+        name: &String,
         dst: usize,
         index: usize,
         this_is_self: &SelfPtrInfo,

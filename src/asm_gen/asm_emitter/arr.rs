@@ -8,14 +8,16 @@ impl AsmEmitter {
     /// ```gas
     /// movl -28(%rbp), %ecx          # 添字を取り出す
     /// movslq %ecx, %rcx             # 64bitへ符号拡張(アドレス計算は64bitで行う)
-    /// negq %rcx                     # 要素はアドレスが小さくなる向きに並ぶため符号反転
-    /// movl $0, -4(%rbp, %rcx, 4)    # 戻り値のオペランド(4は要素のサイズ)
+    /// negq %rcx                     # 要素はアドレスが小さくなる向きに並ぶため
+    /// addq $4, %rcx                 # 添字を反転する(要素数 - 1 - 添字)
+    /// movl $0, -20(%rbp, %rcx, 4)   # 戻り値のオペランド(4は要素のサイズ)
     /// ```
     ///
     /// 配列の要素`i`は`%rbp - (arr_base + (i + 1) * 要素サイズ)`に置かれる
     /// (`mem_val_ir`・`init_arr_txt`と同じ配置)。x86のスケールは正の値しか
-    /// 取れないので、添字を符号拡張してから`neg`し、
-    /// `-(arr_base + 要素サイズ)(%rbp, -添字, 要素サイズ)`の形で参照する。
+    /// 取れないので、添字を`要素数 - 1 - 添字`に変換し、最後の要素の位置
+    /// `-(arr_base + 要素数 * 要素サイズ)(%rbp, 変換後の添字, 要素サイズ)`を
+    /// 基準に参照する。
     ///
     /// 添字を載せた一時レジスタは`self.arr_index_temp`に記録し、
     /// 書き込み後に`write_mem`が解放する
@@ -38,22 +40,33 @@ impl AsmEmitter {
         // - ローカル配列: ベースは`%rbp`(`dst`のオペランドは`-4(%rbp)`のような
         //   メモリ参照になるため使わない。使うと`-4(-4(%rbp), ..)`になる)
         // - ポインタ: ポインタ自身を持つ64bitレジスタがベース
-        let (elem_size, arr_base, is_ptr, base) = {
+        let (elem_size, arr_base, is_ptr, base, arr_len) = {
             let var_info = self
                 .var_hash_map
                 .get(name)
                 .unwrap_or_else(|| panic!("array variable not found: {}", name));
             match &var_info.size {
-                Size::Array { size, .. } => {
-                    (size.to_bytes(), var_info.arr_base, false, "%rbp".to_string())
-                }
+                Size::Array { size, len } => (
+                    size.to_bytes(),
+                    var_info.arr_base,
+                    false,
+                    "%rbp".to_string(),
+                    *len,
+                ),
                 Size::Pointer { ty, .. } => (
                     ty.to_bytes(),
                     0,
                     true,
                     self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ),
+                    0,
                 ),
-                other => (other.to_bytes(), var_info.arr_base, false, "%rbp".to_string()),
+                other => (
+                    other.to_bytes(),
+                    var_info.arr_base,
+                    false,
+                    "%rbp".to_string(),
+                    1,
+                ),
             }
         };
         let _ = (dst, this_is_self);
@@ -111,9 +124,21 @@ impl AsmEmitter {
         let neg = self.asm_fmt.fmt_mnemonic_resize("neg", &neg, &Size::DQ);
         self.asm_text.push_str(&neg);
 
-        // 要素0のオフセットが`arr_base + 要素サイズ`
+        // 配列は添字を `要素数 - 1 - 添字` に反転して、最後の要素
+        // (最も%rbpから遠い要素)の位置を基準に参照する
         // (ポインタは要素0を指しているのでオフセットなし)
-        let offset = if is_ptr { 0 } else { arr_base + elem_size };
+        let offset = if is_ptr {
+            0
+        } else {
+            if arr_len > 1 {
+                let add = self
+                    .asm_fmt
+                    .get_add_imm(&self.asm_fmt.get_fmt_num(&(arr_len - 1).to_string()), &reg64);
+                let add = self.asm_fmt.fmt_mnemonic_resize("add", &add, &Size::DQ);
+                self.asm_text.push_str(&add);
+            }
+            arr_base + elem_size * arr_len.max(1)
+        };
         self.asm_fmt
             .fmt_ref_operand_indexed(&base, &reg64, elem_size, offset)
     }
