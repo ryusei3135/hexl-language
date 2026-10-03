@@ -1,45 +1,16 @@
 //! self.expr_valueのmatchの中から呼び出すAPIを提供
 
-use super::*;
+use super::{
+    *,
+    arr_access::*,
+};
 
 impl Parser {
-    /// 変数のアドレス取得などのノードを作成
-    /// 呼び出し元では、lex::Tkn::LBracket
-    pub(super) fn get_var_addr_node(&mut self) -> Result<node::Expr, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn_ref(&["name"])? else {
-            panic!()
-        };
-        let result = self.expr_add(true)?;
-        let node = match self.current_tkn().clone() {
-            lex::Tkn::LBracket => {
-                dbg!(self.current_tkn());
-                Err(err::ErrKind::UnexpectedToken)?
-            }
-            // nameの次に、数字が来た場合、それは配列にアクセスする
-            lex::Tkn::Number(index) => {
-                let _ = self.next_tkn(&["]"])?;
-                node::Expr::RefArray {
-                    name,
-                    dst: Box::new(result),
-                    index: Box::new(node::Expr::Number(index)),
-                }
-            }
-            // `]`の次が`.`の場合、アドレスの取得ではなく、ポインタが
-            // 指す構造体のメンバー/メゾットへのアクセス
-            // `[name].member` / `[name].method(..)`
-            _ if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) => {
-                self.next_tkn(&["."])?;
-                self.ptr_member_node(&name)?
-            }
-            _ => node::Expr::GetAddress(Box::new(result)),
-        };
-        Ok(node)
-    }
-
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が
     /// あった場合呼び出される、関数やモジュールの指定メンバー
     /// にアクセスするノードを作成する
-    pub(super) fn gen_name_node<const T: bool>(
+    pub(super) 
+    fn gen_name_node<const T: bool>(
         &mut self,
         name: String,
         init_struct: bool,
@@ -98,7 +69,8 @@ impl Parser {
 
     /// 配列リテラルのノードを作成する
     /// これは配列を初期化するノード
-    pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(super)
+    fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
         let mut items = Vec::<node::Expr>::new();
 
         if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {

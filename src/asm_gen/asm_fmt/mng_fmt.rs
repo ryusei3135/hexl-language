@@ -54,7 +54,8 @@ impl MngAsmFmt {
     /// - usizeの場合はレジスタの番号が返される
     /// ## 引数
     /// - param_idx = 引数の場所
-    pub(in crate::asm_gen) fn get_fmt_param<R: 'static>(&self, param_idx: usize, size: &Size) -> R {
+    pub(in crate::asm_gen) 
+    fn get_fmt_param<R: 'static>(&self, param_idx: usize, size: &Size) -> R {
         if TypeId::of::<R>() != TypeId::of::<usize>() && TypeId::of::<R>() != TypeId::of::<String>()
         {
             panic!("この型は無効です,")
@@ -79,6 +80,73 @@ impl MngAsmFmt {
             .ref_stack
             .replace("{src}", reg)
             .replace("{size}", size.to_string().as_str())
+    }
+
+    /// 添字レジスタ付きのメモリ参照を返す
+    /// (AT&Tなら`-offset(base, index, scale)`)
+    ///
+    /// アドレスは `base + index * scale - offset`。
+    /// `ref_stack`のテンプレートに`(`が含まれるAT&T形式の場合は
+    /// `{src}`を`base, index, scale`に置き換え、それ以外
+    /// (`[{src}-{size}]`など)は`{src}`を`base+index*scale`に置き換える。
+    /// `offset`が`0`のときはオフセット部分を付けない
+    pub(in crate::asm_gen) 
+    fn fmt_ref_operand_indexed(
+        &self,
+        base: &str,
+        index: &str,
+        scale: usize,
+        offset: usize,
+    ) -> String {
+        assert!(
+            matches!(scale, 1 | 2 | 4 | 8),
+            "添字付きアドレッシングのスケールは1/2/4/8のみ対応しています: {}",
+            scale
+        );
+        let tmpl = &self.fmt.fmt.ref_stack;
+        let addr = if tmpl.contains('(') {
+            format!("{}, {}, {}", base, index, scale)
+        } else {
+            format!("{}+{}*{}", base, index, scale)
+        };
+        let mut s = tmpl.replace("{src}", &addr);
+        if offset == 0 {
+            s = s.replace("-{size}", "").replace("+{size}", "").replace("{size}", "");
+        } else {
+            s = s.replace("{size}", &offset.to_string());
+        }
+        s
+    }
+
+    /// 符号反転(`neg`)の命令を返す。
+    /// フォーマットに`neg`が定義されていなければ`neg {dst}`を使う
+    pub(in crate::asm_gen) 
+    fn get_neg(&self, reg: &str) -> String {
+        String::new()
+        // self.opcode_fmt
+        //     .get("neg")
+        //     .map(|o| o.template.clone())
+        //     .unwrap_or_else(|| "{space}neg {dst}\n".to_string())
+        //     .replace("{dst}", reg)
+    }
+
+    /// 符号拡張して64bitレジスタへ読み込む命令を返す
+    /// (AT&Tなら`movslq %ecx, %rcx`/`movsbq`/`movswq`)
+    ///
+    /// ## 引数
+    /// - kind = 元のサイズの接尾辞(`b`/`w`/`l`)
+    ///
+    /// フォーマットに`movsbq`/`movswq`/`movslq`が定義されていればその
+    /// テンプレートを、なければAT&T形式のテンプレートを使う
+    pub(in crate::asm_gen) 
+    fn get_sign_extend(&self, kind: char, src: &str, dst: &str) -> String {
+        let key = format!("movs{}q", kind);
+        self.opcode_fmt
+            .get(&key)
+            .map(|o| o.template.clone())
+            .unwrap_or_else(|| format!("{{space}}movs{}q {{src1}}, {{dst}}\n", kind))
+            .replace("{src1}", src)
+            .replace("{dst}", dst)
     }
 
     /// オフセット無しのメモリ参照(AT&T構文なら`(%rbx)`)を作る。
@@ -117,14 +185,13 @@ impl MngAsmFmt {
     /// 予約されていた、スタックのサイズ分
     pub(in crate::asm_gen) 
     fn gen_stack_frame(&self, size: usize) -> String {
-        // 8バイト境界に切り上げてアライメントする
-        // (例: size=1..8 -> 8, size=9..16 -> 16)
-        let remainder = size % 8;
-        let alignment_size = if remainder == 0 {
-            size
-        } else {
-            size + (8 - remainder)
-        };
+        // 16バイト境界に切り上げてアライメントする
+        // (例: size=1..16 -> 16, size=17..32 -> 32)
+        // `push %rbp`の後の`%rsp`は16バイト境界にあるので、確保するサイズも
+        // 16の倍数にしないと、`call`の時点でSystem V ABIのスタックの
+        // アライメントが崩れる
+        const STACK_ALIGN: usize = 16;
+        let alignment_size = size.div_ceil(STACK_ALIGN) * STACK_ALIGN;
         self.fmt
             .fmt
             .data

@@ -207,9 +207,11 @@ impl Parser {
                 let tkn = self.next_tkn(&["name"])?;
                 if let lex::Tkn::Name(name) = tkn.clone() {
                     match self.peek_tkn() {
-                        // `name`の次が数字の場合、配列への代入
-                        // `[name index] = value`
-                        Ok(lex::Tkn::Number(_)) => {
+                        // `name`の次が添字の式(数字/変数/`a.a`など)の場合、
+                        // 配列への代入
+                        // `[name index] = value` / `[name index else 0] = value`
+                        Ok(ref next) if Self::is_arr_index_start(next) => {
+                            // expr/arr_access.rsで定義
                             self.make_array_assign_node(&name)?.wrap_group2()
                         }
                         // それ以外の場合、ポインタへの代入、または
@@ -407,45 +409,5 @@ impl Parser {
             value,
         )
         .wrap_group2())
-    }
-
-    /// 配列に値を代入するノードを作成する
-    ///
-    /// ## 呼び出し時の前提
-    /// 呼び出し元(`one_line_node`)で`lex::Tkn::LBracket`の次の
-    /// `lex::Tkn::Name(name)`まで読み進めた状態で呼び出す。
-    /// つまり`current_tkn()`が`name`を指している必要がある。
-    ///
-    /// ## 文法のルール
-    /// `[name index] = value`
-    /// - `[arr 0] = 10`
-    ///
-    /// ## Errors
-    /// `name`の次のトークンが数字(`lex::Tkn::Number`)ではない場合エラー
-    fn make_array_assign_node(&mut self, name: &String) -> Result<node::Expr, err::ErrKind> {
-        // `index`は数字である必要がある。そうでなければエラーを返す
-        let tkn = self.next_tkn(&["number"])?;
-        let lex::Tkn::Number(index) = tkn.clone() else {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "number",
-                    found: tkn,
-                }
-            );
-        };
-        self.next_tkn(&["]"])?;
-        self.next_tkn(&["="])?;
-        let value = self.expr_branch()?;
-
-        Ok(node::AssignVar::new(
-            name,
-            node::Expr::RefArray {
-                name: name.to_string(),
-                dst: Box::new(node::Expr::Var(name.to_string())),
-                index: Box::new(node::Expr::Number(index)),
-            },
-            value,
-        ))
     }
 }

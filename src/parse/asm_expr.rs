@@ -149,12 +149,12 @@ impl Parser {
     /// - `x.y` -> 構造体`x`のメンバー`y`への参照
     fn asm_operand_name_tail(&mut self, name: String) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.current_tkn(), lex::Tkn::Dot) {
-            self.advance_tkn();
+            self.advance_tkn().unwrap();
 
             let lex::Tkn::Name(field) = self.current_tkn().clone() else {
                 crate::preproc_err!(self, ExpectedMemberNameInAsmOperand);
             };
-            self.advance_tkn();
+            self.advance_tkn().unwrap();
 
             Ok(node::Expr::Member {
                 scope: vec![name],

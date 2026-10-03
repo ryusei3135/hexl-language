@@ -604,8 +604,8 @@ mod generic_tests {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
         let mut p = parse::Parser::new();
-        p.parser(lexer.gen_tkns.clone())
-            .map(|nodes| nodes.clone())
+        p.parser(&lexer.gen_tkns.clone())
+            .map(|nodes| nodes.to_vec())
             .map_err(|_| ())
     }
 

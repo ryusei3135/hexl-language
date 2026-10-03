@@ -357,11 +357,14 @@ pub enum Expr {
     /// `[name index]`
     /// - name: 配列変数の名前
     /// - dst: 配列本体を指す式
-    /// - index: 添字を表す式(`node::Expr::Number`など)
+    /// - index: 添字を表す式(`Number`/`Var`/`Member`(`a.a`)/四則演算など)
+    ///   `const`や即値ではない場合は`else_idx`が必要(`ir/checker/access_mem.rs`)
     RefArray {
         name: String,
         dst: Box<Expr>,
         index: Box<Expr>,
+        /// 配列の範囲外にアクセスしたときの要素の値
+        else_idx: Option<Box<Expr>>,
     },
 
     DefVar(DefineVar),

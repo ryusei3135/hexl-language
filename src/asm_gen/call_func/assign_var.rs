@@ -44,9 +44,14 @@ impl AsmEmitter {
             .asm_fmt
             .fmt_memory_mnemonic_resize("mov", &text, &mnemonic_size);
         self.asm_text.push_str(&text);
+        // 配列の添字を載せていた一時レジスタは、書き込みが終わったので解放する
+        if let Some(reg) = self.arr_index_temp.take() {
+            self.used_reg.release(reg);
+        }
     }
 
-    pub(super) fn assign_val_ty_is_ptr(
+    pub(super) 
+    fn assign_val_ty_is_ptr(
         &mut self,
         current_reg: usize,
         value: usize,
@@ -76,7 +81,8 @@ impl AsmEmitter {
         // ないソースを持つ不正な命令になってしまう。
         let (ptr_operand, needs_address) = match &self.curr_inst[value] {
             inst::Inst::GetPtr { stk, .. } => (
-                self.asm_fmt.fmt_ref_operand(&"rbp".to_string(), *stk),
+                self.asm_fmt
+                    .fmt_ref_operand(&"%rbp".to_string(), self.ptr_stk(value, *stk)),
                 true,
             ),
             _ => {
@@ -99,7 +105,8 @@ impl AsmEmitter {
         )
     }
 
-    pub(super) fn assign_val_is_not_ptr(
+    pub(super) 
+    fn assign_val_is_not_ptr(
         &mut self,
         current_reg: usize,
         value: usize,

@@ -9,6 +9,9 @@ mod cond;
 pub(in crate::parse) mod range;
 /// このファイルでしか使われないAPIのモジュール
 mod value_api;
+mod arr_access;
+use crate::node;
+use crate::lex;
 
 impl Parser {
     pub(in crate::parse) 
@@ -119,7 +122,8 @@ impl Parser {
         }
     }
 
-    pub(in crate::parse) fn expr_cmp(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::parse) 
+    fn expr_cmp(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
         let mut left = self.expr_add(ini_struct)?;
 
         loop {
@@ -186,24 +190,32 @@ impl Parser {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
-            match self.next_tkn(&[])? {
+            match self.next_tkn_ref(&[])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
+                    self.next_tkn(&[])?;
                     return self.gen_name_node::<false>(name, ini_struct);
                 }
                 lex::Tkn::RBrace => {
+                    self.next_tkn(&[])?;
                     return self.gen_name_node::<false>(name, ini_struct);
                 }
                 // 関数を呼ぶノード
-                lex::Tkn::LParen => {}
-                t => panic!(" name {:?} {:?}", name, t),
+                lex::Tkn::LParen => {
+                    self.next_tkn(&[])?;
+                    // スコープを作成
+                    if self.current_tkn() == &lex::Tkn::Dot {
+                        return self.build_scope_node(&name);
+                    }
+                    // 前回のトークンが名前かつ(なので、関数を呼び出すノードを作成する
+                    return self.call_func_expr(&name, ini_struct);
+                }
+                // 名前の次が`{`/`}`/`(`以外の場合、この名前自身は値ではなく、
+                // 式の直前にあるだけのトークン。
+                // 例: 配列アクセス`[arr a.a else 0]`の`arr`(`expr/arr_access.rs`)
+                // このまま下の処理に進み、名前の次のトークンから値を読み取る
+                _ => {}
             }
-            // スコープを作成
-            if self.current_tkn() == &lex::Tkn::Dot {
-                return self.build_scope_node(&name);
-            }
-            // 前回のトークンが名前かつ(なので、関数を呼び出すノードを作成する
-            return self.call_func_expr(&name, ini_struct);
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
@@ -365,7 +377,7 @@ mod expr_tests {
     fn check_get_address_var() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): b1 { a: int* = [b] }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -390,7 +402,7 @@ mod expr_tests {
     fn check_call_func_node() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): b1 { a(10, a) }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -411,7 +423,7 @@ mod expr_tests {
     fn check_stack_var_single() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): int { a: [int] = 100 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -433,7 +445,7 @@ mod expr_tests {
     fn check_stack_var_array() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): int { a: [int 4] = {100, 100, 100, 100} }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -460,7 +472,7 @@ mod expr_tests {
     fn check_static_var_single() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): int { a: static[int] = 100 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -495,7 +507,7 @@ mod expr_tests {
             }
             ",
         );
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -527,7 +539,7 @@ mod expr_tests {
             }
             ",
         );
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -568,7 +580,7 @@ mod expr_tests {
             }
             ",
         );
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -596,7 +608,7 @@ mod expr_tests {
         // ポインタが指す構造体のメンバーへの代入: `[ptr].name = 10`
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): b1 { [ptr].name = 10 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -618,7 +630,7 @@ mod expr_tests {
         // ポインタが指す構造体のメゾットの呼び出し: `[ptr].f()`
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): b1 { [ptr].f() }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -641,7 +653,7 @@ mod expr_tests {
         // `a: int = [ptr].name`
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): b1 { a: int = [ptr].name }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(
@@ -663,7 +675,7 @@ mod expr_tests {
     fn check_enum_variant_expr() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): int { a: Color = Color::Green }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
             panic!("not func");
         };
         assert_eq!(

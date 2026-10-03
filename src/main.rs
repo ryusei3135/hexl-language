@@ -152,7 +152,7 @@ pub fn build(
         &settings.fmt_name,
     );
     
-    assembler::x64::emitter_x64("-c", &asm_text, "linux").unwrap();
+    assembler::x64::emitter_x64("-c", &asm_text, "linux");
 
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");

@@ -5,7 +5,8 @@ use super::*;
 impl AsmEmitter {
     /// 引数を参照するアセンブリコードの一部
     /// を生成する
-    pub(super) fn param_ref(&mut self, param_name: &String) -> String {
+    pub(super) 
+    fn param_ref(&mut self, param_name: &str) -> String {
         let var_info = self.var_hash_map.get(&param_name.to_string()).unwrap();
 
         if let Some(ty) = var_info.size.is_pointer() {
@@ -18,7 +19,8 @@ impl AsmEmitter {
         }
     }
     /// 文字列のメモリ参照を生成する
-    pub(super) fn string_mem_ref(&mut self, parent_id: usize) -> String {
+    pub(super) 
+    fn string_mem_ref(&mut self, parent_id: usize) -> String {
         let label = self
             .data_map
             .iter()
@@ -30,35 +32,57 @@ impl AsmEmitter {
     }
 
     /// 配列に値を代入するコードを生成
-    pub(super) fn insert_arr_txt(
+    pub(super) 
+    fn insert_arr_txt(
         &mut self,
-        name: &String,
+        name: &str,
         dst: usize,
         index: usize,
         this_is_self: &SelfPtrInfo,
     ) -> String {
-        let index_value = match &self.curr_inst[index] {
+        let index_value = match self.curr_inst[index].clone() {
             inst::Inst::Num { value, .. } => value
                 .parse::<usize>()
                 .expect("配列の添字は数字である必要があります"),
+            // 配列の添字が構造体のメンバ変数の場合
+            inst::Inst::RefStruct { src, pos, size } => {
+                // 構造体からindexを取り出す処理を追加
+                return self.ref_arr_for_struct_member(name, &src, pos, &size, dst, this_is_self);
+            }
             t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
         };
-        let pos = {
-            let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
-            if let Some(pointee) = var_info.size.is_pointer() {
-                pointee.to_bytes() * index_value
+        let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
+        if let Some(pointee) = var_info.size.is_pointer() {
+            // ポインタは要素0を指し、要素`i`は`ポインタ - i * サイズ`
+            let pos = pointee.to_bytes() * index_value;
+            let base = self.extract_operand_text(dst, &this_is_self);
+            if pos == 0 {
+                self.asm_fmt.fmt_ref_operand_no_offset(&base)
             } else {
-                let size = var_info.size.to_bytes();
-                size * index_value + size
+                self.asm_fmt.fmt_ref_operand(&base, pos)
             }
-        };
-
-        let base = self.extract_operand_text(dst, &this_is_self);
-        self.asm_fmt.fmt_ref_operand(&base, pos)
+        } else {
+            // 要素`i`は`%rbp - (arr_base + (i + 1) * size)`に置かれる
+            // (添字が変数の場合のアドレス計算と同じ配置)
+            let size = var_info.size.to_bytes();
+            let pos = var_info.arr_base + size * (index_value + 1);
+            let base = self.extract_operand_text(dst, &this_is_self);
+            self.asm_fmt.fmt_ref_operand(&base, pos)
+        }
     }
 
-    /// 構造体を参照するコードを作成
-    pub(super) fn ref_struct_txt(&mut self, src: &str, size: usize) -> String {
+    /// 構造体のメンバーを参照するコードを作成
+    ///
+    /// 構造体のポインタは先頭のメンバーを指し、メンバーは
+    /// ポインタから見てアドレスが小さくなる向きに並ぶ
+    /// (`a: int`, `b: int`なら`(%rdi)`と`-4(%rdi)`)。
+    ///
+    /// ## 引数
+    /// - pos = IRの、そのメンバーの終端までの累積サイズ
+    /// - member_size = そのメンバー自身のサイズ
+    ///   (`pos - member_size`が、ポインタからのオフセットになる)
+    pub(super) fn ref_struct_txt(&mut self, src: &str, pos: usize, member_size: usize) -> String {
+        let size = pos.saturating_sub(member_size);
         let var_info = self.var_hash_map.get(&src.to_string()).expect(&src);
 
         if var_info.is_stack {
@@ -73,12 +97,18 @@ impl AsmEmitter {
             let offset = var_info.reg + size;
             self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), offset)
         } else {
-            self.asm_fmt
-                .fmt_ref_operand(&self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ), size)
+            let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
+            if size == 0 {
+                // 先頭のメンバーは`(%rdi)`のようにオフセットなし
+                self.asm_fmt.fmt_ref_operand_no_offset(&reg)
+            } else {
+                self.asm_fmt.fmt_ref_operand(&reg, size)
+            }
         }
     }
 
-    pub(super) fn gen_mov_code(&mut self, name: &Option<String>, src: usize) -> String {
+    pub(super) 
+    fn gen_mov_code(&mut self, name: Option<&str>, src: usize) -> String {
         let var_name = name.clone().unwrap();
         let var = self
             .var_hash_map
@@ -137,7 +167,7 @@ impl AsmEmitter {
     /// - ids: 配列の各要素の値を持つノード(`Inst::Num`など)のid
     pub(super) fn init_arr_txt<const RET_IS_ASM: bool>(
         &mut self,
-        ids: &Vec<usize>,
+        ids: &[usize],
         this_is_self: &SelfPtrInfo,
     ) -> String {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
@@ -157,22 +187,21 @@ impl AsmEmitter {
         };
 
         let mut txt = String::new();
-        let mut head_offset = None;
 
-        for id in ids.iter() {
+        // 要素0が最も%rbpに近い位置に来て、要素が増えるほどアドレスが
+        // 小さくなる。領域全体を先に確保し、要素`k`のオフセットは
+        // `arr_base + (k + 1) * 要素のサイズ`(要素0のオフセットが`head_offset`)
+        let elem_bytes = size.to_bytes();
+        let arr_base = self.stk_use_counter;
+        let head_offset = arr_base + elem_bytes;
+        self.stk_use_counter = arr_base + elem_bytes * ids.len();
+
+        for (k, id) in ids.iter().enumerate() {
             let value = self.extract_operand_text(*id, &this_is_self);
-
-            // スタックの場所を更新
-            // (この要素のオフセットは、これまで使用したスタックのサイズ
-            //  `stk_use_counter`に、この要素のサイズを足したもの)
-            self.stk_use_counter += size.to_bytes();
-            if head_offset.is_none() {
-                head_offset = Some(self.stk_use_counter);
-            }
 
             let dst = self
                 .asm_fmt
-                .fmt_ref_operand(&assign_reg, self.stk_use_counter);
+                .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
 
             let mov_line = self
                 .asm_fmt
@@ -195,7 +224,7 @@ impl AsmEmitter {
             self.asm_text.push_str(txt.as_str());
         }
         self.asm_fmt
-            .fmt_ref_operand(&assign_reg, head_offset.unwrap())
+            .fmt_ref_operand(&assign_reg, head_offset)
     }
 
     /// 二行のアセンブリコードのニーモニックを、式のサイズに応じて調整する

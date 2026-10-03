@@ -235,7 +235,7 @@ mod inline_asm_tests {
         lexer.analy(&src.to_string()).unwrap();
 
         let mut p = parse::Parser::new();
-        let nodes = p.parser(lexer.gen_tkns).expect("parse failed");
+        let nodes = p.parser(&lexer.gen_tkns).expect("parse failed");
 
         let node::Group1Node::FuncDefine(func) = &nodes[0] else {
             panic!("not a func define")
@@ -348,7 +348,7 @@ mod inline_asm_tests {
         lexer.analy(&src.to_string()).unwrap();
 
         let mut p = parse::Parser::new();
-        let nodes = p.parser(lexer.gen_tkns).expect("parse failed");
+        let nodes = p.parser(&lexer.gen_tkns).expect("parse failed");
 
         let node::Group1Node::FuncDefine(func) = &nodes[0] else {
             panic!("not a func define")

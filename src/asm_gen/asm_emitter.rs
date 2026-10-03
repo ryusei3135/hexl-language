@@ -3,6 +3,7 @@ mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
 mod struct_ir;
+mod arr;
 
 use super::*;
 use crate::asm_setting;
@@ -43,6 +44,16 @@ pub(in crate::asm_gen) struct VarIndexInfo {
     pub size: types::Size,
     pub index: usize,
     pub is_stack: bool,
+    /// 配列変数の場合の、先頭要素を置く直前の`stk_use_counter`
+    /// (`%rbp`からのバイトオフセット)。要素`i`は
+    /// `%rbp - (arr_base + (i + 1) * 要素サイズ)`に置かれる
+    /// (要素0が最も`%rbp`に近い)。配列以外では`0`
+    pub arr_base: usize,
+    /// スタック上のメモリ(配列など、`mem_val_ir`で確保した領域)に
+    /// 実体がある変数かどうか。`true`の場合、`reg`はレジスタ番号として
+    /// 使われていないので、レジスタの使用中の管理や、インラインアセンブラの
+    /// レジスタ退避の対象にしてはいけない
+    pub in_mem: bool,
 }
 
 impl VarIndexInfo {
@@ -52,6 +63,8 @@ impl VarIndexInfo {
             size: size.clone(),
             index: index,
             is_stack: false,
+            arr_base: 0,
+            in_mem: false,
         }
     }
 
@@ -62,7 +75,16 @@ impl VarIndexInfo {
             size: size.clone(),
             index: index,
             is_stack: true,
+            arr_base: 0,
+            in_mem: false,
         }
+    }
+
+    /// 配列の先頭の位置(`%rbp`からのオフセット)を記録する
+    pub fn with_arr_base(mut self, arr_base: usize) -> Self {
+        self.arr_base = arr_base;
+        self.in_mem = true;
+        self
     }
 }
 
@@ -86,6 +108,8 @@ impl AsmEmitter {
             scope_outer_vars: Vec::new(),
             stk_use_counter: 0,
             emitted_calls: Vec::new(),
+            arr_index_temp: None,
+            struct_stk_map: HashMap::new(),
         };
         me.data_sec_text
             .push_str(&me.asm_fmt.get_section_fmt("data"));
@@ -96,8 +120,8 @@ impl AsmEmitter {
         &mut self,
         func_tree: &mut def_tree::FuncTree,
         asm_fmt_name: &Option<String>,
-        extern_funcs: &Vec<inst::Inst>,
-        global_funcs: &Vec<String>,
+        extern_funcs: &[inst::Inst],
+        global_funcs: &[String],
     ) -> String {
         // `_start`が定義されているファイルの場合だけ、エントリー
         // ポイントとして`.global _start`を出力する
@@ -136,7 +160,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn gen_global_func_asm(&mut self, global_funcs: &Vec<String>) {
+    fn gen_global_func_asm(&mut self, global_funcs: &[String]) {
         // 自身が公開する関数を生成
         for func_name in global_funcs.iter() {
             self.asm_text
@@ -145,7 +169,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn gen_extern_func_asm(&mut self, extern_funcs: &Vec<inst::Inst>) {
+    fn gen_extern_func_asm(&mut self, extern_funcs: &[inst::Inst]) {
         for func in extern_funcs.iter() {
             if let inst::Inst::ExternFunc(name) = func {
                 self.asm_text
@@ -167,9 +191,40 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
-        self.used_reg.mark_used(var.reg);
+        // メモリに実体がある変数の`reg`はレジスタ番号ではないので、
+        // レジスタを使用中にしない
+        if !var.in_mem {
+            self.used_reg.mark_used(var.reg);
+        }
         self.expr_vars.push(name.to_string());
         self.var_hash_map.insert(name.to_owned(), var);
+    }
+
+    /// 構造体の実体(`bytes`バイト)を置くスタック領域を`stk_use_counter`から
+    /// 確保し、`GetPtr`のノード`ptr_idx`に対応付ける。
+    ///
+    /// ポインタ(`lea -N(%rbp), %rdi`)は先頭のメンバーを指し、メンバーは
+    /// そこからアドレスが小さくなる向きに`(%rdi)`、`-4(%rdi)`のように並ぶ。
+    /// 先頭のメンバー自身はポインタより上(アドレスが大きい側)にはみ出すため、
+    /// 最大のメンバーのサイズ(8byte)だけ余分に確保する。
+    /// `N`は現在のスタック使用量を8byteに切り上げた値に8を足した値とし、
+    /// 使用量を`N + bytes`まで進める。これで先にある配列などと重ならない
+    pub(in crate::asm_gen) 
+    fn alloc_struct_stk(&mut self, ptr_idx: usize, bytes: usize) -> usize {
+        if let Some(offset) = self.struct_stk_map.get(&ptr_idx) {
+            return *offset;
+        }
+        let offset = self.stk_use_counter.div_ceil(8) * 8 + 8;
+        self.stk_use_counter = offset + bytes;
+        self.struct_stk_map.insert(ptr_idx, offset);
+        offset
+    }
+
+    /// `GetPtr`のノードの`%rbp`からのオフセット。`alloc_struct_stk`で
+    /// 確保済みならそれを、そうでなければIRの`stk`を返す
+    pub(in crate::asm_gen) 
+    fn ptr_stk(&self, ptr_idx: usize, ir_stk: usize) -> usize {
+        self.struct_stk_map.get(&ptr_idx).copied().unwrap_or(ir_stk)
     }
 
     /// 式の結果や変数を置く、空いているレジスタを1つ確保して返す。
@@ -183,7 +238,8 @@ impl AsmEmitter {
     ///
     /// 返したレジスタを使用中にするのは呼び出し側の責任
     /// (`mark_used`を呼ぶ)。
-    pub(super) fn alloc_reg(&self) -> usize {
+    pub(in crate::asm_gen) 
+    fn alloc_reg(&self) -> usize {
         (0..self.asm_fmt.reg_count())
             .find(|reg| !RESERVED_REGS.contains(reg) && !self.used_reg.is_used(*reg))
             .expect("使用できるレジスタが足りません")
@@ -234,8 +290,10 @@ impl AsmEmitter {
     /// 式の結果のレジスタ(`last_inst_idx`)が次の関数へ持ち越されていた。
     /// (`last_inst_idx`は関数ごとに振り直される式のidで引くので、
     ///  前の関数の同じidの式のレジスタを誤って使うことがあった)
-    pub(super) fn reset_fn_state(&mut self) {
+    pub(in crate::asm_gen) 
+    fn reset_fn_state(&mut self) {
         self.var_hash_map = HashMap::new();
+        self.struct_stk_map.clear();
         self.reg_idx = 0;
         self.used_reg.clear();
         self.scope_outer_vars.clear();
@@ -246,7 +304,8 @@ impl AsmEmitter {
 
     /// `Inst::StartScope`の処理
     /// これ以降に登録されたレジスタを記録し始める
-    pub(super) fn start_scope_asm(&mut self) {
+    pub(in crate::asm_gen) 
+    fn start_scope_asm(&mut self) {
         self.used_reg.start_scope();
         self.scope_outer_vars
             .push(self.var_hash_map.keys().cloned().collect());
@@ -261,7 +320,8 @@ impl AsmEmitter {
     /// ただし、スコープの外で宣言された変数が(スコープ内での再代入などで)
     /// レジスタを使うようになった場合、そのレジスタはスコープが終わっても
     /// 生きているので、解放せずに残す
-    pub(super) fn end_scope_asm(&mut self) {
+    pub(in crate::asm_gen) 
+    fn end_scope_asm(&mut self) {
         let released = self.used_reg.end_scope();
         let outer_vars = self
             .scope_outer_vars
@@ -286,19 +346,22 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) fn update_value_info(&mut self, name: &str, index: usize) {
+    pub(in crate::asm_gen) 
+    fn update_value_info(&mut self, name: &str, index: usize) {
         self.var_hash_map.get_mut(name).unwrap().index = index;
     }
 
     #[inline(always)]
-    pub(super) fn update_value_reg(&mut self, name: &str, reg: usize) {
+    pub(in crate::asm_gen) 
+    fn update_value_reg(&mut self, name: &str, reg: usize) {
         self.used_reg.mark_used(reg);
         self.var_hash_map.get_mut(name).unwrap().reg = reg;
     }
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
     /// 通りに加工する。
-    pub(super) fn format_line(
+    pub(in crate::asm_gen) 
+    fn format_line(
         &mut self,
         opcode: &str,
         dst: Option<usize>,
@@ -361,7 +424,8 @@ impl AsmEmitter {
     /// - `DB`/`DW`/`DD`/`DQ`: そのままのサイズ
     /// - 配列: 要素のサイズ
     /// - ポインタ/構造体など: アドレスを持つので64bit(`DQ`)
-    pub(super) fn value_reg_size(ty: &Size) -> Size {
+    pub(in crate::asm_gen) 
+    fn value_reg_size(ty: &Size) -> Size {
         match ty {
             Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
             Size::Array { size, .. } => Self::value_reg_size(size),
@@ -424,7 +488,8 @@ impl AsmEmitter {
     }
 
     /// IRの値IDから、その式が生成する値の型をたどって取得する。
-    pub(super) fn get_expr_ty(&self, node_idx: usize) -> Size {
+    pub(super) 
+    fn get_expr_ty(&self, node_idx: usize) -> Size {
         match self.curr_inst[node_idx] {
             inst::Inst::Expr(ref expr) => self.get_expr_ty(expr.ls),
             inst::Inst::Pointer(inner) => match self.get_expr_ty(inner) {
@@ -467,7 +532,8 @@ impl AsmEmitter {
     /// `Inst::Struct`を指している場合、その`Inst::Struct`自身のidxを返す。
     /// `format_line`が構造体の生成を特別扱いする際、ラップされた
     /// ノードの内側までたどれるようにするためのヘルパー
-    pub(super) fn resolve_struct_idx(&self, idx: usize) -> Option<usize> {
+    pub(in crate::asm_gen) 
+    fn resolve_struct_idx(&self, idx: usize) -> Option<usize> {
         match self.curr_inst[idx] {
             inst::Inst::Struct { .. } => Some(idx),
             inst::Inst::GetAddress(inner)
@@ -489,7 +555,8 @@ impl AsmEmitter {
     /// これは`mov`命令に付けるサイズ接尾辞(`movl`など)を
     /// 決定するために使う。
     #[inline(always)]
-    pub(in crate::asm_gen) fn check_node_is_mem_val(&self, node_idx: usize) -> Option<Size> {
+    pub(in crate::asm_gen) 
+    fn check_node_is_mem_val(&self, node_idx: usize) -> Option<Size> {
         self.check_node_is_mem_val_inner(node_idx, false)
     }
 
@@ -540,7 +607,8 @@ impl AsmEmitter {
         self.asm_fmt.get_fmt_reg(num, &size)
     }
 
-    pub(super) fn extract_operand_text(
+    pub(in crate::asm_gen) 
+    fn extract_operand_text(
         &mut self,
         parent_id: usize,
         this_is_self: &Option<types::Size>,
@@ -549,7 +617,9 @@ impl AsmEmitter {
             inst::Inst::Num { value, .. } => self.asm_fmt.get_fmt_num(&value),
             inst::Inst::GetPtr { size: _, stk } => {
                 // スタック上に置かれた値そのもの(値が置かれているメモリ)
-                // を指すオペランドを、`%rbp`からのオフセット`stk`を使って生成する
+                // を指すオペランドを、`%rbp`からのオフセットを使って生成する
+                // (構造体の実体は`alloc_struct_stk`で確保したオフセットを使う)
+                let stk = self.ptr_stk(parent_id, stk);
                 self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), stk)
             }
             inst::Inst::Param(param) => {
@@ -579,7 +649,7 @@ impl AsmEmitter {
             }
             inst::Inst::Mov { ref name, src, .. } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.gen_mov_code(&name, src)
+                self.gen_mov_code(name.as_deref(), src)
             }
             inst::Inst::Block(name) => name.to_string(),
             inst::Inst::ExpectJmp(name) => name.to_string(),
@@ -594,9 +664,9 @@ impl AsmEmitter {
                 // `asm_emitter/operand_txt/`に記述
                 self.ref_mem_value_txt(&kind, &size, parent_id)
             }
-            inst::Inst::RefStruct { src, pos, .. } => {
+            inst::Inst::RefStruct { src, pos, size } => {
                 // `asm_emitter/operand_txt/`に記述
-                self.ref_struct_txt(&src, pos)
+                self.ref_struct_txt(&src, pos, size.to_bytes())
             }
             inst::Inst::GetAddress(index) => self.extract_operand_text(index, this_is_self),
             // 配列リテラル自体を値として参照する場合

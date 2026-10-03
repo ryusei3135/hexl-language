@@ -378,7 +378,8 @@ impl IR {
                 self.init_array_node(init_nodes, &expect_byte)
             }
             // 配列にアクセスする
-            node::Expr::RefArray { name, dst, index } => {
+            // else_idxはchecker/access_mem.rsでチェック済みなので、ここではunwrapして使う
+            node::Expr::RefArray { name, dst, index, .. } => {
                 // `src/ir/builder/expr_node.rs`
                 self.ref_array_node(*dst, *index, &name, &expect_byte)
             }
@@ -661,7 +662,7 @@ impl IR {
     #[cfg(test)]
     pub(crate) 
     fn test_only_get_func_body(&self, name: &str) -> &[inst::Inst] {
-        self.func_tree.func.get(name).unwrap().body
+        &self.func_tree.func.get(name).unwrap().body
     }
 
     /// 構造体のメゾットとして展開された関数の処理内容を取得する
@@ -669,7 +670,7 @@ impl IR {
     #[cfg(test)]
     pub(crate) 
     fn test_only_get_method_body(&self, module: &str, name: &str) -> &[inst::Inst] {
-        self.func_tree
+        &self.func_tree
             .func
             .get(&format!("{}::{}", module, name))
             .unwrap()
@@ -708,18 +709,18 @@ mod self_ty_tests {
                 node::ArgsNode {
                     name: "self".to_string(),
                     ty: node::TyNode::SelfTy("Name".to_string()),
-                    is_mut: false,
+                    var_attr: parse::VarMutAttr::Invar,
                 },
                 node::ArgsNode {
                     name: "param".to_string(),
                     ty: node::TyNode::Ty("int".to_string()),
-                    is_mut: false,
+                    var_attr: parse::VarMutAttr::Invar,
                 },
             ],
             node::TyNode::Ty("int".to_string()),
         );
 
-        let resolved = ir.resolve_self_ty(func);
+        let resolved = ir.resolve_self_ty(&func);
 
         assert_eq!(
             resolved.params[0].ty,
@@ -744,18 +745,18 @@ mod self_ty_tests {
                 node::ArgsNode {
                     name: "param".to_string(),
                     ty: node::TyNode::Ty("int".to_string()),
-                    is_mut: false,
+                    var_attr: parse::VarMutAttr::Invar,
                 },
                 node::ArgsNode {
                     name: "self".to_string(),
                     ty: node::TyNode::SelfTy("Name".to_string()),
-                    is_mut: false,
+                    var_attr: parse::VarMutAttr::Invar,
                 },
             ],
             node::TyNode::Ty("int".to_string()),
         );
 
-        let _ = ir.resolve_self_ty(func);
+        let _ = ir.resolve_self_ty(&func);
     }
 
     #[test]
@@ -768,12 +769,12 @@ mod self_ty_tests {
             vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("Name".to_string()),
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             }],
             node::TyNode::SelfTy("Name".to_string()),
         );
 
-        let resolved = ir.resolve_self_ty(func);
+        let resolved = ir.resolve_self_ty(&func);
 
         let expected_ptr = node::TyNode::Pointer {
             is_const: false,
@@ -807,7 +808,7 @@ mod mem_var_tests {
         assert!(
             body.iter().any(|inst| {
                 if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
-                    name: ref mem_name,
+                    name: mem_name,
                     size,
                     src,
                     kind,
@@ -853,7 +854,7 @@ mod mem_var_tests {
         assert!(
             body.iter().any(|inst| {
                 if let inst::Inst::MemoryValue(inst::MemoryInst::Memory {
-                    name: ref mem_name,
+                    name: mem_name,
                     size,
                     src,
                     kind,

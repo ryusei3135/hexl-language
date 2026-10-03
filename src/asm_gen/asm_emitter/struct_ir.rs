@@ -32,15 +32,17 @@ impl AsmEmitter {
             // (これが、このメンバーの`%rbp`からのオフセットになる)
             add_size += size.to_bytes();
 
+            // ポインタは先頭のメンバーを指す(先頭のメンバーのオフセットは0)ので、
+            // このメンバーより前のメンバーの累積サイズがオフセットになる
+            let member_off = add_size - size.to_bytes();
             let offset = if this_is_self {
                 // `self`のポインタ先に直接書き込むので、既存の
                 // `stk_use_counter`(このスコープでのスタック使用量)は
-                // 無関係。累積サイズそのものがオフセットになる
-                add_size
+                // 無関係
+                member_off
             } else {
-                // 既に使用していたスタックのサイズ + ここまでの
-                // メンバーの累積サイズ = このメンバーの正しいオフセット
-                self.stk_use_counter + add_size
+                // 既に使用していたスタックのサイズ + 前のメンバーの累積サイズ
+                self.stk_use_counter + member_off
             };
 
             let fmted = self.asm_fmt.get_fmt_struct_member(value, &size, offset);

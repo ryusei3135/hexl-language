@@ -17,6 +17,15 @@
     サイズが固定になっていた`ver 0.8.9`の不具合は解消済み)
 - `2026-09-12`ニーモニックのサイズをすべて生成するように修正中
 
+- `2026-10-03`operand_txt.rsのinsert_arr_txtで構造体を配列のindexにする処理
+
 ### fmt_one_expr_mnemo_resize
 - `operand_txt.rs`
 - ニーモニックのサイズを調整
+- `2026-10-03`配列の添字が構造体メンバーの場合(`[arr a.a else 0] = 0`)、`arr.rs`の`ref_arr_for_struct_member`が添字付きアドレッシング(`-offset(%rbp, %rcx, 要素サイズ)`)を生成するように修正。要素`i`は`%rbp - (arr_base + (i+1)*要素サイズ)`に置かれる(`VarIndexInfo.arr_base`)ため、添字を`neg`してから参照する
+- `2026-10-03`関数先頭のスタックフレームの確保サイズを、本体の生成中に数えた使用量(`stk_use_counter`)とIRの`stk_size`の大きい方にし、16byteへアライメントして`call_func.rs`の`build_fn_process`で作り直すように修正
+- `2026-10-03`構造体をコンストラクタで初期化する際、暗黙の`self`のスタック領域(`GetPtr`)をIRの`stk`ではなく`stk_use_counter`から確保する(`alloc_struct_stk`)ように修正。配列と領域が重なるバグの修正
+- `2026-10-03`構造体のメンバーの並びを変更。ポインタは先頭のメンバーを指し、`(%rdi)`、`-4(%rdi)`のように`pos - メンバーのサイズ`をオフセットにする(`ref_struct_txt`/`emit_struct_ini_asm`/`alloc_struct_stk`)
+- `2026-10-03`配列の並びを変更。要素0が最もアドレスが小さく、要素`i`は`%rbp - arr_base + i*サイズ`(`arr_base`は要素0のオフセット)。添字が構造体のメンバーの場合は`neg`ではなく`movslq`で符号拡張して`-arr_base(%rbp, %rcx, サイズ)`で参照する
+- `2026-10-03`配列などメモリに実体がある変数(`VarIndexInfo.in_mem`)を、レジスタの使用中の記録とインラインアセンブラのレジスタ退避の対象から外した(`#asm`の前に`movl %eax, %ecx`が出るバグ)
+- `2026-10-03`配列の並びを元に戻した。要素`i`は`%rbp - (arr_base + (i+1)*サイズ)`(`-4`, `-8`, ...)で、添字が構造体のメンバーの場合は`movslq`で符号拡張した後に`negq`してから`-(arr_base+サイズ)(%rbp, %rcx, サイズ)`で参照する

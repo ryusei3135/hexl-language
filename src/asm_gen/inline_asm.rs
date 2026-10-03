@@ -22,7 +22,7 @@ impl AsmEmitter {
     fn var_using_reg(&self, reg: usize) -> Option<(String, Size)> {
         self.var_hash_map
             .iter()
-            .find(|(_, info)| !info.is_stack && info.reg == reg)
+            .find(|(_, info)| !info.is_stack && !info.in_mem && info.reg == reg)
             .map(|(name, info)| (name.clone(), info.size.clone()))
     }
 

@@ -43,4 +43,14 @@ pub struct AsmEmitter {
     /// 生成済みの呼び出しの戻り値を、後続のノードが値として
     /// 参照する際(`a: int = func(10)`など)に使う
     pub(super) emitted_calls: Vec<usize>,
+    /// 配列の添字が構造体のメンバー(`[arr a.a else 0]`など)のとき、
+    /// 添字を載せるために確保した一時レジスタ。
+    /// 配列への書き込みが終わった時点で解放する
+    pub(super) arr_index_temp: Option<usize>,
+    /// 構造体のコンストラクタへ渡す暗黙の`self`(`Inst::GetPtr`)のノードid
+    /// -> 実際に割り当てた`%rbp`からのオフセット。
+    /// IRの`stk`は配列など、エミッタ側(`stk_use_counter`)が割り当てた
+    /// スタック領域と重なることがあるため、構造体の実体は
+    /// `stk_use_counter`から確保し直す。関数ごとにクリアする
+    pub(super) struct_stk_map: HashMap<usize, usize>,
 }

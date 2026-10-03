@@ -436,7 +436,7 @@ mod ty_tests {
         let mut lex = lex::Lexer::new();
         let _ = lex.analy(&value.to_string()).unwrap();
         let mut parse = Parser::new();
-        parse.parser(lex.gen_tkns.clone()).unwrap().clone()
+        parse.parser(&lex.gen_tkns.clone()).unwrap().to_vec()
     }
 
     #[test]

@@ -165,16 +165,15 @@ impl AsmEmitter {
         self.stk_use_counter = 0;
         // 生成済みの関数呼び出しの記録も、関数ごとにリセットする
         self.emitted_calls.clear();
-        if fn_meta_data.1.stk_size != 0 {
-            // 予約されたサイズ分確保する
-            self.asm_text
-                .push_str(&self.asm_fmt.gen_stack_frame(fn_meta_data.1.stk_size));
-        } else {
-            if &fn_meta_data.0 != "_start" {
-                self.asm_text
-                    .push_str(self.asm_fmt.func_frame_fmt().as_str());
-            }
-        }
+        // 関数の先頭のスタックフレームの生成位置を控えておく。
+        // 本体を生成しながらスタックの使用量を数え、最後にこの位置の
+        // スタックフレームを、数えた使用量(アライメント済み)で作り直す
+        // (使用量は本体を生成してみないと確定しないため)
+        let prologue_start = self.asm_text.len();
+        let ir_stk_size = fn_meta_data.1.stk_size;
+        let prologue = self.gen_fn_prologue(&fn_meta_data.0, ir_stk_size);
+        self.asm_text.push_str(&prologue);
+        let prologue_end = self.asm_text.len();
 
         self.curr_inst = mem::take(&mut fn_meta_data.1.body);
         let returned_struct_idx = if fn_ret_ty.is_none() {
@@ -287,6 +286,29 @@ impl AsmEmitter {
         // 無い(終了は`exit`のsyscallで行う)ため、`leave; ret`は付けない
         if fn_meta_data.0 != "_start" && !self.asm_text.ends_with("ret\n") {
             self.asm_text.push_str("leave\nret\n");
+        }
+
+        // === スタックフレームで確保するサイズを確定させる ===
+        // IRが見積もったサイズ(`stk_size`)と、本体の生成で実際に数えた
+        // スタックの使用量(`stk_use_counter`)の大きい方を使う。
+        // `gen_stack_frame`が8/16byte境界へ切り上げる
+        let used_stk_size = self.stk_use_counter.max(ir_stk_size);
+        let prologue = self.gen_fn_prologue(&fn_meta_data.0, used_stk_size);
+        self.asm_text
+            .replace_range(prologue_start..prologue_end, &prologue);
+    }
+
+    /// 関数の先頭のスタックフレームのアセンブリを生成する
+    ///
+    /// - `stk_size != 0`: `stk_size`をアライメントした分だけ確保する
+    /// - `stk_size == 0`: 確保せずフレームだけ作る(`_start`は作らない)
+    fn gen_fn_prologue(&self, fn_name: &str, stk_size: usize) -> String {
+        if stk_size != 0 {
+            self.asm_fmt.gen_stack_frame(stk_size)
+        } else if fn_name != "_start" {
+            self.asm_fmt.func_frame_fmt()
+        } else {
+            String::new()
         }
     }
 }

@@ -161,7 +161,7 @@ mod tests {
     fn display_includes_position_and_func_name() {
         let e = ErrKind::Syntax(Box::new(SyntaxErr {
             kind: SyntaxErrKind::TknIsEofInExpr,
-            loc: ErrLoc::new(Span::new(&3, &10), "expr_value".to_string()),
+            loc: ErrLoc::new(Span::new(3, 10), "expr_value".to_string()),
         }));
         let msg = e.to_string();
         assert!(msg.contains("3行目"));

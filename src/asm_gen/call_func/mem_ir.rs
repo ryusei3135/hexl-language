@@ -2,7 +2,8 @@ use super::*;
 use crate::ir::types;
 
 impl AsmEmitter {
-    pub(super) fn mov_value_ir(
+    pub(super) 
+    fn mov_value_ir(
         &mut self,
         size: &types::Size,
         dst: usize,
@@ -12,6 +13,19 @@ impl AsmEmitter {
     ) {
         // 経由の間接参照になってしまっていた。
         if let types::Size::Struct(_) = size {
+            // コンストラクタ呼び出しで初期化する構造体は、暗黙の`self`
+            // 引数(`GetAddress(GetPtr)`)が指すスタック領域を、先に
+            // `stk_use_counter`から確保する。IRの`stk`のままだと、先に
+            // 確保済みの配列などと領域が重なってしまう
+            if let inst::Inst::CallFunc(meta_data) = self.curr_inst[src].clone() {
+                if let Some(&self_arg) = meta_data.params.get(0) {
+                    if let inst::Inst::GetAddress(mem_idx) = self.curr_inst[self_arg].clone() {
+                        if matches!(self.curr_inst[mem_idx], inst::Inst::GetPtr { .. }) {
+                            self.alloc_struct_stk(mem_idx, size.to_bytes());
+                        }
+                    }
+                }
+            }
             // 呼び出し自体(`lea`+`call`)は副作用として`self.asm_text`へ
             // 積まれる。戻り値のオペランド文字列自体は構造体には
             // 使えないので捨てる
@@ -36,6 +50,7 @@ impl AsmEmitter {
             let inst::Inst::GetPtr { stk, .. } = self.curr_inst[mem_idx].clone() else {
                 panic!("システムエラー: 暗黙のselfポインタ引数の参照先がGetPtrではありません");
             };
+            let stk = self.ptr_stk(mem_idx, stk);
 
             if let Some(var_name) = name {
                 self.insert_var_info(
@@ -135,14 +150,18 @@ impl AsmEmitter {
                     };
 
                     let mut txt = String::new();
-                    for idx in src.iter() {
+                    // 要素0が最も%rbpに近い位置(`-4(%rbp)`)に来て、要素が
+                    // 増えるほどアドレスが小さくなる(`-4`, `-8`, `-12`, ...)。
+                    // 領域全体(`要素のサイズ * 要素数`)を先に確保し、
+                    // 要素`k`のオフセットは `arr_base + (k + 1) * 要素のサイズ`
+                    let elem_bytes = size.to_bytes();
+                    let arr_base = self.stk_use_counter;
+                    self.stk_use_counter = arr_base + elem_bytes * src.len();
+                    for (k, idx) in src.iter().enumerate() {
                         let value = self.extract_operand_text(*idx, &dst_size);
-                        // スタックの場所を更新
-                        // (この変数のオフセットは、これまで使用した
-                        //  スタックのサイズ`stk_use_counter`に、
-                        //  この変数のサイズを足したもの)
-                        self.stk_use_counter += size.to_bytes();
-                        let s = &self.asm_fmt.fmt_ref_operand(&base, self.stk_use_counter);
+                        let s = &self
+                            .asm_fmt
+                            .fmt_ref_operand(&base, arr_base + (k + 1) * elem_bytes);
 
                         let mov_line = self
                             .asm_fmt
@@ -162,7 +181,8 @@ impl AsmEmitter {
                     }
                     self.insert_var_info(
                         &name,
-                        asm_emitter::VarIndexInfo::new(self.reg_idx, &size, *dst),
+                        asm_emitter::VarIndexInfo::new(self.reg_idx, &size, *dst)
+                            .with_arr_base(arr_base),
                     );
                     self.asm_text.push_str(txt.as_str());
                 }
@@ -207,8 +227,19 @@ impl AsmEmitter {
             // では構造体自身の先頭オフセット(`%rbp`から見た位置)が
             // 分からなくなってしまう。呼び出し前の値を控えておき、
             // それをこの変数の実体の位置として登録する
-            let struct_stk_offset = self.stk_use_counter;
+            // 構造体のポインタは先頭のメンバーを指すので、`alloc_struct_stk`と
+            // 同様に、先頭のメンバーがはみ出す分(8byte)を余分に確保する
+            let struct_stk_offset = if is_self {
+                self.stk_use_counter
+            } else {
+                let base = self.stk_use_counter.div_ceil(8) * 8 + 8;
+                self.stk_use_counter = base;
+                base
+            };
             let ini_asm = self.emit_struct_ini_asm(mem, is_self);
+            if !is_self {
+                self.stk_use_counter = self.stk_use_counter.max(struct_stk_offset + size.to_bytes());
+            }
             self.asm_text.push_str(ini_asm.as_str());
             if let Some(var_name) = name {
                 self.insert_var_info(
