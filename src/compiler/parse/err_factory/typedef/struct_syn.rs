@@ -1,7 +1,8 @@
 use super::*;
 
 impl Parser {
-    pub(in crate::compiler::parse) fn struct_name_is_not_found(
+    pub(in crate::compiler::parse) 
+    fn struct_name_is_not_found(
         &self,
     ) -> Result<node::Group1Node, err::ErrKind> {
         crate::syntax_err!(
@@ -14,7 +15,8 @@ impl Parser {
         )
     }
 
-    pub(in crate::compiler::parse) fn struct_lbrace_not_found(
+    pub(in crate::compiler::parse) 
+    fn struct_lbrace_not_found(
         &self,
         tkn: lex::Tkn,
     ) -> Result<(), err::ErrKind> {
@@ -28,7 +30,8 @@ impl Parser {
         )
     }
 
-    pub(in crate::compiler::parse) fn struct_in_unexpect_tkn(
+    pub(in crate::compiler::parse) 
+    fn struct_in_unexpect_tkn(
         &self,
         expect: lex::Tkn,
     ) -> Result<(), err::ErrKind> {

@@ -125,7 +125,7 @@ impl IR {
     pub fn builder(
         &mut self,
         nodes: &[node::Group1Node],
-        #[cfg(not(test))] settings: &crate::cmd_line_args::OptSettings,
+        #[cfg(not(test))] settings: &crate::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
         // 構造体・列挙型は、定義された場所より前で使われる場合があるので
         // 先に全て登録しておく(前方参照に対応するため)
@@ -438,6 +438,9 @@ impl IR {
             } => {
                 // `src/ir/builder/expr_node.rs`
                 self.init_struct_node(&name, &mut fields).unwrap()
+            }
+            node::Expr::InitUnion { is_self, name, fields } => {
+                panic!("あとで作成");
             }
             // ここでは対応する「元の変数名」が分からない文脈
             // (関数の引数や構造体フィールドの初期化式など)から

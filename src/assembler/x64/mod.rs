@@ -1,13 +1,12 @@
 mod convert;
-pub mod elf;
-mod emitter;
+pub(in crate::assembler) mod emitter;
 mod format_table;
 mod parse;
-pub mod pe;
 mod reg;
 
 use emitter::Emitter;
 use parse::{Lexer, Parser};
+pub use super::*;
 
 /// アセンブリソースをアセンブルしてファイルに書き出す。
 ///

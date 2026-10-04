@@ -1,11 +1,13 @@
+mod def_fields;
+
 use super::{Parser, *};
 use std::collections::HashMap;
 
-/// 構造体、列挙型を定義するノードの生成
+/// 構造体、共用体、列挙型を定義するノードの生成
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
-    pub(super) 
+    pub(in crate::compiler::parse) 
     fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             return self.struct_name_is_not_found();
@@ -28,8 +30,38 @@ impl Parser {
         Ok(r)
     }
 
+    /// `union name { mem: ty, mem2: ty2 }` を解析する
+    /// 呼び出し時は current_tkn() が KeyWordUnion
+    pub(in crate::compiler::parse)
+    fn union_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+        if self.current_tkn() != &lex::Tkn::KeyWordUnion {
+            return self.union_keyword_not_found();
+        }
+
+        let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
+            // 名前がなかった
+            return self.union_name_is_not_found();
+        };
+        // 自身の構造体の名前を登録、`Self`をこれに入れ替える
+        self.struct_self_name = Some(name.to_string());
+
+        match self.next_tkn(&["{"])? {
+            lex::Tkn::LBrace => {}
+            t => {
+                self.union_lbrace_not_found(t)?;
+            }
+        }
+
+        let fields = self.define_union_fields()?;
+        // 構造体の中身をすべて処理し終わったので、`None`にする
+        self.struct_self_name = None;
+        self.gen_flag = GenFlag::Group1;
+        let r = node::UnionDefine::new(name, fields.0, fields.1);
+        Ok(r)
+    }
+
     /// 構造体を初期化する式を生成
-    pub(super) 
+    pub(in crate::compiler::parse) 
     fn struct_init_node<const T: bool>(
         &mut self,
         name: &str,
@@ -83,9 +115,64 @@ impl Parser {
         })
     }
 
+    /// 共用体を初期化する式を生成
+    /// 呼び出し時は current_tkn() が `LBrace` (`struct_init_node`と同じ)
+    pub(in crate::compiler::parse)
+    fn union_init_node<const T: bool>(
+        &mut self,
+        name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
+        if self.current_tkn() != &lex::Tkn::LBrace {
+            self.union_lbrace_not_found(self.current_tkn().clone())?;
+        }
+        // {を飛ばす
+        let _ = self.next_tkn(&[])?;
+        let mut fields = HashMap::<String, Box<node::Expr>>::new();
+
+        loop {
+            let name: String = match &self.current_tkn() {
+                lex::Tkn::Name(name) => name.to_string(),
+                lex::Tkn::RBrace => {
+                    break;
+                }
+                t => {
+                    return crate::syntax_err!(
+                        self.build_err_span(),
+                        err::SyntaxErrKind::UnexpectedTkn {
+                            found: (*t).clone(),
+                            expected: lex::Tkn::Name("union init".to_string()),
+                            context: lex::Tkn::KeyWordUnion
+                        }
+                    );
+                }
+            };
+            // :じゃないとエラー
+            if self.next_tkn(&[":"])? != lex::Tkn::Colon {
+                self.union_in_unexpect_tkn(lex::Tkn::Colon)?;
+            }
+            fields.insert(
+                name,
+                // 共用体のメンバーを初期化する
+                Box::new(self.expr_cmp(true)?),
+            );
+
+            match self.current_tkn() {
+                lex::Tkn::Name(..) => continue,
+                lex::Tkn::RBrace => break,
+                // 値の後ろに続けられるのは、次のメンバー名か`}`だけ
+                _ => self.union_in_unexpect_tkn(lex::Tkn::RBrace)?,
+            }
+        }
+        Ok(node::Expr::InitUnion {
+            is_self: T,
+            name: name.to_string(),
+            fields,
+        })
+    }
+
     /// `enum name { mem, mem2 }` を解析する
     /// 呼び出し時は current_tkn() が `KeyWordEnum`
-    pub(super) 
+    pub(in crate::compiler::parse) 
     fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             panic!("列挙型の名前が必要です");
@@ -98,122 +185,6 @@ impl Parser {
 
         let variants = self.define_enum_variants()?;
         Ok(node::EnumDefine::new(name, variants.0))
-    }
-
-    /// 構造体のメンバ定義を解析する関数
-    /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace`
-    fn define_struct_fields(
-        &mut self,
-    ) -> Result<(Vec<node::StructField>, Vec<node::Group1Node>), err::ErrKind> {
-        if self.current_tkn() != &lex::Tkn::LBrace {
-            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
-        }
-
-        let mut fields = Vec::<node::StructField>::new();
-        let mut pub_flag = false;
-        let mut methods = Vec::new();
-
-        loop {
-            match self.next_tkn(&["name", "pub", "}"])? {
-                lex::Tkn::Name(name) => {
-                    match self.next_tkn_ref(&[":", "("])? {
-                        lex::Tkn::Colon => {
-                            self.next_tkn(&[])?;
-                            let ty = self.define_ty_node()?;
-
-                            fields.push(node::StructField {
-                                name: name.clone(),
-                                ty,
-                            });
-
-                            match self.current_tkn() {
-                                lex::Tkn::Comma => {}
-                                lex::Tkn::RBrace => break,
-                                // `,`を省略して改行だけで次のメンバーへ続く場合
-                                // (現在のトークンが次のメンバーの`name`/`pub`を
-                                // 指しているので、位置を1つ戻して、ループの先頭の
-                                // `next_tkn`でもう一度読めるようにする)
-                                lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
-                                    self.back_tkn();
-                                }
-                                t => crate::syntax_err!(
-                                    self.build_err_span(),
-                                    err::SyntaxErrKind::UnexpectTknAfterKeyword {
-                                        keyword: lex::Tkn::Colon,
-                                        expected: vec![",", "}"],
-                                        found: t.clone(),
-                                    }
-                                )?,
-                            }
-                            continue;
-                        }
-
-                        lex::Tkn::LParen => {
-                            let mut method = self.func_node(&name, pub_flag)?;
-                            self.next_tkn(&[])?;
-                            self.scope_counter += 1;
-                            // メゾットの本体が空(`{}`)の場合、`one_line_node`を
-                            // 呼ばずにそのまま本体無しとして扱う
-                            if self.current_tkn() != &lex::Tkn::RBrace {
-                                'method_body: loop {
-                                    let node = self.one_line_node()?;
-
-                                    if let node::Group1Node::FuncDefine(ref mut func) = method {
-                                        func.body
-                                            .push(node.gen_group_info(self.build_err_span().line));
-                                    }
-
-                                    if self.current_tkn() == &lex::Tkn::RBrace {
-                                        self.advance_tkn().unwrap();
-                                        break 'method_body;
-                                    }
-                                }
-                            } else {
-                                self.advance_tkn().unwrap();
-                            }
-                            self.scope_counter -= 1;
-                            // モジュールの名前を登録
-                            if let node::Group1Node::FuncDefine(ref mut func) = method {
-                                func.self_module_name(self.struct_self_name.as_ref().unwrap());
-                            } else {
-                                panic!();
-                            }
-                            methods.push(method);
-
-                            // メゾットの本体を閉じる`}`の次のトークンは、
-                            // 次のメンバーの`name`/`pub`、または構造体を
-                            // 閉じる`}`のいずれか。すでにそのトークンを
-                            // 指しているので、`Colon`アームと違い
-                            // 下の共通処理(`next_tkn`での読み進め)は
-                            // 行わずここで直接分岐する
-                            match self.current_tkn() {
-                                lex::Tkn::RBrace => {
-                                    //self.advance_tkn().unwrap();
-                                    break;
-                                }
-                                lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
-                                    self.back_tkn();
-                                }
-                                t => panic!("{:?}", t),
-                            }
-                            pub_flag = false;
-                            continue;
-                        }
-
-                        _ => return Err(err::ErrKind::UnexpectedToken),
-                    }
-                    pub_flag = false;
-                    self.next_tkn(&[])?;
-                }
-                lex::Tkn::KeyWordPub => {
-                    pub_flag = true;
-                }
-                lex::Tkn::RBrace => break,
-                t => panic!("{:?}", t),
-            }
-        }
-
-        Ok((fields, methods))
     }
 
     /// 列挙型のメンバ定義を解析する
@@ -311,7 +282,7 @@ impl Parser {
     /// これにより、型として予約語`Self`が使われたとき、
     /// `node::TyNode::SelfTy(self_name)`へ解決できる。
     /// メゾットの外(トップレベルの関数など)では`None`を渡す。
-    pub(super) 
+    pub(in crate::compiler::parse) 
     fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return Err(err::ErrKind::UnexpectedToken);
@@ -323,7 +294,7 @@ impl Parser {
     /// トークンが`:`である必要はなく、`current_tkn()`は型の直前の
     /// 区切り(`:`、ジェネリクスの型引数の`<`や`,`)を指していればよい。
     /// 終了時は、型の次のトークンを指す
-    pub(super) 
+    pub(in crate::compiler::parse) 
     fn ty_node_after_delim(&mut self) -> Result<node::TyNode, err::ErrKind> {
         match self.next_tkn(&["name", "[", "string", "Self"])?.clone() {
             // 予約語`Self`: 自身の構造体を指す型
@@ -439,6 +410,14 @@ mod ty_tests {
         parse.parser(&lex.gen_tkns.clone()).unwrap().to_vec()
     }
 
+    /// 構文解析がエラーになるかどうか
+    fn build_is_err(value: &str) -> bool {
+        let mut lex = lex::Lexer::new();
+        let _ = lex.analy(&value.to_string()).unwrap();
+        let mut parse = Parser::new();
+        parse.parser(&lex.gen_tkns.clone()).is_err()
+    }
+
     #[test]
     fn test_struct() {
         assert_eq!(
@@ -542,6 +521,83 @@ mod ty_tests {
         assert_eq!(func.params[0].name, "self");
         assert_eq!(func.params[1].name, "param");
         assert_eq!(func.params[1].ty, node::TyNode::Ty("int".to_string()));
+    }
+
+    #[test]
+    fn test_union() {
+        assert_eq!(
+            &build("union Name { name: ty name2: ty }"),
+            &vec![node::UnionDefine::new(
+                "Name".to_string(),
+                vec![
+                    node::StructField::make_field("name", "ty"),
+                    node::StructField::make_field("name2", "ty")
+                ],
+                Vec::new()
+            )]
+        );
+    }
+
+    #[test]
+    fn union_method() {
+        let mut f = vec![node::FuncDefine::new(
+            "new",
+            Vec::new(),
+            node::TyNode::Ty("ty".to_string()),
+            false,
+        )];
+        let node::Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
+            panic!();
+        };
+        func.self_module_name(&"Name".to_string());
+        assert_eq!(
+            &build("union Name { a: int new(): ty {}}"),
+            &vec![node::UnionDefine::new(
+                "Name".to_string(),
+                vec![node::StructField::make_field("a", "int"),],
+                f
+            )]
+        );
+    }
+
+    #[test]
+    fn union_method_self_ty() {
+        // 共用体でも`Self`は、定義されている共用体自身の名前へ解決される
+        let nodes = build(
+            "union Name { \
+                a: int \
+                new(): Self {} \
+                func(self: Self, param: int): int {ret 0} \
+            }",
+        );
+        let node::Group1Node::UnionDefine(union_def) = &nodes[0] else {
+            panic!("共用体が定義されていません: {:?}", nodes);
+        };
+
+        let node::Group1Node::FuncDefine(new_func) = &union_def.methods[0] else {
+            panic!();
+        };
+        assert_eq!(new_func.name, "new");
+        assert_eq!(new_func.ret_ty, node::TyNode::SelfTy("Name".to_string()));
+
+        let node::Group1Node::FuncDefine(func) = &union_def.methods[1] else {
+            panic!();
+        };
+        assert_eq!(func.name, "func");
+        assert_eq!(func.params[0].ty, node::TyNode::SelfTy("Name".to_string()));
+        assert_eq!(func.params[0].name, "self");
+        assert_eq!(func.params[1].name, "param");
+        assert_eq!(func.params[1].ty, node::TyNode::Ty("int".to_string()));
+    }
+
+    #[test]
+    fn union_name_is_not_found() {
+        assert!(build_is_err("union { a: int }"));
+    }
+
+    #[test]
+    fn union_lbrace_not_found() {
+        assert!(build_is_err("union Name a: int }"));
     }
 
     #[test]

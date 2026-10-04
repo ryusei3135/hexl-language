@@ -1,5 +1,12 @@
+/// 構造体や列挙型などのノードの定義
+pub mod data_node;
+/// テスト時のみ使う関数など
+pub mod test_utils;
+
 use std::collections::HashMap;
 
+pub(in crate::compiler) use data_node::*;
+pub(in crate::compiler) use test_utils::*;
 use crate::compiler::{models::Body, node, parse::VarMutAttr};
 
 pub const IS_MUST: usize = 0;
@@ -198,56 +205,6 @@ impl FuncDefine {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct StructField {
-    pub name: String,
-    pub ty: TyNode,
-}
-
-impl StructField {
-    #[cfg(test)]
-    pub fn make_field(name: &str, ty: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            ty: TyNode::Ty(ty.to_string()),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct StructDefine {
-    pub name: String,
-    pub fields: Vec<StructField>,
-    pub methods: Vec<Group1Node>,
-}
-
-impl StructDefine {
-    #[inline(always)]
-    pub const fn new(
-        name: String,
-        fields: Vec<StructField>,
-        methods: Vec<Group1Node>,
-    ) -> Group1Node {
-        Group1Node::StructDefine(Self {
-            name,
-            fields,
-            methods,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct EnumDefine {
-    pub name: String,
-    pub variants: Vec<String>,
-}
-
-impl EnumDefine {
-    #[inline(always)]
-    pub fn new(name: String, variants: Vec<String>) -> Group1Node {
-        Group1Node::EnumDefine(Self { name, variants })
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StmtNode {
@@ -342,6 +299,11 @@ pub enum Expr {
         body: Body,
     },
     InitStruct {
+        is_self: bool,
+        name: String,
+        fields: HashMap<String, Box<Expr>>,
+    },
+    InitUnion {
         is_self: bool,
         name: String,
         fields: HashMap<String, Box<Expr>>,
@@ -621,34 +583,8 @@ impl Group2Node {
 pub enum Group1Node {
     FuncDefine(FuncDefine),
     StructDefine(StructDefine),
+    UnionDefine(UnionDefine),
     EnumDefine(EnumDefine),
     Include(ModPath),
     Line(String),
-}
-
-#[cfg(test)]
-pub fn gen_var_node(name: &str, value: &str, ty: &str, line: usize) -> Group2Info {
-    Group2Node::Expr(Expr::DefVar(DefineVar::new(
-        &name.to_string(),
-        Expr::Number(value.to_string()),
-        &TyNode::Ty(ty.to_string()),
-        VarMutAttr::Invar,
-    )))
-    .gen_group_info(line)
-}
-
-#[cfg(test)]
-pub fn wrap_expr_cmp(left: &str, right: &str) -> Expr {
-    Expr::LessThen((
-        Box::new(Expr::Number(left.to_string())),
-        Box::new(Expr::Number(right.to_string())),
-    ))
-}
-
-#[cfg(test)]
-pub fn wrap_eq_expr_cmp(left: &str, right: &str) -> Expr {
-    Expr::Equal((
-        Box::new(Expr::Number(left.to_string())),
-        Box::new(Expr::Number(right.to_string())),
-    ))
 }

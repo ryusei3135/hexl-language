@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::emitter::{Emitter, FixupKind, Section};
+use super::x64::emitter::{Emitter, FixupKind, Section};
 
 pub const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 

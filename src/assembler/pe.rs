@@ -1,4 +1,4 @@
-use super::emitter::{Emitter, FixupKind, Section};
+use super::x64::emitter::{Emitter, FixupKind, Section};
 
 // ============================================================
 // PE (Portable Executable) format constants

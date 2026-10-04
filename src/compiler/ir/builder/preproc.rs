@@ -7,7 +7,7 @@ impl IR {
     fn include_proc(
         &mut self,
         path: &node::ModPath,
-        settings: &crate::cmd_line_args::OptSettings,
+        settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         match &path.kind {
             // 従来の書き方(`mod::file`)。ファイルとして存在するかどうかで
@@ -46,7 +46,7 @@ impl IR {
     fn include_auto(
         &mut self,
         path: &node::ModPath,
-        settings: &crate::cmd_line_args::OptSettings,
+        settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();
 
@@ -110,7 +110,7 @@ impl IR {
         &mut self,
         path: &node::ModPath,
         alias: Option<&String>,
-        settings: &crate::cmd_line_args::OptSettings,
+        settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();
         self.check_include_file_exists(&full_path);
@@ -141,7 +141,7 @@ impl IR {
         &mut self,
         path: &node::ModPath,
         func_name: &str,
-        settings: &crate::cmd_line_args::OptSettings,
+        settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();
         self.check_include_file_exists(&full_path);
@@ -172,7 +172,7 @@ impl IR {
     fn include_glob(
         &mut self,
         path: &node::ModPath,
-        settings: &crate::cmd_line_args::OptSettings,
+        settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();
         self.check_include_file_exists(&full_path);
