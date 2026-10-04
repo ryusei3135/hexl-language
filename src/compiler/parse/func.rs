@@ -189,7 +189,8 @@ impl Parser {
     ///
     /// 呼び出しが定義より前に書かれていても、その型の関数を作れる
     /// ように、本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
-    pub(super) fn collect_generic_funcs(&mut self) -> Result<(), err::ErrKind> {
+    pub(super) 
+    fn collect_generic_funcs(&mut self) -> Result<(), err::ErrKind> {
         let len = self.tkns.as_ref().unwrap().len();
         // `{`の深さ。トップレベル(0)にある`name<`だけが関数の定義
         let mut depth = 0usize;
@@ -220,7 +221,8 @@ impl Parser {
 
     /// 現在のトークン(関数名)から始まるジェネリクス関数の定義を、
     /// 本体を閉じる`}`まで読み飛ばす。終了時は`}`を指す
-    pub(super) fn skip_generic_func_def(&mut self) -> Result<(), err::ErrKind> {
+    pub(super) 
+    fn skip_generic_func_def(&mut self) -> Result<(), err::ErrKind> {
         let (_, _, end) = self.extract_generic_def(self.idx)?;
         self.idx = end;
         Ok(())
@@ -346,7 +348,8 @@ impl Parser {
     ///
     /// ## Args
     /// - lt_idx `<`のトークンのインデックス
-    pub(super) fn is_generic_call(&self, name: &str, lt_idx: usize) -> bool {
+    pub(super) 
+    fn is_generic_call(&self, name: &str, lt_idx: usize) -> bool {
         if !self.generic_funcs.contains_key(name) {
             return false;
         }

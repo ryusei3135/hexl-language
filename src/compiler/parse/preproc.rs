@@ -10,7 +10,8 @@ use regex::{Captures, Regex};
 // }
 
 impl Parser {
-    pub(super) fn make_preproc(
+    pub(super) 
+    fn make_preproc(
         &mut self,
         proc_name: &str,
     ) -> Result<node::Group2Node, err::ErrKind> {

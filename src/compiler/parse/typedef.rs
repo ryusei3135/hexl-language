@@ -3,6 +3,14 @@ mod def_fields;
 use super::{Parser, *};
 use std::collections::HashMap;
 
+/// 共用体の追加オプションのフラグ
+#[derive(Debug, Clone)]
+pub(in crate::compiler::parse::typedef)
+enum UnionFlags {
+    Unsafe,
+    Normal,
+}
+
 /// 構造体、共用体、列挙型を定義するノードの生成
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
@@ -38,12 +46,29 @@ impl Parser {
             return self.union_keyword_not_found();
         }
 
-        let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
-            // 名前がなかった
-            return self.union_name_is_not_found();
+        let union_flag = match self.next_tkn(&["name", "str litral"])? {
+            lex::Tkn::Name(union_name) => {
+                // 自身の構造体の名前を登録、`Self`をこれに入れ替える
+                self.struct_self_name.insert(union_name);
+                UnionFlags::Normal
+            }
+            lex::Tkn::Str(union_option) => {
+                match union_option.as_str() {
+                    "unsafe" => {
+                        if let Some(union_name) = self.advance_tkn() {
+                            // 自身の構造体の名前を登録、`Self`をこれに入れ替える
+                            self.struct_self_name.insert(union_name);
+                        } else {
+                            // オプションの続きに共用体の名前が来なかった
+                            return self.union_option_next_name_not_found();
+                        }
+                        UnionFlags::Unsafe
+                    }
+                    _ => return self.union_option_unregister(union_option),
+                }
+            }
+            _ => return self.union_name_is_not_found(),
         };
-        // 自身の構造体の名前を登録、`Self`をこれに入れ替える
-        self.struct_self_name = Some(name.to_string());
 
         match self.next_tkn(&["{"])? {
             lex::Tkn::LBrace => {}
@@ -52,7 +77,7 @@ impl Parser {
             }
         }
 
-        let fields = self.define_union_fields()?;
+        let fields = self.define_union_fields(union_flag)?;
         // 構造体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
         self.gen_flag = GenFlag::Group1;

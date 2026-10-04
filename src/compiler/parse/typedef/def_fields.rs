@@ -89,6 +89,7 @@ impl Parser {
     pub(in crate::compiler::parse::typedef)
     fn define_union_fields(
         &mut self,
+        union_flag: UnionFlags,
     ) -> Result<(Vec<node::UnionField>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
             return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
@@ -97,6 +98,10 @@ impl Parser {
         let mut fields = Vec::<node::UnionField>::new();
         let mut pub_flag = false;
         let mut methods = Vec::new();
+
+        if union_flag == UnionFlags::Normal {
+            self.safe_union_field();
+        }
 
         loop {
             match self.next_tkn(&["name", "pub", "}"])? {
@@ -153,6 +158,52 @@ impl Parser {
         }
 
         Ok((fields, methods))
+    }
+
+    fn safe_union_field(&mut self) {
+        let mut fields = Vec::<node::UnionField>::new();
+        let mut pub_flag = false;
+        let mut methods = Vec::new();
+
+        loop {
+            // フィールドの名前を取得
+            let field_name = match self.advance_tkn() {
+                Some(lex::Tkn::Name(field_name)) => {
+                    field_name
+                }
+                Some(_) => {
+                    panic!();
+                }
+                None => {
+                    panic!();
+                }
+            };
+
+            match self.peek_tkn()? {
+                lex::Tkn::LParen => {
+                    self.advance_tkn().unwrap();
+                    let ty = self.ty_node_after_delim()?;
+                    // )で閉じているか確認
+                    if self.current_tkn() != &lex::Tkn::RParen {
+                        panic!();
+                    }
+                    fields.push(UnionField::new(field_name, ty));
+                }
+                lex::Tkn::Name(..) => {
+                    fields.push(UnionField::typeless_new(field_name));
+                    continue;
+                }
+                _ => {},
+            }
+        }
+    }
+
+    fn check_is_not_fn(&mut self) -> bool {
+        if self.peek2_tkn()? != lex::Tkn::Colon {
+            true
+        } else {
+            false
+        }
     }
 
     /// 呼び出しもとで`:`が来たらそれは構造体などのメンバー

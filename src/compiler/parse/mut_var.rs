@@ -6,7 +6,8 @@ impl Parser {
     /// 変数を定義する際に、可変か不変かを判定する
     /// - 可変の場合、`true`を返す
     #[inline(always)]
-    pub fn assign_expr_is_mut(
+    pub(in crate::compiler::parse) 
+    fn assign_expr_is_mut(
         &mut self,
         name: &str,
     ) -> Result<VarMutAttr, Result<node::Expr, err::ErrKind>> {

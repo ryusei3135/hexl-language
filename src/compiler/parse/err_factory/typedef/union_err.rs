@@ -75,4 +75,42 @@ impl Parser {
             }
         )
     }
+
+    /// 共用体の追加オプションの機能で登録されていないもの
+    /// が選択されたときのエラー
+    /// ```
+    /// union"unsafe" name {}
+    /// ```
+    /// ## Args
+    /// - option_name
+    ///     - 所有権を渡す
+    #[inline(always)]
+    pub(in crate::compiler::parse)
+    fn union_option_unregister(
+        &self,
+        option_name: String,
+    ) -> Result<(), err::ErrKind> {
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::OptionIsNotFound { 
+                found: option_name, 
+                context: lex::Tkn::KeyWordUnion 
+            }
+        )
+    }
+
+    #[inline(always)]
+    pub(in crate::compiler::parse)
+    fn union_option_next_name_not_found(
+        &self,
+    ) -> Result<(), err::ErrKind> {
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::UnexpectedTkn {
+                found: self.current_tkn().clone(),
+                expected: lex::Tkn::Name("union_name".to_string()),
+                context: lex::Tkn::KeyWordUnion
+            }
+        )
+    }
 }

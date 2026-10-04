@@ -63,14 +63,14 @@ impl StructDefine {
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnionField {
     pub name: String,
-    pub ty: TyNode,
+    pub ty: Option<TyNode>,
 }
 
 impl Field for UnionField {
     fn new(name: String, ty: TyNode) -> Self {
         Self {
             name,
-            ty,
+            ty: Some(ty),
         }
     }
     
@@ -78,6 +78,15 @@ impl Field for UnionField {
         Self {
             name: name.to_string(),
             ty: TyNode::Ty(ty.to_string()),
+        }
+    }
+}
+
+impl UnionField {
+    pub fn typeless_new(name: String) -> Self {
+        Self {
+            name,
+            ty: None,
         }
     }
 }

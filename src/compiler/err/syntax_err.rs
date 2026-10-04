@@ -34,6 +34,10 @@ pub enum SyntaxErrKind {
         /// このトークンの直前の構文(エラーメッセージ用の文脈)
         context: lex::Tkn,
     },
+    OptionIsNotFound {
+        found: String,
+        context: lex::Tkn,
+    },
     /// キーワードの直後に、期待していたトークンが来なかった
     UnexpectTknAfterKeyword {
         /// 直前のキーワード
