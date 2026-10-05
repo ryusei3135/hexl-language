@@ -7,7 +7,7 @@ impl IR {
         if ty
             .clone()
             .try_into()
-            .is_ok_and(|result: types::Size| !matches!(result, expect_ty))
+            .is_ok_and(|result: types::Size| &result != expect_ty)
         {
             let ty: types::Size = ty.try_into().unwrap();
             panic!("{:?} fond {:?}", expect_ty, ty);

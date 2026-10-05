@@ -29,7 +29,7 @@ impl Parser {
             }
             // `Name` 以外が来た、または EOF の場合（パニックさせずエラーを返す）
             Some(other_tkn) => {
-                panic!();
+                panic!("{:?}", other_tkn);
             }
             None => {
                 crate::syntax_err!(

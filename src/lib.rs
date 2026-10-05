@@ -36,6 +36,8 @@ pub struct OptSettings {
     pub file_name: Option<String>,
     /// `dump` オプションが指定されたか
     pub dump: bool,
+    /// `dump <file>` 形式で指定されたか（dump のみ行いビルドしない）
+    pub dump_only: bool,
 
     opt_flags: Option<OptFlags>,
 }
@@ -46,6 +48,7 @@ impl OptSettings {
             fmt_name: None,
             file_name: None,
             dump: false,
+            dump_only: false,
 
             opt_flags: Some(first_flag),
         }
@@ -56,6 +59,7 @@ impl OptSettings {
             fmt_name: self.fmt_name.clone(),
             file_name: Some(file_name.to_owned()),
             dump: self.dump,
+            dump_only: self.dump_only,
             opt_flags: Some(OptFlags::SetFile),
         }
     }
@@ -96,6 +100,14 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
         match &index {
             0 => continue,
             1 => {
+                // `dump <file>` 形式: 次の引数がファイル名になる
+                // (opt_flags は初期状態の SetFile のまま残るので、
+                //  次の引数が file_name に入る)
+                if *opt == "dump" {
+                    settings.dump = true;
+                    settings.dump_only = true;
+                    continue;
+                }
                 if let Err(ref e) = settings.set_value(opt.to_string()) {
                     eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
                 }
@@ -187,18 +199,23 @@ pub fn build(
 // dump
 // ---------------------------------------------------------------------------
 
-/// `dump` オプション指定時に `.text` を表示する。失敗しても警告のみで処理は続行する。
-fn dump_text(settings: &OptSettings) {
+/// `dump` オプション指定時に `.text` を表示する。成功したら true を返す。
+/// 失敗しても警告のみで、呼び出し側が続行するかどうかを決める。
+fn dump_text(settings: &OptSettings) -> bool {
     let file_name = match settings.file_name.as_deref() {
         Some(name) => name,
         None => {
             eprintln!("警告: dump するファイル名が指定されていません");
-            return;
+            return false;
         }
     };
 
-    if let Err(e) = dump::load::dump(file_name, "text") {
-        eprintln!("警告: `{}`のdumpに失敗しました: {}", file_name, e);
+    match dump::load::dump(file_name, "text") {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("警告: `{}`のdumpに失敗しました: {}", file_name, e);
+            false
+        }
     }
 }
 
@@ -207,6 +224,12 @@ fn dump_text(settings: &OptSettings) {
 // ---------------------------------------------------------------------------
 
 /// コマンドライン引数（先頭はプログラム名）を受け取って全体を実行し、終了コードを返す。
+///
+/// ```text
+/// hexl dump a.out        # a.out の .text を表示して終了
+/// hexl main.hexl dump    # dump してからビルド
+/// hexl main.hexl         # ビルドのみ
+/// ```
 pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
     let args_vec: Vec<String> = args.into_iter().collect();
     // 各 String への参照（&str）を集めた Vec を作る
@@ -217,6 +240,16 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
 
     asm_setting::load_setting();
 
+    // `hexl dump <file>`: dump だけ行って終了
+    if settings.dump_only {
+        return if dump_text(&settings) {
+            process::ExitCode::SUCCESS
+        } else {
+            process::ExitCode::FAILURE
+        };
+    }
+
+    // `hexl <file> dump`: dump してからビルド
     if settings.dump {
         dump_text(&settings);
     }

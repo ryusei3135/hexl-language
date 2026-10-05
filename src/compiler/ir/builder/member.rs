@@ -158,7 +158,7 @@ impl IR {
                     return member::arr_index_is_not_num::<inst::Inst>(&val);
                 }
             }
-            t => panic!(),
+            t => panic!("{:?}", t),
         };
 
         Ok(inst::Inst::RefStruct {

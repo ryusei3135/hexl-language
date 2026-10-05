@@ -439,7 +439,7 @@ impl AsmEmitter {
         // `call`で呼ばれたわけではないため`ret`で戻ることができない。
         // `_start`の中に明示的な`return`(`Inst::Ret`)が書かれていた
         // 場合も、通常の`leave; ret`ではなく`sys_exit`で終了させる。
-        let is_start = fn_name == "_start";
+        let _is_start = fn_name == "_start";
 
         if fn_ret_ty.is_none() {
             if let Some(struct_idx) = self.resolve_struct_idx(idx) {

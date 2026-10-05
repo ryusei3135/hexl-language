@@ -13,3 +13,4 @@ hexl/
 *.elf
 *.exe
 library
+build.rs

@@ -1,5 +1,3 @@
-use crate::compiler::err::{ErrKind::UnexpectedToken, syntax_err::SyntaxErrKind};
-
 use super::*;
 
 impl Parser {

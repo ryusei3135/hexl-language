@@ -229,13 +229,13 @@ impl IR {
     fn def_var_node_with_register_ty(
         &mut self,
         mut var: node::DefineVar,
-        expect_byte: &types::Size,
+        _expect_byte: &types::Size,
         var_attr: &parse::VarMutAttr,
         register_ty: Option<node::TyNode>,
     ) -> Result<inst::Inst, err::ErrKind> {
         match &var.ty.clone() {
             node::TyNode::ConstractMust(constract) | node::TyNode::ConstractOf(constract) => {
-                let constract_ty = var.ty.clone();
+                // let _constract_ty = var.ty.clone();
                 let mut inner_var = var.clone();
                 inner_var.ty = constract.unwrap_ty();
 
