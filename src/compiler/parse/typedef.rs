@@ -1,15 +1,8 @@
 mod def_fields;
+mod union_field;
 
 use super::{Parser, *};
 use std::collections::HashMap;
-
-/// 共用体の追加オプションのフラグ
-#[derive(Debug, Clone)]
-pub(in crate::compiler::parse::typedef)
-enum UnionFlags {
-    Unsafe,
-    Normal,
-}
 
 /// 構造体、共用体、列挙型を定義するノードの生成
 impl Parser {
@@ -38,7 +31,11 @@ impl Parser {
         Ok(r)
     }
 
-    /// `union name { mem: ty, mem2: ty2 }` を解析する
+    /// 共用体を解析する
+    /// ```text
+    /// union Name { Mem  Mem1(int)  func(self: Self): int {..} }
+    /// union "unsafe" Name { mem: int  mem2: i64 }
+    /// ```
     /// 呼び出し時は current_tkn() が KeyWordUnion
     pub(in crate::compiler::parse)
     fn union_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
@@ -46,29 +43,20 @@ impl Parser {
             return self.union_keyword_not_found();
         }
 
-        let union_flag = match self.next_tkn(&["name", "str litral"])? {
-            lex::Tkn::Name(union_name) => {
-                // 自身の構造体の名前を登録、`Self`をこれに入れ替える
-                self.struct_self_name.insert(union_name);
-                UnionFlags::Normal
-            }
-            lex::Tkn::Str(union_option) => {
-                match union_option.as_str() {
-                    "unsafe" => {
-                        if let Some(union_name) = self.advance_tkn() {
-                            // 自身の構造体の名前を登録、`Self`をこれに入れ替える
-                            self.struct_self_name.insert(union_name);
-                        } else {
-                            // オプションの続きに共用体の名前が来なかった
-                            return self.union_option_next_name_not_found();
-                        }
-                        UnionFlags::Unsafe
-                    }
-                    _ => return self.union_option_unregister(union_option),
-                }
-            }
+        let (name, union_mode) = match self.next_tkn(&["name", "str litral"])? {
+            lex::Tkn::Name(union_name) => (union_name, node::UnionMode::Normal),
+            lex::Tkn::Str(union_option) => match union_option.as_str() {
+                "unsafe" => match self.next_tkn(&["name"])? {
+                    lex::Tkn::Name(union_name) => (union_name, node::UnionMode::Unsafe),
+                    // オプションの続きに共用体の名前が来なかった
+                    _ => return self.union_option_next_name_not_found(),
+                },
+                _ => return self.union_option_unregister(union_option),
+            },
             _ => return self.union_name_is_not_found(),
         };
+        // 自身の共用体の名前を登録、`Self`をこれに入れ替える
+        self.struct_self_name = Some(name.clone());
 
         match self.next_tkn(&["{"])? {
             lex::Tkn::LBrace => {}
@@ -77,12 +65,11 @@ impl Parser {
             }
         }
 
-        let fields = self.define_union_fields(union_flag)?;
-        // 構造体の中身をすべて処理し終わったので、`None`にする
+        let (fields, methods) = self.define_union_fields(union_mode)?;
+        // 共用体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
         self.gen_flag = GenFlag::Group1;
-        let r = node::UnionDefine::new(name, fields.0, fields.1);
-        Ok(r)
+        Ok(node::UnionDefine::new(name, fields, methods))
     }
 
     /// 構造体を初期化する式を生成
@@ -426,6 +413,7 @@ impl Parser {
 #[cfg(test)]
 mod ty_tests {
     use super::*;
+    use crate::compiler::node::Field;
     use std::collections::HashMap;
 
     fn build(value: &str) -> Vec<node::Group1Node> {
@@ -551,12 +539,40 @@ mod ty_tests {
     #[test]
     fn test_union() {
         assert_eq!(
-            &build("union Name { name: ty name2: ty }"),
+            &build("union Name { A B(ty) }"),
             &vec![node::UnionDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::StructField::make_field("name", "ty"),
-                    node::StructField::make_field("name2", "ty")
+                    node::UnionField::typeless_new("A".to_string()),
+                    node::UnionField::make_field("B", "ty"),
+                ],
+                Vec::new()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_union_last_typeless() {
+        // 最後のメンバーが型なしでも、`}`で終われる
+        assert_eq!(
+            &build("union Name { A }"),
+            &vec![node::UnionDefine::new(
+                "Name".to_string(),
+                vec![node::UnionField::typeless_new("A".to_string())],
+                Vec::new()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_union_unsafe() {
+        assert_eq!(
+            &build("union \"unsafe\" Name { a: int b: i64 }"),
+            &vec![node::UnionDefine::new(
+                "Name".to_string(),
+                vec![
+                    node::UnionField::unsafe_new("a".to_string(), node::TyNode::Ty("int".to_string())),
+                    node::UnionField::unsafe_new("b".to_string(), node::TyNode::Ty("i64".to_string())),
                 ],
                 Vec::new()
             )]
@@ -576,10 +592,10 @@ mod ty_tests {
         };
         func.self_module_name(&"Name".to_string());
         assert_eq!(
-            &build("union Name { a: int new(): ty {}}"),
+            &build("union Name { A(int) new(): ty {}}"),
             &vec![node::UnionDefine::new(
                 "Name".to_string(),
-                vec![node::StructField::make_field("a", "int"),],
+                vec![node::UnionField::make_field("A", "int")],
                 f
             )]
         );
@@ -590,7 +606,7 @@ mod ty_tests {
         // 共用体でも`Self`は、定義されている共用体自身の名前へ解決される
         let nodes = build(
             "union Name { \
-                a: int \
+                A(int) \
                 new(): Self {} \
                 func(self: Self, param: int): int {ret 0} \
             }",
@@ -617,12 +633,12 @@ mod ty_tests {
 
     #[test]
     fn union_name_is_not_found() {
-        assert!(build_is_err("union { a: int }"));
+        assert!(build_is_err("union { A }"));
     }
 
     #[test]
     fn union_lbrace_not_found() {
-        assert!(build_is_err("union Name a: int }"));
+        assert!(build_is_err("union Name A }"));
     }
 
     #[test]

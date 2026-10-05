@@ -136,6 +136,10 @@ impl Parser {
                             let node = self.struct_node()?;
                             self.gen_nodes.push(node);
                         }
+                        lex::Tkn::KeyWordUnion => {
+                            let node = self.union_node()?;
+                            self.gen_nodes.push(node);
+                        }
                         lex::Tkn::KeyWordEnum => {
                             let node = self.enum_node()?;
                             self.gen_nodes.push(node);

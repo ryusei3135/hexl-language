@@ -29,6 +29,7 @@ impl IR {
             public_func_tree: Vec::new(),
             define_meta_data: Vec::new(),
             struct_tree: def_tree::StructTree::new(),
+            union_tree: def_tree::UnionTree::new(),
             enum_tree: HashMap::new(),
             stk_counter: 0,
             current_span: err::Span::unknown(),
@@ -135,6 +136,9 @@ impl IR {
                 node::Group1Node::StructDefine(info) => {
                     self.struct_tree.add(info);
                 }
+                node::Group1Node::UnionDefine(info) => {
+                    self.union_tree.add(info);
+                }
                 node::Group1Node::EnumDefine(info) => {
                     self.enum_tree.insert(info.name.clone(), info.clone());
                 }
@@ -164,6 +168,13 @@ impl IR {
                     // 通常の関数としてIRへ展開する
                     let _ = self.expand_struct_methods(info)?;
                 }
+                node::Group1Node::UnionDefine(info) => {
+                    // 共用体の情報を登録
+                    self.union_tree.add(info);
+                    // 共用体の中に定義されているメゾットを、
+                    // 通常の関数としてIRへ展開する
+                    let _ = self.expand_union_methods(info)?;
+                }
                 node::Group1Node::EnumDefine(info) => {
                     // 列挙型の情報を登録
                     self.enum_tree.insert(info.name.clone(), info.clone());
@@ -190,17 +201,39 @@ impl IR {
         &mut self,
         struct_def: &node::StructDefine,
     ) -> Result<(), err::ErrKind> {
+        self.expand_methods("構造体", &struct_def.name, &struct_def.methods)
+    }
+
+    /// 共用体の中に定義されているメゾット(`UnionDefine::methods`)を、
+    /// 通常のトップレベルの関数として展開してIRへ変換する
+    /// (処理の流れは`expand_struct_methods`と同じ)
+    fn expand_union_methods(
+        &mut self,
+        union_def: &node::UnionDefine,
+    ) -> Result<(), err::ErrKind> {
+        self.expand_methods("共用体", &union_def.name, &union_def.methods)
+    }
+
+    /// `expand_struct_methods`/`expand_union_methods`の共通処理
+    /// - `kind`: エラーメッセージ用の、型の種類の名前
+    /// - `owner`: メゾットが属する型の名前(モジュール名になる)
+    fn expand_methods(
+        &mut self,
+        kind: &str,
+        owner: &str,
+        methods: &[node::Group1Node],
+    ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
-        for method in &struct_def.methods {
+        for method in methods {
             let node::Group1Node::FuncDefine(method_info) = method else {
                 panic!(
-                    "構造体`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
-                    struct_def.name, method
+                    "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
+                    kind, owner, method
                 );
             };
 
             let mut method_info = self.resolve_self_ty(&method_info);
-            method_info.module = Some(struct_def.name.clone());
+            method_info.module = Some(owner.to_string());
 
             // 関数の情報を登録
             self.entry_fn_info(&method_info);
@@ -434,13 +467,37 @@ impl IR {
             }
             // 構造体の初期化: `Name { field: value, .. }`
             node::Expr::InitStruct {
-                name, mut fields, ..
+                is_self,
+                name,
+                mut fields,
+            } => {
+                // パーサーは`Name { .. }`が構造体か共用体かを区別できないので、
+                // 共用体の名前だった場合はここで共用体の初期化として扱う
+                let is_union = self.union_tree.contains_key(&name)
+                    || (is_self
+                        && self.this_is_self
+                        && self
+                            .var_tree
+                            .get_ty_name(&name)
+                            .map_or(false, |n| self.union_tree.contains_key(&n)));
+                if is_union {
+                    // `src/ir/builder/expr_node.rs`
+                    let result = self.init_union_node(is_self, &name, &mut fields);
+                    self.unwrap_or_report(result)
+                } else {
+                    // `src/ir/builder/expr_node.rs`
+                    self.init_struct_node(&name, &mut fields).unwrap()
+                }
+            }
+            // 共用体の初期化: `Name { field: value }`
+            node::Expr::InitUnion {
+                is_self,
+                name,
+                mut fields,
             } => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_struct_node(&name, &mut fields).unwrap()
-            }
-            node::Expr::InitUnion { is_self, name, fields } => {
-                panic!("あとで作成");
+                let result = self.init_union_node(is_self, &name, &mut fields);
+                self.unwrap_or_report(result)
             }
             // ここでは対応する「元の変数名」が分からない文脈
             // (関数の引数や構造体フィールドの初期化式など)から
@@ -806,10 +863,10 @@ mod mem_var_tests {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
         let mut parser = parse::Parser::new();
-        let nodes = parser.parser(lexer.gen_tkns.clone()).unwrap().clone();
+        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
-        ir.test_only_get_func_body("main")
+        ir.test_only_get_func_body("main").to_vec()
     }
 
     #[test]
@@ -968,10 +1025,10 @@ mod match_expr_ir_tests {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
         let mut parser = parse::Parser::new();
-        let nodes = parser.parser(lexer.gen_tkns.clone()).unwrap().clone();
+        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
-        ir.test_only_get_func_body("main")
+        ir.test_only_get_func_body("main").to_vec()
     }
 
     #[test]
@@ -1034,7 +1091,7 @@ mod match_expr_ir_tests {
 
 #[cfg(test)]
 mod struct_method_expand_tests {
-    use crate::compiler::node::StructDefine;
+    use crate::compiler::node::{Field, StructDefine};
 
     use super::*;
 
@@ -1074,13 +1131,13 @@ mod struct_method_expand_tests {
             vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("Point".to_string()),
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             }],
             node::TyNode::Ty("int".to_string()),
             vec![
                 node::StmtNode::Return(node::Expr::Number("1".to_string()))
                     .wrap()
-                    .gen_group_info(&0),
+                    .gen_group_info(0),
             ],
         );
 
@@ -1128,7 +1185,7 @@ mod struct_method_expand_tests {
             vec![
                 node::StmtNode::Return(node::Expr::Number("42".to_string()))
                     .wrap()
-                    .gen_group_info(&0),
+                    .gen_group_info(0),
             ],
         );
 
@@ -1148,7 +1205,7 @@ mod struct_method_expand_tests {
                     })),
                 })
                 .wrap()
-                .gen_group_info(&0),
+                .gen_group_info(0),
             ],
             module: None,
         };
@@ -1174,6 +1231,7 @@ mod struct_method_expand_tests {
 #[cfg(test)]
 mod method_call_via_member_tests {
     use super::*;
+    use crate::compiler::node::Field;
     use std::collections::HashMap;
 
     fn make_ini_struct_node(name: &String, fields: HashMap<String, Box<node::Expr>>) -> node::Expr {
@@ -1196,13 +1254,13 @@ mod method_call_via_member_tests {
             params: vec![node::ArgsNode {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("int".to_string()),
-                is_mut: false,
+                var_attr: parse::VarMutAttr::Invar,
             }],
             ret_ty: node::TyNode::Ty("int".to_string()),
             body: vec![
                 node::StmtNode::Return(node::Expr::Number("7".to_string()))
                     .wrap()
-                    .gen_group_info(&0),
+                    .gen_group_info(0),
             ],
             module: None,
         };
@@ -1223,11 +1281,11 @@ mod method_call_via_member_tests {
             &"p".to_string(),
             make_ini_struct_node(&"Point".to_string(), fields),
             &node::TyNode::Ty("Point".to_string()),
-            &false,
+            parse::VarMutAttr::Invar,
         )
         .wrap()
         .wrap_group2()
-        .gen_group_info(&0);
+        .gen_group_info(0);
 
         let call_method = node::StmtNode::Return(node::Expr::Member {
             scope: vec!["p".to_string()],
@@ -1238,7 +1296,7 @@ mod method_call_via_member_tests {
             })),
         })
         .wrap()
-        .gen_group_info(&0);
+        .gen_group_info(0);
 
         let main_fn = node::FuncDefine {
             public: true,

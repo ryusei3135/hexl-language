@@ -38,6 +38,8 @@ pub struct IR {
     define_meta_data: Vec<def_tree::FnDefMetaData>,
     // 定義済みの構造体の情報
     pub struct_tree: def_tree::StructTree,
+    // 定義済みの共用体の情報
+    pub union_tree: def_tree::UnionTree,
     // 定義済みの列挙型の情報
     pub enum_tree: HashMap<String, node::EnumDefine>,
     stk_counter: usize,

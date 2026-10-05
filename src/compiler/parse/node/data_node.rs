@@ -3,7 +3,7 @@
 use super::*;
 
 
-pub(in crate::compiler::parse) 
+pub(in crate::compiler)
 trait Field {
     /// 所有権で渡す
     fn new(name: String, ty: TyNode) -> Self;
@@ -59,11 +59,25 @@ impl StructDefine {
 }
 
 // ===== 共用体 =====
- 
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum UnionMode {
+    Normal,
+    Unsafe,
+}
+
+/// 共用体の中身(フィールドかメゾット)
+#[derive(Clone, Debug, PartialEq)]
+pub enum UnionFieldKind {
+    Field(UnionField),
+    Method(Group1Node),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnionField {
     pub name: String,
     pub ty: Option<TyNode>,
+    pub mode: UnionMode,
 }
 
 impl Field for UnionField {
@@ -71,23 +85,46 @@ impl Field for UnionField {
         Self {
             name,
             ty: Some(ty),
+            mode: UnionMode::Normal,
         }
     }
-    
+
     fn make_field(name: &str, ty: &str) -> Self {
         Self {
             name: name.to_string(),
-            ty: TyNode::Ty(ty.to_string()),
+            ty: Some(TyNode::Ty(ty.to_string())),
+            mode: UnionMode::Normal,
         }
     }
 }
 
 impl UnionField {
+    /// `A::Name`のように`Normal`かつ型を指定しないときに使う
+    /// ```
+    /// union A {
+    ///     Name
+    ///     Name1(int)
+    /// }
+    /// ```
     pub fn typeless_new(name: String) -> Self {
         Self {
             name,
             ty: None,
+            mode: UnionMode::Normal,
         }
+    }
+
+    /// `Unsafe`モードのフィールドを作る
+    pub fn unsafe_new(name: String, ty: TyNode) -> Self {
+        Self {
+            name,
+            ty: Some(ty),
+            mode: UnionMode::Unsafe,
+        }
+    }
+
+    pub fn wrap_union_field_kind(self) -> UnionFieldKind {
+        UnionFieldKind::Field(self)
     }
 }
 
@@ -111,6 +148,35 @@ impl UnionDefine {
             fields,
             methods,
         })
+    }
+
+    /// `UnionFieldKind`の一覧から、フィールドとメゾットに振り分けて作る
+    pub fn from_kinds(name: String, kinds: Vec<UnionFieldKind>) -> Group1Node {
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        for kind in kinds {
+            match kind {
+                UnionFieldKind::Field(f) => fields.push(f),
+                UnionFieldKind::Method(m) => methods.push(m),
+            }
+        }
+        Self::new(name, fields, methods)
+    }
+
+    /// タグ付き共用体(`Normal`)かどうか。
+    /// `Unsafe`のフィールドが1つでもあればタグを持たない共用体として扱う
+    pub fn is_tagged(&self) -> bool {
+        !self.fields.iter().any(|f| f.mode == UnionMode::Unsafe)
+    }
+
+    /// 名前からフィールドを探す
+    pub fn find_field(&self, name: &str) -> Option<&UnionField> {
+        self.fields.iter().find(|f| f.name == name)
+    }
+
+    /// フィールドのインデックス(定義順)をタグとして返す
+    pub fn tag_of(&self, name: &str) -> Option<usize> {
+        self.fields.iter().position(|f| f.name == name)
     }
 }
 

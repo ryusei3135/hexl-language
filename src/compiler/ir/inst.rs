@@ -199,6 +199,22 @@ pub enum Inst {
         mem: Vec<MemoryInst>,
         is_self: bool,
     },
+    /// 共用体の初期化
+    /// - `tagged`が`true`のときは、先頭に`tag`(`DD`)を置き、その後ろに
+    ///   最も大きいメンバーのサイズ分の領域(ペイロード)を確保する
+    /// - `tagged`が`false`(`unsafe`)のときはタグを置かず、ペイロードのみ
+    Union {
+        name: String,
+        /// 選ばれたメンバーの、定義順のインデックス
+        tag: usize,
+        /// 選ばれたメンバーの値(型なしメンバーなら`None`)
+        /// `MemoryInst::Member`が入る
+        value: Option<MemoryInst>,
+        tagged: bool,
+        /// 共用体全体のサイズ(`types::Size::Union`)
+        size: types::Size,
+        is_self: bool,
+    },
     MemoryValue(MemoryInst),
 }
 
@@ -248,6 +264,9 @@ impl Inst {
             }
             types::Size::Struct(_) => {
                 panic!("gen_num: 構造体型に数値を直接代入することはできません");
+            }
+            types::Size::Union { .. } => {
+                panic!("gen_num: 共用体型に数値を直接代入することはできません");
             }
             types::Size::Array { size, .. } => {
                 Self::gen_num(&value, &size, dst);

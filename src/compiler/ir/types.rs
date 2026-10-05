@@ -10,6 +10,13 @@ pub enum Size {
     DD,
     DQ,
     Struct(Vec<Box<(String, Size)>>),
+    /// 共用体
+    /// - `fields`: メンバー名と型(型なしメンバーは`Void`)。定義順がタグの値
+    /// - `tagged`: 先頭にタグ(`UNION_TAG_BYTES`バイト)を持つか
+    Union {
+        fields: Vec<Box<(String, Size)>>,
+        tagged: bool,
+    },
     Pointer {
         ty: Box<Size>,
         is_const: bool,
@@ -88,7 +95,30 @@ impl TryFrom<TyNode> for Size {
     }
 }
 
+/// 共用体のタグのバイト数(列挙型と同じ`DD`)
+pub const UNION_TAG_BYTES: usize = 4;
+
 impl Size {
+    /// 共用体のペイロード(タグを除いた領域)のバイト数。
+    /// 型なしメンバー(`Void`)は0バイトとして扱う
+    pub(crate)
+    fn payload_bytes(&self) -> usize {
+        match self {
+            Self::Void => 0,
+            t => t.to_bytes(),
+        }
+    }
+
+    /// 共用体のタグを除いた、メンバーの値を置く位置のオフセット
+    pub(crate)
+    fn union_payload_offset(&self) -> usize {
+        match self {
+            Self::Union { tagged: true, .. } => UNION_TAG_BYTES,
+            Self::Union { tagged: false, .. } => 0,
+            t => panic!("union_payload_offset: 共用体ではありません: {:?}", t),
+        }
+    }
+
     /// 構造体の型を作成する
     pub(in crate::compiler::ir) 
     fn emit_struct_ty_node(
@@ -166,6 +196,18 @@ impl Size {
                 }
                 size_counter
             }
+            Self::Union { fields, tagged } => {
+                let payload = fields
+                    .iter()
+                    .map(|mem| mem.1.payload_bytes())
+                    .max()
+                    .unwrap_or(0);
+                if *tagged {
+                    UNION_TAG_BYTES + payload
+                } else {
+                    payload
+                }
+            }
             Self::Void => panic!(),
         }
     }
@@ -211,7 +253,34 @@ impl IR {
         &self,
         ty: &node::TyNode,
     ) -> Result<types::Size, err::ErrKind> {
+        // 共用体は`struct_tree`では解決できないので先に調べる
+        if let node::TyNode::Ty(name) = ty {
+            if self.union_tree.contains_key(name) {
+                return Ok(self.size_of(ty));
+            }
+        }
         types::Size::try_from_or_emit_struct(&mut |name| self.struct_tree.get_struct_size(name), ty)
+    }
+
+    /// 共用体の定義から`types::Size::Union`を作る
+    pub(in crate::compiler::ir) 
+    fn size_of_union(&self, union_def: &node::UnionDefine) -> types::Size {
+        let fields = union_def
+            .fields
+            .iter()
+            .map(|field| {
+                let size = match &field.ty {
+                    Some(ty) => self.size_of(ty),
+                    // 型なしメンバー(`A::Name`)は値を持たない
+                    None => types::Size::Void,
+                };
+                Box::new((field.name.clone(), size))
+            })
+            .collect();
+        types::Size::Union {
+            fields,
+            tagged: union_def.is_tagged(),
+        }
     }
 
     /// 型からサイズを求める
@@ -239,6 +308,10 @@ impl IR {
                         .map(|field| Box::new((field.name.clone(), self.size_of(&field.ty))))
                         .collect();
                     return types::Size::Struct(fields);
+                }
+
+                if let Some(union_def) = self.union_tree.get(name) {
+                    return self.size_of_union(&union_def.clone());
                 }
 
                 panic!("未定義の型です: {}", name);

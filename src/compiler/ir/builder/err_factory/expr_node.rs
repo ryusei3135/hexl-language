@@ -33,3 +33,27 @@ fn this_struct_is_undefined(
         None
     ))
 }
+
+/// 共用体が存在しなかった
+pub(in crate::compiler::ir::builder) 
+fn this_union_is_undefined(
+    found: &str,
+) -> Result<inst::Inst, err::ErrKind> {
+    Err(crate::GenUndefErrResult!(
+        UndefUnion,
+        found.to_owned(),
+        None
+    ))
+}
+
+/// 共用体に、そのメンバーが存在しなかった
+pub(in crate::compiler::ir::builder) 
+fn this_union_field_is_undefined(
+    found: &str,
+) -> Result<inst::Inst, err::ErrKind> {
+    Err(crate::GenUndefErrResult!(
+        UndefUnionField,
+        found.to_owned(),
+        None
+    ))
+}

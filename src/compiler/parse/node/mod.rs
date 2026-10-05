@@ -588,3 +588,9 @@ pub enum Group1Node {
     Include(ModPath),
     Line(String),
 }
+
+impl Group1Node {
+    pub fn wrap_union_field_kind(self) -> UnionFieldKind {
+        UnionFieldKind::Method(self)
+    }
+}

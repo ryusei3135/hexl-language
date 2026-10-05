@@ -342,6 +342,55 @@ impl StructTree {
     }
 }
 
+/// 共用体の定義を名前から引くための木
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnionTree {
+    tree: HashMap<String, node::UnionDefine>,
+}
+
+impl UnionTree {
+    pub(in crate::compiler::ir) 
+    fn new() -> Self {
+        Self {
+            tree: HashMap::new(),
+        }
+    }
+
+    pub(in crate::compiler::ir) 
+    fn add(&mut self, info: &node::UnionDefine) {
+        self.tree.insert(info.name.to_string(), info.clone());
+    }
+
+    pub(in crate::compiler::ir) 
+    fn get(&self, name: &str) -> Option<&node::UnionDefine> {
+        self.tree.get(name)
+    }
+
+    pub(in crate::compiler::ir) 
+    fn contains_key(&self, name: &str) -> bool {
+        self.tree.contains_key(name)
+    }
+
+    /// メンバーの定義順のインデックス(タグの値)を取得する
+    pub(in crate::compiler::ir) 
+    fn get_tag(&self, name: &str, field_name: &str) -> Option<usize> {
+        self.tree.get(name)?.tag_of(field_name)
+    }
+
+    pub(in crate::compiler::ir) 
+    fn get_union(&self, name: &str) -> Result<node::UnionDefine, err::ErrKind> {
+        if let Some(target) = self.tree.get(name) {
+            Ok(target.clone())
+        } else {
+            Err(crate::GenUndefErrResult!(
+                UndefUnion,
+                name.to_string(),
+                None
+            ))
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnDefInfo {
     pub name: String,

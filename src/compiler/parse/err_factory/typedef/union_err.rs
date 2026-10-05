@@ -86,10 +86,10 @@ impl Parser {
     ///     - 所有権を渡す
     #[inline(always)]
     pub(in crate::compiler::parse)
-    fn union_option_unregister(
+    fn union_option_unregister<T>(
         &self,
         option_name: String,
-    ) -> Result<(), err::ErrKind> {
+    ) -> Result<T, err::ErrKind> {
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::OptionIsNotFound { 
@@ -101,9 +101,9 @@ impl Parser {
 
     #[inline(always)]
     pub(in crate::compiler::parse)
-    fn union_option_next_name_not_found(
+    fn union_option_next_name_not_found<T>(
         &self,
-    ) -> Result<(), err::ErrKind> {
+    ) -> Result<T, err::ErrKind> {
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectedTkn {

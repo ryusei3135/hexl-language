@@ -363,6 +363,10 @@ impl IR {
         variant: &str,
         expect_byte: &types::Size,
     ) -> Result<Box<inst::Inst>, err::ErrKind> {
+        // `Union::Mem`は、型なしメンバーを選んだ共用体の値になる
+        if self.union_tree.contains_key(name) {
+            return Ok(Box::new(self.typeless_union_node(name, variant)?));
+        }
         let enum_def = self
             .enum_tree
             .get(name)
@@ -422,6 +426,96 @@ impl IR {
             name: name.to_string(),
             mem: mem_insts,
             is_self: { self.this_is_self && self.var_tree.is_self_ty(&name) },
+        })
+    }
+
+    /// `Union::Mem`(型なしメンバー)から共用体の値を作る
+    fn typeless_union_node(
+        &mut self,
+        union_name: &str,
+        field_name: &str,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        let union_def = self.union_tree.get_union(union_name)?;
+        let tag = union_def
+            .tag_of(field_name)
+            .ok_or_else(|| expr_node::this_union_field_is_undefined(field_name).unwrap_err())?;
+        if union_def.fields[tag].ty.is_some() {
+            panic!(
+                "共用体 `{}` のメンバー `{}` は値が必要です(`{} {{ {}: 値 }}`)",
+                union_name, field_name, union_name, field_name
+            );
+        }
+
+        // 共用体全体のスタックを確保する
+        self.stack_counter(&node::TyNode::Ty(union_name.to_string()));
+        Ok(inst::Inst::Union {
+            name: union_name.to_string(),
+            tag,
+            value: None,
+            tagged: union_def.is_tagged(),
+            size: self.size_of_union(&union_def),
+            is_self: false,
+        })
+    }
+
+    /// 共用体の初期化: `Name { field: value }`
+    /// 共用体は同時に1つのメンバーしか持てないので、指定できるのは1つだけ
+    pub(super)
+    fn init_union_node(
+        &mut self,
+        is_self: bool,
+        name: &str,
+        fields: &mut HashMap<String, Box<node::Expr>>,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        // メゾットの処理中、初期化する共用体が`self`の場合は
+        // 変数の型から実際の共用体の名前を求める
+        let resolve_self = is_self && self.this_is_self;
+        let union_name: String = if resolve_self {
+            self.var_tree.get_ty_name(name)?.to_owned()
+        } else {
+            name.to_string()
+        };
+        let union_def = self.union_tree.get_union(&union_name)?;
+
+        if fields.len() != 1 {
+            panic!(
+                "共用体 `{}` の初期化では、メンバーをちょうど1つ指定してください({}個指定されています)",
+                union_name,
+                fields.len()
+            );
+        }
+        let (field_name, field_expr) = fields.drain().next().unwrap();
+        let tag = union_def
+            .tag_of(&field_name)
+            .ok_or_else(|| expr_node::this_union_field_is_undefined(&field_name).unwrap_err())?;
+
+        // 共用体全体のスタックを一度だけ確保する
+        self.stack_counter(&node::TyNode::Ty(union_name.clone()));
+
+        let field_ty = union_def.fields[tag].ty.clone();
+        let value = match field_ty {
+            Some(ty) => {
+                let field_size = self.size_of(&ty);
+                let value_idx = self.gen_expr_ir(*field_expr, &field_size);
+                Some(inst::MemoryInst::Member {
+                    parent: field_name,
+                    value_idx,
+                    size: field_size,
+                })
+            }
+            None => panic!(
+                "共用体 `{}` のメンバー `{}` は型がないので値を渡せません",
+                union_name, field_name
+            ),
+        };
+
+        Ok(inst::Inst::Union {
+            name: union_name,
+            tag,
+            value,
+            tagged: union_def.is_tagged(),
+            size: self.size_of_union(&union_def),
+            is_self: resolve_self && self.var_tree.is_self_ty(name),
         })
     }
 }
