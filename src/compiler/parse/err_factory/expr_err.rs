@@ -170,4 +170,33 @@ impl Parser {
             }
         )
     }
+
+    // ===== バリアントのパターン束縛(`expr/variant_bind.rs`) =====
+
+    /// `M(val) := value`が`cond`の条件式以外で使われた
+    pub(in crate::compiler::parse)
+    fn variant_bind_outside_cond<T>(&self) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::ExpectedKind {
+                expected: "`cond` condition (`Variant(name) := expr` can only be used in a cond condition)",
+                found: self.current_tkn().clone(),
+            }
+        )
+    }
+
+    /// `M(val) := value`の途中に、期待したトークンが無かった
+    pub(in crate::compiler::parse)
+    fn variant_bind_unexpected<T>(
+        &self,
+        expected: &'static str,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::ExpectedKind { expected, found }
+        )
+    }
 }

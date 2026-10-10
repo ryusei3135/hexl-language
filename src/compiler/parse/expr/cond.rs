@@ -13,6 +13,10 @@ impl Parser {
         let cond_expr = if self.peek_tkn().unwrap() == lex::Tkn::LBrace {
             self.next_tkn(&[])?;
             None
+        } else if self.is_variant_bind_ahead() {
+            // バリアントのパターン束縛: `cond M(val) := a { .. } | { .. }`
+            // 真偽値として扱われるので、下の`is_bool_expr`でif/elseになる
+            Some(Box::new(self.expr_variant_bind()?))
         } else {
             // 構造体を初期化する式を代入することはできないので、`false`
             Some(Box::new(self.expr_cmp(STRUCT_NOT_INIT)?))
@@ -45,7 +49,18 @@ impl Parser {
                 return self.build_else_arm_node(&cond_expr, arms);
             }
             // if
-            let pattern = self.expr_cmp(STRUCT_NOT_INIT)?;
+            let pattern = if self.is_variant_bind_ahead() {
+                // 対象の式がない`cond { .. }`のアームの条件式なら、
+                // パターン束縛を使える: `M(val) := a => { .. }`
+                // (`cond a { .. }`のアームは`a`との値の比較なので使えない)
+                if cond_expr.is_some() {
+                    self.next_tkn(&[])?;
+                    return crate::err_at!(self.variant_bind_outside_cond());
+                }
+                self.expr_variant_bind()?
+            } else {
+                self.expr_cmp(STRUCT_NOT_INIT)?
+            };
 
             // => 構文エラーを返す
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
@@ -113,6 +128,7 @@ impl Parser {
     }
 
     /// 与えられた式が真偽値を返す(比較)式かどうか
+    /// (バリアントのパターン束縛`M(val) := a`も、`a`が`M`かどうかの真偽値)
     ///
     /// `match` に渡された対象の式がこれに該当する場合、
     /// 「真偽値を与える」形式(単純なif/else)として扱う
@@ -123,6 +139,7 @@ impl Parser {
                 | node::Expr::GreaterThen(_)
                 | node::Expr::Equal(_)
                 | node::Expr::NotEq(_)
+                | node::Expr::VariantBind(_)
         )
     }
 

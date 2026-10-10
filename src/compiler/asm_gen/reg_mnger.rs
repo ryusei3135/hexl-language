@@ -74,10 +74,14 @@ impl UsedRegManager {
     /// ## 引数
     /// - unavailable: 割り当てに使えないレジスタ。この関数自身の引数の
     ///   レジスタ(`%rdi`など。値がまだ入っている)を渡す
+    /// - stack_vars: レジスタに置かず、スタックに置く変数の名前
+    ///   ([`UsedRegManager::stack_var_names`])。変数の使用回数の表に
+    ///   出てきても割り当てずに飛ばし、次の変数にレジスタを割り当てる
     pub fn allocation_register(
         &mut self,
         var_counter: &counter_mnger::VarCounter,
         unavailable: &[usize],
+        stack_vars: &[String],
     ) {
         self.allocated.clear();
         self.pending.clear();
@@ -89,12 +93,42 @@ impl UsedRegManager {
             .filter(|reg| !RESERVED_REGS.contains(reg) && !unavailable.contains(reg));
 
         for (name, _count) in var_counter.vars_by_priority() {
+            // スタックに置く変数(`s: Name = Name { .. }`など)は、
+            // レジスタを持たない(`VarIndexInfo::new_stack`)ので割り当てない。
+            // 割り当ててしまうと、変数が定義されても`bind_var`が呼ばれず、
+            // 取り置き(`pending`)のレジスタが解放されないまま無駄になる
+            if stack_vars.iter().any(|stack_var| stack_var == name) {
+                continue;
+            }
             let Some(reg) = candidates.next() else {
                 break;
             };
             self.allocated.insert(name.to_string(), reg);
             self.pending.push(reg);
         }
+    }
+
+    /// 関数の本体のIRから、レジスタに置かずスタックに置く変数の名前を集める
+    ///
+    /// ポインタでない構造体の変数(`s: Name = Name { .. }`)は、`%rbp`からの
+    /// オフセットで保存する(`call_func/mem_ir.rs`の`mov_value_ir`)。
+    /// 同じ名前が別のスコープで構造体以外として定義されていても、
+    /// 名前ごとに割り当てるので、1つでも構造体の定義があれば対象にする
+    pub fn stack_var_names(body: &[inst::Inst]) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        for node in body {
+            if let inst::Inst::Mov {
+                name: Some(name),
+                size: Size::Struct(..),
+                ..
+            } = node
+            {
+                if !names.contains(name) {
+                    names.push(name.clone());
+                }
+            }
+        }
+        names
     }
 
     /// 変数`name`に割り当てたレジスタ(割り当てていなければ`None`)
@@ -214,5 +248,75 @@ impl UsedRegManager {
         for reg in regs {
             self.mark_used(*reg);
         }
+    }
+}
+
+#[cfg(test)]
+mod stack_var_tests {
+    use super::*;
+
+    fn manager() -> UsedRegManager {
+        // callee_saved: rbx(3), r12(12) / caller_saved: rcx(1)
+        UsedRegManager::new(Rc::new(vec![3, 12]), Rc::new(vec![1]))
+    }
+
+    #[test]
+    fn stack_var_is_skipped_and_next_var_gets_the_register() {
+        let mut counter = counter_mnger::VarCounter::new();
+        // `s`(構造体)が最も多く使われ、次に`a`、`b`
+        for _ in 0..3 {
+            counter.use_var("s");
+        }
+        counter.use_var("a");
+        counter.use_var("a");
+        counter.use_var("b");
+
+        let mut regs = manager();
+        regs.allocation_register(&counter, &[], &["s".to_string()]);
+
+        // `s`には割り当てず、取り置きもしない
+        assert_eq!(regs.allocated_reg("s"), None);
+        // 次の変数に、先頭のレジスタから順に割り当てる
+        assert_eq!(regs.allocated_reg("a"), Some(3));
+        assert_eq!(regs.allocated_reg("b"), Some(12));
+        assert!(regs.is_reserved(3) && regs.is_reserved(12));
+    }
+
+    #[test]
+    fn without_stack_vars_the_most_used_var_gets_the_first_register() {
+        let mut counter = counter_mnger::VarCounter::new();
+        counter.use_var("s");
+        counter.use_var("s");
+        counter.use_var("a");
+
+        let mut regs = manager();
+        regs.allocation_register(&counter, &[], &[]);
+        assert_eq!(regs.allocated_reg("s"), Some(3));
+        assert_eq!(regs.allocated_reg("a"), Some(12));
+    }
+
+    #[test]
+    fn stack_var_names_collects_struct_movs_only() {
+        let body = vec![
+            inst::Inst::Mov {
+                name: Some("s".to_string()),
+                size: Size::Struct(Vec::new()),
+                dst: 0,
+                src: 1,
+            },
+            inst::Inst::Mov {
+                name: Some("a".to_string()),
+                size: Size::DD,
+                dst: 2,
+                src: 3,
+            },
+            inst::Inst::Mov {
+                name: None,
+                size: Size::Struct(Vec::new()),
+                dst: 4,
+                src: 5,
+            },
+        ];
+        assert_eq!(UsedRegManager::stack_var_names(&body), vec!["s".to_string()]);
     }
 }

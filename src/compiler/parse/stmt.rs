@@ -241,6 +241,10 @@ impl Parser {
         let node = match self.current_tkn().clone() {
             lex::Tkn::CompleSyn => self.comple_syntax()?,
             lex::Tkn::Name(name) => {
+                // `M(val) := a`は`cond`の条件式の中でしか使えない
+                if self.is_variant_bind_at(self.idx) {
+                    return crate::err_at!(self.variant_bind_outside_cond());
+                }
                 node::Group2Node::Expr(self.build_scope_node(&name)?)
             }
             // ポインタ/配列にアクセスするノードの作成
@@ -317,6 +321,11 @@ impl Parser {
             lex::Tkn::LBrace => None,
             // 条件式あり
             _ => {
+                // `M(val) := a`は`cond`の条件式の中でしか使えない
+                if self.is_variant_bind_ahead() {
+                    self.next_tkn(&[])?;
+                    return crate::err_at!(self.variant_bind_outside_cond());
+                }
                 // 条件に構造体の初期化を使うことはできない
                 Some(Box::new(self.expr_cmp(false)?))
             }

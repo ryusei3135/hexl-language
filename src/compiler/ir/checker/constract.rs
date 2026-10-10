@@ -213,6 +213,9 @@ impl IR {
             node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
                 Self::walk_expr(target, must_vars);
             }
+            node::Expr::VariantBind(bind) => {
+                Self::walk_expr(&bind.value, must_vars);
+            }
             node::Expr::Add(pair)
             | node::Expr::Sub(pair)
             | node::Expr::Mul(pair)

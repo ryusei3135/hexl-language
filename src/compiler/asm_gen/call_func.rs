@@ -167,8 +167,11 @@ impl AsmEmitter {
         // 変数の使用頻度に合わせてレジスタを割り当てる(`reg_mnger.rs`)
         // この関数自身の引数のレジスタには、まだ引数の値が入っているので使わない
         let param_regs = self.asm_fmt.param_regs(fn_meta_data.1.args.len());
+        // 構造体の変数(`s: Name = Name { .. }`)はスタックに置くので、
+        // レジスタの割り当てから外し、次の変数に割り当てる
+        let stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_meta_data.1.body);
         self.used_reg
-            .allocation_register(&fn_meta_data.1.var_counter, &param_regs);
+            .allocation_register(&fn_meta_data.1.var_counter, &param_regs, &stack_vars);
         // 関数ごとにスタックの使用量をリセットする
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)

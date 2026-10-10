@@ -167,9 +167,9 @@ impl Size {
 
     /// ポインタ型を作成する
     pub(in crate::compiler::ir) 
-    fn build_ptr_ty(ty: &node::TyNode, range: Option<(usize, usize)>) -> Self {
+    fn build_ptr_ty(size: Self, range: Option<(usize, usize)>) -> Self {
         Self::Pointer {
-            ty: Box::new(ty.try_into().unwrap()),
+            ty: Box::new(size),
             is_const: false,
             range,
         }

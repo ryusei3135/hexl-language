@@ -11,6 +11,54 @@ impl AsmEmitter {
         name: Option<&str>,
         this_is_self: SelfPtrInfo,
     ) {
+        // 構造体リテラルをポインタ変数へ束縛する場合、構造体の実体は
+        // スタックに置き、変数自体はその先頭アドレスを保持するレジスタに置く
+        if let types::Size::Pointer { ty, .. } = size {
+            if matches!(ty.as_ref(), types::Size::Struct(_))
+                && matches!(
+                    self.inst_at(src),
+                    inst::Inst::Struct {
+                        is_self: false,
+                        ..
+                    }
+                )
+            {
+                let offset = self
+                    .struct_mem(None, ty, src, dst)
+                    .expect("構造体リテラルの初期化に失敗しました");
+                let reg = match name
+                    .and_then(|n| self.used_reg.allocated_reg(n))
+                    .filter(|r| !self.used_reg.is_used(*r))
+                {
+                    Some(reg) => reg,
+                    None => self.alloc_reg(),
+                };
+                self.reg_idx = reg;
+                match name {
+                    Some(var_name) => self.used_reg.bind_var(var_name, reg),
+                    None => {
+                        self.used_reg.mark_used(reg);
+                    }
+                }
+
+                let text = self.tmpl_line(
+                    "address",
+                    &self.reg64(reg),
+                    &self.rbp_ref(offset),
+                    &types::Size::DQ,
+                    false,
+                );
+                self.asm_text.push_str(&text);
+                if let Some(var_name) = name {
+                    self.insert_var_info(
+                        var_name,
+                        asm_emitter::VarIndexInfo::new(reg, size, dst),
+                    );
+                }
+                return;
+            }
+        }
+
         // 経由の間接参照になってしまっていた。
         if let types::Size::Struct(_) = size {
             // コンストラクタ呼び出しで初期化する構造体は、暗黙の`self`
@@ -30,7 +78,7 @@ impl AsmEmitter {
             // 積まれる。戻り値のオペランド文字列自体は構造体には
             // 使えないので捨てる
             let _ = self.extract_operand_text(src, this_is_self);
-            if self.struct_mem(name, size, src, dst).is_none() {
+            if self.struct_mem(name, size, src, dst).is_some() {
                 return ();
             }
 
@@ -218,7 +266,7 @@ impl AsmEmitter {
         size: &types::Size,
         src: usize,
         dst: usize,
-    ) -> Option<()> {
+    ) -> Option<usize> {
         if let inst::Inst::Struct { mem, is_self, .. } = self.inst_at(src) {
             // `emit_struct_ini_asm`はメンバーを書き込みながら
             // `self.stk_use_counter`を進めていくため、呼び出し後
@@ -245,8 +293,8 @@ impl AsmEmitter {
                     asm_emitter::VarIndexInfo::new_stack(struct_stk_offset, &size, dst),
                 );
             }
-            return None;
+            return Some(struct_stk_offset);
         }
-        Some(())
+        None
     }
 }

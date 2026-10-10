@@ -182,6 +182,61 @@ impl DefineVar {
     }
 }
 
+/// `cond`の条件式の中だけで使える、バリアントの
+/// パターン束縛(Rustの`if let`に近い)
+///
+/// - `M(val) := value`      : `val`の型はバリアント`M`の中身の型から推論する(`ty`は`None`)
+/// - `M(val): int = value`  : `val`の型を明示する(`ty`は`Some(int)`)
+/// - `M(val) mut:= value`   : `val`を可変にする(`var_attr`は`Var`)
+///
+/// `value`が`M`であるときだけ真になり、その中身が`val`に束縛される
+/// (`val`は真のときの本体の中でだけ使える)
+#[derive(Clone, Debug, PartialEq)]
+pub struct VariantBind {
+    /// `A::M(val)`の`A`(`M(val)`のように省略されたときは`None`)
+    pub variant_ty: Option<String>,
+    /// `M(val)`の`M`(バリアントのメンバーの名前)
+    pub variant: String,
+    /// `M(val)`の`val`(束縛する変数の名前)
+    pub bind: String,
+    /// `None`なら`:=`(型推論)、`Some`なら`: ty =`(型を明示)
+    pub ty: Option<TyNode>,
+    /// 判定する対象の式
+    pub value: Box<Expr>,
+    /// `val`が不変(省略)か、`mut`/`const`か
+    /// (`M(val) mut:= value` / `M(val) mut: ty = value`)
+    pub var_attr: VarMutAttr,
+}
+
+impl VariantBind {
+    pub fn new(variant: &str, bind: &str, ty: Option<TyNode>, value: Expr) -> Self {
+        Self {
+            variant_ty: None,
+            variant: variant.to_string(),
+            bind: bind.to_string(),
+            ty,
+            value: Box::new(value),
+            var_attr: VarMutAttr::Invar,
+        }
+    }
+
+    /// `val`の可変/不変を設定する
+    pub fn with_var_attr(mut self, var_attr: VarMutAttr) -> Self {
+        self.var_attr = var_attr;
+        self
+    }
+
+    /// `A::M(val)`の`A`を設定する
+    pub fn with_variant_ty(mut self, variant_ty: Option<String>) -> Self {
+        self.variant_ty = variant_ty;
+        self
+    }
+
+    pub fn wrap(self) -> Expr {
+        Expr::VariantBind(self)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct AssignVar {
     pub name: String,
@@ -264,6 +319,9 @@ pub enum Expr {
     },
 
     DefVar(DefineVar),
+    /// `cond`の条件式の中だけで使える: `M(val) := value` / `M(val): ty = value`
+    /// (`expr/variant_bind.rs`)
+    VariantBind(VariantBind),
     Scope {
         scope: Vec<String>,
         target: Box<Expr>,

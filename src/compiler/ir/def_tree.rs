@@ -376,6 +376,23 @@ impl VariantTree {
         self.tree.contains_key(name)
     }
 
+    /// 名前から、バリアント型の定義を探す。
+    /// ジェネリクスなバリアント型(`Option`)は、型引数ごとに`Option$int`のような
+    /// 名前で登録されているので、完全一致が無ければ`名前$`で始まるものを探す
+    pub(in crate::compiler::ir) 
+    fn find_by_base_name(&self, name: &str) -> Option<&node::VariantDefine> {
+        self.tree.get(name).or_else(|| {
+            self.tree
+                .iter()
+                .filter(|(key, _)| {
+                    key.strip_prefix(name)
+                        .is_some_and(|suffix| suffix.starts_with('$'))
+                })
+                .map(|(_, def)| def)
+                .next()
+        })
+    }
+
     /// メンバーの定義順のインデックス(タグの値)を取得する
     pub(in crate::compiler::ir) 
     fn get_tag(&self, name: &str, field_name: &str) -> Option<usize> {

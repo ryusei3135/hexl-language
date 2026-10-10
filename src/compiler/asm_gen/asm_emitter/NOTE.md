@@ -43,3 +43,8 @@
     - 割り当てたレジスタは、変数が定義される(`bind_var`)まで取り置かれ、`alloc_reg`は使わない(`is_reserved`)
     - スコープ(反復処理や関数内のブロック)が終わる(`EndScope`)と、その中で使用中になったレジスタは全て解放され(`end_scope`)、他の変数や式が使える。外側の変数のレジスタは残す(`end_scope_asm`)。関数が終わると割り当て自体を破棄する(`clear`)
     - 使った`callee_saved`のレジスタは、関数の入口で`push`、`ret`の直前で`pop`する。使うレジスタは本体を生成し終わるまで分からないので、目印(`{callee_save}`/`{callee_restore}`)を置いて`build_fn_process`の最後に置き換える。`_start`は戻り先が無いので対象外
+- `2026-10-11`スタックに置く変数(ポインタでない構造体の変数`s: Name = Name {..}`)を、レジスタの割り当てから外した
+    - 以前は、この変数が`VarCounter`に出てくると`allocation_register`がレジスタを割り当てて取り置き(`pending`)にしていた。構造体の変数はレジスタを持たず`bind_var`も呼ばれないため、そのレジスタが解放されず、次の変数に使えなかった
+    - `reg_mnger.rs`の`UsedRegManager::stack_var_names`が、関数のIR(`Inst::Mov`の`size`が`Struct`で`name`がある)から名前を集め、`allocation_register`の`stack_vars`に渡す。該当する変数は飛ばし、次の変数にレジスタを割り当てる(`call_func.rs`の`build_fn_process`)
+    - 配列(`Inst::MemoryValue`)も同じくレジスタを持たないが、今回は対象外
+

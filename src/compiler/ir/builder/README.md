@@ -12,6 +12,7 @@
 | `[member].rs` | [構造体のメンバーからirなどを生成する際に必要なAPI] | - |
 | `[proc_fn_info].rs` | [関数のノードからirや関数の登録などをするAPI] | - |
 | `[scope].rs` | [例`mod::func()`などのスコープを処理するAPI] | - |
+| `[variant_bind].rs` | [`cond M(val) := value`(`Expr::VariantBind`)を`value.label == tag`と`val = value.value`に展開するAPI] | `gen_match_expr_ir`から使う |
 
 ---
 

@@ -4,6 +4,7 @@ mod member;
 mod preproc;
 mod proc_fn_info;
 mod scope;
+mod variant_bind;
 
 use super::*;
 use crate::compiler::ir::types::*;
@@ -360,6 +361,9 @@ impl IR {
     /// `Assign`ノードが来たら代入先の変数の型で確定させる
     /// (それ以外のノードでは`DD`にフォールバックする)
     fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: Option<&types::Size>) -> usize {
+        // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
+        // (`src/ir/builder/variant_bind.rs`)
+        let expr = self.scope_call_to_variant_init(expr);
         // `src/ir/builder/expr_node.rs`
         let resolved = self.resolve_expect_byte(&expr, expect_byte);
         let expect_byte = &resolved;
@@ -485,6 +489,12 @@ impl IR {
             node::Expr::Loop { pattern, body } => {
                 return self.gen_loop_expr_ir(pattern, &body);
             }
+            // `M(val) := value`は、`cond`の条件式の中でだけ使える
+            // (`gen_match_expr_ir`が展開するので、ここには来ない)
+            node::Expr::VariantBind(bind) => panic!(
+                "`{}({}) := ..`は`cond`の条件式の中でのみ使えます",
+                bind.variant, bind.bind
+            ),
             // バリアント型のメンバへのアクセス: `Name::Mem`
             // - 全メンバーが型なしの(旧列挙型相当)場合は、定義順に基いた
             //   タグ(整数値)として展開する
@@ -711,10 +721,21 @@ impl IR {
         let end_label = self.next_pattern_label();
 
         // 各アームの条件式(一致すれば、対応するアームのラベルへジャンプする)
+        // `M(val) := value`のアームは、`value.label == tag_of(M)`に展開し、
+        // `val`の定義(`val = value.value`)はアームの本体の先頭へ置くので、
+        // その情報(`binds`)を覚えておく
+        let mut binds: Vec<Option<variant_bind::VariantBindInfo>> = Vec::new();
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
             crate::push_jmp_code!(self, ExpectJmp, label);
-            let cond = build_cond(&arm.pattern);
-            self.gen_expr_ir(cond, None);
+            if let node::Expr::VariantBind(bind) = &*arm.pattern {
+                // `src/ir/builder/variant_bind.rs`
+                let result = self.variant_bind_cond(bind);
+                binds.push(Some(self.unwrap_or_report(result)));
+            } else {
+                let cond = build_cond(&arm.pattern);
+                self.gen_expr_ir(cond, None);
+                binds.push(None);
+            }
         }
 
         // どの条件にも一致しなかった場合の処理(else)
@@ -727,10 +748,15 @@ impl IR {
         crate::push_jmp_code!(self, Jmp, &end_label);
 
         // 各アームの処理内容を作成する
-        for (arm, label) in arms.iter().zip(arm_labels.iter()) {
+        for ((arm, label), bind) in arms.iter().zip(arm_labels.iter()).zip(binds.iter()) {
             // このアーム専用のラベル(条件が一致した場合の飛び先)
             crate::push_jmp_code!(self, Block, label);
             self.begin_scope();
+            // `M(val) := value`の`val`を定義する(`val = value.value`)
+            if let Some(info) = bind {
+                let result = self.variant_bind_define_var(info);
+                self.unwrap_or_report(result);
+            }
             self.gen_inst(&arm.body);
             self.end_block_scope();
             crate::push_jmp_code!(self, Jmp, &end_label);
@@ -1194,6 +1220,114 @@ mod match_expr_ir_tests {
             "matchのアーム本体ラベルが重複している: {:?}",
             labels
         );
+    }
+
+    const VARIANT_BIND_SRC: &str = "variant V { A B(int) }
+        main(): int {
+            v: V = V { B: 5 }
+            cond B(val) := v {
+                x: int = val
+            } | {
+                x: int = 0
+            }
+        }";
+
+    #[test]
+    fn check_variant_bind_expands_to_label_compare() {
+        // `B(val) := v` は `v.label == tag_of(B)` の比較に展開される
+        let body = build_func_body(VARIANT_BIND_SRC);
+        let label_pos = body
+            .iter()
+            .position(|inst| {
+                matches!(
+                    inst,
+                    inst::Inst::RefStruct { src, pos: 0, size: types::Size::DD } if src == "v"
+                )
+            })
+            .expect("`v.label`(タグの読み出し)が生成される必要がある");
+        // `B`は定義順で1番目(`A`が0)なので、タグは1
+        assert!(
+            matches!(
+                &body[label_pos + 1],
+                inst::Inst::Num { value, .. } if value == "1"
+            ),
+            "タグ(1)との比較が続く必要がある: {:?}",
+            body
+        );
+        assert!(
+            matches!(
+                &body[label_pos + 2],
+                inst::Inst::Expr(inst::ExprInst {
+                    kind: inst::ExprKind::Equal,
+                    ..
+                })
+            ),
+            "`==`の比較命令が続く必要がある: {:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn check_variant_bind_defines_val_from_payload() {
+        // 条件が真のときの本体の先頭で、`val = v.value`(タグの後ろのペイロード)が
+        // 定義される。それは本体の中の`x: int = val`より前にある
+        let body = build_func_body(VARIANT_BIND_SRC);
+        let payload_pos = body
+            .iter()
+            .position(|inst| {
+                matches!(
+                    inst,
+                    inst::Inst::RefStruct { src, pos, size: types::Size::DD }
+                        if src == "v" && *pos == types::VARIANT_TAG_BYTES
+                )
+            })
+            .expect("`v.value`(ペイロードの読み出し)が生成される必要がある");
+        let val_pos = body
+            .iter()
+            .position(|inst| {
+                matches!(inst, inst::Inst::Mov { name: Some(n), .. } if n == "val")
+            })
+            .expect("`val`の定義(Mov)が生成される必要がある");
+        assert!(payload_pos < val_pos, "{:?}", body);
+        // `val`の定義は、`ExpectJmp`の先(アームのラベルの後ろ)にある
+        let arm_block = body
+            .iter()
+            .position(|inst| matches!(inst, inst::Inst::Block(_)))
+            .expect("アームのラベル(Block)が必要");
+        assert!(arm_block < payload_pos, "{:?}", body);
+    }
+
+    #[test]
+    fn check_variant_ctor_defined_after_use() {
+        // バリアント型が使う関数より後ろに定義されていても、
+        // `E::b(10)`は関数呼び出しではなく、バリアント型の初期化になる
+        let mut lexer = lex::Lexer::new();
+        lexer
+            .analy(
+                &"main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }".to_string(),
+            )
+            .unwrap();
+        let mut parser = parse::Parser::new();
+        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let mut ir = IR::new();
+        ir.builder(&nodes).unwrap();
+        let body = ir.test_only_get_func_body("main").to_vec();
+        assert!(
+            body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::Variant { tag: 1, value: Some(_), .. }
+            )),
+            "{:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn check_variant_bind_with_explicit_ty() {
+        // `B(val): int = v` も同じIRになる
+        let infer = build_func_body(VARIANT_BIND_SRC);
+        let explicit = build_func_body(&VARIANT_BIND_SRC.replace("B(val) := v", "B(val): int = v"));
+        assert_eq!(infer, explicit);
     }
 }
 

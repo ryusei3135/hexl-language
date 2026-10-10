@@ -22,7 +22,12 @@ variant Option<T> {
 }
 
 f<T>(): T {
-    e mut: E = E::a
+    e mut: E = E::b(10)
+    cond E::b(val) mut:= e {
+        val += 1
+    } else {
+        a: int = 10
+    }
     lll: T = T {
         name: 10
         aa: 10
@@ -82,7 +87,7 @@ _start(): int {
     a: static[int] = 30
     ptr mut: int* = [a]
     ptr += 6
-    s: Name = Name {
+    s: Name* = Name {
         name: 10
         aa: 10
     }

@@ -10,6 +10,8 @@ pub(in crate::compiler::parse) mod range;
 /// このファイルでしか使われないAPIのモジュール
 mod value_api;
 mod arr_access;
+/// `cond`の条件式の中だけで使える`M(val) := value`
+mod variant_bind;
 use crate::compiler::node;
 use crate::compiler::lex;
 

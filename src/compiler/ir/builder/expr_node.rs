@@ -29,6 +29,9 @@ impl IR {
         expect_byte: &types::Size,
         attr: &VarMutAttr,
     ) -> usize {
+        // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
+        // (`src/ir/builder/variant_bind.rs`)
+        let expr = self.scope_call_to_variant_init(expr);
         if let node::Expr::Scope { scope, target } = expr {
             self.expr_counter += 1;
             let result = self.scope_node(&scope, target, Some(&var_name.to_string()), &attr);
@@ -246,7 +249,7 @@ impl IR {
     }
 
     /// 命令を`ir_tree`へ積み、その命令のidを返す
-    fn push_inst(&mut self, inst: inst::Inst) -> usize {
+    pub(super) fn push_inst(&mut self, inst: inst::Inst) -> usize {
         self.ir_tree.push(inst);
         self.id_counter += 1;
         self.id_counter - 1
@@ -254,7 +257,7 @@ impl IR {
 
     /// `value_idx <kind> n`(`n`は即値)の比較命令を積む
     /// (条件分岐の判定用なので、即値の型は`DD`にしている)
-    fn push_cmp_with_num(&mut self, value_idx: usize, n: usize, kind: inst::ExprKind) -> usize {
+    pub(super) fn push_cmp_with_num(&mut self, value_idx: usize, n: usize, kind: inst::ExprKind) -> usize {
         let num_idx = self.id_counter;
         self.push_inst(inst::Inst::gen_num(&n.to_string(), &types::Size::DD, num_idx));
         let dst = self.id_counter;
@@ -410,7 +413,7 @@ impl IR {
                 }
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
-                    size: types::Size::build_ptr_ty(&*ty_name, r),
+                    size: types::Size::build_ptr_ty(self.size_of(&*ty_name), r),
                     dst: self.id_counter,
                     src: value_idx,
                 };
