@@ -34,11 +34,9 @@ impl AsmEmitter {
     }
 
     fn resolve_operand_var_size(&self, node_idx: usize) -> Option<Size> {
-        match self.curr_inst[node_idx].clone() {
-            inst::Inst::AssignVar { name, .. } => {
-                self.var_hash_map.get(&name).map(|v| v.size.clone())
-            }
-            inst::Inst::Param(param) => self.var_hash_map.get(&param.name).map(|v| v.size.clone()),
+        match self.inst_at(node_idx) {
+            inst::Inst::AssignVar { name, .. } => self.var_size(&name),
+            inst::Inst::Param(param) => self.var_size(&param.name),
             inst::Inst::Pointer(inner) | inst::Inst::GetAddress(inner) => {
                 self.resolve_operand_var_size(inner)
             }
@@ -52,11 +50,10 @@ impl AsmEmitter {
         let inst::Inst::Param(param) = &self.curr_inst[node_idx] else {
             return None;
         };
-        let var_info = self.var_hash_map.get(&param.name)?;
+        let var_info = self.find_var_info(&param.name)?;
         var_info.size.is_pointer()?;
 
-        let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
-        Some(self.asm_fmt.fmt_ref_operand_no_offset(&reg))
+        Some(self.ptr_deref_operand(var_info.reg))
     }
 
     fn extract_operand_text_sized(
@@ -65,17 +62,16 @@ impl AsmEmitter {
         this_is_self: &Option<Size>,
         forced_size: &Size,
     ) -> String {
-        match self.curr_inst[node_idx].clone() {
+        match self.inst_at(node_idx) {
             inst::Inst::AssignVar { name, .. } => {
-                let var_info = self.var_hash_map.get(&name).unwrap();
+                let var_info = self.var_info(&name);
                 let size = gen_reg_size(&var_info, &forced_size);
                 self.asm_fmt.get_fmt_reg(var_info.reg, &size)
             }
             inst::Inst::Param(param) => {
-                let var_info = self.var_hash_map.get(&param.name).unwrap();
+                let var_info = self.var_info(&param.name);
                 if var_info.size.is_pointer().is_some() {
-                    let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
-                    self.asm_fmt.fmt_ref_operand_no_offset(&reg)
+                    self.ptr_deref_operand(var_info.reg)
                 } else {
                     self.asm_fmt.get_fmt_reg(var_info.reg, forced_size)
                 }
@@ -125,7 +121,7 @@ impl AsmEmitter {
             self.gen_inline_asm_txt(&lines);
             // === スタックに退避したレジスタを、退避した時とは逆順に戻す ===
             for reg in stacked_regs.iter().rev() {
-                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                let reg_name = self.reg64(*reg);
                 let pop_asm = self.asm_fmt.get_pop(&reg_name);
                 self.asm_text.push_str(&pop_asm);
             }
@@ -150,12 +146,7 @@ impl AsmEmitter {
         // 変数の正式な保持場所として扱う(恒久的な移動)
         let src = self.asm_fmt.get_fmt_reg(reg, &size);
         let dst = self.asm_fmt.get_fmt_reg(free_reg, &size);
-        let mut mov_asm = self
-            .asm_fmt
-            .get_opcode_tmpl("mov")
-            .replace("{dst}", &dst)
-            .replace("{src1}", &src);
-        mov_asm = self.asm_fmt.fmt_mnemonic_resize("mov", &mov_asm, &size);
+        let mov_asm = self.mov_line(&dst, &src, &size, false);
         self.asm_text.push_str(&mov_asm);
 
         self.update_value_reg(&var_name, free_reg);
@@ -169,7 +160,7 @@ impl AsmEmitter {
         // --- 2-b. 空いているレジスタがない場合 ---
         // インラインアセンブラの前後でこのレジスタの値を
         // スタックに退避/復元する(一時的な退避)
-        let reg_name = self.asm_fmt.get_fmt_reg(reg, &Size::DQ);
+        let reg_name = self.reg64(reg);
         let push_asm = self.asm_fmt.get_push(&reg_name);
         self.asm_text.push_str(&push_asm);
         stacked_regs.push(reg);

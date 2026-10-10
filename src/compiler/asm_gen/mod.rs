@@ -2,6 +2,8 @@
 //! 渡されたフォーマットのアセンブリ言語に変換するApiを提供する
 
 /// self.format_lineで構造体のポインタを渡すところがある
+mod access;
+use access::FRAME_BASE_REG;
 mod asm_emitter;
 mod call_func;
 mod emit_fn_name;

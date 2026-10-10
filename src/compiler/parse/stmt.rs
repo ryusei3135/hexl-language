@@ -90,7 +90,7 @@ impl Parser {
 
         // トップレベルの関数定義なので、`Self`が解決される
         // 構造体/列挙型は存在しない
-        let node = self.func_node(func_name, P)?;
+        let node = self.func_node(func_name.to_owned(), P)?;
         self.gen_nodes.push(node);
 
         self.gen_flag = GenFlag::Group2;

@@ -13,7 +13,7 @@ impl Parser {
     pub(in crate::compiler::parse) 
     fn func_node(
         &mut self,
-        func_name: &str,
+        func_name: String,
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
         let arg = match self.next_tkn(&["(", "<"])? {
@@ -45,7 +45,7 @@ impl Parser {
                 let ret_ty = self.define_ty_node()?;
 
                 if self.current_tkn() == &lex::Tkn::LBrace {
-                    Ok(node::FuncDefine::new(func_name, arg, ret_ty, is_public))
+                    Ok(node::FuncDefine::new(func_name.clone(), arg, ret_ty, is_public))
                 } else {
                     Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
                 }

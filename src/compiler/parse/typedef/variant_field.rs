@@ -25,7 +25,7 @@ impl Parser {
                 self.advance_tkn();
                 if self.check_this_is_fn() == IS_METHOD {
                     // メゾットとして処理
-                    let method = self.make_variant_method(&field_name, pub_flag)?;
+                    let method = self.make_variant_method(field_name, pub_flag)?;
                     Ok(method.wrap_variant_field_kind())
                 } else {
                     // 型を持つメンバーとして処理
@@ -98,7 +98,7 @@ impl Parser {
     /// 終了時はメゾットの本体を閉じる`}`を指す
     fn make_variant_method(
         &mut self,
-        method_name: &str,
+        method_name: String,
         pub_flag: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
         #[cfg(test)]

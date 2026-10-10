@@ -7,12 +7,12 @@ impl AsmEmitter {
     /// を生成する
     pub(super) 
     fn param_ref(&mut self, param_name: &String) -> String {
-        let var_info = self.var_hash_map.get(&param_name.to_string()).unwrap();
+        let var_info = self.var_info(param_name);
 
         if let Some(ty) = var_info.size.is_pointer() {
             // ポインタ型はアドレス(常に8byte)を保持するため、
             // 64bitレジスタ(`%rcx`など)を経由してメモリを参照する
-            let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
+            let reg = self.reg64(var_info.reg);
             self.asm_fmt.fmt_ref_operand(&reg, ty.to_bytes())
         } else {
             self.asm_fmt.get_fmt_reg(var_info.reg, &var_info.size)
@@ -22,12 +22,8 @@ impl AsmEmitter {
     pub(super) 
     fn string_mem_ref(&mut self, parent_id: usize) -> String {
         let label = self
-            .data_map
-            .iter()
-            .find(|v| v.0 == parent_id)
-            .unwrap()
-            .1
-            .clone();
+            .static_label(parent_id)
+            .expect("string label not found");
         self.asm_fmt.fmt_static_var_rip(&label)
     }
 
@@ -40,7 +36,7 @@ impl AsmEmitter {
         index: usize,
         this_is_self: &SelfPtrInfo,
     ) -> String {
-        let index_value = match self.curr_inst[index].clone() {
+        let index_value = match self.inst_at(index) {
             inst::Inst::Num { value, .. } => value
                 .parse::<usize>()
                 .expect("配列の添字は数字である必要があります"),
@@ -51,16 +47,12 @@ impl AsmEmitter {
             }
             t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
         };
-        let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
+        let var_info = self.var_info(name);
         if let Some(pointee) = var_info.size.is_pointer() {
             // ポインタは要素0を指し、要素`i`は`ポインタ - i * サイズ`
             let pos = pointee.to_bytes() * index_value;
             let base = self.extract_operand_text(dst, &this_is_self);
-            if pos == 0 {
-                self.asm_fmt.fmt_ref_operand_no_offset(&base)
-            } else {
-                self.asm_fmt.fmt_ref_operand(&base, pos)
-            }
+            self.ref_base_offset(&base, pos)
         } else {
             // 要素`i`は`%rbp - (arr_base + (i + 1) * size)`に置かれる
             // (添字が変数の場合のアドレス計算と同じ配置)
@@ -82,8 +74,8 @@ impl AsmEmitter {
     /// - member_size = そのメンバー自身のサイズ
     ///   (`pos - member_size`が、ポインタからのオフセットになる)
     pub(super) fn ref_struct_txt(&mut self, src: &str, pos: usize, member_size: usize) -> String {
-        let size = pos.saturating_sub(member_size);
-        let var_info = self.var_hash_map.get(&src.to_string()).expect(&src);
+        let size = Self::struct_member_offset(pos, member_size);
+        let var_info = self.var_info(src);
 
         if var_info.is_stack {
             // `src`(構造体変数自身)が、ポインタをレジスタに持つのでは
@@ -94,37 +86,23 @@ impl AsmEmitter {
             // オフセットが入っているので、そこにメンバーのオフセット
             // (`size`)を足した位置を直接`%rbp`相対で参照する
             // (レジスタを経由した間接参照`(%rcx)`にはしない)
-            let offset = var_info.reg + size;
-            self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), offset)
+            self.rbp_ref(var_info.reg + size)
         } else {
-            let reg = self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ);
-            if size == 0 {
-                // 先頭のメンバーは`(%rdi)`のようにオフセットなし
-                self.asm_fmt.fmt_ref_operand_no_offset(&reg)
-            } else {
-                self.asm_fmt.fmt_ref_operand(&reg, size)
-            }
+            // 先頭のメンバーは`(%rdi)`のようにオフセットなし
+            let reg = self.reg64(var_info.reg);
+            self.ref_base_offset(&reg, size)
         }
     }
 
     pub(super) 
     fn gen_mov_code(&mut self, name: Option<&str>, src: usize) -> String {
-        let var_name = name.clone().unwrap();
-        let var = self
-            .var_hash_map
-            .get(&*var_name)
-            .unwrap_or_else(|| panic!("this var is not found -> {}", var_name));
+        let var_name = name.unwrap();
+        let var = self.var_info(var_name);
 
-        if var.is_stack {
-            return self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), var.reg);
-        }
-        let (reg_num, is_ptr, var_size) =
-            (var.reg, var.size.is_pointer().is_some(), var.size.clone());
-        let size = if is_ptr { Size::DQ } else { var_size };
-        if is_ptr == false {
-            if let Some(static_var) = self.data_map.iter().find(|v| v.0 == src) {
-                // static領域の変数を返す:
-                return static_var.1.clone();
+        // ポインタでない、レジスタ上の変数が static領域の値なら、そのラベルを返す
+        if !var.is_stack && var.size.is_pointer().is_none() {
+            if let Some(label) = self.static_label(src) {
+                return label;
             }
         }
 
@@ -132,7 +110,7 @@ impl AsmEmitter {
         //  `x + 1`のような式の結果が、変数`x`自身のレジスタへ
         //  書き込まれて`x`を壊していた。式の結果のレジスタは
         //  `alloc_reg`で別に確保するので、ここでは何もしない)
-        self.asm_fmt.get_fmt_reg(reg_num, &size)
+        self.var_operand(var_name)
     }
 
     /// メモリを参照するコードを生成する
@@ -145,17 +123,12 @@ impl AsmEmitter {
         if matches!(kind, inst::MemoryKind::Static) {
             // 静的領域の変数: データセクションに置いたラベルを参照する
             let name = self
-                .data_map
-                .iter()
-                .find(|v| v.0 == parent_id)
-                .expect("static var label not found")
-                .1
-                .clone();
+                .static_label(parent_id)
+                .expect("static var label not found");
             self.asm_fmt.fmt_static_var_rip(&name)
         } else {
             // スタック領域の変数: %rbpからのオフセットを参照する
-            self.asm_fmt
-                .fmt_ref_operand(&"%rbp".to_string(), size.to_bytes())
+            self.rbp_ref(size.to_bytes())
         }
     }
 
@@ -172,9 +145,9 @@ impl AsmEmitter {
     ) -> String {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
         let assign_reg = if this_is_self.is_none() {
-            self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ)
+            self.self_ptr_reg()
         } else {
-            "%rbp".to_string()
+            FRAME_BASE_REG.to_string()
         };
 
         let first_id = ids.first().unwrap();
@@ -203,17 +176,7 @@ impl AsmEmitter {
                 .asm_fmt
                 .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
 
-            let mov_line = self
-                .asm_fmt
-                .get_opcode_tmpl("mov")
-                .replace("{dst}", &dst)
-                .replace("{src1}", value.as_str());
-
-            txt.push_str(
-                self.asm_fmt
-                    .fmt_memory_mnemonic_resize("mov", &mov_line, &size)
-                    .as_str(),
-            );
+            txt.push_str(&self.mov_line(&dst, &value, &size, true));
         }
 
         if RET_IS_ASM {

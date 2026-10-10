@@ -184,11 +184,7 @@ impl AsmEmitter {
 
     /// 指定された名前の変数の型を返す
     pub fn get_var_ty(&self, var_name: &str) -> Size {
-        self.var_hash_map
-            .get(var_name)
-            .expect(&format!("not found {}", var_name))
-            .size
-            .clone()
+        self.var_info(var_name).size.clone()
     }
 
     #[inline(always)]
@@ -264,11 +260,7 @@ impl AsmEmitter {
         else {
             return;
         };
-        let held_by_var = self
-            .var_hash_map
-            .values()
-            .any(|var| !var.is_stack && var.reg == reg);
-        if !held_by_var {
+        if !self.is_reg_held_by_var(reg) {
             self.used_reg.release(reg);
         }
     }
@@ -331,9 +323,7 @@ impl AsmEmitter {
             .expect("StartScopeに対応しないEndScopeです");
         let live_regs: Vec<usize> = outer_vars
             .iter()
-            .filter_map(|name| self.var_hash_map.get(name))
-            .filter(|var| !var.is_stack)
-            .map(|var| var.reg)
+            .filter_map(|name| self.var_reg(name))
             .collect();
         self.used_reg.restore(&live_regs);
 
@@ -350,14 +340,14 @@ impl AsmEmitter {
     #[inline(always)]
     pub(in crate::compiler::asm_gen) 
     fn update_value_info(&mut self, name: &str, index: usize) {
-        self.var_hash_map.get_mut(name).unwrap().index = index;
+        self.var_info_mut(name).index = index;
     }
 
     #[inline(always)]
     pub(in crate::compiler::asm_gen) 
     fn update_value_reg(&mut self, name: &str, reg: usize) {
         self.used_reg.mark_used(reg);
-        self.var_hash_map.get_mut(name).unwrap().reg = reg;
+        self.var_info_mut(name).reg = reg;
     }
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
@@ -377,18 +367,11 @@ impl AsmEmitter {
             let mut txt = self.extract_operand_text(struct_idx, &this_is_self);
 
             let ret_line = if this_is_self.is_none() {
-                let self_ptr_reg = self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ);
-                let line = self
-                    .asm_fmt
-                    .get_opcode_tmpl("address")
-                    .replace("{dst}", &self.get_reg(dst, &Size::DQ))
-                    .replace("{src1}", &self_ptr_reg);
+                let self_ptr_reg = self.self_ptr_reg();
+                let line = self.fill_tmpl("address", &self.get_reg(dst, &Size::DQ), &self_ptr_reg);
                 self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
             } else {
-                self.asm_fmt
-                    .get_opcode_tmpl(opcode)
-                    .replace("{dst}", &self.get_reg(dst, &base_size))
-                    .replace("{src1}", "%rbp")
+                self.fill_tmpl(opcode, &self.get_reg(dst, &base_size), FRAME_BASE_REG)
             };
             txt.push_str(&ret_line);
             txt
@@ -403,10 +386,7 @@ impl AsmEmitter {
             } else {
                 self.asm_fmt.resize_reg_operand(&src_text, &dst_size)
             };
-            self.asm_fmt
-                .get_opcode_tmpl(opcode)
-                .replace("{dst}", &dst_text)
-                .replace("{src1}", &src_text)
+            self.fill_tmpl(opcode, &dst_text, &src_text)
         };
 
         if let Some(resized_asm) = self.gen_resize_mnemonic(&formated, opcode, src1) {
@@ -500,17 +480,7 @@ impl AsmEmitter {
             },
             inst::Inst::GetAddress(..) => Size::DQ,
             inst::Inst::InsertArr { ref name, .. } => {
-                let size = self
-                    .var_hash_map
-                    .get(name)
-                    .unwrap_or_else(|| panic!("array variable not found: {}", name))
-                    .size
-                    .clone();
-                match size {
-                    Size::Array { size, .. } => *size,
-                    Size::Pointer { ty, .. } => *ty,
-                    ty => ty,
-                }
+                self.arr_elem_ty(name)
             }
             inst::Inst::AssignVar { value, .. } => self.get_expr_ty(value),
             inst::Inst::InitArr(ref ids) => {
@@ -590,10 +560,7 @@ impl AsmEmitter {
                 // ではないので、`is_deref`はそのまま引き継ぐ
                 self.check_node_is_mem_val_inner(inner, is_deref)
             }
-            inst::Inst::InsertArr { ref name, .. } => self
-                .var_hash_map
-                .get(&name.to_string())
-                .map(|var| var.size.clone()),
+            inst::Inst::InsertArr { ref name, .. } => self.var_size(name),
             _ => None,
         }
     }
@@ -615,31 +582,20 @@ impl AsmEmitter {
         parent_id: usize,
         this_is_self: &Option<types::Size>,
     ) -> String {
-        match self.curr_inst[parent_id].clone() {
+        match self.inst_at(parent_id) {
             inst::Inst::Num { value, .. } => self.asm_fmt.get_fmt_num(&value),
             inst::Inst::GetPtr { size: _, stk } => {
                 // スタック上に置かれた値そのもの(値が置かれているメモリ)
                 // を指すオペランドを、`%rbp`からのオフセットを使って生成する
                 // (構造体の実体は`alloc_struct_stk`で確保したオフセットを使う)
                 let stk = self.ptr_stk(parent_id, stk);
-                self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), stk)
+                self.rbp_ref(stk)
             }
             inst::Inst::Param(param) => {
                 // `asm_emitter/operand_txt/`に記述
                 self.param_ref(&param.name)
             }
-            inst::Inst::AssignVar { ref name, .. } => {
-                let var_info = self.var_hash_map.get(&name.to_string()).unwrap();
-                if var_info.is_stack {
-                    return self.asm_fmt.fmt_ref_operand(&"%rbp".to_string(), var_info.reg);
-                }
-                let size = if var_info.size.is_pointer().is_some() {
-                    Size::DQ
-                } else {
-                    var_info.size.clone()
-                };
-                self.asm_fmt.get_fmt_reg(var_info.reg, &size)
-            }
+            inst::Inst::AssignVar { ref name, .. } => self.var_operand(name),
             // 配列にアクセス
             inst::Inst::InsertArr { name, dst, index } => {
                 // `asm_emitter/operand_txt/`に記述

@@ -17,9 +17,9 @@ impl AsmEmitter {
             // 引数(`GetAddress(GetPtr)`)が指すスタック領域を、先に
             // `stk_use_counter`から確保する。IRの`stk`のままだと、先に
             // 確保済みの配列などと領域が重なってしまう
-            if let inst::Inst::CallFunc(meta_data) = self.curr_inst[src].clone() {
+            if let inst::Inst::CallFunc(meta_data) = self.inst_at(src) {
                 if let Some(&self_arg) = meta_data.params.get(0) {
-                    if let inst::Inst::GetAddress(mem_idx) = self.curr_inst[self_arg].clone() {
+                    if let inst::Inst::GetAddress(mem_idx) = self.inst_at(self_arg) {
                         if matches!(self.curr_inst[mem_idx], inst::Inst::GetPtr { .. }) {
                             self.alloc_struct_stk(mem_idx, size.to_bytes());
                         }
@@ -34,7 +34,7 @@ impl AsmEmitter {
                 return ();
             }
 
-            let inst::Inst::CallFunc(meta_data) = self.curr_inst[src].clone() else {
+            let inst::Inst::CallFunc(meta_data) = self.inst_at(src) else {
                 panic!(
                     "構造体を返す初期化式はコンストラクタ呼び出しである必要があります: {:?}",
                     self.curr_inst[src]
@@ -44,10 +44,10 @@ impl AsmEmitter {
                 .params
                 .get(0)
                 .expect("構造体を返す関数は暗黙のselfポインタ引数を持つ必要があります");
-            let inst::Inst::GetAddress(mem_idx) = self.curr_inst[self_arg_idx].clone() else {
+            let inst::Inst::GetAddress(mem_idx) = self.inst_at(self_arg_idx) else {
                 panic!("システムエラー: 暗黙のselfポインタ引数がGetAddressではありません");
             };
-            let inst::Inst::GetPtr { stk, .. } = self.curr_inst[mem_idx].clone() else {
+            let inst::Inst::GetPtr { stk, .. } = self.inst_at(mem_idx) else {
                 panic!("システムエラー: 暗黙のselfポインタ引数の参照先がGetPtrではありません");
             };
             let stk = self.ptr_stk(mem_idx, stk);
@@ -61,7 +61,7 @@ impl AsmEmitter {
             return;
         }
 
-        if size.is_pointer().is_none() && self.data_map.iter().find(|v| v.0 == src).is_some() {
+        if size.is_pointer().is_none() && self.static_label(src).is_some() {
             // 子のノードがstatic領域の値で、かつ宣言先の型がポインタで
             // ない場合のみ、変数名だけを登録する(この場合は変数の
             // 実体が静的領域そのものであり、レジスタへ値をロード
@@ -85,14 +85,9 @@ impl AsmEmitter {
             let is_literal_num = matches!(self.curr_inst[src], inst::Inst::Num { .. });
 
             let formated = if size.is_pointer().is_some() && is_literal_num {
-                let dst_reg = self.asm_fmt.get_fmt_reg(reg, &Size::DQ);
+                let dst_reg = self.reg64(reg);
                 let value_operand = self.extract_operand_text(src, &this_is_self);
-                let text = self
-                    .asm_fmt
-                    .get_opcode_tmpl("mov")
-                    .replace("{dst}", &dst_reg)
-                    .replace("{src1}", &value_operand);
-                self.asm_fmt.fmt_mnemonic_resize("mov", &text, &Size::DQ)
+                self.mov_line(&dst_reg, &value_operand, &Size::DQ, false)
             } else {
                 // メモリのポインタか、値かで、ニーモニックが変わる
                 let mnemonic = if size.is_pointer().is_some() {
@@ -146,7 +141,7 @@ impl AsmEmitter {
                         inst::Inst::Pointer(..)
                         | inst::Inst::Param(..)
                         | inst::Inst::GetPtr { .. } => self.extract_operand_text(*dst, &dst_size),
-                        _ => "%rbp".to_string(),
+                        _ => FRAME_BASE_REG.to_string(),
                     };
 
                     let mut txt = String::new();
@@ -159,25 +154,15 @@ impl AsmEmitter {
                     self.stk_use_counter = arr_base + elem_bytes * src.len();
                     for (k, idx) in src.iter().enumerate() {
                         let value = self.extract_operand_text(*idx, &dst_size);
-                        let s = &self
+                        let elem_ref = self
                             .asm_fmt
                             .fmt_ref_operand(&base, arr_base + (k + 1) * elem_bytes);
-
-                        let mov_line = self
-                            .asm_fmt
-                            .get_opcode_tmpl("mov")
-                            .replace("{dst}", &s)
-                            .replace("{src1}", value.as_str());
                         let store_size = if size.is_pointer().is_some() {
                             Size::DQ
                         } else {
                             size.clone()
                         };
-                        txt.push_str(
-                            self.asm_fmt
-                                .fmt_memory_mnemonic_resize("mov", &mov_line, &store_size)
-                                .as_str(),
-                        );
+                        txt.push_str(&self.mov_line(&elem_ref, &value, &store_size, true));
                     }
                     self.insert_var_info(
                         &name,
@@ -221,7 +206,7 @@ impl AsmEmitter {
         src: usize,
         dst: usize,
     ) -> Option<()> {
-        if let inst::Inst::Struct { mem, is_self, .. } = self.curr_inst[src].clone() {
+        if let inst::Inst::Struct { mem, is_self, .. } = self.inst_at(src) {
             // `emit_struct_ini_asm`はメンバーを書き込みながら
             // `self.stk_use_counter`を進めていくため、呼び出し後
             // では構造体自身の先頭オフセット(`%rbp`から見た位置)が

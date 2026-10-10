@@ -44,7 +44,7 @@ impl Parser {
                         }
 
                         lex::Tkn::LParen => {
-                            let mut method = self.func_node(&name, pub_flag)?;
+                            let mut method = self.func_node(name, pub_flag)?;
                             self.next_tkn(&[])?;
                             self.scope_counter += 1;
                             // メゾットの本体が空(`{}`)の場合、`one_line_node`を
@@ -206,7 +206,7 @@ impl Parser {
         // モジュールの名前を登録
         if let node::Group1Node::FuncDefine(func) = method {
             if let Some(mod_name) = &self.struct_self_name {
-                func.self_module_name(mod_name);
+                func.self_module_name(mod_name.to_owned());
             } else {
                 panic!();
             }

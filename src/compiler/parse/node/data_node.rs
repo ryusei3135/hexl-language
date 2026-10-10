@@ -1,5 +1,7 @@
 //! 構造体などのデータ型のノードの定義
 
+// use crate::compiler::node::VariantMode::EnumMode;
+
 use super::*;
 
 

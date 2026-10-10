@@ -23,20 +23,6 @@
 use super::*;
 
 impl AsmEmitter {
-    /// `mov`のテンプレートで、サイズに合わせた1行を作る
-    fn fmt_mov_line(&self, dst: &str, src: &str, size: &Size, is_memory: bool) -> String {
-        let line = self
-            .asm_fmt
-            .get_opcode_tmpl("mov")
-            .replace("{dst}", dst)
-            .replace("{src1}", src);
-        if is_memory {
-            self.asm_fmt.fmt_memory_mnemonic_resize("mov", &line, size)
-        } else {
-            self.asm_fmt.fmt_mnemonic_resize("mov", &line, size)
-        }
-    }
-
     /// `/`と`%`のアセンブリ言語を生成する
     ///
     /// 結果は`self.reg_idx`のレジスタに置く。
@@ -79,9 +65,9 @@ impl AsmEmitter {
         // === 割る数を空きレジスタへ ===
         // (`idiv`は即値を直接取れないのと、`%rdx`を書き換える前に
         //  オペランドを読み出しておく必要があるため、先に移す)
-        asm.push_str(&self.fmt_mov_line(&dst_txt, &src2, &calc, mem2));
+        asm.push_str(&self.mov_line(&dst_txt, &src2, &calc, mem2));
         // === 割られる数を`%rax`へ ===
-        asm.push_str(&self.fmt_mov_line(&rax, &src1, &calc, mem1));
+        asm.push_str(&self.mov_line(&rax, &src1, &calc, mem1));
 
         // === 符号拡張(`%rdx:%rax`)と除算 ===
         let att = self.asm_fmt.mnemonic_size();
@@ -102,7 +88,7 @@ impl AsmEmitter {
             2
         };
         let result = self.asm_fmt.get_fmt_reg(result_reg, &calc);
-        asm.push_str(&self.fmt_mov_line(&dst_txt, &result, &calc, false));
+        asm.push_str(&self.mov_line(&dst_txt, &result, &calc, false));
 
         // === 退避したレジスタを逆順に復元 ===
         for reg in saved.iter().rev() {

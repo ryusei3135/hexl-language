@@ -26,30 +26,27 @@ impl AsmEmitter {
         //   メモリ参照になるため使わない。使うと`-4(-4(%rbp), ..)`になる)
         // - ポインタ: ポインタ自身を持つ64bitレジスタがベース
         let (elem_size, arr_base, is_ptr, base, arr_len) = {
-            let var_info = self
-                .var_hash_map
-                .get(name)
-                .unwrap_or_else(|| panic!("array variable not found: {}", name));
+            let var_info = self.var_info(name);
             match &var_info.size {
                 Size::Array { size, len } => (
                     size.to_bytes(),
                     var_info.arr_base,
                     false,
-                    "%rbp".to_string(),
+                    FRAME_BASE_REG.to_string(),
                     *len,
                 ),
                 Size::Pointer { ty, .. } => (
                     ty.to_bytes(),
                     0,
                     true,
-                    self.asm_fmt.get_fmt_reg(var_info.reg, &Size::DQ),
+                    self.reg64(var_info.reg),
                     0,
                 ),
                 other => (
                     other.to_bytes(),
                     var_info.arr_base,
                     false,
-                    "%rbp".to_string(),
+                    FRAME_BASE_REG.to_string(),
                     1,
                 ),
             }
@@ -63,7 +60,7 @@ impl AsmEmitter {
         self.arr_index_temp = Some(reg_num);
 
         let idx_size = Self::value_reg_size(size);
-        let reg64 = self.asm_fmt.get_fmt_reg(reg_num, &Size::DQ);
+        let reg64 = self.reg64(reg_num);
 
         match idx_size {
             // 8/16bitの添字は、メモリから直接符号拡張して読み込む
@@ -77,28 +74,14 @@ impl AsmEmitter {
             //   movslq %ecx, %rcx
             Size::DD => {
                 let reg32 = self.asm_fmt.get_fmt_reg(reg_num, &Size::DD);
-                let load = self
-                    .asm_fmt
-                    .get_opcode_tmpl("mov")
-                    .replace("{dst}", &reg32)
-                    .replace("{src1}", &member);
-                let load = self
-                    .asm_fmt
-                    .fmt_memory_mnemonic_resize("mov", &load, &Size::DD);
+                let load = self.mov_line(&reg32, &member, &Size::DD, true);
                 self.asm_text.push_str(&load);
                 let ext = self.asm_fmt.get_sign_extend('l', &reg32, &reg64);
                 self.asm_text.push_str(&ext);
             }
             // 64bitの添字: そのまま読み込む
             _ => {
-                let load = self
-                    .asm_fmt
-                    .get_opcode_tmpl("mov")
-                    .replace("{dst}", &reg64)
-                    .replace("{src1}", &member);
-                let load = self
-                    .asm_fmt
-                    .fmt_memory_mnemonic_resize("mov", &load, &Size::DQ);
+                let load = self.mov_line(&reg64, &member, &Size::DQ, true);
                 self.asm_text.push_str(&load);
             }
         }

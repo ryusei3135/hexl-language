@@ -77,17 +77,8 @@ impl AsmEmitter {
                 self.extract_operand_text(src1_idx, &resize_size.clone().wrap_dst_size());
             let src1_text = self.asm_fmt.resize_reg_operand(&src1_text, &resize_size);
 
-            let mut asm = self
-                .asm_fmt
-                .get_opcode_tmpl(opcode)
-                .replace("{dst}", &param_reg)
-                .replace("{src1}", &src1_text);
-            asm = if self.check_node_is_mem_val(*param).is_some() {
-                self.asm_fmt
-                    .fmt_memory_mnemonic_resize(opcode, &asm, &resize_size)
-            } else {
-                self.asm_fmt.fmt_mnemonic_resize(opcode, &asm, &resize_size)
-            };
+            let is_memory = self.check_node_is_mem_val(*param).is_some();
+            let asm = self.tmpl_line(opcode, &param_reg, &src1_text, &resize_size, is_memory);
             let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty);
             arg_lines.push((param_reg_num, src1_text, asm));
         }
@@ -408,10 +399,7 @@ impl AsmEmitter {
             // (以前は`reg_idx`のレジスタへ変数を「引っ越し」させていたため、
             //  引数や他の変数のレジスタを壊したり、ループの先頭が
             //  参照するレジスタと食い違ったりしていた)
-            let current_reg = match self.var_hash_map.get(name) {
-                Some(var) if !var.is_stack => var.reg,
-                _ => self.reg_idx,
-            };
+            let current_reg = self.var_reg(name).unwrap_or(self.reg_idx);
             let s: SelfPtrInfo = if this_is_self {
                 None
             } else {
@@ -443,7 +431,7 @@ impl AsmEmitter {
 
         if fn_ret_ty.is_none() {
             if let Some(struct_idx) = self.resolve_struct_idx(idx) {
-                let mem = match self.curr_inst[struct_idx].clone() {
+                let mem = match self.inst_at(struct_idx) {
                     inst::Inst::Struct { mem, .. } => mem,
                     _ => panic!("構造体の戻り値を解決できません"),
                 };

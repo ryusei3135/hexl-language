@@ -23,7 +23,7 @@ impl AsmEmitter {
                 .extract_operand_text(*value_idx, &member_size)
                 .to_string();
             if value.is_empty() {
-                let inst::Inst::InitArr(arr) = self.curr_inst[*value_idx].clone() else {
+                let inst::Inst::InitArr(arr) = self.inst_at(*value_idx) else {
                     panic!();
                 };
                 struct_txt.push_str(self.init_arr_txt::<true>(&arr, &member_size).as_str());
@@ -52,8 +52,7 @@ impl AsmEmitter {
                 // 第一引数(`self`のポインタ)のレジスタを取得し、
                 // `%rbp`をそのレジスタに置き換える
                 // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
-                let self_ptr_reg = &self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ);
-                struct_txt.push_str(&fmted.replace("%rbp", &self_ptr_reg));
+                struct_txt.push_str(&fmted.replace("%rbp", &self.self_ptr_reg()));
             } else {
                 struct_txt.push_str(&fmted);
             }
