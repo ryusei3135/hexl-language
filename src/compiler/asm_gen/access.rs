@@ -102,7 +102,7 @@ impl AsmEmitter {
     fn var_operand(&self, name: &str) -> String {
         let var = self.var_info(name);
         if var.is_stack {
-            return self.rbp_ref(var.reg);
+            return self.rbp_ref(var.offset);
         }
         let size = if var.size.is_pointer().is_some() {
             Size::DQ

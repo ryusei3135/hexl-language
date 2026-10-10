@@ -40,9 +40,13 @@ const RESERVED_REGS: [usize; 2] = [0, 2];
 
 #[derive(Debug, Clone)]
 pub(in crate::compiler::asm_gen) struct VarIndexInfo {
-    /// `is_stack`が`false`の場合はレジスタ番号(従来通り)、
-    /// `true`の場合は`%rbp`からのバイトオフセットを表す
+    /// レジスタ番号。`is_stack`が`true`の変数(ポインタでない構造体の
+    /// 変数)はレジスタを持たないので[`VarIndexInfo::NO_REG`]が入る
+    /// (`%rbp`からの位置は`offset`を使う)
     pub reg: usize,
+    /// `is_stack`が`true`の場合の、`%rbp`からのバイトオフセット
+    /// (構造体先頭のメンバーの位置)。`is_stack`が`false`の場合は`0`で意味を持たない
+    pub offset: usize,
     pub size: types::Size,
     pub index: usize,
     pub is_stack: bool,
@@ -59,9 +63,15 @@ pub(in crate::compiler::asm_gen) struct VarIndexInfo {
 }
 
 impl VarIndexInfo {
+    /// レジスタを持たない変数(`is_stack`)の`reg`に入れる値。
+    /// レジスタ番号として使うと範囲外になって即座にpanicするので、
+    /// オフセットをレジスタ番号と取り違えるバグを見逃さない
+    pub const NO_REG: usize = usize::MAX;
+
     pub fn new(reg: usize, size: &types::Size, index: usize) -> Self {
         Self {
             reg: reg,
+            offset: 0,
             size: size.clone(),
             index: index,
             is_stack: false,
@@ -70,10 +80,12 @@ impl VarIndexInfo {
         }
     }
 
-    /// `%rbp`からのオフセット(`offset`)に直接置かれている変数として登録する
+    /// ポインタでない構造体の変数を、`%rbp`からのオフセット(`offset`)に
+    /// 直接置かれている変数として登録する。レジスタは使わない
     pub fn new_stack(offset: usize, size: &types::Size, index: usize) -> Self {
         Self {
-            reg: offset,
+            reg: Self::NO_REG,
+            offset,
             size: size.clone(),
             index: index,
             is_stack: true,
@@ -93,6 +105,8 @@ impl VarIndexInfo {
 
 impl AsmEmitter {
     pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData) -> Self {
+        let caller = Rc::new(vec![1, 4, 5, 6, 7, 8, 9]);
+        let callee = Rc::new(vec![3, 10, 11, 12, 13]);
         let mut me = Self {
             asm_text: String::new(),
             data_sec_text: String::new(),
@@ -106,12 +120,15 @@ impl AsmEmitter {
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
             var_hash_map: HashMap::new(),
-            used_reg: reg_mnger::UsedRegManager::new(),
+            used_reg: reg_mnger::UsedRegManager::new(Rc::clone(&callee), Rc::clone(&caller)),
             scope_outer_vars: Vec::new(),
             stk_use_counter: 0,
             emitted_calls: Vec::new(),
             arr_index_temp: None,
             struct_stk_map: HashMap::new(),
+
+            callee_saved: Rc::clone(&callee),
+            caller_saved: Rc::clone(&caller),
         };
         me.data_sec_text
             .push_str(&me.asm_fmt.get_section_fmt("data"));
@@ -190,7 +207,7 @@ impl AsmEmitter {
     #[inline(always)]
     pub(super) fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
         // メモリに実体がある変数(`in_mem`)と、`%rbp`相対で置かれた
-        // 変数(`is_stack`)の`reg`はレジスタ番号ではないので、
+        // 変数(`is_stack`)はレジスタを持たない(`offset`で保存する)ので、
         // レジスタを使用中にしない
         if !var.in_mem && !var.is_stack {
             self.used_reg.mark_used(var.reg);
@@ -240,7 +257,12 @@ impl AsmEmitter {
     pub(in crate::compiler::asm_gen) 
     fn alloc_reg(&self) -> usize {
         (0..self.asm_fmt.reg_count())
-            .find(|reg| !RESERVED_REGS.contains(reg) && !self.used_reg.is_used(*reg))
+            .find(|reg| {
+                !RESERVED_REGS.contains(reg)
+                    && !self.used_reg.is_used(*reg)
+                    // まだ定義されていない変数のために割り当てたレジスタは使わない
+                    && !self.used_reg.is_reserved(*reg)
+            })
             .expect("使用できるレジスタが足りません")
     }
 

@@ -82,11 +82,11 @@ impl AsmEmitter {
             // なく`%rbp`相対のメモリに直接置かれている場合
             // (`a: Name = Name::new()`のように構造体を直接ローカル
             //  変数として初期化した場合など)。
-            // このとき`var_info.reg`には`%rbp`からの構造体先頭の
+            // このとき`var_info.offset`には`%rbp`からの構造体先頭の
             // オフセットが入っているので、そこにメンバーのオフセット
             // (`size`)を足した位置を直接`%rbp`相対で参照する
             // (レジスタを経由した間接参照`(%rcx)`にはしない)
-            self.rbp_ref(var_info.reg + size)
+            self.rbp_ref(var_info.offset + size)
         } else {
             // 先頭のメンバーは`(%rdi)`のようにオフセットなし
             let reg = self.reg64(var_info.reg);

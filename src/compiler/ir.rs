@@ -10,6 +10,7 @@ pub mod builder;
 mod checker;
 pub mod def_tree;
 pub mod inst;
+pub mod counter_mnger;
 mod param;
 
 use crate::compiler::err::{self, undef::UndefKind::*};
@@ -48,6 +49,8 @@ pub struct IR {
 
     pub(in crate::compiler::ir) 
     constract_flag: checker::ConstractFlags,
+
+    var_counter: counter_mnger::VarCounter,
 
     expr_is_ptr_val: bool,
 }

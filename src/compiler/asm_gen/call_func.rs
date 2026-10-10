@@ -5,6 +5,12 @@ use super::*;
 use crate::compiler::asm_gen::emit_fn_name::*;
 use crate::compiler::ir::{self, types};
 
+/// 関数の入口で`callee_saved`のレジスタを退避する位置の目印
+/// (本体の生成が終わってから、実際に使ったレジスタの`push`に置き換える)
+const CALLEE_SAVE_MARK: &str = "{callee_save}";
+/// `leave`/`ret`の直前で、退避したレジスタを戻す位置の目印
+const CALLEE_RESTORE_MARK: &str = "{callee_restore}";
+
 impl AsmEmitter {
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する
     ///
@@ -29,8 +35,11 @@ impl AsmEmitter {
 
         // 関数を呼ぶためレジスタを退避
         for reg in protected_regs.iter() {
-            let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-            call_func.push_str(&self.asm_fmt.get_push(&reg_name));
+            // callerレジスタのみ退避する
+            if self.callee_saved.iter().find(|x| *x == reg).is_none() {
+                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                call_func.push_str(&self.asm_fmt.get_push(&reg_name));
+            }
         }
 
         // 各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
@@ -117,8 +126,10 @@ impl AsmEmitter {
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
         // === 退避したレジスタを、退避した時とは逆順に復元する ===
         for reg in protected_regs.iter().rev() {
-            let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-            call_func.push_str(&self.asm_fmt.get_pop(&reg_name));
+            if self.callee_saved.iter().find(|x| *x == reg).is_none() {
+                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                call_func.push_str(&self.asm_fmt.get_pop(&reg_name));
+            }
         }
         call_func
     }
@@ -153,6 +164,11 @@ impl AsmEmitter {
         self.asm_text.push_str(&format!("{}:\n", &fn_label));
         // 前の関数の変数・レジスタの状態を持ち越さない
         self.reset_fn_state();
+        // 変数の使用頻度に合わせてレジスタを割り当てる(`reg_mnger.rs`)
+        // この関数自身の引数のレジスタには、まだ引数の値が入っているので使わない
+        let param_regs = self.asm_fmt.param_regs(fn_meta_data.1.args.len());
+        self.used_reg
+            .allocation_register(&fn_meta_data.1.var_counter, &param_regs);
         // 関数ごとにスタックの使用量をリセットする
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)
@@ -168,6 +184,11 @@ impl AsmEmitter {
         let prologue = self.gen_fn_prologue(&fn_meta_data.0, ir_stk_size);
         self.asm_text.push_str(&prologue);
         let prologue_end = self.asm_text.len();
+        // 使った`callee_saved`のレジスタの退避(どのレジスタを使うかは
+        // 本体を生成し終わるまで分からないので、目印を置いて後で置き換える)
+        if fn_meta_data.0 != "_start" {
+            self.asm_text.push_str(CALLEE_SAVE_MARK);
+        }
 
         self.curr_inst = mem::take(&mut fn_meta_data.1.body);
         let returned_struct_idx = if fn_ret_ty.is_none() {
@@ -279,8 +300,29 @@ impl AsmEmitter {
         // `_start`はOSから直接呼ばれるエントリーポイントで、`ret`で戻る先が
         // 無い(終了は`exit`のsyscallで行う)ため、`leave; ret`は付けない
         if fn_meta_data.0 != "_start" && !self.asm_text.ends_with("ret\n") {
+            self.asm_text.push_str(CALLEE_RESTORE_MARK);
             self.asm_text.push_str("leave\nret\n");
         }
+
+        // === 使った`callee_saved`のレジスタを、入口で退避・出口で復元する ===
+        let callee_regs = self.used_reg.callee_regs_to_save();
+        let mut save_asm = String::new();
+        let mut restore_asm = String::new();
+        for reg in callee_regs.iter() {
+            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+            save_asm.push_str(&self.asm_fmt.get_push(&name));
+        }
+        for reg in callee_regs.iter().rev() {
+            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+            restore_asm.push_str(&self.asm_fmt.get_pop(&name));
+        }
+        // スタックフレームの作り直し(下の`replace_range`)は`prologue_end`より
+        // 前の範囲だけを書き換えるので、先に本体側の目印を置き換えておく
+        let body = self.asm_text.split_off(prologue_end);
+        let body = body
+            .replace(CALLEE_SAVE_MARK, &save_asm)
+            .replace(CALLEE_RESTORE_MARK, &restore_asm);
+        self.asm_text.push_str(&body);
 
         // === スタックフレームで確保するサイズを確定させる ===
         // IRが見積もったサイズ(`stk_size`)と、本体の生成で実際に数えた
@@ -450,6 +492,9 @@ impl AsmEmitter {
                 //         &self.gen_exit_syscall_asm()
                 //     );
                 // } else {
+                if !_is_start {
+                    self.asm_text.push_str(CALLEE_RESTORE_MARK);
+                }
                 self.asm_text
                     .push_str(self.asm_fmt.func_frame_end().as_str());
                 self.asm_text.push_str("ret\n");
@@ -465,6 +510,9 @@ impl AsmEmitter {
         //             &self.gen_exit_syscall_asm()
         //         );
         // } else {
+        if !_is_start {
+            self.asm_text.push_str(CALLEE_RESTORE_MARK);
+        }
         self.asm_text
             .push_str(self.asm_fmt.func_frame_end().as_str());
         self.asm_text.push_str("ret\n");

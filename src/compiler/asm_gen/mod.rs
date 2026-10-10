@@ -14,6 +14,7 @@ mod reg_mnger;
 use crate::compiler::ir::{def_tree, inst, types::Size};
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
 use crate::compiler::models::AsmFmtData;
 
 pub type SelfPtrInfo<'a> = Option<&'a Size>;
@@ -55,4 +56,7 @@ pub struct AsmEmitter {
     /// スタック領域と重なることがあるため、構造体の実体は
     /// `stk_use_counter`から確保し直す。関数ごとにクリアする
     pub(super) struct_stk_map: HashMap<usize, usize>,
+
+    callee_saved: Rc<Vec<usize>>,
+    caller_saved: Rc<Vec<usize>>,
 }

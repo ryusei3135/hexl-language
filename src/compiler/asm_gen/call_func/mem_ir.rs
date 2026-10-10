@@ -72,11 +72,24 @@ impl AsmEmitter {
             );
         } else {
             // レジスタに置く変数
-            // 使用中のレジスタ(引数など)と`%rax`/`%rdx`を避けて確保する
-            let reg = self.alloc_reg();
+            // `reg_mnger.rs`が使用回数をもとに割り当てたレジスタが空いていれば
+            // それを使い、そうでなければ使用中のレジスタ(引数など)と
+            // `%rax`/`%rdx`を避けて空きレジスタを確保する
+            let reg = match name
+                .and_then(|n| self.used_reg.allocated_reg(n))
+                .filter(|r| !self.used_reg.is_used(*r))
+            {
+                Some(reg) => reg,
+                None => self.alloc_reg(),
+            };
             self.reg_idx = reg;
-            // このレジスタを使用中として記録する
-            self.used_reg.mark_used(reg);
+            // このレジスタを使用中として記録する(スコープが終わると解放される)
+            match name {
+                Some(var_name) => self.used_reg.bind_var(var_name, reg),
+                None => {
+                    self.used_reg.mark_used(reg);
+                }
+            }
             // ポインタ型の変数へ数値リテラル(`ptr: int* = 0`の
             // ような`0`=NULL初期化など)を代入する場合は、
             // アドレスを求める`lea`(="address")命令ではなく、

@@ -7,8 +7,12 @@ use super::*;
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
     /// 処理のIRを生成する
+    /// 一回しか呼ばれないのでinlineにしてもOk
+    #[inline(always)]
     pub(super) 
     fn ini_def_fn_info(&mut self, info: &node::FuncDefine) -> Result<(), err::ErrKind> {
+        // 関数のスコープごとに使用回数を数え直す(`FnDefInfo.var_counter`に保存される)
+        self.var_counter = counter_mnger::VarCounter::with_arg_count(info.params.len());
         // 関数の情報を登録
         self.entry_fn_info(&info);
         self.var_tree = def_tree::VarTree::new();
@@ -36,6 +40,7 @@ impl IR {
             // 関数の戻り値
             &info.ret_ty,
             self.stk_counter,
+            &self.var_counter,
         );
         self.stk_counter = 0;
     }

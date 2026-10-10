@@ -30,3 +30,16 @@
 - `2026-10-03`配列などメモリに実体がある変数(`VarIndexInfo.in_mem`)を、レジスタの使用中の記録とインラインアセンブラのレジスタ退避の対象から外した(`#asm`の前に`movl %eax, %ecx`が出るバグ)
 - `2026-10-03`配列の並びを元に戻した。要素`i`は`%rbp - (arr_base + (i+1)*サイズ)`(`-4`, `-8`, ...)で、添字が構造体のメンバーの場合は`movslq`で符号拡張した後に`negq`してから`-(arr_base+サイズ)(%rbp, %rcx, サイズ)`で参照する
 - `2026-10-03`配列の添字が構造体のメンバーの場合、`movslq`→`negq`→`addq $(要素数-1)`で添字を`要素数-1-添字`に反転し、最後の要素の位置`-(arr_base+要素数*サイズ)(%rbp, %rcx, サイズ)`を基準に参照するように変更
+
+- `2026-10-10`ポインタでない構造体の変数(`a: Name = Name{..}`など)は、`VarIndexInfo`にレジスタ番号ではなく`%rbp`からのオフセットで保存するように修正
+    - 場所: `asm_emitter.rs`の`VarIndexInfo`(`offset`フィールド・`new_stack`・`NO_REG`)
+    - `is_stack == true`の変数は、`reg`が`VarIndexInfo::NO_REG`(`usize::MAX`)で、位置は`offset`(構造体先頭のメンバーの`%rbp`からのバイト数)だけが持つ。以前は`reg`にオフセットを入れていたため、レジスタ番号と取り違えて`get_fmt_reg`が範囲外でpanicしていた
+    - 登録する場所: `call_func/mem_ir.rs`の`mov_value_ir`(コンストラクタ呼び出しで初期化)と`struct_mem`(`Name {..}`リテラルで初期化)
+    - `offset`を読む場所: `access.rs`の`var_operand`、`operand_txt.rs`の`ref_struct_txt`、`inline_asm.rs`の`extract_operand_text_sized`(`AssignVar`)
+    - 新しく変数の位置を読むコードは、`is_stack`を確認して`offset`を使うこと(ポインタの変数は従来どおり`reg`)
+- `2026-10-10`変数へのレジスタの割り当て(`reg_mnger.rs`)
+    - 関数のアセンブリを作る前(`call_func.rs`の`build_fn_process`)に、IRが数えた変数の使用回数(`FnDefInfo.var_counter`)の多い順に、`allocation_register`でレジスタを割り当てる。`callee_saved`(`rbx`/`r12`〜`r15`)を先に、次に`caller_saved`を使う。`%rax`/`%rdx`(`RESERVED_REGS`)と、その関数自身の引数のレジスタは使わない
+    - 変数を定義するとき(`call_func/mem_ir.rs`の`mov_value_ir`)は、割り当てたレジスタが空いていればそれを自動的に使う。空いていなければ従来どおり`alloc_reg`で探す
+    - 割り当てたレジスタは、変数が定義される(`bind_var`)まで取り置かれ、`alloc_reg`は使わない(`is_reserved`)
+    - スコープ(反復処理や関数内のブロック)が終わる(`EndScope`)と、その中で使用中になったレジスタは全て解放され(`end_scope`)、他の変数や式が使える。外側の変数のレジスタは残す(`end_scope_asm`)。関数が終わると割り当て自体を破棄する(`clear`)
+    - 使った`callee_saved`のレジスタは、関数の入口で`push`、`ret`の直前で`pop`する。使うレジスタは本体を生成し終わるまで分からないので、目印(`{callee_save}`/`{callee_restore}`)を置いて`build_fn_process`の最後に置き換える。`_start`は戻り先が無いので対象外

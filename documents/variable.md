@@ -44,6 +44,11 @@ b: static[int] = 20
     struct Name {
         arr: [int 5]
     }
+    variant Name<T> {
+        Name1(int)
+        Name2(T)
+        Name3
+    }
     arr: Name = Name {
         arr: {0, 1, 2, 3, 4}
     }

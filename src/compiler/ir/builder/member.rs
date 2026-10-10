@@ -22,6 +22,8 @@ impl IR {
             // スコープないに」変数が存在しない
             .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInVar, name.to_string(), None))?
             .to_string();
+        // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
+        self.count_var_use(&member_name);
         let pos: usize = self.struct_tree.get_pos(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
@@ -85,6 +87,8 @@ impl IR {
         ptr_name: &str,
         name: &str,
     ) -> Result<inst::Inst, err::ErrKind> {
+        // ポインタの変数を使ったことを記録(`src/ir/counter_mnger.rs`)
+        self.count_var_use(ptr_name);
         // `get_ty_name`はポインタ型の変数に対しては、指す先の
         // 構造体名を返す(`src/ir/def_tree.rs`)
         let struct_name = self.var_tree.get_ty_name(ptr_name)?;
@@ -130,6 +134,8 @@ impl IR {
         index: &Box<node::Expr>,
     ) -> Result<inst::Inst, err::ErrKind> {
         let var_name: &str = &scope.last().unwrap();
+        // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
+        self.count_var_use(var_name);
         let struct_name = self.var_tree.get_ty_name(&var_name)?;
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める

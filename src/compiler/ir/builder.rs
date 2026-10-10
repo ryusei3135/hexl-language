@@ -35,6 +35,7 @@ impl IR {
             stk_counter: 0,
             current_span: err::Span::unknown(),
             constract_flag: checker::ConstractFlags::new(),
+            var_counter: counter_mnger::VarCounter::new(),
             expr_is_ptr_val: false,
         }
     }
@@ -418,6 +419,8 @@ impl IR {
             // 配列にアクセスする
             // else_idxはchecker/access_mem.rsでチェック済み
             node::Expr::RefArray { name, dst, index, .. } => {
+                // 配列変数を使ったことを記録(`src/ir/counter_mnger.rs`)
+                self.count_var_use(&name);
                 // 添字が可変: `if lo <= idx < hi { arr[idx] } else { arr[else_idx] }`
                 // `src/ir/builder/expr_node.rs`
                 if let Some(guard) = arr_guard {
@@ -439,6 +442,10 @@ impl IR {
                 self.unwrap_or_report(result)
             }
             node::Expr::Var(var_name) => {
+                // 変数(ローカル変数/引数)を使ったことを記録
+                // (`src/ir/counter_mnger.rs`)
+                self.count_var_use(&var_name);
+
                 let binding: node::TyNode = self.var_tree.get_ty_node(&var_name).unwrap();  
                 // 組み込み型ならそのまま、そうでなければ(構造体/バリアント型)
                 // `struct_tree`/`variant_tree`から探して型を決める

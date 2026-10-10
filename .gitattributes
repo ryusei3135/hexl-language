@@ -9,9 +9,12 @@
 *.S linguist-language=Assembly
 *.asm linguist-language=Assembly
 
+*.hexl linguist-language=Hexl
+
 # 明示的にソースコードとして扱う
 *.c linguist-detectable=true
 *.h linguist-detectable=true
 *.py linguist-detectable=true
 *.s linguist-detectable=true
 *.rs linguist-detectable=true
+*.hexl linguist-detectable=true

@@ -1,6 +1,5 @@
 use crate::compiler::{
-    err::compile::CompileErr,
-    parse::{self, VarMutAttr},
+    err::compile::CompileErr, node::ImportKind::Module, parse::{self, VarMutAttr},
 };
 
 use super::types::*;
@@ -231,6 +230,12 @@ impl VarTree {
         self.hash.retain(|name, _| state.hash.contains_key(name));
     }
 
+    /// `get`と同じだが、登録されていない変数でもpanicせず`None`を返す
+    pub(in crate::compiler::ir) 
+    fn find(&self, name: &str) -> Option<&VarType> {
+        self.hash.get(name).map(|var| &var.attribute)
+    }
+
     /// 指定された変数が引数か、ローカル変数かなどを返す
     pub(in crate::compiler::ir) 
     fn get(&self, name: &str) -> &VarType {
@@ -399,11 +404,35 @@ pub struct FnDefInfo {
     pub body: Vec<inst::Inst>,
     pub ret_ty: Option<node::TyNode>,
     pub temp_ty: Vec<node::TyNode>,
+    pub var_counter: counter_mnger::VarCounter,
     pub public: bool,
     pub stk_size: usize,
 }
 
 impl FnDefInfo {
+    pub fn new(
+        name: String,
+        module: Option<String>,
+        args: Vec<node::ArgsNode>,
+        body: Vec<inst::Inst>,
+        ret_ty: Option<node::TyNode>,
+        temp_ty: Vec<node::TyNode>,
+        public: bool,
+        stk_size: usize,
+        var_counter: counter_mnger::VarCounter,
+    ) -> Self {
+        Self {
+            name,
+            module,
+            args,
+            body,
+            ret_ty,
+            temp_ty,
+            var_counter,
+            public,
+            stk_size,
+        }
+    }
     /// 第一引数が`Self`型、または`Self`を指すポインタ型
     /// (`self: Self` / `self: Self*` / `self: Self*mut`)かどうかを判定する
     pub fn first_param_is_self(&self) -> bool {
@@ -485,6 +514,7 @@ impl FuncTree {
         meta_data: &node::FuncDefine,
         ret_ty: &node::TyNode,
         stk_size: usize,
+        var_counter: &counter_mnger::VarCounter,
     ) {
         // 関数の名前
         let fn_name = &meta_data.name;
@@ -495,18 +525,19 @@ impl FuncTree {
         let key = Self::make_key(&fn_name, fn_mod.as_ref(), &fn_tmp_ty);
         self.func.insert(
             key,
-            FnDefInfo {
-                name: fn_name.clone(),
+            FnDefInfo::new(
+                fn_name.clone(),
                 // 構造体のメゾットとして展開された関数の場合、
                 // 属している構造体の名前がここに入る
-                module: fn_mod.to_owned(),
-                args: meta_data.params.clone(),
-                body: body.to_owned(),
-                ret_ty: Some(ret_ty.to_owned()),
-                temp_ty: fn_tmp_ty.to_owned(),
-                public: meta_data.public,
+                fn_mod.to_owned(),
+                meta_data.params.clone(),
+                body.to_owned(),
+                Some(ret_ty.to_owned()),
+                fn_tmp_ty.to_owned(),
+                meta_data.public,
                 stk_size,
-            },
+                var_counter.clone(),
+            ),
         );
     }
 
@@ -517,15 +548,18 @@ impl FuncTree {
             meta_data.module.as_ref(),
             &meta_data.temp_ty,
         );
-        self.func.entry(key).or_insert_with(|| FnDefInfo {
-            name: meta_data.name.clone(),
-            module: meta_data.module.clone(),
-            args: meta_data.params.clone(),
-            body: Vec::new(),
-            ret_ty: Some(meta_data.ret_ty.clone()),
-            temp_ty: meta_data.temp_ty.clone(),
-            public: meta_data.public,
-            stk_size: 0,
+        self.func.entry(key).or_insert_with(|| {
+            FnDefInfo::new(
+                meta_data.name.clone(),
+                meta_data.module.clone(),
+                meta_data.params.clone(),
+                Vec::new(),
+                Some(meta_data.ret_ty.clone()),
+                meta_data.temp_ty.clone(),
+                meta_data.public,
+                0,
+                counter_mnger::VarCounter::new()
+            )
         });
     }
 }
@@ -571,15 +605,18 @@ impl FnDefMetaData {
 
     pub(in crate::compiler::ir) 
     fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
-        FnDefInfo {
-            name: self.name.clone(),
-            module: None,
-            args: self.params.clone(),
-            body: Vec::new(),
-            ret_ty: self.ret_ty.clone(),
-            temp_ty: Vec::new(),
-            public: true,
+        FnDefInfo::new(
+            self.name.clone(),
+            None,
+            self.params.clone(),
+            Vec::new(),
+            self.ret_ty.clone(),
+            Vec::new(),
+            true,
             stk_size,
-        }
+            // 外部の関数の本体はこのファイルにないので、使用回数は無い
+            // (処理中の関数のカウンターを渡すと、関数ごとの区切りが崩れる)
+            counter_mnger::VarCounter::new(),
+        )
     }
 }

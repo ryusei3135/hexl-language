@@ -65,6 +65,10 @@ impl AsmEmitter {
         match self.inst_at(node_idx) {
             inst::Inst::AssignVar { name, .. } => {
                 let var_info = self.var_info(&name);
+                if var_info.is_stack {
+                    // レジスタを持たない変数は、`%rbp`相対のメモリ参照にする
+                    return self.var_operand(&name);
+                }
                 let size = gen_reg_size(&var_info, &forced_size);
                 self.asm_fmt.get_fmt_reg(var_info.reg, &size)
             }

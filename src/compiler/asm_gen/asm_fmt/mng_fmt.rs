@@ -469,6 +469,12 @@ impl MngAsmFmt {
         result
     }
 
+    /// 先頭から`count`個の引数が渡されるレジスタの番号
+    pub(in crate::compiler::asm_gen) 
+    fn param_regs(&self, count: usize) -> Vec<usize> {
+        self.param_fmt.iter().take(count).copied().collect()
+    }
+
     #[inline(always)]
     pub(in crate::compiler::asm_gen) 
     fn inline_asm_list(&self) -> Vec<String> {
