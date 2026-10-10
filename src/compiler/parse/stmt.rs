@@ -35,16 +35,25 @@ pub(super) struct GenericFunc {
     pub(super) tkns: Vec<lex::LocatedTkn>,
 }
 
-// #[derive(Clone, Debug, PartialEq)]
-// pub(super) struct GenericData {
-//     pub(super) is_public: bool,
-//     /// `<T, U>`の型パラメータの名前
-//     pub(super) params: Vec<String>,
-//     /// 関数名から本体を閉じる`}`までのトークン。
-//     /// ただし`<T, U>`の部分は取り除いてある
-//     /// (`name(arg: T): T { .. }`という通常の関数と同じ形)
-//     pub(super) tkns: Vec<lex::LocatedTkn>,
-// }
+/// ジェネリクスな構造体/バリアント
+/// (`struct Name<T> { .. }` / `variant Name<T> { .. }` / `variant "unsafe" Name<T> { .. }`)の定義。
+///
+/// 関数と同じく、定義を読んだ時点ではノードを作らず、トークン列をそのまま
+/// 保存しておく。`Name<int>`のように使われるたびに、型パラメータを実際の型の
+/// トークンに置き換えて解析し直し、その型の構造体/バリアントのノードを作る
+/// (`typedef/generic.rs`の`instantiate_generic_type`)。
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct GenericType {
+    /// `<T, U>`の型パラメータの名前
+    pub(super) params: Vec<String>,
+    /// `struct`/`variant`から本体を閉じる`}`までのトークン。
+    /// ただし`<T, U>`の部分は取り除いてある
+    /// (`struct Name { .. }`という通常の定義と同じ形)
+    pub(super) tkns: Vec<lex::LocatedTkn>,
+    /// `tkns`の中で、型の名前のトークンがある位置
+    /// (`struct Name`なら1、`variant "unsafe" Name`なら2)
+    pub(super) name_idx: usize,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parser {
@@ -69,6 +78,15 @@ pub struct Parser {
     /// ジェネリクス関数の中で、さらにジェネリクス関数が
     /// 呼び出されている入れ子の深さ
     pub(super) generic_depth: usize,
+    /// 定義済みのジェネリクスな構造体/バリアント(型名 -> 定義)
+    pub(super) generic_types: HashMap<String, GenericType>,
+    /// 作成済みの(型名, `<>`の中身)。同じ型引数での使用が
+    /// 何度あっても、その型の構造体/バリアントは1つだけ作るために使う
+    pub(super) generated_types: Vec<(String, Vec<node::TyNode>)>,
+    /// 使われた型引数ごとに作った構造体/バリアントのノード。
+    /// `pending_funcs`と同じ理由で、解析がすべて終わってから
+    /// `gen_nodes`の後ろに追加する
+    pub(super) pending_types: Vec<node::Group1Node>,
 }
 
 impl Parser {
@@ -86,6 +104,9 @@ impl Parser {
             generated_funcs: Vec::new(),
             pending_funcs: Vec::new(),
             generic_depth: 0,
+            generic_types: HashMap::new(),
+            generated_types: Vec::new(),
+            pending_types: Vec::new(),
         }
     }
 
@@ -117,10 +138,16 @@ impl Parser {
 
         // 呼び出しが定義より前に書かれていても、その型の関数を
         // 作れるように、先にジェネリクス関数の定義を集めておく
+        // 構造体/バリアントのジェネリクスも同様。関数の定義を集める際に、
+        // 引数や戻り値の型`Pair<int>`を関数の定義と間違えないよう、
+        // 型の定義を先に集める
+        self.collect_generic_types()?;
         self.collect_generic_funcs()?;
         self.parse_loop()?;
 
-        // 呼び出された型ごとに作った関数を、通常の関数の後ろに追加する
+        // 使われた型引数ごとに作った構造体/バリアント、呼び出された型ごとに
+        // 作った関数を、通常のノードの後ろに追加する
+        self.gen_nodes.append(&mut self.pending_types);
         self.gen_nodes.append(&mut self.pending_funcs);
         Ok(&self.gen_nodes)
     }
@@ -144,12 +171,18 @@ impl Parser {
                             self.gen_nodes.push(node.change_group1());
                         }
                         lex::Tkn::KeyWordStruct => {
-                            let node = self.struct_node()?;
-                            self.gen_nodes.push(node);
+                            // ジェネリクス(`struct Name<T> {..}`)は、使われるまで
+                            // ノードを作らないので、読み飛ばす
+                            if !self.skip_generic_type_def()? {
+                                let node = self.struct_node()?;
+                                self.gen_nodes.push(node);
+                            }
                         }
                         lex::Tkn::KeyWordVariant => {
-                            let node = self.variant_node()?;
-                            self.gen_nodes.push(node);
+                            if !self.skip_generic_type_def()? {
+                                let node = self.variant_node()?;
+                                self.gen_nodes.push(node);
+                            }
                         }
                         t => {
                             return crate::err_at!(self.unexpect_tkn_in_stmt(t));

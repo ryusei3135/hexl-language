@@ -1,5 +1,6 @@
 mod def_fields;
 mod variant_field;
+mod generic;
 
 use super::{Parser, *};
 use std::collections::HashMap;
@@ -254,8 +255,23 @@ impl Parser {
                 let base_ty = self.is_constract_ty(node::TyNode::Ty(name.clone()))?;
                 let ty =
                     match self.next_tkn(&["<", "*", "["])? {
+                        // ジェネリクスな構造体/バリアント: `Name<int>`
                         lex::Tkn::LAngleBracket => {
-                            return crate::err_at!(self.generics_not_supported_yet());
+                            if !self.generic_types.contains_key(&name) {
+                                return crate::err_at!(self.generics_not_supported_yet());
+                            }
+                            // その型引数の構造体/バリアントを(まだ無ければ)作り、
+                            // 作った型の名前の型にする。終了時は`>`を指す
+                            let generic_name = self.generic_type_ref(&name)?;
+                            let generic_ty = self.is_constract_ty(node::TyNode::Ty(generic_name))?;
+                            match self.next_tkn(&["*", "["])? {
+                                lex::Tkn::LBracket => {
+                                    self.next_tkn(&["["])?;
+                                    self.make_range_ptr_node(generic_ty)?
+                                }
+                                lex::Tkn::Mul => self.ptr_ty_node(generic_ty)?,
+                                _ => generic_ty,
+                            }
                         }
                         // 境界付きポインタ
                         lex::Tkn::LBracket => {

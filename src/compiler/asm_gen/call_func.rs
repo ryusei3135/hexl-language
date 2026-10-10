@@ -27,6 +27,7 @@ impl AsmEmitter {
             .filter(|reg| *reg != 0)
             .collect();
 
+        // 関数を呼ぶためレジスタを退避
         for reg in protected_regs.iter() {
             let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
             call_func.push_str(&self.asm_fmt.get_push(&reg_name));

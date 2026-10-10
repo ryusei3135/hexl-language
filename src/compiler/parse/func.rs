@@ -178,7 +178,14 @@ impl Parser {
                 ) || (i > 1
                     && matches!(tkns[i - 1].tkn, lex::Tkn::Str(_))
                     && matches!(tkns[i - 2].tkn, lex::Tkn::KeyWordVariant)));
+            // 引数や戻り値の型`Pair<int>`(`Pair`はジェネリクスな構造体/バリアント)も
+            // `Name<`の形だが、関数の定義ではない
+            let is_generic_type_name = matches!(
+                &tkns[i].tkn,
+                lex::Tkn::Name(n) if self.generic_types.contains_key(n)
+            );
             let is_generic_head = !is_type_def_name
+                && !is_generic_type_name
                 && matches!(tkns[i].tkn, lex::Tkn::Name(_))
                 && matches!(
                     tkns.get(i + 1).map(|t| &t.tkn),
@@ -368,6 +375,7 @@ impl Parser {
     /// ## 戻り値
     /// `(型のノード, 各型のトークン列)`。トークン列は、型パラメータを
     /// 置き換えるために使う
+    pub(in crate::compiler::parse)
     fn generic_type_args(
         &mut self,
         param_count: usize,
@@ -444,35 +452,12 @@ impl Parser {
     }
 
     /// ジェネリクス関数の型パラメータを、実際の型のトークンに置き換える
+    /// (置き換えの本体は、構造体/バリアントと共通の`substitute_params`)
     fn substitute_ty_params(
         generic: &GenericFunc,
         ty_tkns: &[Vec<lex::LocatedTkn>],
     ) -> Vec<lex::LocatedTkn> {
-        let mut out = Vec::with_capacity(generic.tkns.len());
-
-        for (i, t) in generic.tkns.iter().enumerate() {
-            // 先頭は関数名。`x.T`や`mod::T`の`T`は、型ではなく
-            // メンバー/パスの名前なので置き換えない
-            let replaceable = i > 0
-                && !matches!(
-                    generic.tkns[i - 1].tkn,
-                    lex::Tkn::Dot | lex::Tkn::ModPathTkn
-                );
-            if let (true, lex::Tkn::Name(n)) = (replaceable, &t.tkn) {
-                if let Some(p) = generic.params.iter().position(|p| p == n) {
-                    for ty_tkn in &ty_tkns[p] {
-                        // 位置情報は、置き換え前の`T`の位置にしておく
-                        let mut tkn = ty_tkn.clone();
-                        tkn.line = t.line;
-                        tkn.pos = t.pos;
-                        out.push(tkn);
-                    }
-                    continue;
-                }
-            }
-            out.push(t.clone());
-        }
-        out
+        Self::substitute_params(&generic.tkns, &generic.params, ty_tkns)
     }
 
     /// 型引数`ty_args`で、ジェネリクス関数`name`の関数のノードを作り、

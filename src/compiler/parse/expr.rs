@@ -52,6 +52,11 @@ impl Parser {
                 lex::Tkn::LAngleBracket if self.is_generic_call(&name, self.idx) => {
                     return self.generic_call_expr(&name, true);
                 }
+                // ジェネリクスな構造体/バリアントの初期化・メゾットの呼び出し:
+                // `Name<int> { .. }` / `Name<int>::Mem`
+                lex::Tkn::LAngleBracket if self.is_generic_type_expr(&name, self.idx) => {
+                    return self.generic_type_expr::<false>(&name, true);
+                }
                 lex::Tkn::LBrace => {
                     return self.struct_init_node::<false>(&name);
                 }

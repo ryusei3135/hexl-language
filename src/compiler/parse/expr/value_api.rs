@@ -37,6 +37,13 @@ impl Parser {
                 self.advance_tkn().unwrap();
                 self.generic_call_expr(&name, true)?
             }
+            // ジェネリクスな構造体/バリアントの初期化・メゾットの呼び出し:
+            // `Name<int> { .. }` / `Name<int>::Mem`
+            lex::Tkn::LAngleBracket if self.is_generic_type_expr(&name, self.idx + 1) => {
+                // `<`まで進める
+                self.advance_tkn().unwrap();
+                self.generic_type_expr::<T>(&name, init_struct)?
+            }
             // 構造体の初期化ノードを作成する
             lex::Tkn::LBrace => {
                 // "{"から始まらないといけないので、次に進める
@@ -44,27 +51,37 @@ impl Parser {
                 return self.struct_init_node::<T>(&name);
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
-            lex::Tkn::ModPathTkn => {
-                self.next_tkn(&["name"])?;
-                let lex::Tkn::Name(mem_name) = self.next_tkn(&["name"])?.clone() else {
-                    panic!();
-                };
-                if matches!(self.next_tkn_ref(&[])?, lex::Tkn::LParen) {
-                    self.next_tkn(&["("])?;
-                    node::Expr::Scope {
-                        scope: vec![name],
-                        target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
-                    }
-                } else {
-                    node::Expr::EnumVariant {
-                        name,
-                        variant: mem_name,
-                    }
-                }
-            }
+            lex::Tkn::ModPathTkn => self.scope_member_node(name, init_struct)?,
             _ => node::Expr::Var(name),
         };
         Ok(node)
+    }
+
+    /// `Name::Mem` / `Name::func(..)`のノードを作成する。
+    /// 呼び出し時の`current_tkn()`は、`::`の1つ前のトークン
+    /// (型の名前。ジェネリクスな型の場合は`>`)
+    pub(in crate::compiler::parse)
+    fn scope_member_node(
+        &mut self,
+        name: String,
+        init_struct: bool,
+    ) -> Result<node::Expr, err::ErrKind> {
+        self.next_tkn(&["name"])?;
+        let lex::Tkn::Name(mem_name) = self.next_tkn(&["name"])?.clone() else {
+            panic!();
+        };
+        if matches!(self.next_tkn_ref(&[])?, lex::Tkn::LParen) {
+            self.next_tkn(&["("])?;
+            Ok(node::Expr::Scope {
+                scope: vec![name],
+                target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
+            })
+        } else {
+            Ok(node::Expr::EnumVariant {
+                name,
+                variant: mem_name,
+            })
+        }
     }
 
     /// 配列リテラルのノードを作成する

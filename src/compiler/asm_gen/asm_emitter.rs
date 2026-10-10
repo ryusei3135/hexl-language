@@ -619,7 +619,7 @@ impl AsmEmitter {
                 )
             }
             inst::Inst::Variant { name, tag, value, tagged, size, is_self } => {
-                panic!()
+                self.emit_data_variant_init_asm(name, value.as_ref(), tag, is_self, &size)
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
