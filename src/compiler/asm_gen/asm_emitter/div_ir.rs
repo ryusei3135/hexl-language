@@ -43,9 +43,9 @@ impl AsmEmitter {
         };
 
         // オペランドのテキストは、レジスタなら計算サイズに揃える
-        let src1 = self.extract_operand_text(expr.ls, &wrap_size);
+        let src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref());
         let src1 = self.asm_fmt.resize_reg_operand(&src1, &calc);
-        let src2 = self.extract_operand_text(expr.rs, &wrap_size);
+        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref());
         let src2 = self.asm_fmt.resize_reg_operand(&src2, &calc);
         let mem1 = self.check_node_is_mem_val(expr.ls).is_some();
         let mem2 = self.check_node_is_mem_val(expr.rs).is_some();

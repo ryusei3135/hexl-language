@@ -8,8 +8,8 @@ impl AsmEmitter {
         size: &types::Size,
         dst: usize,
         src: usize,
-        name: &Option<String>,
-        this_is_self: &SelfPtrInfo,
+        name: Option<&str>,
+        this_is_self: SelfPtrInfo,
     ) {
         // 経由の間接参照になってしまっていた。
         if let types::Size::Struct(_) = size {
@@ -29,7 +29,7 @@ impl AsmEmitter {
             // 呼び出し自体(`lea`+`call`)は副作用として`self.asm_text`へ
             // 積まれる。戻り値のオペランド文字列自体は構造体には
             // 使えないので捨てる
-            let _ = self.extract_operand_text(src, &this_is_self);
+            let _ = self.extract_operand_text(src, this_is_self);
             if self.struct_mem(name, size, src, dst).is_none() {
                 return ();
             }
@@ -86,7 +86,7 @@ impl AsmEmitter {
 
             let formated = if size.is_pointer().is_some() && is_literal_num {
                 let dst_reg = self.reg64(reg);
-                let value_operand = self.extract_operand_text(src, &this_is_self);
+                let value_operand = self.extract_operand_text(src, this_is_self);
                 self.mov_line(&dst_reg, &value_operand, &Size::DQ, false)
             } else {
                 // メモリのポインタか、値かで、ニーモニックが変わる
@@ -114,7 +114,7 @@ impl AsmEmitter {
                 if self
                     .expr_vars
                     .iter()
-                    .find(|v| v.as_str() == var_name.as_str())
+                    .find(|v| v.as_str() == var_name)
                     .is_some()
                 {
                     self.update_value_reg(&var_name, current_reg);
@@ -132,15 +132,15 @@ impl AsmEmitter {
                 kind,
                 dst,
             } => {
-                let dst_size: SelfPtrInfo = size.wrap_dst_size();
+                let dst_size = size.wrap_dst_size();
 
                 if kind == &inst::MemoryKind::Static {
-                    self.is_static_var(src, *dst, name, &size.wrap_dst_size());
+                    self.is_static_var(src, *dst, name, size.wrap_dst_size().as_ref());
                 } else {
                     let base = match &self.curr_inst[*dst] {
                         inst::Inst::Pointer(..)
                         | inst::Inst::Param(..)
-                        | inst::Inst::GetPtr { .. } => self.extract_operand_text(*dst, &dst_size),
+                        | inst::Inst::GetPtr { .. } => self.extract_operand_text(*dst, dst_size.as_ref()),
                         _ => FRAME_BASE_REG.to_string(),
                     };
 
@@ -153,7 +153,7 @@ impl AsmEmitter {
                     let arr_base = self.stk_use_counter;
                     self.stk_use_counter = arr_base + elem_bytes * src.len();
                     for (k, idx) in src.iter().enumerate() {
-                        let value = self.extract_operand_text(*idx, &dst_size);
+                        let value = self.extract_operand_text(*idx, dst_size.as_ref());
                         let elem_ref = self
                             .asm_fmt
                             .fmt_ref_operand(&base, arr_base + (k + 1) * elem_bytes);
@@ -178,13 +178,13 @@ impl AsmEmitter {
 
     fn is_static_var(
         &mut self,
-        src: &Vec<usize>,
+        src: &[usize],
         dst: usize,
-        name: &String,
-        this_is_self: &SelfPtrInfo,
+        name: &str,
+        this_is_self: SelfPtrInfo,
     ) {
         println!("src/gen/call_func/MemoryValue");
-        let val = self.extract_operand_text(*src.last().unwrap(), &this_is_self);
+        let val = self.extract_operand_text(*src.last().unwrap(), this_is_self);
         let label_name = format!("M{}", self.data_idx.to_string());
         let fmt_data =
             self.asm_fmt
@@ -201,7 +201,7 @@ impl AsmEmitter {
 
     fn struct_mem(
         &mut self,
-        name: &Option<String>,
+        name: Option<&str>,
         size: &types::Size,
         src: usize,
         dst: usize,
@@ -221,7 +221,7 @@ impl AsmEmitter {
                 self.stk_use_counter = base;
                 base
             };
-            let ini_asm = self.emit_struct_ini_asm(mem, is_self);
+            let ini_asm = self.emit_struct_init_asm(mem, is_self);
             if !is_self {
                 self.stk_use_counter = self.stk_use_counter.max(struct_stk_offset + size.to_bytes());
             }

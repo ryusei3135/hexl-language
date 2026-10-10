@@ -7,17 +7,17 @@ impl AsmEmitter {
         name: &str,
         dst: usize,
         value: usize,
-        this_is_self: &SelfPtrInfo,
+        this_is_self: SelfPtrInfo,
     ) {
         // 書き込み先のメモリのオペランド
-        let dst_operand = self.extract_operand_text(dst, &this_is_self);
+        let dst_operand = self.extract_operand_text(dst, this_is_self);
         let dst_operand = if matches!(self.curr_inst[dst], inst::Inst::Pointer(..)) {
             format!("({})", dst_operand)
         } else {
             dst_operand
         };
         // 書き込む値のオペランド
-        let value_operand = self.extract_operand_text(value, &this_is_self);
+        let value_operand = self.extract_operand_text(value, this_is_self);
 
         // ニーモニックのサイズ調整に使う型。
         //
@@ -47,14 +47,14 @@ impl AsmEmitter {
         &mut self,
         current_reg: usize,
         value: usize,
-        this_is_self: &SelfPtrInfo,
+        this_is_self: SelfPtrInfo,
     ) -> String {
         // ポインタ型の変数へ数値リテラル(`ptr = 0`のようなNULL代入)を
         // 再代入する場合は、アドレスを求める`lea`ではなく、ポインタの
         // サイズ(64bit)に合わせた`movq`でそのまま即値を書き込む
         if matches!(self.curr_inst[value], inst::Inst::Num { .. }) {
             let dst_reg = self.reg64(current_reg);
-            let value_operand = self.extract_operand_text(value, &this_is_self);
+            let value_operand = self.extract_operand_text(value, this_is_self);
             return self.mov_line(&dst_reg, &value_operand, &Size::DQ, false);
         }
 
@@ -69,7 +69,7 @@ impl AsmEmitter {
         let (ptr_operand, needs_address) = match &self.curr_inst[value] {
             inst::Inst::GetPtr { stk, .. } => (self.rbp_ref(self.ptr_stk(value, *stk)), true),
             _ => {
-                let operand = self.extract_operand_text(value, &this_is_self);
+                let operand = self.extract_operand_text(value, this_is_self);
                 let needs_address = self.check_node_is_mem_val(value).is_some();
                 (operand, needs_address)
             }
@@ -85,7 +85,7 @@ impl AsmEmitter {
         &mut self,
         current_reg: usize,
         value: usize,
-        this_is_self: &SelfPtrInfo,
+        this_is_self: SelfPtrInfo,
     ) -> String {
         let mnemonic = if self.curr_inst[value].is_pointer() {
             "address"
@@ -93,6 +93,6 @@ impl AsmEmitter {
             "mov"
         };
 
-        self.format_line(mnemonic, Some(current_reg), value, None, &this_is_self)
+        self.format_line(mnemonic, Some(current_reg), value, None, this_is_self)
     }
 }

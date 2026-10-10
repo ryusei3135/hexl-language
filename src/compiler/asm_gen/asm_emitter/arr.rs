@@ -14,7 +14,7 @@ impl AsmEmitter {
         pos: usize,
         size: &Size,
         dst: usize,
-        this_is_self: &SelfPtrInfo,
+        this_is_self: SelfPtrInfo,
     ) -> String {
         // 前回の添字用レジスタが解放されていなければ、ここで解放する
         if let Some(old) = self.arr_index_temp.take() {
