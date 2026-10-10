@@ -166,10 +166,13 @@ impl IR {
             Ok(types::Size::Pointer {
                 range: Some(range), ..
             }) => range.1 - range.0,
+            // 長さの指定がないので、1
+            Ok(types::Size::Pointer { range , ..}) => 1,
             Ok(types::Size::Array { len, .. }) => *len,
-            _ => panic!(
-                "変数 `{}` の長さを決定できません: 配列/文字列リテラルでの初期化か、範囲の指定が必要です",
+            t => panic!(
+                "変数 `{}` の長さを決定できません: 配列/文字列リテラルでの初期化か、範囲の指定が必要です {:?}",
                 name,
+                t
             ),
         }
     }

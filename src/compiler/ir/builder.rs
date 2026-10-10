@@ -9,6 +9,8 @@ use super::*;
 use crate::compiler::ir::types::*;
 use crate::compiler::{err::*, models::Body, parse};
 
+const NEXT_VAR_NODE_IS_GET_ADDR: bool = true;
+
 impl IR {
     pub fn new() -> Self {
         Self {
@@ -29,11 +31,11 @@ impl IR {
             public_func_tree: Vec::new(),
             define_meta_data: Vec::new(),
             struct_tree: def_tree::StructTree::new(),
-            union_tree: def_tree::UnionTree::new(),
-            enum_tree: HashMap::new(),
+            variant_tree: def_tree::VariantTree::new(),
             stk_counter: 0,
             current_span: err::Span::unknown(),
             constract_flag: checker::ConstractFlags::new(),
+            expr_is_ptr_val: false,
         }
     }
 
@@ -128,7 +130,7 @@ impl IR {
         nodes: &[node::Group1Node],
         #[cfg(not(test))] settings: &crate::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
-        // 構造体・列挙型は、定義された場所より前で使われる場合があるので
+        // 構造体・バリアント型は、定義された場所より前で使われる場合があるので
         // 先に全て登録しておく(前方参照に対応するため)
         for node in nodes {
             match node {
@@ -136,11 +138,8 @@ impl IR {
                 node::Group1Node::StructDefine(info) => {
                     self.struct_tree.add(info);
                 }
-                node::Group1Node::UnionDefine(info) => {
-                    self.union_tree.add(info);
-                }
-                node::Group1Node::EnumDefine(info) => {
-                    self.enum_tree.insert(info.name.clone(), info.clone());
+                node::Group1Node::VariantDefine(info) => {
+                    self.variant_tree.add(info);
                 }
                 node::Group1Node::FuncDefine(info) => {
                     // 関数本体を生成する前にシグネチャを登録し、
@@ -168,16 +167,12 @@ impl IR {
                     // 通常の関数としてIRへ展開する
                     let _ = self.expand_struct_methods(info)?;
                 }
-                node::Group1Node::UnionDefine(info) => {
-                    // 共用体の情報を登録
-                    self.union_tree.add(info);
-                    // 共用体の中に定義されているメゾットを、
+                node::Group1Node::VariantDefine(info) => {
+                    // バリアント型の情報を登録
+                    self.variant_tree.add(info);
+                    // バリアント型の中に定義されているメゾットを、
                     // 通常の関数としてIRへ展開する
-                    let _ = self.expand_union_methods(info)?;
-                }
-                node::Group1Node::EnumDefine(info) => {
-                    // 列挙型の情報を登録
-                    self.enum_tree.insert(info.name.clone(), info.clone());
+                    let _ = self.expand_variant_methods(info)?;
                 }
                 _ => {}
             }
@@ -204,17 +199,17 @@ impl IR {
         self.expand_methods("構造体", &struct_def.name, &struct_def.methods)
     }
 
-    /// 共用体の中に定義されているメゾット(`UnionDefine::methods`)を、
+    /// バリアント型の中に定義されているメゾット(`VariantDefine::methods`)を、
     /// 通常のトップレベルの関数として展開してIRへ変換する
     /// (処理の流れは`expand_struct_methods`と同じ)
-    fn expand_union_methods(
+    fn expand_variant_methods(
         &mut self,
-        union_def: &node::UnionDefine,
+        variant_def: &node::VariantDefine,
     ) -> Result<(), err::ErrKind> {
-        self.expand_methods("共用体", &union_def.name, &union_def.methods)
+        self.expand_methods("バリアント型", &variant_def.name, &variant_def.methods)
     }
 
-    /// `expand_struct_methods`/`expand_union_methods`の共通処理
+    /// `expand_struct_methods`/`expand_variant_methods`の共通処理
     /// - `kind`: エラーメッセージ用の、型の種類の名前
     /// - `owner`: メゾットが属する型の名前(モジュール名になる)
     fn expand_methods(
@@ -261,7 +256,7 @@ impl IR {
             self.constract_flag.reset();
             match stmt.get_node().clone() {
                 node::Group2Node::Expr(expr) => {
-                    let _ = self.gen_expr_ir(expr, &types::Size::DD);
+                    let _ = self.gen_expr_ir(expr, None);
                 }
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir(stmt);
@@ -287,7 +282,8 @@ impl IR {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
                 let func_ret_ty = self.func_ret_ty.as_ref().unwrap();
-                let idx = self.gen_expr_ir(expr, &self.size_of(&func_ret_ty));
+                let ret_size = self.size_of(&func_ret_ty);
+                let idx = self.gen_expr_ir(expr, Some(&ret_size));
                 inst::Inst::Ret(idx)
             }
             node::StmtNode::Continue => {
@@ -320,8 +316,8 @@ impl IR {
         expect_byte: &types::Size,
     ) -> (usize, usize) {
         (
-            self.gen_expr_ir(*node.0, &expect_byte),
-            self.gen_expr_ir(*node.1, &expect_byte),
+            self.gen_expr_ir(*node.0, Some(&expect_byte)),
+            self.gen_expr_ir(*node.1, Some(&expect_byte)),
         )
     }
 
@@ -359,7 +355,13 @@ impl IR {
         .new()
     }
 
-    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: &types::Size) -> usize {
+    /// `expect_byte`は期待する型。`None`の場合は未確定で、
+    /// `Assign`ノードが来たら代入先の変数の型で確定させる
+    /// (それ以外のノードでは`DD`にフォールバックする)
+    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: Option<&types::Size>) -> usize {
+        // `src/ir/builder/expr_node.rs`
+        let resolved = self.resolve_expect_byte(&expr, expect_byte);
+        let expect_byte = &resolved;
         self.expr_counter += 1;
         // 配列/ポインタのアクセスやポインタの加算の範囲チェック
         // (`src/ir/checker/access_mem.rs`)
@@ -369,11 +371,12 @@ impl IR {
         let inst = match expr {
             // ポインタ関係
             node::Expr::GetAddress(target) => {
-                let idx = self.gen_expr_ir(*target, &expect_byte);
+                self.expr_is_ptr_val = NEXT_VAR_NODE_IS_GET_ADDR;
+                let idx = self.gen_expr_ir(*target, Some(&expect_byte));
                 inst::Inst::GetAddress(idx)
             }
             node::Expr::ConnectAddr(target) => {
-                let idx = self.gen_expr_ir(*target, &expect_byte);
+                let idx = self.gen_expr_ir(*target, Some(&expect_byte));
                 inst::Inst::Pointer(idx)
             }
 
@@ -435,11 +438,29 @@ impl IR {
                 let result = self.gen_call_fn_ir(None, &meta_data, None);
                 self.unwrap_or_report(result)
             }
-            node::Expr::Var(name) => {
+            node::Expr::Var(var_name) => {
+                let binding: node::TyNode = self.var_tree.get_ty_node(&var_name).unwrap();  
+                // 組み込み型ならそのまま、そうでなければ(構造体/バリアント型)
+                // `struct_tree`/`variant_tree`から探して型を決める
+                let mut ty: Size = match Size::try_from(binding.clone()) {
+                    Ok(ty) => ty,
+                    Err(_) => {
+                        let result = self.try_size_or_emit_struct(&binding);
+                        self.unwrap_or_report(result)
+                    }
+                };
+                ty = if self.expr_is_ptr_val {
+                    // 型をwrapしたのでフラグを閉じる
+                    self.expr_is_ptr_val = false;
+                    ty.wrap_get_addr()
+                } else {
+                    ty
+                };
                 // `src/ir/ty_checker/var_ty.rs`
-                self.check_var_ty(&name, &expect_byte);
+                println!(" ty {:?}", ty);
+                self.check_var_ty(&ty, &expect_byte);
 
-                return match self.var_tree.get(&name) {
+                return match self.var_tree.get(&var_name) {
                     def_tree::VarType::Local(index) => *index,
                     def_tree::VarType::Param(param) => {
                         // 引数のノード
@@ -457,8 +478,10 @@ impl IR {
             node::Expr::Loop { pattern, body } => {
                 return self.gen_loop_expr_ir(pattern, &body);
             }
-            // 列挙型のメンバへのアクセス: `Name::Mem`
-            // メンバの定義順に基いたタグ(整数値)として展開する
+            // バリアント型のメンバへのアクセス: `Name::Mem`
+            // - 全メンバーが型なしの(旧列挙型相当)場合は、定義順に基いた
+            //   タグ(整数値)として展開する
+            // - データ付きメンバーを持つ場合は、タグ付きの値として展開する
             node::Expr::EnumVariant { name, variant } => {
                 // `src/ir/builder/expr_node.rs`
                 *self
@@ -471,32 +494,32 @@ impl IR {
                 name,
                 mut fields,
             } => {
-                // パーサーは`Name { .. }`が構造体か共用体かを区別できないので、
-                // 共用体の名前だった場合はここで共用体の初期化として扱う
-                let is_union = self.union_tree.contains_key(&name)
+                // パーサーは`Name { .. }`が構造体かバリアント型かを区別できないので、
+                // バリアント型の名前だった場合はここでバリアント型の初期化として扱う
+                let is_variant = self.variant_tree.contains_key(&name)
                     || (is_self
                         && self.this_is_self
                         && self
                             .var_tree
                             .get_ty_name(&name)
-                            .map_or(false, |n| self.union_tree.contains_key(&n)));
-                if is_union {
+                            .map_or(false, |n| self.variant_tree.contains_key(&n)));
+                if is_variant {
                     // `src/ir/builder/expr_node.rs`
-                    let result = self.init_union_node(is_self, &name, &mut fields);
+                    let result = self.init_variant_node(is_self, &name, &mut fields);
                     self.unwrap_or_report(result)
                 } else {
                     // `src/ir/builder/expr_node.rs`
                     self.init_struct_node(&name, &mut fields).unwrap()
                 }
             }
-            // 共用体の初期化: `Name { field: value }`
-            node::Expr::InitUnion {
+            // バリアント型の初期化: `Name { field: value }`
+            node::Expr::InitVariant {
                 is_self,
                 name,
                 mut fields,
             } => {
                 // `src/ir/builder/expr_node.rs`
-                let result = self.init_union_node(is_self, &name, &mut fields);
+                let result = self.init_variant_node(is_self, &name, &mut fields);
                 self.unwrap_or_report(result)
             }
             // ここでは対応する「元の変数名」が分からない文脈
@@ -574,7 +597,7 @@ impl IR {
 
         let mut value_idx = Vec::new();
         for value in values {
-            value_idx.push(self.gen_expr_ir(value, &elem_size));
+            value_idx.push(self.gen_expr_ir(value, Some(&elem_size)));
         }
 
         // メモリ領域の情報を作成
@@ -630,7 +653,7 @@ impl IR {
             let condition = self.pattern_labels;
             self.pattern_labels += 1;
             crate::push_jmp_code!(self, ExpectJmp, &condition);
-            let _ = self.gen_expr_ir(*expr, &types::Size::DD);
+            let _ = self.gen_expr_ir(*expr, None);
             // もし条件がfalseならendまでジャンプ
             crate::push_jmp_code!(self, Jmp, &end);
             // 条件がtrueのときジャンプする場所
@@ -684,7 +707,7 @@ impl IR {
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
             crate::push_jmp_code!(self, ExpectJmp, label);
             let cond = build_cond(&arm.pattern);
-            self.gen_expr_ir(cond, &types::Size::DD);
+            self.gen_expr_ir(cond, None);
         }
 
         // どの条件にも一致しなかった場合の処理(else)
@@ -944,10 +967,11 @@ mod mem_var_tests {
     }
 
     #[test]
-    fn check_enum_as_ty_and_variant_access() {
-        // 列挙型を型として使い、`Name::Mem`でメンバにアクセスできる
+    fn check_variant_enum_like_as_ty_and_access() {
+        // 型なしメンバーだけの`variant`(旧列挙型)を型として使い、
+        // `Name::Mem`でメンバにアクセスできる
         let body = build_func_body(
-            "enum Color { Red Green Blue } main(): int { a: Color = Color::Green }",
+            "variant Color { Red Green Blue } main(): int { a: Color = Color::Green }",
         );
         assert!(
             body.iter().any(|inst| matches!(
@@ -960,10 +984,10 @@ mod mem_var_tests {
     }
 
     #[test]
-    fn check_enum_forward_reference() {
-        // 列挙型が使われる場所より後に定義されていても解決できる
+    fn check_variant_enum_like_forward_reference() {
+        // `variant`が使われる場所より後に定義されていても解決できる
         let body =
-            build_func_body("main(): int { a: Color = Color::Blue } enum Color { Red Green Blue }");
+            build_func_body("main(): int { a: Color = Color::Blue } variant Color { Red Green Blue }");
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
@@ -975,10 +999,10 @@ mod mem_var_tests {
     }
 
     #[test]
-    fn check_combined_struct_enum_program() {
-        // 構造体と列挙型を同じプログラム内で型として使えることを確認する
+    fn check_combined_struct_variant_program() {
+        // 構造体と`variant`を同じプログラム内で型として使えることを確認する
         let body = build_func_body(
-            "enum Color { Red Green Blue } struct Point { x: int y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1 y: 2 } }",
+            "variant Color { Red Green Blue } struct Point { x: int y: int } main(): int { c: Color = Color::Green p: Point = Point { x: 1 y: 2 } }",
         );
         assert!(
             body.iter()
@@ -988,6 +1012,66 @@ mod mem_var_tests {
             i,
             inst::Inst::Struct { mem, .. } if mem.len() == 2
         )));
+    }
+
+    #[test]
+    fn check_variant_with_data_init() {
+        // データ付きメンバーの初期化は、タグ付きの`Inst::Variant`になる
+        let body = build_func_body(
+            "variant V { A B(int) } main(): int { v: V = V { B: 5 } }",
+        );
+        assert!(
+            body.iter().any(|i| matches!(
+                i,
+                inst::Inst::Variant { tag: 1, value: Some(_), tagged: true, .. }
+            )),
+            "{:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn check_variant_typeless_member_in_data_variant() {
+        // データ付きメンバーを持つ`variant`の型なしメンバーは`Inst::Variant`(値なし)
+        let body = build_func_body(
+            "variant V { A B(int) } main(): int { v: V = V::A }",
+        );
+        assert!(
+            body.iter().any(|i| matches!(
+                i,
+                inst::Inst::Variant { tag: 0, value: None, tagged: true, .. }
+            )),
+            "{:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn check_variant_unsafe_has_no_tag() {
+        // `"unsafe"`はタグを持たない
+        let body = build_func_body(
+            "variant \"unsafe\" V { a: int b: i64 } main(): int { v: V = V { b: 5 } }",
+        );
+        assert!(
+            body.iter().any(|i| matches!(
+                i,
+                inst::Inst::Variant { tagged: false, value: Some(_), .. }
+            )),
+            "{:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn check_variant_size() {
+        // タグ(4バイト) + 最大のメンバー(i64 = 8バイト)
+        let src = "variant V { A B(int) C(i64) } main(): int { v: V = V { C: 1 } }";
+        let body = build_func_body(src);
+        let size = body.iter().find_map(|i| match i {
+            inst::Inst::Variant { size, .. } => Some(size.clone()),
+            _ => None,
+        });
+        assert_eq!(size.map(|s| s.to_bytes()), Some(12), "{:?}", body);
     }
 
     #[test]

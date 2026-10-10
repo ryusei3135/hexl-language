@@ -1,6 +1,6 @@
 //! 構造体や共用体などのフィールドを生成するAPIを提供
 
-use crate::compiler::node::{Field, Group1Node, StructField, UnionField, UnionFieldKind, UnionMode};
+use crate::compiler::node::{Field, Group1Node, StructField, VariantField, VariantFieldKind, VariantMode};
 
 use super::*;
 
@@ -98,20 +98,20 @@ impl Parser {
     /// - `Normal`: `Mem` / `Mem(ty)` / メゾット(タグ付き共用体)
     /// - `Unsafe`: `mem: ty`(構造体と同じ書き方。タグを持たない)
     pub(in crate::compiler::parse::typedef)
-    fn define_union_fields(
+    fn define_variant_fields(
         &mut self,
-        union_flag: UnionMode,
-    ) -> Result<(Vec<node::UnionField>, Vec<node::Group1Node>), err::ErrKind> {
+        variant_flag: VariantMode,
+    ) -> Result<(Vec<node::VariantField>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
             return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
         }
 
-        match union_flag {
-            UnionMode::Normal => self.safe_union_field(),
-            UnionMode::Unsafe => {
-                let (mut fields, methods) = self.define_colon_fields::<UnionField>()?;
+        match variant_flag {
+            VariantMode::Normal => self.safe_variant_field(),
+            VariantMode::Unsafe => {
+                let (mut fields, methods) = self.define_colon_fields::<VariantField>()?;
                 for field in fields.iter_mut() {
-                    field.mode = UnionMode::Unsafe;
+                    field.mode = VariantMode::Unsafe;
                 }
                 Ok((fields, methods))
             }
@@ -120,12 +120,12 @@ impl Parser {
 
     /// ラベル付きの共用体を作成
     /// ```text
-    /// union A { Mem  Mem1(int)  func(self: Self) {} }
+    /// variant A { Mem  Mem1(int)  func(self: Self) {} }
     /// ```
-    fn safe_union_field(
+    fn safe_variant_field(
         &mut self,
-    ) -> Result<(Vec<node::UnionField>, Vec<node::Group1Node>), err::ErrKind> {
-        let mut fields = Vec::<node::UnionField>::new();
+    ) -> Result<(Vec<node::VariantField>, Vec<node::Group1Node>), err::ErrKind> {
+        let mut fields = Vec::<node::VariantField>::new();
         let mut methods = Vec::new();
         let mut pub_flag = false;
 
@@ -142,9 +142,9 @@ impl Parser {
                 lex::Tkn::Comma => {}
                 // フィールドの名前を取得
                 lex::Tkn::Name(field_name) => {
-                    match self.make_union_field(field_name, pub_flag)? {
-                        UnionFieldKind::Field(field) => fields.push(field),
-                        UnionFieldKind::Method(method) => methods.push(method),
+                    match self.make_variant_field(field_name, pub_flag)? {
+                        VariantFieldKind::Field(field) => fields.push(field),
+                        VariantFieldKind::Method(method) => methods.push(method),
                     }
                     pub_flag = false;
                 }
@@ -153,8 +153,8 @@ impl Parser {
                         self.build_err_span(),
                         err::SyntaxErrKind::UnexpectedTkn {
                             found: t,
-                            expected: lex::Tkn::Name("union member".to_string()),
-                            context: lex::Tkn::KeyWordUnion
+                            expected: lex::Tkn::Name("variant member".to_string()),
+                            context: lex::Tkn::KeyWordVariant
                         }
                     );
                 }

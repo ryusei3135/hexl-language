@@ -149,7 +149,7 @@ impl IR {
             self.check_constract_arg(meta_data.name.as_str(), &def_args[index], &expr_arg)?;
 
             let ty = self.size_of(&def_args[index].ty).clone();
-            let idx = self.gen_expr_ir(expr_arg, &ty);
+            let idx = self.gen_expr_ir(expr_arg, Some(&ty));
             func_meta_data.insert_param_parent_id(idx);
         }
         Ok(inst::Inst::CallFunc(func_meta_data))

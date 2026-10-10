@@ -199,11 +199,11 @@ pub enum Inst {
         mem: Vec<MemoryInst>,
         is_self: bool,
     },
-    /// 共用体の初期化
+    /// バリアント型の初期化
     /// - `tagged`が`true`のときは、先頭に`tag`(`DD`)を置き、その後ろに
     ///   最も大きいメンバーのサイズ分の領域(ペイロード)を確保する
     /// - `tagged`が`false`(`unsafe`)のときはタグを置かず、ペイロードのみ
-    Union {
+    Variant {
         name: String,
         /// 選ばれたメンバーの、定義順のインデックス
         tag: usize,
@@ -211,7 +211,7 @@ pub enum Inst {
         /// `MemoryInst::Member`が入る
         value: Option<MemoryInst>,
         tagged: bool,
-        /// 共用体全体のサイズ(`types::Size::Union`)
+        /// バリアント型全体のサイズ(`types::Size::Variant`)
         size: types::Size,
         is_self: bool,
     },
@@ -265,8 +265,8 @@ impl Inst {
             types::Size::Struct(_) => {
                 panic!("gen_num: 構造体型に数値を直接代入することはできません");
             }
-            types::Size::Union { .. } => {
-                panic!("gen_num: 共用体型に数値を直接代入することはできません");
+            types::Size::Variant { .. } => {
+                panic!("gen_num: バリアント型型に数値を直接代入することはできません");
             }
             types::Size::Array { size, .. } => {
                 Self::gen_num(&value, &size, dst);
@@ -275,6 +275,7 @@ impl Inst {
                 value.parse::<u64>().unwrap();
             }
             types::Size::Void => panic!(),
+            types::Size::GetAddr(..) => panic!(),
         }
         Self::Num {
             dst,

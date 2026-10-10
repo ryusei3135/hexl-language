@@ -39,13 +39,17 @@ pub struct IR {
     // 定義済みの構造体の情報
     pub struct_tree: def_tree::StructTree,
     // 定義済みの共用体の情報
-    pub union_tree: def_tree::UnionTree,
+    pub variant_tree: def_tree::VariantTree,
     // 定義済みの列挙型の情報
-    pub enum_tree: HashMap<String, node::EnumDefine>,
+    // pub enum_tree: HashMap<String, node::EnumDefine>,
     stk_counter: usize,
-    pub(in crate::compiler::ir) current_span: err::Span,
+    pub(in crate::compiler::ir) 
+    current_span: err::Span,
 
-    pub(in crate::compiler::ir) constract_flag: checker::ConstractFlags,
+    pub(in crate::compiler::ir) 
+    constract_flag: checker::ConstractFlags,
+
+    expr_is_ptr_val: bool,
 }
 
 pub const IS_ASSIGN_EXPR: bool = true;

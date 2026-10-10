@@ -192,7 +192,7 @@ impl IR {
     pub(super) 
     fn inline_proc(&mut self, lines: &[node::InlineAsm], name: &str) {
         let mut gen_ir = |expr: Expr| {
-            let ty: types::Size =
+            let ty: Option<types::Size> =
             // 変数のノードを取得
             if let node::Expr::Var(
                 ref var_name
@@ -203,11 +203,11 @@ impl IR {
                     .get_ty_node(&var_name)
                     .unwrap();
                 let result = self.try_size_or_emit_struct(&ty_node);
-                self.unwrap_or_report(result)
+                Some(self.unwrap_or_report(result))
             } else {
-                types::Size::DD
+                None
             };
-            self.gen_expr_ir(expr, &ty)
+            self.gen_expr_ir(expr, ty.as_ref())
         };
         let asm_lines = lines
             .into_iter()

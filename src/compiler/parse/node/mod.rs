@@ -303,7 +303,7 @@ pub enum Expr {
         name: String,
         fields: HashMap<String, Box<Expr>>,
     },
-    InitUnion {
+    InitVariant {
         is_self: bool,
         name: String,
         fields: HashMap<String, Box<Expr>>,
@@ -583,14 +583,13 @@ impl Group2Node {
 pub enum Group1Node {
     FuncDefine(FuncDefine),
     StructDefine(StructDefine),
-    UnionDefine(UnionDefine),
-    EnumDefine(EnumDefine),
+    VariantDefine(VariantDefine),
     Include(ModPath),
     Line(String),
 }
 
 impl Group1Node {
-    pub fn wrap_union_field_kind(self) -> UnionFieldKind {
-        UnionFieldKind::Method(self)
+    pub fn wrap_variant_field_kind(self) -> VariantFieldKind {
+        VariantFieldKind::Method(self)
     }
 }

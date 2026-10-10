@@ -3,6 +3,6 @@
 pub mod struct_syn;
 
 /// 共用体の例外
-pub mod union_err;
+pub mod variant_err;
 
 use super::*;

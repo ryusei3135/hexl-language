@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-08
+### Changed
+- `enum`と`union`を統合`variant`
+    ```
+    variant Name {
+        Mem(int)
+        Mem2
+    }
+
+    variant"unsafe" Name {
+        name: int
+        field: i64
+    }
+    ```
+### Fixed
+- 変数のアドレスを取得する式が普通の変数になるバグを修正
+
+
 ## [0.13.0] - 2026-10-04
 ### Added
 - dump機能を追加

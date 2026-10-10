@@ -43,7 +43,71 @@ impl IR {
             self.id_counter += 1;
             self.id_counter - 1
         } else {
-            self.gen_expr_ir(expr, expect_byte)
+            self.gen_expr_ir(expr, Some(expect_byte))
+        }
+    }
+
+    /// `gen_expr_ir`に渡された期待する型を確定させる
+    ///
+    /// - `Assign`ノードなら、代入先の型で確定させる
+    ///   - 構造体のメンバー(`var.member` / `[ptr].member` /
+    ///     `var.[member idx]`)への代入なら、そのメンバーの型
+    ///   - それ以外は、代入先の変数の型
+    /// - それ以外は、渡された型をそのまま使う
+    /// - どちらも無い(`None`で`Assign`でもない)なら`DD`にする
+    pub(super)
+    fn resolve_expect_byte(
+        &self,
+        expr: &node::Expr,
+        expect_byte: Option<&types::Size>,
+    ) -> types::Size {
+        if let node::Expr::Assign(assign_node) = expr {
+            if let Some(size) = self.member_ty_of_assign_dst(&assign_node.dst) {
+                return size;
+            }
+            if let Some(ty_node) = self.var_tree.get_ty_node(&assign_node.name) {
+                let result = self.try_size_or_emit_struct(&ty_node);
+                return self.unwrap_or_report(result);
+            }
+        }
+        expect_byte.cloned().unwrap_or(types::Size::DD)
+    }
+
+    /// 代入先が構造体のメンバーなら、そのメンバーの型を返す
+    fn member_ty_of_assign_dst(&self, dst: &node::Expr) -> Option<types::Size> {
+        // (構造体名, メンバー名, 配列メンバーの要素か)
+        let (struct_name, member, is_arr_elem) = match dst {
+            node::Expr::Member { scope, target } => {
+                let var_name = scope.last()?;
+                let struct_name = self.var_tree.get_ty_name(var_name).ok()?;
+                match &**target {
+                    node::Expr::Var(m) => (struct_name, m.clone(), false),
+                    node::Expr::RefArray { name, .. } => (struct_name, name.clone(), true),
+                    _ => return None,
+                }
+            }
+            node::Expr::PtrMember { name, target } => {
+                let struct_name = self.var_tree.get_ty_name(name).ok()?;
+                match &**target {
+                    node::Expr::Var(m) => (struct_name, m.clone(), false),
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        if is_arr_elem {
+            // 配列メンバーは要素1つ分の型にする(`member_is_arr_ref`と同じ)
+            let field_ty = self
+                .struct_tree
+                .get(&struct_name)?
+                .fields
+                .iter()
+                .find(|field| field.name == member)?
+                .ty
+                .clone();
+            self.try_size_or_emit_struct(&field_ty).ok()
+        } else {
+            Some(self.struct_tree.get_mem_size(&struct_name, &member))
         }
     }
 
@@ -74,7 +138,7 @@ impl IR {
 
         let right_expr_idx: usize =
             self.gen_named_expr_ir(&assign_node.name, *assign_node.value, &expect_byte, &attr);
-        let dst_idx = self.gen_expr_ir(*assign_node.dst, &expect_byte);
+        let dst_idx = self.gen_expr_ir(*assign_node.dst, Some(&expect_byte));
 
         Ok(inst::Inst::AssignVar {
             name: assign_node.name.to_string(),
@@ -94,7 +158,7 @@ impl IR {
         };
         let mut dsts = Vec::new();
         for node in init_nodes.iter() {
-            let dst = self.gen_expr_ir(node.clone(), &size);
+            let dst = self.gen_expr_ir(node.clone(), Some(&size));
             dsts.push(dst);
         }
         inst::Inst::InitArr(dsts)
@@ -112,8 +176,8 @@ impl IR {
         // 添字の範囲チェックは`gen_expr_ir`の`check_mem_access`で行う
         inst::Inst::InsertArr {
             name: name.to_string(),
-            dst: self.gen_expr_ir(dst, &expect_byte),
-            index: self.gen_expr_ir(index, &expect_byte),
+            dst: self.gen_expr_ir(dst, Some(&expect_byte)),
+            index: self.gen_expr_ir(index, Some(&expect_byte)),
         }
     }
 
@@ -149,8 +213,8 @@ impl IR {
         let end_label = self.next_pattern_label();
 
         // 代入する値と添字は、分岐の前に一度だけ評価する
-        let dst_idx = self.gen_expr_ir(dst, &expect_byte);
-        let index_idx = self.gen_expr_ir(guard.index.clone(), &expect_byte);
+        let dst_idx = self.gen_expr_ir(dst, Some(&expect_byte));
+        let index_idx = self.gen_expr_ir(guard.index.clone(), Some(&expect_byte));
 
         // `idx < lo`なら範囲外
         crate::push_jmp_code!(self, ExpectJmp, &else_label);
@@ -170,7 +234,7 @@ impl IR {
 
         // 範囲外: `arr[else_idx] = dst`
         crate::push_jmp_code!(self, Block, &else_label);
-        let else_idx = self.gen_expr_ir(guard.else_idx.clone(), &expect_byte);
+        let else_idx = self.gen_expr_ir(guard.else_idx.clone(), Some(&expect_byte));
         self.push_inst(inst::Inst::InsertArr {
             name: guard.name,
             dst: dst_idx,
@@ -356,6 +420,9 @@ impl IR {
         }
     }
 
+    /// `Name::Mem`: バリアント型のメンバーへのアクセス
+    /// - 全メンバーが型なし(旧列挙型相当)なら、タグを整数値として返す
+    /// - それ以外は、型なしメンバーを選んだタグ付きの値を返す
     pub(super) 
     fn enum_variant_node(
         &mut self,
@@ -363,24 +430,23 @@ impl IR {
         variant: &str,
         expect_byte: &types::Size,
     ) -> Result<Box<inst::Inst>, err::ErrKind> {
-        // `Union::Mem`は、型なしメンバーを選んだ共用体の値になる
-        if self.union_tree.contains_key(name) {
-            return Ok(Box::new(self.typeless_union_node(name, variant)?));
-        }
-        let enum_def = self
-            .enum_tree
+        let variant_def = self
+            .variant_tree
             .get(name)
-            .ok_or_else(|| expr_node::this_enum_is_undefined(name).unwrap_err())?;
-        let variant_index = enum_def
-            .variants
-            .iter()
-            .position(|v| &v == &variant)
-            .ok_or_else(|| expr_node::this_enum_member_is_undefined(variant).unwrap_err())?;
-        Ok(Box::new(inst::Inst::gen_num(
-            &variant_index.to_string(), 
-            &expect_byte, 
-            self.id_counter
-        )))
+            .cloned()
+            .ok_or_else(|| expr_node::this_variant_is_undefined(name).unwrap_err())?;
+
+        if variant_def.is_plain_enum() {
+            let tag = variant_def
+                .tag_of(variant)
+                .ok_or_else(|| expr_node::this_variant_field_is_undefined(variant).unwrap_err())?;
+            return Ok(Box::new(inst::Inst::gen_num(
+                &tag.to_string(),
+                &expect_byte,
+                self.id_counter,
+            )));
+        }
+        Ok(Box::new(self.typeless_variant_node(name, variant)?))
     }
 
     pub(super) 
@@ -415,7 +481,7 @@ impl IR {
                 )
             });
 
-            let value_idx = self.gen_expr_ir(*field_expr, &field_size);
+            let value_idx = self.gen_expr_ir(*field_expr, Some(&field_size));
             mem_insts.push(inst::MemoryInst::Member {
                 parent: field.name.clone(),
                 value_idx: value_idx,
@@ -429,74 +495,74 @@ impl IR {
         })
     }
 
-    /// `Union::Mem`(型なしメンバー)から共用体の値を作る
-    fn typeless_union_node(
+    /// `Variant::Mem`(型なしメンバー)からバリアント型の値を作る
+    fn typeless_variant_node(
         &mut self,
-        union_name: &str,
+        variant_name: &str,
         field_name: &str,
     ) -> Result<inst::Inst, err::ErrKind> {
-        let union_def = self.union_tree.get_union(union_name)?;
-        let tag = union_def
+        let variant_def = self.variant_tree.get_variant(variant_name)?;
+        let tag = variant_def
             .tag_of(field_name)
-            .ok_or_else(|| expr_node::this_union_field_is_undefined(field_name).unwrap_err())?;
-        if union_def.fields[tag].ty.is_some() {
+            .ok_or_else(|| expr_node::this_variant_field_is_undefined(field_name).unwrap_err())?;
+        if variant_def.fields[tag].ty.is_some() {
             panic!(
-                "共用体 `{}` のメンバー `{}` は値が必要です(`{} {{ {}: 値 }}`)",
-                union_name, field_name, union_name, field_name
+                "バリアント型 `{}` のメンバー `{}` は値が必要です(`{} {{ {}: 値 }}`)",
+                variant_name, field_name, variant_name, field_name
             );
         }
 
-        // 共用体全体のスタックを確保する
-        self.stack_counter(&node::TyNode::Ty(union_name.to_string()));
-        Ok(inst::Inst::Union {
-            name: union_name.to_string(),
+        // バリアント型全体のスタックを確保する
+        self.stack_counter(&node::TyNode::Ty(variant_name.to_string()));
+        Ok(inst::Inst::Variant {
+            name: variant_name.to_string(),
             tag,
             value: None,
-            tagged: union_def.is_tagged(),
-            size: self.size_of_union(&union_def),
+            tagged: variant_def.is_tagged(),
+            size: self.size_of_variant(&variant_def),
             is_self: false,
         })
     }
 
-    /// 共用体の初期化: `Name { field: value }`
-    /// 共用体は同時に1つのメンバーしか持てないので、指定できるのは1つだけ
+    /// バリアント型の初期化: `Name { field: value }`
+    /// バリアント型は同時に1つのメンバーしか持てないので、指定できるのは1つだけ
     pub(super)
-    fn init_union_node(
+    fn init_variant_node(
         &mut self,
         is_self: bool,
         name: &str,
         fields: &mut HashMap<String, Box<node::Expr>>,
     ) -> Result<inst::Inst, err::ErrKind> {
-        // メゾットの処理中、初期化する共用体が`self`の場合は
-        // 変数の型から実際の共用体の名前を求める
+        // メゾットの処理中、初期化するバリアント型が`self`の場合は
+        // 変数の型から実際のバリアント型の名前を求める
         let resolve_self = is_self && self.this_is_self;
-        let union_name: String = if resolve_self {
+        let variant_name: String = if resolve_self {
             self.var_tree.get_ty_name(name)?.to_owned()
         } else {
             name.to_string()
         };
-        let union_def = self.union_tree.get_union(&union_name)?;
+        let variant_def = self.variant_tree.get_variant(&variant_name)?;
 
         if fields.len() != 1 {
             panic!(
-                "共用体 `{}` の初期化では、メンバーをちょうど1つ指定してください({}個指定されています)",
-                union_name,
+                "バリアント型 `{}` の初期化では、メンバーをちょうど1つ指定してください({}個指定されています)",
+                variant_name,
                 fields.len()
             );
         }
         let (field_name, field_expr) = fields.drain().next().unwrap();
-        let tag = union_def
+        let tag = variant_def
             .tag_of(&field_name)
-            .ok_or_else(|| expr_node::this_union_field_is_undefined(&field_name).unwrap_err())?;
+            .ok_or_else(|| expr_node::this_variant_field_is_undefined(&field_name).unwrap_err())?;
 
-        // 共用体全体のスタックを一度だけ確保する
-        self.stack_counter(&node::TyNode::Ty(union_name.clone()));
+        // バリアント型全体のスタックを一度だけ確保する
+        self.stack_counter(&node::TyNode::Ty(variant_name.clone()));
 
-        let field_ty = union_def.fields[tag].ty.clone();
+        let field_ty = variant_def.fields[tag].ty.clone();
         let value = match field_ty {
             Some(ty) => {
                 let field_size = self.size_of(&ty);
-                let value_idx = self.gen_expr_ir(*field_expr, &field_size);
+                let value_idx = self.gen_expr_ir(*field_expr, Some(&field_size));
                 Some(inst::MemoryInst::Member {
                     parent: field_name,
                     value_idx,
@@ -504,17 +570,17 @@ impl IR {
                 })
             }
             None => panic!(
-                "共用体 `{}` のメンバー `{}` は型がないので値を渡せません",
-                union_name, field_name
+                "バリアント型 `{}` のメンバー `{}` は型がないので値を渡せません",
+                variant_name, field_name
             ),
         };
 
-        Ok(inst::Inst::Union {
-            name: union_name,
+        Ok(inst::Inst::Variant {
+            name: variant_name,
             tag,
             value,
-            tagged: union_def.is_tagged(),
-            size: self.size_of_union(&union_def),
+            tagged: variant_def.is_tagged(),
+            size: self.size_of_variant(&variant_def),
             is_self: resolve_self && self.var_tree.is_self_ty(name),
         })
     }

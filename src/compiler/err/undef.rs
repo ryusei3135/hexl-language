@@ -25,12 +25,10 @@ pub enum UndefKind {
     UndefVar,
     UndefFunc,
     UndefStruct,
-    UndefEnum,
-    UndefEnumMember,
     UndefMemberInVar,
     UndefMemberInFn,
-    UndefUnion,
-    UndefUnionField,
+    UndefVariant,
+    UndefVariantField,
 }
 
 #[derive(Debug, Clone, PartialEq)]

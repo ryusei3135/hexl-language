@@ -1,4 +1,4 @@
-use crate::compiler::node::{Field, UnionField, UnionFieldKind};
+use crate::compiler::node::{Field, VariantField, VariantFieldKind};
 
 use super::*;
 
@@ -6,7 +6,7 @@ use super::*;
 const IS_METHOD: bool = true;
 const IS_FIELD: bool = false;
 
-type IsUnionMethod = bool;
+type IsVariantMethod = bool;
 
 impl Parser {
     /// 共用体のフィールドを作成する
@@ -14,36 +14,36 @@ impl Parser {
     /// 終了時は、そのメンバーの最後のトークン(型なしなら名前、
     /// `Mem(ty)`なら`)`、メゾットなら本体を閉じる`}`)を指す
     pub(in crate::compiler::parse::typedef)
-    fn make_union_field(
+    fn make_variant_field(
         &mut self,
         field_name: String,
         pub_flag: bool,
-    ) -> Result<UnionFieldKind, err::ErrKind> {
+    ) -> Result<VariantFieldKind, err::ErrKind> {
         match self.peek_tkn()? {
             lex::Tkn::LParen => {
                 // 現在のトークンを`(`にする
                 self.advance_tkn();
                 if self.check_this_is_fn() == IS_METHOD {
                     // メゾットとして処理
-                    let method = self.make_union_method(&field_name, pub_flag)?;
-                    Ok(method.wrap_union_field_kind())
+                    let method = self.make_variant_method(&field_name, pub_flag)?;
+                    Ok(method.wrap_variant_field_kind())
                 } else {
                     // 型を持つメンバーとして処理
-                    let ty = self.make_ty_union_field()?;
-                    Ok(UnionField::new(field_name, ty).wrap_union_field_kind())
+                    let ty = self.make_ty_variant_field()?;
+                    Ok(VariantField::new(field_name, ty).wrap_variant_field_kind())
                 }
             }
             // 型なしのメンバー: 次に続くのは別のメンバー・`,`・`}`
             lex::Tkn::Name(..)
             | lex::Tkn::KeyWordPub
             | lex::Tkn::Comma
-            | lex::Tkn::RBrace => Ok(UnionField::typeless_new(field_name).wrap_union_field_kind()),
+            | lex::Tkn::RBrace => Ok(VariantField::typeless_new(field_name).wrap_variant_field_kind()),
             t => crate::syntax_err!(
                 self.build_err_span(),
                 err::SyntaxErrKind::UnexpectedTkn {
                     found: t,
                     expected: lex::Tkn::RBrace,
-                    context: lex::Tkn::KeyWordUnion
+                    context: lex::Tkn::KeyWordVariant
                 }
             ),
         }
@@ -53,9 +53,9 @@ impl Parser {
     /// `Mem(ty)`の`ty`を作成する。
     /// 呼び出し時は current_tkn() が`(`、終了時は`)`を指す
     /// ```text
-    /// union A {Mem(ty)}
+    /// variant A {Mem(ty)}
     /// ```
-    fn make_ty_union_field(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    fn make_ty_variant_field(&mut self) -> Result<node::TyNode, err::ErrKind> {
         #[cfg(test)]
         if self.current_tkn() != &lex::Tkn::LParen {
             panic!("`(`じゃない");
@@ -65,7 +65,7 @@ impl Parser {
         // 型の次のトークンを指して終了する
         let ty = self.ty_node_after_delim()?;
         if self.current_tkn() != &lex::Tkn::RParen {
-            self.union_in_unexpect_tkn(lex::Tkn::RParen)?;
+            self.variant_in_unexpect_tkn(lex::Tkn::RParen)?;
         }
         Ok(ty)
     }
@@ -75,13 +75,13 @@ impl Parser {
     /// `Mem1(int)`ならfalse
     /// `Mem2(a: ty)` / `Mem3()` / `Mem4(mut a: ty)`ならtrueを返す
     /// ```text
-    /// union A {
+    /// variant A {
     ///     Mem1(int)
     ///     Mem2(a: ty)
     /// }
     /// ```
     #[inline(always)]
-    fn check_this_is_fn(&self) -> IsUnionMethod {
+    fn check_this_is_fn(&self) -> IsVariantMethod {
         // `(`の次が`)`/`mut`なら引数の定義
         if let Ok(lex::Tkn::RParen | lex::Tkn::KeyWordMut) = self.peek_tkn() {
             return IS_METHOD;
@@ -96,7 +96,7 @@ impl Parser {
     /// 共用体のメゾットのノードを作成する。
     /// 呼び出し時は current_tkn() が`(`、
     /// 終了時はメゾットの本体を閉じる`}`を指す
-    fn make_union_method(
+    fn make_variant_method(
         &mut self,
         method_name: &str,
         pub_flag: bool,
@@ -125,46 +125,46 @@ impl Parser {
 }
 
 #[cfg(test)]
-mod union_node_test {
+mod variant_node_test {
     use crate::compiler::{
         lex,
         node::{self, *},
         parse,
     };
 
-    fn gen_union(content: &str) -> node::UnionDefine {
+    fn gen_variant(content: &str) -> node::VariantDefine {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
         let mut p = parse::Parser::new();
         let nodes = p.parser(&tkns).expect("node is err");
-        let node::Group1Node::UnionDefine(union_node) = nodes[0].clone() else {
-            panic!("not union");
+        let node::Group1Node::VariantDefine(variant_node) = nodes[0].clone() else {
+            panic!("not variant");
         };
-        union_node
+        variant_node
     }
 
     #[test]
-    fn check_typeless_union_node() {
+    fn check_typeless_variant_node() {
         assert_eq!(
-            gen_union("union A {A}"),
-            UnionDefine {
+            gen_variant("variant A {A}"),
+            VariantDefine {
                 name: "A".to_string(),
-                fields: vec![node::UnionField::typeless_new("A".to_string())],
+                fields: vec![node::VariantField::typeless_new("A".to_string())],
                 methods: Vec::new(),
             }
         );
     }
 
     #[test]
-    fn check_union_with_method() {
-        let union_node = gen_union("union A {A func(a: int) {ret 1}}");
+    fn check_variant_with_method() {
+        let variant_node = gen_variant("variant A {A func(a: int) {ret 1}}");
         assert_eq!(
-            union_node.fields,
-            vec![node::UnionField::typeless_new("A".to_string())]
+            variant_node.fields,
+            vec![node::VariantField::typeless_new("A".to_string())]
         );
-        assert_eq!(union_node.methods.len(), 1);
-        let node::Group1Node::FuncDefine(func) = &union_node.methods[0] else {
+        assert_eq!(variant_node.methods.len(), 1);
+        let node::Group1Node::FuncDefine(func) = &variant_node.methods[0] else {
             panic!("not func");
         };
         assert_eq!(func.name, "func");
@@ -172,14 +172,14 @@ mod union_node_test {
     }
 
     #[test]
-    fn check_union_with_ty_field() {
-        let union_node = gen_union("union A {B(int) C}");
-        assert_eq!(union_node.fields.len(), 2);
-        assert_eq!(union_node.fields[0].name, "B");
+    fn check_variant_with_ty_field() {
+        let variant_node = gen_variant("variant A {B(int) C}");
+        assert_eq!(variant_node.fields.len(), 2);
+        assert_eq!(variant_node.fields[0].name, "B");
         assert_eq!(
-            union_node.fields[0].ty,
+            variant_node.fields[0].ty,
             Some(node::TyNode::Ty("int".to_string()))
         );
-        assert_eq!(union_node.fields[1].ty, None);
+        assert_eq!(variant_node.fields[1].ty, None);
     }
 }

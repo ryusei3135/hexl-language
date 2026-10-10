@@ -58,34 +58,34 @@ impl StructDefine {
     }
 }
 
-// ===== 共用体 =====
+// ===== バリアント型(旧共用体 + 旧列挙型) =====
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum UnionMode {
+pub enum VariantMode {
     Normal,
     Unsafe,
 }
 
-/// 共用体の中身(フィールドかメゾット)
+/// バリアント型の中身(フィールドかメゾット)
 #[derive(Clone, Debug, PartialEq)]
-pub enum UnionFieldKind {
-    Field(UnionField),
+pub enum VariantFieldKind {
+    Field(VariantField),
     Method(Group1Node),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct UnionField {
+pub struct VariantField {
     pub name: String,
     pub ty: Option<TyNode>,
-    pub mode: UnionMode,
+    pub mode: VariantMode,
 }
 
-impl Field for UnionField {
+impl Field for VariantField {
     fn new(name: String, ty: TyNode) -> Self {
         Self {
             name,
             ty: Some(ty),
-            mode: UnionMode::Normal,
+            mode: VariantMode::Normal,
         }
     }
 
@@ -93,15 +93,15 @@ impl Field for UnionField {
         Self {
             name: name.to_string(),
             ty: Some(TyNode::Ty(ty.to_string())),
-            mode: UnionMode::Normal,
+            mode: VariantMode::Normal,
         }
     }
 }
 
-impl UnionField {
+impl VariantField {
     /// `A::Name`のように`Normal`かつ型を指定しないときに使う
     /// ```
-    /// union A {
+    /// variant A {
     ///     Name
     ///     Name1(int)
     /// }
@@ -110,7 +110,7 @@ impl UnionField {
         Self {
             name,
             ty: None,
-            mode: UnionMode::Normal,
+            mode: VariantMode::Normal,
         }
     }
 
@@ -119,45 +119,45 @@ impl UnionField {
         Self {
             name,
             ty: Some(ty),
-            mode: UnionMode::Unsafe,
+            mode: VariantMode::Unsafe,
         }
     }
 
-    pub fn wrap_union_field_kind(self) -> UnionFieldKind {
-        UnionFieldKind::Field(self)
+    pub fn wrap_variant_field_kind(self) -> VariantFieldKind {
+        VariantFieldKind::Field(self)
     }
 }
 
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct UnionDefine {
+pub struct VariantDefine {
     pub name: String,
-    pub fields: Vec<UnionField>,
+    pub fields: Vec<VariantField>,
     pub methods: Vec<Group1Node>,
 }
 
-impl UnionDefine {
+impl VariantDefine {
     #[inline(always)]
     pub const fn new(
         name: String,
-        fields: Vec<UnionField>,
+        fields: Vec<VariantField>,
         methods: Vec<Group1Node>,
     ) -> Group1Node {
-        Group1Node::UnionDefine(Self {
+        Group1Node::VariantDefine(Self {
             name,
             fields,
             methods,
         })
     }
 
-    /// `UnionFieldKind`の一覧から、フィールドとメゾットに振り分けて作る
-    pub fn from_kinds(name: String, kinds: Vec<UnionFieldKind>) -> Group1Node {
+    /// `VariantFieldKind`の一覧から、フィールドとメゾットに振り分けて作る
+    pub fn from_kinds(name: String, kinds: Vec<VariantFieldKind>) -> Group1Node {
         let mut fields = Vec::new();
         let mut methods = Vec::new();
         for kind in kinds {
             match kind {
-                UnionFieldKind::Field(f) => fields.push(f),
-                UnionFieldKind::Method(m) => methods.push(m),
+                VariantFieldKind::Field(f) => fields.push(f),
+                VariantFieldKind::Method(m) => methods.push(m),
             }
         }
         Self::new(name, fields, methods)
@@ -166,31 +166,23 @@ impl UnionDefine {
     /// タグ付き共用体(`Normal`)かどうか。
     /// `Unsafe`のフィールドが1つでもあればタグを持たない共用体として扱う
     pub fn is_tagged(&self) -> bool {
-        !self.fields.iter().any(|f| f.mode == UnionMode::Unsafe)
+        !self.fields.iter().any(|f| f.mode == VariantMode::Unsafe)
+    }
+
+    /// 全メンバーが型なしの`Normal`か(旧`enum`相当、C言語風の列挙型)
+    pub fn is_plain_enum(&self) -> bool {
+        self.fields
+            .iter()
+            .all(|f| f.ty.is_none() && f.mode == VariantMode::Normal)
     }
 
     /// 名前からフィールドを探す
-    pub fn find_field(&self, name: &str) -> Option<&UnionField> {
+    pub fn find_field(&self, name: &str) -> Option<&VariantField> {
         self.fields.iter().find(|f| f.name == name)
     }
 
     /// フィールドのインデックス(定義順)をタグとして返す
     pub fn tag_of(&self, name: &str) -> Option<usize> {
         self.fields.iter().position(|f| f.name == name)
-    }
-}
-
-// ===== 列挙型 =====
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct EnumDefine {
-    pub name: String,
-    pub variants: Vec<String>,
-}
-
-impl EnumDefine {
-    #[inline(always)]
-    pub fn new(name: String, variants: Vec<String>) -> Group1Node {
-        Group1Node::EnumDefine(Self { name, variants })
     }
 }

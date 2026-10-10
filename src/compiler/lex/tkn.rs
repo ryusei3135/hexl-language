@@ -46,7 +46,7 @@ pub enum Tkn {
     KeyWordLoop,
     KeyWordPub,
     KeyWordStruct,
-    KeyWordEnum,
+    KeyWordVariant,
     KeyWordConst,
     KeyWordStatic,
     /// mut
@@ -59,7 +59,6 @@ pub enum Tkn {
 
     KeyWordContinue,
     KeyWordBreak,
-    KeyWordUnion,
 
     KeyWordWhere,
     KeyWordAllow,

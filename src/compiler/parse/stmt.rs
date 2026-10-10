@@ -136,12 +136,8 @@ impl Parser {
                             let node = self.struct_node()?;
                             self.gen_nodes.push(node);
                         }
-                        lex::Tkn::KeyWordUnion => {
-                            let node = self.union_node()?;
-                            self.gen_nodes.push(node);
-                        }
-                        lex::Tkn::KeyWordEnum => {
-                            let node = self.enum_node()?;
+                        lex::Tkn::KeyWordVariant => {
+                            let node = self.variant_node()?;
                             self.gen_nodes.push(node);
                         }
                         t => {
@@ -288,7 +284,7 @@ impl Parser {
                     self.build_err_span(),
                     err::SyntaxErrKind::UnexpectTknAfterKeyword {
                         keyword: lex::Tkn::KeyWordPub,
-                        expected: vec!["struct", "enum", "name"],
+                        expected: vec!["struct", "variant", "name"],
                         found: unexpect_tkn,
                     }
                 )

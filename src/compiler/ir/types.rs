@@ -10,10 +10,10 @@ pub enum Size {
     DD,
     DQ,
     Struct(Vec<Box<(String, Size)>>),
-    /// 共用体
+    /// バリアント型
     /// - `fields`: メンバー名と型(型なしメンバーは`Void`)。定義順がタグの値
-    /// - `tagged`: 先頭にタグ(`UNION_TAG_BYTES`バイト)を持つか
-    Union {
+    /// - `tagged`: 先頭にタグ(`VARIANT_TAG_BYTES`バイト)を持つか
+    Variant {
         fields: Vec<Box<(String, Size)>>,
         tagged: bool,
     },
@@ -26,6 +26,7 @@ pub enum Size {
         size: Box<Size>,
         len: usize,
     },
+    GetAddr(Box<Size>),
     Void,
 }
 
@@ -95,11 +96,11 @@ impl TryFrom<TyNode> for Size {
     }
 }
 
-/// 共用体のタグのバイト数(列挙型と同じ`DD`)
-pub const UNION_TAG_BYTES: usize = 4;
+/// バリアント型のタグのバイト数(型なしメンバーだけの場合の`DD`と同じ)
+pub const VARIANT_TAG_BYTES: usize = 4;
 
 impl Size {
-    /// 共用体のペイロード(タグを除いた領域)のバイト数。
+    /// バリアント型のペイロード(タグを除いた領域)のバイト数。
     /// 型なしメンバー(`Void`)は0バイトとして扱う
     pub(crate)
     fn payload_bytes(&self) -> usize {
@@ -109,13 +110,13 @@ impl Size {
         }
     }
 
-    /// 共用体のタグを除いた、メンバーの値を置く位置のオフセット
+    /// バリアント型のタグを除いた、メンバーの値を置く位置のオフセット
     pub(crate)
-    fn union_payload_offset(&self) -> usize {
+    fn variant_payload_offset(&self) -> usize {
         match self {
-            Self::Union { tagged: true, .. } => UNION_TAG_BYTES,
-            Self::Union { tagged: false, .. } => 0,
-            t => panic!("union_payload_offset: 共用体ではありません: {:?}", t),
+            Self::Variant { tagged: true, .. } => VARIANT_TAG_BYTES,
+            Self::Variant { tagged: false, .. } => 0,
+            t => panic!("variant_payload_offset: バリアント型ではありません: {:?}", t),
         }
     }
 
@@ -143,7 +144,7 @@ impl Size {
     /// `try_into`は組み込み型しか解決できないため、構造体などの
     /// ユーザー定義の型では`Err`が返ってくる。その場合に`f`
     /// (構造体の定義を名前から取得する関数)を使って構造体の型を作成する
-    pub(in crate::compiler::ir) 
+    pub(in super) 
     fn try_from_or_emit_struct(
         f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
         ty: &node::TyNode,
@@ -154,7 +155,7 @@ impl Size {
         }
     }
 
-    pub(crate) 
+    pub(in crate::compiler)
     fn is_pointer(&self) -> Option<Size> {
         if let Self::Pointer { ty, .. } = self {
             Some(*ty.clone())
@@ -196,18 +197,19 @@ impl Size {
                 }
                 size_counter
             }
-            Self::Union { fields, tagged } => {
+            Self::Variant { fields, tagged } => {
                 let payload = fields
                     .iter()
                     .map(|mem| mem.1.payload_bytes())
                     .max()
                     .unwrap_or(0);
                 if *tagged {
-                    UNION_TAG_BYTES + payload
+                    VARIANT_TAG_BYTES + payload
                 } else {
                     payload
                 }
             }
+            Self::GetAddr(..) => 8,
             Self::Void => panic!(),
         }
     }
@@ -222,6 +224,12 @@ impl Size {
     pub(in crate::compiler::ir) 
     fn wrap_ok<E>(self) -> Result<Self, E> {
         Ok(self)
+    }
+
+    /// 型をポインタを取得する型でwrap
+    pub(in crate::compiler::ir)
+    fn wrap_get_addr(&self) -> Self {
+        Self::GetAddr(Box::new(self.clone()))
     }
 }
 
@@ -253,19 +261,19 @@ impl IR {
         &self,
         ty: &node::TyNode,
     ) -> Result<types::Size, err::ErrKind> {
-        // 共用体は`struct_tree`では解決できないので先に調べる
+        // バリアント型は`struct_tree`では解決できないので先に調べる
         if let node::TyNode::Ty(name) = ty {
-            if self.union_tree.contains_key(name) {
+            if self.variant_tree.contains_key(name) {
                 return Ok(self.size_of(ty));
             }
         }
         types::Size::try_from_or_emit_struct(&mut |name| self.struct_tree.get_struct_size(name), ty)
     }
 
-    /// 共用体の定義から`types::Size::Union`を作る
+    /// バリアント型の定義から`types::Size::Variant`を作る
     pub(in crate::compiler::ir) 
-    fn size_of_union(&self, union_def: &node::UnionDefine) -> types::Size {
-        let fields = union_def
+    fn size_of_variant(&self, variant_def: &node::VariantDefine) -> types::Size {
+        let fields = variant_def
             .fields
             .iter()
             .map(|field| {
@@ -277,28 +285,23 @@ impl IR {
                 Box::new((field.name.clone(), size))
             })
             .collect();
-        types::Size::Union {
+        types::Size::Variant {
             fields,
-            tagged: union_def.is_tagged(),
+            tagged: variant_def.is_tagged(),
         }
     }
 
     /// 型からサイズを求める
     ///
     /// 組み込み型(`byte`/`u16`/`int`/`u64`)は`types::Size::new`と
-    /// 同じ結果を返すが、構造体・列挙型などのユーザー定義の型名が渡された
-    /// 場合は`struct_tree`/`enum_tree`を参照して解決する
+    /// 同じ結果を返すが、構造体・バリアント型などのユーザー定義の型名が渡された
+    /// 場合は`struct_tree`/`variant_tree`を参照して解決する
     pub(in crate::compiler::ir) 
     fn size_of(&self, ty: &node::TyNode) -> types::Size {
         match ty {
             node::TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {
                     return ty.try_into().unwrap();
-                }
-
-                if self.enum_tree.contains_key(name) {
-                    // 列挙型は現在、タグ(整数値)として扱う
-                    return types::Size::DD;
                 }
 
                 if let Some(struct_def) = self.struct_tree.get(&name) {
@@ -310,8 +313,13 @@ impl IR {
                     return types::Size::Struct(fields);
                 }
 
-                if let Some(union_def) = self.union_tree.get(name) {
-                    return self.size_of_union(&union_def.clone());
+                if let Some(variant_def) = self.variant_tree.get(name) {
+                    // 全メンバーが型なし(旧列挙型相当)の場合は、
+                    // タグ(整数値)だけで表せるので`DD`として扱う
+                    if variant_def.is_plain_enum() {
+                        return types::Size::DD;
+                    }
+                    return self.size_of_variant(&variant_def.clone());
                 }
 
                 panic!("未定義の型です: {}", name);

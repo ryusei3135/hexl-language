@@ -342,13 +342,13 @@ impl StructTree {
     }
 }
 
-/// 共用体の定義を名前から引くための木
+/// バリアント型の定義を名前から引くための木
 #[derive(Clone, Debug, PartialEq)]
-pub struct UnionTree {
-    tree: HashMap<String, node::UnionDefine>,
+pub struct VariantTree {
+    tree: HashMap<String, node::VariantDefine>,
 }
 
-impl UnionTree {
+impl VariantTree {
     pub(in crate::compiler::ir) 
     fn new() -> Self {
         Self {
@@ -357,12 +357,12 @@ impl UnionTree {
     }
 
     pub(in crate::compiler::ir) 
-    fn add(&mut self, info: &node::UnionDefine) {
+    fn add(&mut self, info: &node::VariantDefine) {
         self.tree.insert(info.name.to_string(), info.clone());
     }
 
     pub(in crate::compiler::ir) 
-    fn get(&self, name: &str) -> Option<&node::UnionDefine> {
+    fn get(&self, name: &str) -> Option<&node::VariantDefine> {
         self.tree.get(name)
     }
 
@@ -378,12 +378,12 @@ impl UnionTree {
     }
 
     pub(in crate::compiler::ir) 
-    fn get_union(&self, name: &str) -> Result<node::UnionDefine, err::ErrKind> {
+    fn get_variant(&self, name: &str) -> Result<node::VariantDefine, err::ErrKind> {
         if let Some(target) = self.tree.get(name) {
             Ok(target.clone())
         } else {
             Err(crate::GenUndefErrResult!(
-                UndefUnion,
+                UndefVariant,
                 name.to_string(),
                 None
             ))

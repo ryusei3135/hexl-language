@@ -1,16 +1,29 @@
+
 use super::*;
 
 impl IR {
-    pub fn check_var_ty(&self, var_name: &String, expect_ty: &types::Size) {
-        let ty = self.var_tree.get_ty_node(&var_name).unwrap();
+    /// 一回しか呼ばれないのでinline
+    /// 代入先の型と代入する型が同じか比較する。
+    #[inline(always)]
+    pub(in crate::compiler::ir) 
+    fn check_var_ty(&self, var_ty: &types::Size, expect_ty: &types::Size) {
+        // let ty = self.var_tree.get_ty_node(var_name).unwrap();
+        println!("{:?} fond var_ty {:?}", expect_ty, var_ty);
 
-        if ty
-            .clone()
-            .try_into()
-            .is_ok_and(|result: types::Size| &result != expect_ty)
-        {
-            let ty: types::Size = ty.try_into().unwrap();
-            panic!("{:?} fond {:?}", expect_ty, ty);
+        match expect_ty {
+            types::Size::Pointer { ty, is_const, range } => {
+                if let types::Size::GetAddr(var_t) = var_ty {
+                    if var_t != ty {
+                        panic!();
+                    }
+                }
+            }
+            _ => {
+                if var_ty != expect_ty {
+                    // let changed_ty: types::Size = ty.clone().try_into().unwrap();
+                    panic!("{:?} fond {:?}", expect_ty, var_ty);
+                }
+            }
         }
     }
 }

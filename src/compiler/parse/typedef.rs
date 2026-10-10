@@ -1,10 +1,10 @@
 mod def_fields;
-mod union_field;
+mod variant_field;
 
 use super::{Parser, *};
 use std::collections::HashMap;
 
-/// 構造体、共用体、列挙型を定義するノードの生成
+/// 構造体、バリアント型(共用体と列挙型を統合したもの)を定義するノードの生成
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
@@ -31,29 +31,30 @@ impl Parser {
         Ok(r)
     }
 
-    /// 共用体を解析する
+    /// バリアント型(旧`union`と旧`enum`を統合したもの)を解析する
     /// ```text
-    /// union Name { Mem  Mem1(int)  func(self: Self): int {..} }
-    /// union "unsafe" Name { mem: int  mem2: i64 }
+    /// variant Name { A B }                                  // 列挙型相当
+    /// variant Name { Mem  Mem1(int)  func(self: Self): int {..} }
+    /// variant "unsafe" Name { mem: int  mem2: i64 }        // タグなし(旧unsafe union)
     /// ```
-    /// 呼び出し時は current_tkn() が KeyWordUnion
+    /// 呼び出し時は current_tkn() が KeyWordVariant
     pub(in crate::compiler::parse)
-    fn union_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
-        if self.current_tkn() != &lex::Tkn::KeyWordUnion {
-            return self.union_keyword_not_found();
+    fn variant_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+        if self.current_tkn() != &lex::Tkn::KeyWordVariant {
+            return self.variant_keyword_not_found();
         }
 
-        let (name, union_mode) = match self.next_tkn(&["name", "str litral"])? {
-            lex::Tkn::Name(union_name) => (union_name, node::UnionMode::Normal),
-            lex::Tkn::Str(union_option) => match union_option.as_str() {
+        let (name, variant_mode) = match self.next_tkn(&["name", "str litral"])? {
+            lex::Tkn::Name(variant_name) => (variant_name, node::VariantMode::Normal),
+            lex::Tkn::Str(variant_option) => match variant_option.as_str() {
                 "unsafe" => match self.next_tkn(&["name"])? {
-                    lex::Tkn::Name(union_name) => (union_name, node::UnionMode::Unsafe),
+                    lex::Tkn::Name(variant_name) => (variant_name, node::VariantMode::Unsafe),
                     // オプションの続きに共用体の名前が来なかった
-                    _ => return self.union_option_next_name_not_found(),
+                    _ => return self.variant_option_next_name_not_found(),
                 },
-                _ => return self.union_option_unregister(union_option),
+                _ => return self.variant_option_unregister(variant_option),
             },
-            _ => return self.union_name_is_not_found(),
+            _ => return self.variant_name_is_not_found(),
         };
         // 自身の共用体の名前を登録、`Self`をこれに入れ替える
         self.struct_self_name = Some(name.clone());
@@ -61,15 +62,15 @@ impl Parser {
         match self.next_tkn(&["{"])? {
             lex::Tkn::LBrace => {}
             t => {
-                self.union_lbrace_not_found(t)?;
+                self.variant_lbrace_not_found(t)?;
             }
         }
 
-        let (fields, methods) = self.define_union_fields(union_mode)?;
+        let (fields, methods) = self.define_variant_fields(variant_mode)?;
         // 共用体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
         self.gen_flag = GenFlag::Group1;
-        Ok(node::UnionDefine::new(name, fields, methods))
+        Ok(node::VariantDefine::new(name, fields, methods))
     }
 
     /// 構造体を初期化する式を生成
@@ -130,12 +131,12 @@ impl Parser {
     /// 共用体を初期化する式を生成
     /// 呼び出し時は current_tkn() が `LBrace` (`struct_init_node`と同じ)
     pub(in crate::compiler::parse)
-    fn union_init_node<const T: bool>(
+    fn variant_init_node<const T: bool>(
         &mut self,
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            self.union_lbrace_not_found(self.current_tkn().clone())?;
+            self.variant_lbrace_not_found(self.current_tkn().clone())?;
         }
         // {を飛ばす
         let _ = self.next_tkn(&[])?;
@@ -152,15 +153,15 @@ impl Parser {
                         self.build_err_span(),
                         err::SyntaxErrKind::UnexpectedTkn {
                             found: (*t).clone(),
-                            expected: lex::Tkn::Name("union init".to_string()),
-                            context: lex::Tkn::KeyWordUnion
+                            expected: lex::Tkn::Name("variant init".to_string()),
+                            context: lex::Tkn::KeyWordVariant
                         }
                     );
                 }
             };
             // :じゃないとエラー
             if self.next_tkn(&[":"])? != lex::Tkn::Colon {
-                self.union_in_unexpect_tkn(lex::Tkn::Colon)?;
+                self.variant_in_unexpect_tkn(lex::Tkn::Colon)?;
             }
             fields.insert(
                 name,
@@ -172,84 +173,14 @@ impl Parser {
                 lex::Tkn::Name(..) => continue,
                 lex::Tkn::RBrace => break,
                 // 値の後ろに続けられるのは、次のメンバー名か`}`だけ
-                _ => self.union_in_unexpect_tkn(lex::Tkn::RBrace)?,
+                _ => self.variant_in_unexpect_tkn(lex::Tkn::RBrace)?,
             }
         }
-        Ok(node::Expr::InitUnion {
+        Ok(node::Expr::InitVariant {
             is_self: T,
             name: name.to_string(),
             fields,
         })
-    }
-
-    /// `enum name { mem, mem2 }` を解析する
-    /// 呼び出し時は current_tkn() が `KeyWordEnum`
-    pub(in crate::compiler::parse) 
-    fn enum_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
-            panic!("列挙型の名前が必要です");
-        };
-
-        match self.next_tkn(&["{"])? {
-            lex::Tkn::LBrace => {}
-            t => panic!("{:?}", t),
-        }
-
-        let variants = self.define_enum_variants()?;
-        Ok(node::EnumDefine::new(name, variants.0))
-    }
-
-    /// 列挙型のメンバ定義を解析する
-    /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace` を指す
-    fn define_enum_variants(
-        &mut self,
-    ) -> Result<(Vec<String>, Vec<node::Group1Node>), err::ErrKind> {
-        if self.current_tkn() != &lex::Tkn::LBrace {
-            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
-        }
-
-        let mut variants = Vec::<String>::new();
-        let mut pub_flag = false;
-        let mut methods = Vec::new();
-
-        loop {
-            match self.next_tkn(&["name", "pub", "}"])? {
-                lex::Tkn::Name(name) => {
-                    variants.push(name.to_string());
-
-                    // 次のトークンを先読みし、`,`があるかどうかだけで
-                    // 位置を進めるかを決める
-                    // (`,`が無い場合はcurrent_tknを次のメンバーの
-                    // `name`/`pub`のまま残し、ループの先頭の`next_tkn`で
-                    // もう一度読めるようにする)
-                    match self.next_tkn_ref(&["}", ",", "(", "name", "pub"])? {
-                        lex::Tkn::RBrace => {
-                            self.next_tkn(&[])?;
-                            break;
-                        }
-                        lex::Tkn::Name(..) => {
-                            continue;
-                        }
-                        // `func_node`が`(`を含めて解析するので、
-                        // ここではcurrent_tknを`name`のままにしておく
-                        lex::Tkn::LParen => {
-                            methods.push(self.func_node(&name, pub_flag.clone())?);
-                        }
-                        // `,`を省略して改行だけで次のメンバーへ続く場合
-                        lex::Tkn::KeyWordPub => {}
-                        t => panic!("{:?}", t),
-                    }
-                    pub_flag = false;
-                }
-                lex::Tkn::KeyWordPub => {
-                    pub_flag = true;
-                }
-                lex::Tkn::RBrace => break,
-                t => panic!("{:?}", t),
-            }
-        }
-
-        Ok((variants, methods))
     }
 
     fn ptr_ty_node(&mut self, ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
@@ -537,14 +468,14 @@ mod ty_tests {
     }
 
     #[test]
-    fn test_union() {
+    fn test_variant() {
         assert_eq!(
-            &build("union Name { A B(ty) }"),
-            &vec![node::UnionDefine::new(
+            &build("variant Name { A B(ty) }"),
+            &vec![node::VariantDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::UnionField::typeless_new("A".to_string()),
-                    node::UnionField::make_field("B", "ty"),
+                    node::VariantField::typeless_new("A".to_string()),
+                    node::VariantField::make_field("B", "ty"),
                 ],
                 Vec::new()
             )]
@@ -552,27 +483,27 @@ mod ty_tests {
     }
 
     #[test]
-    fn test_union_last_typeless() {
+    fn test_variant_last_typeless() {
         // 最後のメンバーが型なしでも、`}`で終われる
         assert_eq!(
-            &build("union Name { A }"),
-            &vec![node::UnionDefine::new(
+            &build("variant Name { A }"),
+            &vec![node::VariantDefine::new(
                 "Name".to_string(),
-                vec![node::UnionField::typeless_new("A".to_string())],
+                vec![node::VariantField::typeless_new("A".to_string())],
                 Vec::new()
             )]
         );
     }
 
     #[test]
-    fn test_union_unsafe() {
+    fn test_variant_unsafe() {
         assert_eq!(
-            &build("union \"unsafe\" Name { a: int b: i64 }"),
-            &vec![node::UnionDefine::new(
+            &build("variant \"unsafe\" Name { a: int b: i64 }"),
+            &vec![node::VariantDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::UnionField::unsafe_new("a".to_string(), node::TyNode::Ty("int".to_string())),
-                    node::UnionField::unsafe_new("b".to_string(), node::TyNode::Ty("i64".to_string())),
+                    node::VariantField::unsafe_new("a".to_string(), node::TyNode::Ty("int".to_string())),
+                    node::VariantField::unsafe_new("b".to_string(), node::TyNode::Ty("i64".to_string())),
                 ],
                 Vec::new()
             )]
@@ -580,7 +511,7 @@ mod ty_tests {
     }
 
     #[test]
-    fn union_method() {
+    fn variant_method() {
         let mut f = vec![node::FuncDefine::new(
             "new",
             Vec::new(),
@@ -592,36 +523,36 @@ mod ty_tests {
         };
         func.self_module_name(&"Name".to_string());
         assert_eq!(
-            &build("union Name { A(int) new(): ty {}}"),
-            &vec![node::UnionDefine::new(
+            &build("variant Name { A(int) new(): ty {}}"),
+            &vec![node::VariantDefine::new(
                 "Name".to_string(),
-                vec![node::UnionField::make_field("A", "int")],
+                vec![node::VariantField::make_field("A", "int")],
                 f
             )]
         );
     }
 
     #[test]
-    fn union_method_self_ty() {
+    fn variant_method_self_ty() {
         // 共用体でも`Self`は、定義されている共用体自身の名前へ解決される
         let nodes = build(
-            "union Name { \
+            "variant Name { \
                 A(int) \
                 new(): Self {} \
                 func(self: Self, param: int): int {ret 0} \
             }",
         );
-        let node::Group1Node::UnionDefine(union_def) = &nodes[0] else {
+        let node::Group1Node::VariantDefine(variant_def) = &nodes[0] else {
             panic!("共用体が定義されていません: {:?}", nodes);
         };
 
-        let node::Group1Node::FuncDefine(new_func) = &union_def.methods[0] else {
+        let node::Group1Node::FuncDefine(new_func) = &variant_def.methods[0] else {
             panic!();
         };
         assert_eq!(new_func.name, "new");
         assert_eq!(new_func.ret_ty, node::TyNode::SelfTy("Name".to_string()));
 
-        let node::Group1Node::FuncDefine(func) = &union_def.methods[1] else {
+        let node::Group1Node::FuncDefine(func) = &variant_def.methods[1] else {
             panic!();
         };
         assert_eq!(func.name, "func");
@@ -632,23 +563,74 @@ mod ty_tests {
     }
 
     #[test]
-    fn union_name_is_not_found() {
-        assert!(build_is_err("union { A }"));
+    fn variant_name_is_not_found() {
+        assert!(build_is_err("variant { A }"));
     }
 
     #[test]
-    fn union_lbrace_not_found() {
-        assert!(build_is_err("union Name A }"));
+    fn variant_lbrace_not_found() {
+        assert!(build_is_err("variant Name A }"));
     }
 
     #[test]
-    fn enum_node() {
+    fn enum_like_variant() {
+        // 旧`enum Name {A B}`は、型なしメンバーだけの`variant`になる
         assert_eq!(
-            &build("enum Name {A B}"),
-            &vec![node::EnumDefine::new(
+            &build("variant Name {A B}"),
+            &vec![node::VariantDefine::new(
                 "Name".to_string(),
-                vec!["A".to_string(), "B".to_string()]
+                vec![
+                    node::VariantField::typeless_new("A".to_string()),
+                    node::VariantField::typeless_new("B".to_string()),
+                ],
+                Vec::new()
             )]
         );
+    }
+
+    #[test]
+    fn enum_like_variant_with_comma() {
+        // 旧`enum`の`,`区切りも使える
+        assert_eq!(
+            &build("variant Name {A, B,}"),
+            &build("variant Name {A B}")
+        );
+    }
+
+    #[test]
+    fn variant_enum_like_with_method() {
+        // 旧`enum`ではメゾットが捨てられていたが、統合後は保持される
+        let nodes = build("variant Name { A B func(self: Self): int {ret 0} }");
+        let node::Group1Node::VariantDefine(def) = &nodes[0] else {
+            panic!("variant が定義されていません: {:?}", nodes);
+        };
+        assert_eq!(def.fields.len(), 2);
+        assert_eq!(def.methods.len(), 1);
+        assert!(def.is_plain_enum());
+    }
+
+    #[test]
+    fn variant_with_data_is_not_plain_enum() {
+        let nodes = build("variant Name { A B(int) }");
+        let node::Group1Node::VariantDefine(def) = &nodes[0] else {
+            panic!();
+        };
+        assert!(!def.is_plain_enum());
+        assert!(def.is_tagged());
+    }
+
+    #[test]
+    fn variant_unsafe_not_plain_enum() {
+        let nodes = build("variant \"unsafe\" Name { a: int b: i64 }");
+        let node::Group1Node::VariantDefine(def) = &nodes[0] else {
+            panic!();
+        };
+        assert!(!def.is_tagged());
+        assert!(!def.is_plain_enum());
+    }
+
+    #[test]
+    fn variant_unregistered_option() {
+        assert!(build_is_err("variant \"safe\" Name { A }"));
     }
 }
