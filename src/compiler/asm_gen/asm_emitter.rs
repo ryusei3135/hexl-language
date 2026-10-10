@@ -188,7 +188,8 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
+    pub(super) 
+    fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
         // メモリに実体がある変数の`reg`はレジスタ番号ではないので、
         // レジスタを使用中にしない
         if !var.in_mem {
@@ -248,7 +249,8 @@ impl AsmEmitter {
     /// 呼ぶ。
     ///
     /// 変数がそのレジスタを持っている場合は解放しない。
-    pub(super) fn release_expr_temp(&mut self, node_idx: usize) {
+    pub(super) 
+    fn release_expr_temp(&mut self, node_idx: usize) {
         if !matches!(self.curr_inst[node_idx], inst::Inst::Expr(..)) {
             return;
         }
@@ -268,7 +270,8 @@ impl AsmEmitter {
     /// 現在`reg`を使っている値を、`push`で退避するためのレジスタ名の一覧
     /// (`dst`は除く)。`/`や`%`が書き換える`%rax`/`%rdx`のうち、
     /// 使用中のものを退避するために使う。
-    pub(super) fn live_reserved_regs(&self, dst: usize) -> Vec<usize> {
+    pub(super) 
+    fn live_reserved_regs(&self, dst: usize) -> Vec<usize> {
         RESERVED_REGS
             .iter()
             .copied()
@@ -410,6 +413,8 @@ impl AsmEmitter {
     fn value_reg_size(ty: &Size) -> Size {
         match ty {
             Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
+            // データなしのバリアントはタグ(`DD`の整数)としてレジスタに載せる
+            Size::Variant { .. } => Size::DD,
             Size::Array { size, .. } => Self::value_reg_size(size),
             _ => Size::DQ,
         }
@@ -618,9 +623,21 @@ impl AsmEmitter {
                     this_is_self.is_none(),
                 )
             }
-            inst::Inst::Variant { name, tag, value, tagged, size, is_self } => {
-                panic!()
+            // データなしのメンバーは整数型(タグの値)なので、即値のオペランドを返す
+            inst::Inst::Variant { tag, value: None, .. } => {
+                self.asm_fmt.get_fmt_num(&tag.to_string())
             }
+            // データ付きのメンバーは構造体として展開する
+            // (`asm_emitter/data_mem_factory.rs`に記述)
+            inst::Inst::Variant { tag, value, tagged, size, .. } => self
+                .emit_data_variant_init_asm(
+                    tag,
+                    value,
+                    tagged,
+                    &size,
+                    // Noneの場合それはSelf
+                    this_is_self.is_none(),
+                ),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
                 self.ref_mem_value_txt(&kind, &size, parent_id)

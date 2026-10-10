@@ -86,9 +86,9 @@ impl CallFuncMetaData {
         self.params.push(value_id);
     }
 
-    pub fn module(&mut self, path: &Vec<String>) {
-        self.path = path.clone();
-    }
+    // pub fn module(&mut self, path: &Vec<String>) {
+    //     self.path = path.clone();
+    // }
 }
 
 #[derive(Clone, Debug, PartialEq)]

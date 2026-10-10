@@ -61,6 +61,13 @@ impl AsmEmitter {
             return;
         }
 
+        // データ付きのバリアントは構造体として、スタックに展開する
+        // (データなしのものは整数型としてレジスタに載せるので、下の処理へ進む)
+        if let inst::Inst::Variant { value: Some(_), .. } = self.inst_at(src) {
+            self.variant_mem(name, size, src, dst);
+            return;
+        }
+
         if size.is_pointer().is_none() && self.static_label(src).is_some() {
             // 子のノードがstatic領域の値で、かつ宣言先の型がポインタで
             // ない場合のみ、変数名だけを登録する(この場合は変数の
@@ -235,5 +242,38 @@ impl AsmEmitter {
             return None;
         }
         Some(())
+    }
+
+    /// データ付きバリアントの初期化を、構造体と同様にスタックへ展開する
+    fn variant_mem(
+        &mut self,
+        name: Option<&str>,
+        size: &types::Size,
+        src: usize,
+        dst: usize,
+    ) {
+        let inst::Inst::Variant { tag, value, tagged, size: v_size, is_self, .. } =
+            self.inst_at(src)
+        else {
+            panic!();
+        };
+        let stk_offset = if is_self {
+            self.stk_use_counter
+        } else {
+            let base = self.stk_use_counter.div_ceil(8) * 8 + 8;
+            self.stk_use_counter = base;
+            base
+        };
+        let ini_asm = self.emit_data_variant_init_asm(tag, value, tagged, &v_size, is_self);
+        if !is_self {
+            self.stk_use_counter = self.stk_use_counter.max(stk_offset + v_size.to_bytes());
+        }
+        self.asm_text.push_str(ini_asm.as_str());
+        if let Some(var_name) = name {
+            self.insert_var_info(
+                var_name,
+                asm_emitter::VarIndexInfo::new_stack(stk_offset, size, dst),
+            );
+        }
     }
 }
