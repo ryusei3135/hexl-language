@@ -45,6 +45,8 @@ impl AsmEmitter {
         // 各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
         // 後で、引数レジスタを壊さない順序に並べ替えて出力する
         let mut arg_lines: Vec<(usize, String, String)> = Vec::new();
+        // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
+        self.used_reg.start_scope();
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数の実際の型のサイズ
@@ -124,6 +126,8 @@ impl AsmEmitter {
             emit_generic_fn_name_id(&meta_data.name, &generic_args)
         };
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
+        // 引数で使ったレジスタを解放
+        self.used_reg.end_scope();
         // === 退避したレジスタを、退避した時とは逆順に復元する ===
         for reg in protected_regs.iter().rev() {
             if self.callee_saved.iter().find(|x| *x == reg).is_none() {
