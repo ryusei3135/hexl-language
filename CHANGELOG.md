@@ -7,10 +7,12 @@
 ## [0.13.2] - 2026-10-10
 ### Added
 - parserのエラーをerr_factoryに複数追加
+- データty機バリアントのメモリを生成する機能を追加
 ### Changed
 - nodeの場所を整理`src/compiler/node/`
 ### Fixed
 - 式の型が固定で32bitになるバグを修正
+- 何があってもバリアントを使うとpanicするバグを修正
 ### Changed
 - SelfPtrInfoを`Option<Size>`から`Option<&'a Size>`に変更 
 

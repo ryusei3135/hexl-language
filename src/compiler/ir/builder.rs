@@ -505,7 +505,7 @@ impl IR {
                             .map_or(false, |n| self.variant_tree.contains_key(&n)));
                 if is_variant {
                     // `src/ir/builder/expr_node.rs`
-                    let result = self.init_variant_node(is_self, &name, &mut fields);
+                    let result = self.init_variant_node(is_self, &name, &mut fields, &expect_byte);
                     self.unwrap_or_report(result)
                 } else {
                     // `src/ir/builder/expr_node.rs`
@@ -519,7 +519,7 @@ impl IR {
                 mut fields,
             } => {
                 // `src/ir/builder/expr_node.rs`
-                let result = self.init_variant_node(is_self, &name, &mut fields);
+                let result = self.init_variant_node(is_self, &name, &mut fields, &expect_byte);
                 self.unwrap_or_report(result)
             }
             // ここでは対応する「元の変数名」が分からない文脈
@@ -1044,6 +1044,23 @@ mod mem_var_tests {
             "{:?}",
             body
         );
+    }
+
+    #[test]
+    fn check_generic_variant_infers_type_from_context() {
+        let body = build_func_body(
+            "variant Option<T> { Some(T) None } create(): Option<int> { ret Option::None } main(): int { value: int = 10 some: Option<int> = Option::Some(value) none: Option<int> = Option::None }",
+        );
+        let variants = body
+            .iter()
+            .filter_map(|inst| match inst {
+                inst::Inst::Variant { name, tag, .. } => Some((name.as_str(), *tag)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(variants.contains(&("Option$int", 0)), "{:?}", body);
+        assert!(variants.contains(&("Option$int", 1)), "{:?}", body);
     }
 
     #[test]

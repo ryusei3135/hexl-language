@@ -70,6 +70,9 @@ impl Parser {
         let lex::Tkn::Name(mem_name) = self.next_tkn(&["name"])?.clone() else {
             panic!();
         };
+        if self.is_variant_field(&name, &mem_name) {
+            return self.variant_init_node::<false>(&name);
+        }
         if matches!(self.next_tkn_ref(&[])?, lex::Tkn::LParen) {
             self.next_tkn(&["("])?;
             Ok(node::Expr::Scope {
@@ -82,6 +85,25 @@ impl Parser {
                 variant: mem_name,
             })
         }
+    }
+
+    /// 渡されたモジュールの名前とフィールドの名前がすでに出現している場合、
+    /// これはバリアントなのでtrueを返す
+    fn is_variant_field(&self, type_name: &str, field_name: &str) -> bool {
+        self.gen_nodes
+            .iter()
+            .chain(self.pending_types.iter())
+            .any(|node| {
+                let node::Group1Node::VariantDefine(def) = node else {
+                    return false;
+                };
+                let is_matching_type = def.name == type_name
+                    || def
+                        .name
+                        .strip_prefix(type_name)
+                        .is_some_and(|suffix| suffix.starts_with('$'));
+                is_matching_type && def.find_field(field_name).is_some()
+            })
     }
 
     /// 配列リテラルのノードを作成する

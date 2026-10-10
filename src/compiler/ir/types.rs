@@ -14,6 +14,7 @@ pub enum Size {
     /// - `fields`: メンバー名と型(型なしメンバーは`Void`)。定義順がタグの値
     /// - `tagged`: 先頭にタグ(`VARIANT_TAG_BYTES`バイト)を持つか
     Variant {
+        name: String,
         fields: Vec<Box<(String, Size)>>,
         tagged: bool,
     },
@@ -197,7 +198,7 @@ impl Size {
                 }
                 size_counter
             }
-            Self::Variant { fields, tagged } => {
+            Self::Variant { fields, tagged, .. } => {
                 let payload = fields
                     .iter()
                     .map(|mem| mem.1.payload_bytes())
@@ -210,7 +211,7 @@ impl Size {
                 }
             }
             Self::GetAddr(..) => 8,
-            Self::Void => panic!(),
+            Self::Void => 0,
         }
     }
 
@@ -230,6 +231,21 @@ impl Size {
     pub(in crate::compiler::ir)
     fn wrap_get_addr(&self) -> Self {
         Self::GetAddr(Box::new(self.clone()))
+    }
+
+    pub(in crate::compiler)
+    fn extract_variant_largest_size(&self) -> &Size {
+        if let Self::Variant { name, fields, tagged } = self {
+            let idx = fields
+                .iter()
+                .enumerate()
+                .max_by_key(|(idx, val)| {
+                    (*val).1.to_bytes()
+                });
+            &(*fields[idx.unwrap().0]).1
+        } else {
+            panic!();
+        }
     }
 }
 
@@ -286,6 +302,7 @@ impl IR {
             })
             .collect();
         types::Size::Variant {
+            name: variant_def.name.clone(),
             fields,
             tagged: variant_def.is_tagged(),
         }

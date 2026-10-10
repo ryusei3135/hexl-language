@@ -18,6 +18,8 @@
 //! - 型(変数・引数・戻り値・メンバーの型): `a: Pair<int>` / `Pair<int>*`
 //! - 構造体の初期化: `Pair<int> { a: 1 b: 2 }`
 //! - メゾット/バリアントのメンバー: `Pair<int>::new()` / `Opt<int>::None`
+//! - 期待する型から解決できる場合は、`Opt::None` / `Opt::Some(value)`のように
+//!   バリアントの型引数を省略できる
 //!
 //! ## 作り方
 //! 定義のトークン列の型パラメータ(`T`)を、型引数のトークンに置き換えて、
@@ -737,6 +739,37 @@ mod generic_type_tests {
             node::Expr::EnumVariant {
                 name: "Opt$int".to_string(),
                 variant: "None".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn generic_variant_constructor_is_init_variant_node() {
+        let nodes = build(
+            "
+            variant Option<T> { Some(T) None }
+            main(): int {
+                value: int = 10
+                o: Option<int> = Option::Some(value)
+                ret 0
+            }
+            ",
+        );
+        let main = func(&nodes, "main");
+        let node::Group2Node::Expr(node::Expr::DefVar(var)) = main.body[1].get_node() else {
+            panic!("{:?}", main.body[1]);
+        };
+        assert_eq!(
+            *var.value,
+            node::Expr::InitVariant {
+                is_self: false,
+                name: "Option".to_string(),
+                fields: [(
+                    "Some".to_string(),
+                    Box::new(node::Expr::Var("value".to_string()))
+                )]
+                .into_iter()
+                .collect(),
             }
         );
     }

@@ -186,7 +186,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn expr_value(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
+    fn expr_value(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
@@ -194,11 +194,20 @@ impl Parser {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
                     self.next_tkn(&[])?;
-                    return self.gen_name_node::<false>(name, ini_struct);
+                    return self.gen_name_node::<false>(name, init_struct);
                 }
                 lex::Tkn::RBrace => {
                     self.next_tkn(&[])?;
-                    return self.gen_name_node::<false>(name, ini_struct);
+                    return self.gen_name_node::<false>(name, init_struct);
+                }
+                lex::Tkn::RParen => {
+                    self.next_tkn(&[])?;
+                    return Ok(node::Expr::Var(name));
+                }
+                // データ付きバリアントなど
+                lex::Tkn::ModPathTkn => {
+                    self.advance_tkn().unwrap();
+                    return self.scope_member_node(name, init_struct);
                 }
                 // 関数を呼ぶノード
                 lex::Tkn::LParen => {
@@ -208,7 +217,7 @@ impl Parser {
                         return self.build_scope_node(&name);
                     }
                     // 前回のトークンが名前かつ(なので、関数を呼び出すノードを作成する
-                    return self.call_func_expr(&name, ini_struct);
+                    return self.call_func_expr(&name, init_struct);
                 }
                 // 名前の次が`{`/`}`/`(`以外の場合、この名前自身は値ではなく、
                 // 式の直前にあるだけのトークン。
@@ -223,17 +232,17 @@ impl Parser {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
-            lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(ini_struct)?)),
+            lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
             lex::Tkn::Number(value) => node::Expr::Number(value),
             lex::Tkn::KeyWordSelf => {
                 let self_name = self.struct_self_name.as_ref().unwrap().to_string();
                 // `expr/value_api.rs`
-                self.gen_name_node::<true>(self_name, ini_struct)?
+                self.gen_name_node::<true>(self_name, init_struct)?
             }
             lex::Tkn::Str(value) => node::Expr::Str(value),
-            lex::Tkn::Name(name) => self.gen_name_node::<false>(name, ini_struct)?,
+            lex::Tkn::Name(name) => self.gen_name_node::<false>(name, init_struct)?,
             lex::Tkn::LParen => {
-                let result = self.expr_cmp(ini_struct)?;
+                let result = self.expr_cmp(init_struct)?;
 
                 if self.current_tkn() == &lex::Tkn::LParen {
                     dbg!(self.current_tkn());

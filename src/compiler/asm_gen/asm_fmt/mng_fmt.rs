@@ -241,7 +241,7 @@ impl MngAsmFmt {
             types::Size::Array { size, .. } => {
                 return self.get_fmt_struct_member(value, &size, offset);
             }
-            _ => panic!(),
+            t => panic!("{:?}", t),
         };
         fmted.replace("mov", &format!("mov{}", s_fmt))
     }

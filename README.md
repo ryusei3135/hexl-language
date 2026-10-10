@@ -7,7 +7,7 @@
 # Hexl - 自作プログラミング言語 / Custom Programming Language
 Hexlはrustで実装されたプログラミング言語であり
 字句解析・構文解析・AST・コンパイラを自前で実装しており、
-c言語ライクな言語を作ることを目的としています。
+メモリ安全な言語を作ることを目的としています。
 - [X64アセンブラ](https://github.com/ryusei3135/hexl-language/tree/HasmX64)
 
 
@@ -15,7 +15,7 @@ c言語ライクな言語を作ることを目的としています。
 [english doc](./documents/english.md)
 
 ## 概要（Overview）
-c言語ライクな言語
+可能な限りpanicしない言語
 
 ## 特徴（Features）
 - 自作プログラミング言語
@@ -55,7 +55,7 @@ gcc 生成したアセンブリソースコード -nostdlib
     - break
 * データ
     - struct
-    - enum
+    - variant
     - static
     - const
     - mut
@@ -65,7 +65,6 @@ gcc 生成したアセンブリソースコード -nostdlib
     - of
 * 将来つかう予定
     - `register`データ
-    - `union`データ
     - `move`契約
     - `async`制御
     - `await`制御

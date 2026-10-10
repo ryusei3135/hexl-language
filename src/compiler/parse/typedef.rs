@@ -155,7 +155,6 @@ impl Parser {
 
         // `(`へ進み、さらに値の先頭のトークンへ進む
         let _ = self.next_tkn(&["("])?;
-        let _ = self.next_tkn(&[])?;
         let value = Box::new(self.expr_cmp(true)?);
 
         // 値の後ろは`)`でなければならない

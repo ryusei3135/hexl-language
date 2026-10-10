@@ -60,11 +60,40 @@ impl AsmEmitter {
         struct_txt
     }
 
-    pub(in crate::compiler::asm_gen)
-    fn emit_data_variant_init_asm(&mut self, name: String, member: Option<&inst::MemoryInst>, tag: usize, this_is_self: bool, variant_size: &Size) -> String {
+    /// バリアント(`E::a`など)をスタック領域に配置するコードを生成
+    ///
+    /// ポインタは先頭のフィールド(タグ、4byte)を指し、ペイロード
+    /// (最大バリアントのサイズ`P`)はその下に並ぶ。
+    /// ```text
+    ///   tag     : 0(ptr)
+    ///   payload : -P(ptr)      ([ptr - P, ptr)に収まり、タグと重ならない)
+    /// ```
+    /// `this_is_self`が`false`の場合、`ptr`は`%rbp - N`で、`N`は
+    /// `alloc_struct_stk(parent_id, P)`で確保する(`stk_use_counter`を進める)。
+    /// `true`の場合は`self`のポインタ先へ直接書き込む。
+    ///
+    /// 返すのは命令列のみ。呼び出し側(`format_line`)が、この後に
+    /// アドレスをレジスタへ渡す命令(`lea`)を続ける。
+    pub(in crate::compiler::asm_gen) 
+    fn emit_data_variant_init_asm(
+        &mut self, 
+        parent_id: usize,
+        member: Option<&inst::MemoryInst>, 
+        tag: usize, 
+        this_is_self: bool, 
+        variant_size: &Size
+    ) -> String {
+        let payload_bytes = variant_size.extract_variant_largest_size().to_bytes();
+        let (tag_off, data_off) = if this_is_self {
+            (0, payload_bytes)
+        } else {
+            let n = self.alloc_struct_stk(parent_id, payload_bytes);
+            (n, n + payload_bytes)
+        };
+
         let mut variant_txt = String::new();
-        let mut offset = 0;
-        let txt = if let Some(mem_val) = member {
+        // ペイロード(中身がないバリアントは書き込まない)
+        if let Some(mem_val) = member {
             let inst::MemoryInst::Member {
                 value_idx, size, ..
             } = mem_val else {
@@ -80,30 +109,25 @@ impl AsmEmitter {
                     panic!();
                 };
                 variant_txt.push_str(self.init_arr_txt::<true>(&arr, member_size).as_str());
+            } else {
+                variant_txt.push_str(&self.asm_fmt.get_fmt_struct_member(
+                    value,
+                    variant_size.extract_variant_largest_size(),
+                    data_off,
+                ));
             }
-            
-            // このメンバー分を足した「累積」サイズ
-            // (これが、このメンバーの`%rbp`からのオフセットになる)
-            let add_size = size.to_bytes();
+        }
+        variant_txt.push_str(self.emit_variant_tag_field(tag_off, tag).as_str());
 
-            // ポインタは先頭のメンバーを指す(先頭のメンバーのオフセットは0)ので、
-            // このメンバーより前のメンバーの累積サイズがオフセットになる
-            offset = self.make_member_offset(this_is_self, add_size, &size);
-
-            self.asm_fmt.get_fmt_struct_member(value, &variant_size, offset)
-        } else {
-            offset = self.make_member_offset(this_is_self, variant_size.to_bytes(), &variant_size);
-            self.asm_fmt.get_fmt_struct_member("0".to_string(), &variant_size, offset)
-        };
-
-        variant_txt.push_str(txt.as_str());
-        variant_txt.push_str(self.emit_variant_tag_field(offset, tag).as_str());
-
+        if this_is_self {
+            // `self`のポインタ(64bitのレジスタ)の指す先へ書き込む
+            variant_txt = variant_txt.replace("%rbp", &self.self_ptr_reg());
+        }
         variant_txt
     }
 
     fn emit_variant_tag_field(&mut self, offset: usize, tag_num: usize) -> String {
-        self.asm_fmt.get_fmt_struct_member(tag_num.to_string(), &types::Size::DD, offset)
+        self.asm_fmt.get_fmt_struct_member(self.asm_fmt.get_fmt_num(&tag_num.to_string()), &types::Size::DD, offset)
     }
 
     /// 構造体やバリアントのoffsetを計算

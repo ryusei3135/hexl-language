@@ -430,11 +430,12 @@ impl IR {
         variant: &str,
         expect_byte: &types::Size,
     ) -> Result<Box<inst::Inst>, err::ErrKind> {
+        let name = self.resolve_variant_name(name, expect_byte);
         let variant_def = self
             .variant_tree
-            .get(name)
+            .get(&name)
             .cloned()
-            .ok_or_else(|| expr_node::this_variant_is_undefined(name).unwrap_err())?;
+            .ok_or_else(|| expr_node::this_variant_is_undefined(&name).unwrap_err())?;
 
         if variant_def.is_plain_enum() {
             let tag = variant_def
@@ -446,7 +447,29 @@ impl IR {
                 self.id_counter,
             )));
         }
-        Ok(Box::new(self.typeless_variant_node(name, variant)?))
+        Ok(Box::new(self.typeless_variant_node(&name, variant)?))
+    }
+
+    fn resolve_variant_name(&self, name: &str, expect_byte: &types::Size) -> String {
+        if self.variant_tree.contains_key(name) {
+            return name.to_string();
+        }
+
+        if let types::Size::Variant {
+            name: expected_name,
+            ..
+        } = expect_byte
+        {
+            if expected_name
+                .strip_prefix(name)
+                .is_some_and(|suffix| suffix.starts_with('$'))
+                && self.variant_tree.contains_key(expected_name)
+            {
+                return expected_name.clone();
+            }
+        }
+
+        name.to_string()
     }
 
     pub(super) 
@@ -532,6 +555,7 @@ impl IR {
         is_self: bool,
         name: &str,
         fields: &mut HashMap<String, Box<node::Expr>>,
+        expect_byte: &types::Size,
     ) -> Result<inst::Inst, err::ErrKind> {
         // メゾットの処理中、初期化するバリアント型が`self`の場合は
         // 変数の型から実際のバリアント型の名前を求める
@@ -539,7 +563,7 @@ impl IR {
         let variant_name: String = if resolve_self {
             self.var_tree.get_ty_name(name)?.to_owned()
         } else {
-            name.to_string()
+            self.resolve_variant_name(name, expect_byte)
         };
         let variant_def = self.variant_tree.get_variant(&variant_name)?;
 

@@ -45,7 +45,7 @@ func6(a: int must=func5) {
 }
 
 
-add(a mut: int, b: int) {
+add(a mut: int, b: int): Option<int> {
     c: byte* = "hello world\n"
     d: byte* = "tomato\n"
 
@@ -73,9 +73,11 @@ add(a mut: int, b: int) {
         }
         a -= 1
     }
+    ret Option::None
 }
 
 _start(): int {
+    o: Option<int> = Option::Some(10)
     h: int must=func5 = func4()
     a: static[int] = 30
     ptr mut: int* = [a]

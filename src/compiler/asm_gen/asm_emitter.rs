@@ -189,9 +189,10 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
-        // メモリに実体がある変数の`reg`はレジスタ番号ではないので、
+        // メモリに実体がある変数(`in_mem`)と、`%rbp`相対で置かれた
+        // 変数(`is_stack`)の`reg`はレジスタ番号ではないので、
         // レジスタを使用中にしない
-        if !var.in_mem {
+        if !var.in_mem && !var.is_stack {
             self.used_reg.mark_used(var.reg);
         }
         self.expr_vars.push(name.to_string());
@@ -362,7 +363,20 @@ impl AsmEmitter {
         this_is_self: SelfPtrInfo,
     ) -> String {
         let base_size: Size = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
-        let mut formated = if let Some(struct_idx) = self.resolve_struct_idx(src1) {
+        let mut formated = if let Some(variant_idx) = self.resolve_variant_idx(src1) {
+            // バリアントの生成: 初期化の命令を出した後、先頭(タグ)の
+            // アドレスをdstへ渡す(構造体と同じ扱い)
+            let mut txt = self.extract_operand_text(variant_idx, this_is_self);
+            let is_self = matches!(self.curr_inst[variant_idx], inst::Inst::Variant { is_self: true, .. });
+            if !is_self {
+                let stk = self.ptr_stk(variant_idx, 0);
+                let src = self.rbp_ref(stk);
+                let dst_text = self.get_reg(dst, &Size::DQ);
+                let line = self.fill_tmpl("address", &dst_text, &src);
+                txt.push_str(&self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ));
+            }
+            txt
+        } else if let Some(struct_idx) = self.resolve_struct_idx(src1) {
             // 構造体の生成
             let mut txt = self.extract_operand_text(struct_idx, this_is_self);
 
@@ -515,6 +529,17 @@ impl AsmEmitter {
         }
     }
 
+    /// `resolve_struct_idx`のバリアント版
+    fn resolve_variant_idx(&self, idx: usize) -> Option<usize> {
+        match self.curr_inst[idx] {
+            inst::Inst::Variant { .. } => Some(idx),
+            inst::Inst::GetAddress(inner)
+            | inst::Inst::Pointer(inner)
+            | inst::Inst::Mov { src: inner, .. } => self.resolve_variant_idx(inner),
+            _ => None,
+        }
+    }
+
     fn check_node_is_struct(&self, node_idx: usize) -> bool {
         match &self.curr_inst[node_idx] {
             inst::Inst::RefStruct { .. } => true,
@@ -619,7 +644,7 @@ impl AsmEmitter {
                 )
             }
             inst::Inst::Variant { name, tag, value, tagged, size, is_self } => {
-                self.emit_data_variant_init_asm(name, value.as_ref(), tag, is_self, &size)
+                self.emit_data_variant_init_asm(parent_id, value.as_ref(), tag, is_self, &size)
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
