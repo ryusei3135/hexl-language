@@ -24,7 +24,7 @@ impl Parser {
         let node = match self.current_tkn().clone() {
             lex::Tkn::LBracket => {
                 dbg!(self.current_tkn());
-                Err(err::ErrKind::UnexpectedToken)?
+                return crate::err_at!(self.arr_access_unexpected_lbracket());
             }
             // `]`の次が`.`の場合、アドレスの取得ではなく、ポインタが
             // 指す構造体のメンバー/メゾットへのアクセス
@@ -92,23 +92,11 @@ impl Parser {
     fn build_member_array_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "name",
-                    found: member_tkn,
-                }
-            );
+            return crate::err_at!(self.arr_member_name_not_found(member_tkn));
         };
         let index_tkn = self.next_tkn(&["number"])?;
         let lex::Tkn::Number(index) = index_tkn.clone() else {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "number",
-                    found: index_tkn,
-                }
-            );
+            return crate::err_at!(self.arr_member_index_not_number(index_tkn));
         };
         // 添字の次(`else`か`]`)まで進める
         self.next_tkn(&["]", "else"])?;
@@ -164,13 +152,7 @@ impl Parser {
         // `]`の次の`=`まで進める
         let eq_tkn = self.next_tkn(&["="])?;
         if !matches!(eq_tkn, lex::Tkn::Equal) {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "=",
-                    found: eq_tkn,
-                }
-            );
+            return crate::err_at!(self.arr_assign_equal_not_found(eq_tkn));
         }
         let value = self.expr_branch()?;
 
@@ -213,24 +195,12 @@ impl Parser {
             lex::Tkn::KeyWordElse => self.expr_add(false)?,
             lex::Tkn::RBracket => return Ok(None),
             found => {
-                return crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::ExpectedKind {
-                        expected: "`else` or `]`",
-                        found,
-                    }
-                );
+                return crate::err_at!(self.arr_else_or_rbracket_not_found(found));
             }
         };
         // "]"まで進める(current_tkn()は"]"を指す)
         if !matches!(self.current_tkn(), lex::Tkn::RBracket) {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "]",
-                    found: self.current_tkn().clone(),
-                }
-            );
+            return crate::err_at!(self.arr_rbracket_not_found());
         }
         Ok(Some(else_idx))
     }

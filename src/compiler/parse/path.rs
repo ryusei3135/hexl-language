@@ -5,28 +5,36 @@ impl Parser {
     /// name::mod
     pub(in crate::compiler::parse) 
     fn build_scope_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
-        if self.next_tkn_ref(&["{"])? == lex::Tkn::LBrace {
-            self.advance_tkn().unwrap();
-            let node = self.struct_init_node::<false>(name);
-
-            return if self.next_tkn_ref(&["}"])? == lex::Tkn::RBrace {
+        match self.peek_tkn()? {
+            lex::Tkn::LBrace => {
                 self.advance_tkn().unwrap();
-                node
-            } else {
-                // }が来ていない
-                panic!();
-            };
-        }
-        if self.next_tkn_ref(&["."])? == lex::Tkn::Dot {
-            return self.build_member_node(name);
-        }
-        // "::"がないので、何も返さない
-        if self.next_tkn_ref(&["not `::`"])? != lex::Tkn::ModPathTkn {
-            return Ok(self.expr_define_var(name.to_string())?);
+                let node = self.struct_init_node::<false>(name);
+
+                return if self.next_tkn_ref(&["}"])? == lex::Tkn::RBrace {
+                    self.advance_tkn().unwrap();
+                    node
+                } else {
+                    // }が来ていない
+                    panic!();
+                };
+            }
+            lex::Tkn::Dot => {
+                return self.build_member_node(name);
+            }
+            lex::Tkn::ModPathTkn => {
+                // バリアントか調べる
+                self.advance_tkn().unwrap();
+                if let lex::Tkn::Name(next_name) = self.peek_tkn()? {
+                    return self.variant_init_node::<false>(name);
+                }
+                self.back_tkn();
+            }
+            _ => return Ok(self.expr_define_var(name.to_string())?),
         }
 
         crate::scope_node!(self, ModPathTkn, Scope, &name);
     }
+
 
     /// メゾットなどのノードを作成
     /// name.method
@@ -74,13 +82,7 @@ impl Parser {
     fn ptr_member_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "name",
-                    found: member_tkn,
-                }
-            );
+            return crate::err_at!(self.ptr_member_name_not_found(member_tkn));
         };
 
         // メゾットの呼び出し: `[name].method(..)`

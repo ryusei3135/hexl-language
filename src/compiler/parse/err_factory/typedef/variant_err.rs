@@ -10,6 +10,7 @@ impl Parser {
     fn variant_keyword_not_found(
         &self,
     ) -> Result<node::Group1Node, err::ErrKind> {
+        crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectedTkn {
@@ -26,6 +27,7 @@ impl Parser {
     fn variant_name_is_not_found(
         &self
     ) -> Result<node::Group1Node, err::ErrKind> {
+        crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectedTkn {
@@ -45,6 +47,7 @@ impl Parser {
         &self,
         tkn: lex::Tkn,
     ) -> Result<(), err::ErrKind> {
+        crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectedTkn {
@@ -66,6 +69,7 @@ impl Parser {
         &self,
         expect: lex::Tkn,
     ) -> Result<(), err::ErrKind> {
+        crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectedTkn {
@@ -90,6 +94,7 @@ impl Parser {
         &self,
         option_name: String,
     ) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::OptionIsNotFound { 
@@ -104,11 +109,55 @@ impl Parser {
     fn variant_option_next_name_not_found<T>(
         &self,
     ) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectedTkn {
                 found: self.current_tkn().clone(),
                 expected: lex::Tkn::Name("variant_name".to_string()),
+                context: lex::Tkn::KeyWordVariant
+            }
+        )
+    }
+
+
+    /// 共用体の初期化式(`Variant::`の次)に、メンバーの名前ではないトークンがあった
+    pub(in crate::compiler::parse)
+    fn variant_init_member_not_found<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::UnexpectedTkn {
+                found,
+                expected: lex::Tkn::Name("variant member".to_string()),
+                context: lex::Tkn::KeyWordVariant
+            }
+        )
+    }
+
+    /// 共用体の定義の中に、メンバーの名前ではないトークンがあった
+    pub(in crate::compiler::parse)
+    fn variant_member_not_found<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::UnexpectedTkn {
+                found,
+                expected: lex::Tkn::Name("variant member".to_string()),
+                context: lex::Tkn::KeyWordVariant
+            }
+        )
+    }
+
+    /// 共用体のメンバーの名前の次に、予期しないトークンがあった
+    pub(in crate::compiler::parse)
+    fn variant_member_unexpected_tkn<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::UnexpectedTkn {
+                found,
+                expected: lex::Tkn::RBrace,
                 context: lex::Tkn::KeyWordVariant
             }
         )

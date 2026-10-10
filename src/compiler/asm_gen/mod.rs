@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::mem;
 use crate::compiler::models::AsmFmtData;
 
-pub type SelfPtrInfo<'a> = Option<&'a Size>;
+pub type SelfPtrInfo = Option<Size>;
 
 pub struct AsmEmitter {
     pub(super) asm_text: String,

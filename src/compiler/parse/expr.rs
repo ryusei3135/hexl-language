@@ -97,15 +97,10 @@ impl Parser {
             if self.current_tkn() == &lex::Tkn::Equal {
                 node::DefineVar::new(&name, self.expr_branch()?, &ty_node, var_attr).wrap()
             } else {
-                crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::UnexpectTknInExpr {
-                        found: self.current_tkn().clone(),
-                    }
-                )?
+                return crate::err_at!(self.unexpect_tkn_in_expr());
             }
         } else {
-            crate::syntax_err!(self.build_err_span(), err::SyntaxErrKind::TknIsEofInExpr)?
+            return crate::err_at!(self.tkn_is_eof_in_expr());
         };
 
         Ok(node)
@@ -237,12 +232,7 @@ impl Parser {
 
                 if self.current_tkn() == &lex::Tkn::LParen {
                     dbg!(self.current_tkn());
-                    crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::UnexpectTknInExpr {
-                            found: self.current_tkn().clone(),
-                        }
-                    )?
+                    return crate::err_at!(self.unexpect_tkn_in_expr());
                 } else {
                     result
                 }

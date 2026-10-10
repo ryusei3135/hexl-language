@@ -25,7 +25,7 @@ impl Parser {
         &mut self,
     ) -> Result<(Vec<T>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
+            return crate::err_at!(self.fields_lbrace_not_found());
         }
 
         let mut fields = Vec::<T>::new();
@@ -76,7 +76,7 @@ impl Parser {
                             continue;
                         }
 
-                        _ => return Err(err::ErrKind::UnexpectedToken),
+                        _ => return crate::err_at!(self.field_colon_or_lparen_not_found()),
                     }
                     pub_flag = false;
                     self.next_tkn(&[])?;
@@ -103,7 +103,7 @@ impl Parser {
         variant_flag: VariantMode,
     ) -> Result<(Vec<node::VariantField>, Vec<node::Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)));
+            return crate::err_at!(self.fields_lbrace_not_found());
         }
 
         match variant_flag {
@@ -149,14 +149,7 @@ impl Parser {
                     pub_flag = false;
                 }
                 t => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::UnexpectedTkn {
-                            found: t,
-                            expected: lex::Tkn::Name("variant member".to_string()),
-                            context: lex::Tkn::KeyWordVariant
-                        }
-                    );
+                    return crate::err_at!(self.variant_member_not_found(t));
                 }
             }
         }
@@ -188,14 +181,7 @@ impl Parser {
             lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
                 self.back_tkn();
             }
-            t => crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::UnexpectTknAfterKeyword {
-                    keyword: lex::Tkn::Colon,
-                    expected: vec![",", "}"],
-                    found: t.clone(),
-                }
-            )?,
+            t => return crate::err_at!(self.field_end_unexpected_tkn(t.clone())),
         }
         Ok(false)
     }

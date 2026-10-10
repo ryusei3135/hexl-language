@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ## [0.13.2] - 2026-10-10
+### Added
+- parserのエラーをerr_factoryに複数追加
 ### Changed
 - nodeの場所を整理`src/compiler/node/`
 ### Fixed

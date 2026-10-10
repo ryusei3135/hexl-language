@@ -13,20 +13,10 @@ impl Parser {
             if let Some(r) = tkn.get(self.idx + 1).map(|v| v.tkn.clone()) {
                 Ok(r)
             } else {
-                crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::TknIsEof {
-                        expected: Vec::new(),
-                    }
-                )
+                crate::err_at!(self.tkn_is_eof(Vec::new()))
             }
         } else {
-            crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::TknIsEof {
-                    expected: Vec::new(),
-                }
-            )
+            crate::err_at!(self.tkn_is_eof(Vec::new()))
         }
     }
 
@@ -73,12 +63,7 @@ impl Parser {
                 return Ok(val.tkn.clone());
             }
         }
-        crate::syntax_err!(
-            self.build_err_span(),
-            err::SyntaxErrKind::TknIsEof {
-                expected: expected.to_vec()
-            }
-        )
+        crate::err_at!(self.tkn_is_eof(expected.to_vec()))
     }
 
     /// なにのトークンが期待されていたかは呼び出し元で決める
@@ -89,12 +74,7 @@ impl Parser {
                 return Ok(val.tkn.clone());
             }
         }
-        crate::syntax_err!(
-            self.build_err_span(),
-            err::SyntaxErrKind::TknIsEof {
-                expected: expected.to_vec()
-            }
-        )
+        crate::err_at!(self.tkn_is_eof(expected.to_vec()))
     }
 
     /// エラーが発生したときのどの行の何文字目がエラーかを

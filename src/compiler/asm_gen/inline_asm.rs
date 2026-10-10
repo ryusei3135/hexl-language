@@ -59,7 +59,7 @@ impl AsmEmitter {
     fn extract_operand_text_sized(
         &mut self,
         node_idx: usize,
-        this_is_self: SelfPtrInfo,
+        this_is_self: &Option<Size>,
         forced_size: &Size,
     ) -> String {
         match self.inst_at(node_idx) {
@@ -78,7 +78,7 @@ impl AsmEmitter {
             }
             // それ以外(メモリ参照/即値/ポインタなど)は、サイズの
             // 上書きを行わず通常通り組み立てる
-            _ => self.extract_operand_text(node_idx, this_is_self),
+            _ => self.extract_operand_text(node_idx, &this_is_self),
         }
     }
 
@@ -175,7 +175,7 @@ impl AsmEmitter {
             // AT&T記法の慣例により、最後のオペランドをdstとして扱う。
             // srcのレジスタサイズは、常にこのdstのサイズに合わせる
             // (dstが変数を参照していない場合は上書きしない)
-            let dst_size = operand_ids
+            let dst_size: SelfPtrInfo = operand_ids
                 .last()
                 .and_then(|id| self.resolve_operand_var_size(*id));
             let last_index = operand_ids.len().saturating_sub(1);
@@ -189,9 +189,9 @@ impl AsmEmitter {
                 } else {
                     match (index != last_index, &dst_size) {
                         (true, Some(size)) => {
-                            self.extract_operand_text_sized(*operand_id, dst_size.as_ref(), size)
+                            self.extract_operand_text_sized(*operand_id, &dst_size, size)
                         }
-                        _ => self.extract_operand_text(*operand_id, dst_size.as_ref()),
+                        _ => self.extract_operand_text(*operand_id, &dst_size),
                     }
                 };
                 // `{0}`, `{1}`, ... という数字のプレースホルダーを置換

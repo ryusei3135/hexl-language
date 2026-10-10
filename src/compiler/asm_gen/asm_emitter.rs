@@ -2,7 +2,7 @@ mod div_ir;
 mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
-mod data_mem_factory;
+mod struct_ir;
 mod arr;
 
 use super::*;
@@ -188,8 +188,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
+    pub(super) fn insert_var_info(&mut self, name: &str, var: VarIndexInfo) {
         // メモリに実体がある変数の`reg`はレジスタ番号ではないので、
         // レジスタを使用中にしない
         if !var.in_mem {
@@ -249,8 +248,7 @@ impl AsmEmitter {
     /// 呼ぶ。
     ///
     /// 変数がそのレジスタを持っている場合は解放しない。
-    pub(super) 
-    fn release_expr_temp(&mut self, node_idx: usize) {
+    pub(super) fn release_expr_temp(&mut self, node_idx: usize) {
         if !matches!(self.curr_inst[node_idx], inst::Inst::Expr(..)) {
             return;
         }
@@ -270,8 +268,7 @@ impl AsmEmitter {
     /// 現在`reg`を使っている値を、`push`で退避するためのレジスタ名の一覧
     /// (`dst`は除く)。`/`や`%`が書き換える`%rax`/`%rdx`のうち、
     /// 使用中のものを退避するために使う。
-    pub(super) 
-    fn live_reserved_regs(&self, dst: usize) -> Vec<usize> {
+    pub(super) fn live_reserved_regs(&self, dst: usize) -> Vec<usize> {
         RESERVED_REGS
             .iter()
             .copied()
@@ -362,12 +359,12 @@ impl AsmEmitter {
         dst: Option<usize>,
         src1: usize,
         src2: Option<usize>,
-        this_is_self: SelfPtrInfo,
+        this_is_self: &SelfPtrInfo,
     ) -> String {
         let base_size: Size = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
         let mut formated = if let Some(struct_idx) = self.resolve_struct_idx(src1) {
             // 構造体の生成
-            let mut txt = self.extract_operand_text(struct_idx, this_is_self);
+            let mut txt = self.extract_operand_text(struct_idx, &this_is_self);
 
             let ret_line = if this_is_self.is_none() {
                 let self_ptr_reg = self.self_ptr_reg();
@@ -381,7 +378,7 @@ impl AsmEmitter {
         } else {
             let dst_size = self.resolve_dst_reg_size(opcode, src1, this_is_self);
             let dst_text = self.get_reg(dst, &dst_size);
-            let src_text = self.extract_operand_text(src1, this_is_self);
+            let src_text = self.extract_operand_text(src1, &this_is_self);
             // srcがレジスタの場合は、dstとサイズを揃える
             // (`movl %rcx, %edx`のような、サイズの混在を防ぐ)
             let src_text = if opcode == "address" {
@@ -397,7 +394,7 @@ impl AsmEmitter {
         }
 
         if let Some(src2_id) = src2 {
-            formated.replace("{src2}", &self.extract_operand_text(src2_id, this_is_self))
+            formated.replace("{src2}", &self.extract_operand_text(src2_id, &this_is_self))
         } else {
             formated
         }
@@ -413,8 +410,6 @@ impl AsmEmitter {
     fn value_reg_size(ty: &Size) -> Size {
         match ty {
             Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
-            // データなしのバリアントはタグ(`DD`の整数)としてレジスタに載せる
-            Size::Variant { .. } => Size::DD,
             Size::Array { size, .. } => Self::value_reg_size(size),
             _ => Size::DQ,
         }
@@ -433,7 +428,7 @@ impl AsmEmitter {
     ///
     /// 以前は3.と4.が無く、メモリ以外の値は常に64bitレジスタ
     /// (`%rcx`など)に書き込まれていた。
-    fn resolve_dst_reg_size(&self, opcode: &str, src1: usize, dst_ty: SelfPtrInfo) -> Size {
+    fn resolve_dst_reg_size(&self, opcode: &str, src1: usize, dst_ty: &SelfPtrInfo) -> Size {
         if opcode == "address" {
             return Size::DQ;
         }
@@ -585,7 +580,7 @@ impl AsmEmitter {
     fn extract_operand_text(
         &mut self,
         parent_id: usize,
-        this_is_self: SelfPtrInfo,
+        this_is_self: &Option<types::Size>,
     ) -> String {
         match self.inst_at(parent_id) {
             inst::Inst::Num { value, .. } => self.asm_fmt.get_fmt_num(&value),
@@ -617,27 +612,12 @@ impl AsmEmitter {
             inst::Inst::Block(name) => name.to_string(),
             inst::Inst::ExpectJmp(name) => name.to_string(),
             inst::Inst::Struct { mem, .. } => {
-                self.emit_struct_init_asm(
+                self.emit_struct_ini_asm(
                     mem,
                     // Noneの場合それはSelf
                     this_is_self.is_none(),
                 )
             }
-            // データなしのメンバーは整数型(タグの値)なので、即値のオペランドを返す
-            inst::Inst::Variant { tag, value: None, .. } => {
-                self.asm_fmt.get_fmt_num(&tag.to_string())
-            }
-            // データ付きのメンバーは構造体として展開する
-            // (`asm_emitter/data_mem_factory.rs`に記述)
-            inst::Inst::Variant { tag, value, tagged, size, .. } => self
-                .emit_data_variant_init_asm(
-                    tag,
-                    value,
-                    tagged,
-                    &size,
-                    // Noneの場合それはSelf
-                    this_is_self.is_none(),
-                ),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {
                 // `asm_emitter/operand_txt/`に記述
                 self.ref_mem_value_txt(&kind, &size, parent_id)
@@ -674,6 +654,7 @@ impl AsmEmitter {
                     // 戻り値を受ける側の型(`this_is_self`)がある
                     // 場合はそのサイズ、なければ64bit(`%rax`)
                     let ret_size = this_is_self
+                        .as_ref()
                         .map(Self::value_reg_size)
                         .unwrap_or(Size::DQ);
                     self.asm_fmt.get_fmt_reg(0, &ret_size)
@@ -747,8 +728,8 @@ impl AsmEmitter {
 
         let mut formated = tmpl
             .replace("{dst}", &dst_text)
-            .replace("{src1}", &self.extract_operand_text(expr.ls, wrap_size.as_ref()))
-            .replace("{src2}", &self.extract_operand_text(expr.rs, wrap_size.as_ref()))
+            .replace("{src1}", &self.extract_operand_text(expr.ls, &wrap_size))
+            .replace("{src2}", &self.extract_operand_text(expr.rs, &wrap_size))
             .to_string();
 
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()

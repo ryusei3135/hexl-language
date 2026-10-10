@@ -16,6 +16,11 @@ variant E {
     c
 }
 
+variant Option<T> {
+    Some(T)
+    None
+}
+
 f<T>(): T {
     e mut: E = E::a
     lll: T = T {

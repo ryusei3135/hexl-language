@@ -8,8 +8,8 @@ impl AsmEmitter {
         size: &types::Size,
         dst: usize,
         src: usize,
-        name: Option<&str>,
-        this_is_self: SelfPtrInfo,
+        name: &Option<String>,
+        this_is_self: &SelfPtrInfo,
     ) {
         // 経由の間接参照になってしまっていた。
         if let types::Size::Struct(_) = size {
@@ -29,7 +29,7 @@ impl AsmEmitter {
             // 呼び出し自体(`lea`+`call`)は副作用として`self.asm_text`へ
             // 積まれる。戻り値のオペランド文字列自体は構造体には
             // 使えないので捨てる
-            let _ = self.extract_operand_text(src, this_is_self);
+            let _ = self.extract_operand_text(src, &this_is_self);
             if self.struct_mem(name, size, src, dst).is_none() {
                 return ();
             }
@@ -61,13 +61,6 @@ impl AsmEmitter {
             return;
         }
 
-        // データ付きのバリアントは構造体として、スタックに展開する
-        // (データなしのものは整数型としてレジスタに載せるので、下の処理へ進む)
-        if let inst::Inst::Variant { value: Some(_), .. } = self.inst_at(src) {
-            self.variant_mem(name, size, src, dst);
-            return;
-        }
-
         if size.is_pointer().is_none() && self.static_label(src).is_some() {
             // 子のノードがstatic領域の値で、かつ宣言先の型がポインタで
             // ない場合のみ、変数名だけを登録する(この場合は変数の
@@ -93,7 +86,7 @@ impl AsmEmitter {
 
             let formated = if size.is_pointer().is_some() && is_literal_num {
                 let dst_reg = self.reg64(reg);
-                let value_operand = self.extract_operand_text(src, this_is_self);
+                let value_operand = self.extract_operand_text(src, &this_is_self);
                 self.mov_line(&dst_reg, &value_operand, &Size::DQ, false)
             } else {
                 // メモリのポインタか、値かで、ニーモニックが変わる
@@ -121,7 +114,7 @@ impl AsmEmitter {
                 if self
                     .expr_vars
                     .iter()
-                    .find(|v| v.as_str() == var_name)
+                    .find(|v| v.as_str() == var_name.as_str())
                     .is_some()
                 {
                     self.update_value_reg(&var_name, current_reg);
@@ -139,15 +132,15 @@ impl AsmEmitter {
                 kind,
                 dst,
             } => {
-                let dst_size = size.wrap_dst_size();
+                let dst_size: SelfPtrInfo = size.wrap_dst_size();
 
                 if kind == &inst::MemoryKind::Static {
-                    self.is_static_var(src, *dst, name, size.wrap_dst_size().as_ref());
+                    self.is_static_var(src, *dst, name, &size.wrap_dst_size());
                 } else {
                     let base = match &self.curr_inst[*dst] {
                         inst::Inst::Pointer(..)
                         | inst::Inst::Param(..)
-                        | inst::Inst::GetPtr { .. } => self.extract_operand_text(*dst, dst_size.as_ref()),
+                        | inst::Inst::GetPtr { .. } => self.extract_operand_text(*dst, &dst_size),
                         _ => FRAME_BASE_REG.to_string(),
                     };
 
@@ -160,7 +153,7 @@ impl AsmEmitter {
                     let arr_base = self.stk_use_counter;
                     self.stk_use_counter = arr_base + elem_bytes * src.len();
                     for (k, idx) in src.iter().enumerate() {
-                        let value = self.extract_operand_text(*idx, dst_size.as_ref());
+                        let value = self.extract_operand_text(*idx, &dst_size);
                         let elem_ref = self
                             .asm_fmt
                             .fmt_ref_operand(&base, arr_base + (k + 1) * elem_bytes);
@@ -185,13 +178,13 @@ impl AsmEmitter {
 
     fn is_static_var(
         &mut self,
-        src: &[usize],
+        src: &Vec<usize>,
         dst: usize,
-        name: &str,
-        this_is_self: SelfPtrInfo,
+        name: &String,
+        this_is_self: &SelfPtrInfo,
     ) {
         println!("src/gen/call_func/MemoryValue");
-        let val = self.extract_operand_text(*src.last().unwrap(), this_is_self);
+        let val = self.extract_operand_text(*src.last().unwrap(), &this_is_self);
         let label_name = format!("M{}", self.data_idx.to_string());
         let fmt_data =
             self.asm_fmt
@@ -208,7 +201,7 @@ impl AsmEmitter {
 
     fn struct_mem(
         &mut self,
-        name: Option<&str>,
+        name: &Option<String>,
         size: &types::Size,
         src: usize,
         dst: usize,
@@ -228,7 +221,7 @@ impl AsmEmitter {
                 self.stk_use_counter = base;
                 base
             };
-            let ini_asm = self.emit_struct_init_asm(mem, is_self);
+            let ini_asm = self.emit_struct_ini_asm(mem, is_self);
             if !is_self {
                 self.stk_use_counter = self.stk_use_counter.max(struct_stk_offset + size.to_bytes());
             }
@@ -242,38 +235,5 @@ impl AsmEmitter {
             return None;
         }
         Some(())
-    }
-
-    /// データ付きバリアントの初期化を、構造体と同様にスタックへ展開する
-    fn variant_mem(
-        &mut self,
-        name: Option<&str>,
-        size: &types::Size,
-        src: usize,
-        dst: usize,
-    ) {
-        let inst::Inst::Variant { tag, value, tagged, size: v_size, is_self, .. } =
-            self.inst_at(src)
-        else {
-            panic!();
-        };
-        let stk_offset = if is_self {
-            self.stk_use_counter
-        } else {
-            let base = self.stk_use_counter.div_ceil(8) * 8 + 8;
-            self.stk_use_counter = base;
-            base
-        };
-        let ini_asm = self.emit_data_variant_init_asm(tag, value, tagged, &v_size, is_self);
-        if !is_self {
-            self.stk_use_counter = self.stk_use_counter.max(stk_offset + v_size.to_bytes());
-        }
-        self.asm_text.push_str(ini_asm.as_str());
-        if let Some(var_name) = name {
-            self.insert_var_info(
-                var_name,
-                asm_emitter::VarIndexInfo::new_stack(stk_offset, size, dst),
-            );
-        }
     }
 }

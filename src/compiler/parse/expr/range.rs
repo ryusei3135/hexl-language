@@ -6,7 +6,7 @@ impl Parser {
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Mul {
-            return Err(err::ErrKind::UnexpectedToken);
+            return crate::err_at!(self.range_ptr_mul_not_found());
         }
 
         let mut result = (true, 0usize);
@@ -23,42 +23,24 @@ impl Parser {
                 result.1 = self.get_range_start_num()?;
             }
             found => {
-                return crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::ExpectedKind {
-                        expected: "number or `const`/`mut`",
-                        found,
-                    }
-                );
+                return crate::err_at!(self.range_ptr_start_unexpected(found));
             }
         }
 
         if self.next_tkn(&[".."])? != lex::Tkn::RangeTkn {
-            return Err(err::ErrKind::UnexpectedToken);
+            return crate::err_at!(self.range_ptr_range_tkn_not_found());
         }
 
         let end_tkn = self.advance_tkn().unwrap();
         let end_num = match end_tkn {
             lex::Tkn::Number(val) => val.parse::<usize>().unwrap(),
             found => {
-                return crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::ExpectedKind {
-                        expected: "number",
-                        found,
-                    }
-                );
+                return crate::err_at!(self.range_ptr_end_not_number(found));
             }
         };
 
         if !matches!(self.advance_tkn().unwrap(), lex::Tkn::RBracket) {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "]",
-                    found: self.current_tkn().clone(),
-                }
-            );
+            return crate::err_at!(self.range_ptr_rbracket_not_found());
         }
 
         self.advance_tkn().unwrap();
@@ -75,7 +57,7 @@ impl Parser {
         if let lex::Tkn::Number(val) = self.advance_tkn().unwrap() {
             Ok(val.parse::<usize>().unwrap())
         } else {
-            Err(err::ErrKind::UnexpectedToken)
+            crate::err_at!(self.range_ptr_start_not_number())
         }
     }
 }

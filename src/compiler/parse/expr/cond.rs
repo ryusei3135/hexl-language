@@ -7,7 +7,7 @@ impl Parser {
         const STRUCT_NOT_INIT: bool = false;
 
         if self.current_tkn() != &lex::Tkn::KeyWordCond {
-            return self.cond_keyword_not_found();
+            return crate::err_at!(self.cond_keyword_not_found());
         }
         // match の対象式
         let cond_expr = if self.peek_tkn().unwrap() == lex::Tkn::LBrace {
@@ -29,7 +29,7 @@ impl Parser {
 
         // {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
+            return crate::err_at!(self.cond_expr_scope_start_lbrace());
         }
 
         let mut arms = Vec::new();
@@ -49,16 +49,16 @@ impl Parser {
 
             // => 構文エラーを返す
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
-            self.tkn_checker().is_arrow_tkn()?;
+            crate::err_at!(self.tkn_checker()).is_arrow_tkn()?;
             // {
             if self.next_tkn(&["{"])? != lex::Tkn::LBrace {
-                crate::cond_err!(self.build_err_span(), CondExprPatternLBrace)?
+                return crate::err_at!(self.cond_expr_pattern_lbrace());
             }
             self.next_tkn(&[])?;
             // ここでアーム本体を解析
             let body = self.gen_block_node()?;
             // }
-            self.tkn_checker().close_scope_to_rbrace(None)?;
+            crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
             if matches!(self.next_tkn_ref(&[])?, lex::Tkn::RBrace) {
                 break;
             }
@@ -88,19 +88,19 @@ impl Parser {
         // =>
         // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
         self.next_tkn(&[])?;
-        self.tkn_checker().is_arrow_tkn()?;
+        crate::err_at!(self.tkn_checker()).is_arrow_tkn()?;
         // {
         if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {
-            crate::cond_err!(self.build_err_span(), CondElseLBrace)?
+            return crate::err_at!(self.cond_else_lbrace());
         }
         self.next_tkn(&[])?;
         // ここでアーム本体を解析
         let body = self.gen_block_node()?;
         // }
         self.next_tkn(&[])?;
-        self.tkn_checker().close_scope_to_rbrace(None)?;
+        crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
         // 条件分岐を閉じる`}`
-        self.tkn_checker()
+        crate::err_at!(self.tkn_checker())
             .close_scope_to_rbrace(Some(lex::Tkn::KeyWordCond))?;
         //}
         self.next_tkn(&[])?;
@@ -139,27 +139,27 @@ impl Parser {
         // match expr {
         // {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)?
+            return crate::err_at!(self.cond_expr_scope_start_lbrace());
         }
         self.next_tkn(&[])?;
         // trueのときの処理
         let body = self.gen_block_node()?;
         // }
         // } else {
-        self.tkn_checker().close_scope_to_rbrace(None)?;
+        crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
         // else
         if self.next_tkn(&["else"])? != lex::Tkn::KeyWordElse {
-            crate::cond_err!(self.build_err_span(), CondElseNotFound)?
+            return crate::err_at!(self.cond_else_not_found());
         }
         // {
         if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {
-            crate::cond_err!(self.build_err_span(), CondElseLBrace)?
+            return crate::err_at!(self.cond_else_lbrace());
         }
         self.next_tkn(&[])?;
         // それ以外のときの処理
         let else_body = self.gen_block_node()?;
         // }
-        self.tkn_checker().close_scope_to_rbrace(None)?;
+        crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
         // 式の終了
         self.next_tkn(&[])?;
 

@@ -15,10 +15,7 @@ impl Parser {
         // `must`の後ろは必ず`=`
         let found = self.next_tkn(&["="])?;
         if found != lex::Tkn::Equal {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::MissingEqualsAfterMust { found }
-            )?;
+            return crate::err_at!(self.missing_equals_after_must(found));
         }
         // 3. `advance_tkn` の戻り値を `match` で安全かつスマートに分解
         match self.advance_tkn() {
@@ -32,12 +29,7 @@ impl Parser {
                 panic!("{:?}", other_tkn);
             }
             None => {
-                crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::TknIsEof {
-                        expected: vec!["Name"]
-                    }
-                )
+                crate::err_at!(self.must_name_is_eof())
             }
         }
     }
@@ -58,10 +50,7 @@ impl Parser {
                     node::ConstractTy::new::<{ node::IS_OF }>(None, Some(val), Box::new(base_ty));
                 Ok(ty)
             }
-            found => crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::MissingIdentAfterOf { found }
-            )?,
+            found => return crate::err_at!(self.missing_ident_after_of(found)),
         }
     }
 

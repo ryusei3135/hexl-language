@@ -22,21 +22,10 @@ impl Parser {
                 // トップレベルのジェネリクス関数(`func<T>(..)`)は、
                 // `Parser::build_func`が先に処理するので、ここに
                 // 来るのはメゾットなどにジェネリクスが使われた場合
-                return crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::NotImplemented {
-                        feature: "メゾットのジェネリクス",
-                    }
-                );
+                return crate::err_at!(self.fn_not_implemented("メゾットのジェネリクス"));
             }
             t => {
-                return crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::ExpectedKind {
-                        expected: "( or <",
-                        found: t,
-                    }
-                );
+                return crate::err_at!(self.fn_lparen_or_langle_not_found(t));
             }
         };
 
@@ -47,7 +36,7 @@ impl Parser {
                 if self.current_tkn() == &lex::Tkn::LBrace {
                     Ok(node::FuncDefine::new(func_name.clone(), arg, ret_ty, is_public))
                 } else {
-                    Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
+                    crate::err_at!(self.fn_lbrace_not_found())
                 }
             }
             // 戻り値の型が指定されていない場合、組み込みの`int`型を
@@ -58,13 +47,7 @@ impl Parser {
                 node::TyNode::Ty("int".to_string()),
                 is_public,
             )),
-            t => crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: ": or `{`",
-                    found: t.clone(),
-                }
-            ),
+            t => crate::err_at!(self.fn_colon_or_lbrace_not_found(t.clone())),
         }
     }
 
@@ -85,7 +68,7 @@ impl Parser {
     /// IRへの変換時に行う)
     fn define_arg_node(&mut self) -> Result<Vec<node::ArgsNode>, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
-            return Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LParen)));
+            return crate::err_at!(self.fn_args_lparen_not_found());
         }
 
         let mut args_params = Vec::<node::ArgsNode>::new();
@@ -125,7 +108,7 @@ impl Parser {
                     break;
                 }
                 t => {
-                    return self.args_expr_in_unexpect_tkn(t);
+                    return crate::err_at!(self.args_expr_in_unexpect_tkn(t));
                 }
             }
 
@@ -139,23 +122,11 @@ impl Parser {
                         can_create_param = true;
                     } else {
                         // `,`の前に引数が無い(先頭が`,`、または`,,`)
-                        return crate::syntax_err!(
-                            self.build_err_span(),
-                            err::SyntaxErrKind::ExpectedKind {
-                                expected: "name",
-                                found: lex::Tkn::Comma,
-                            }
-                        );
+                        return crate::err_at!(self.fn_arg_before_comma_not_found());
                     }
                 }
                 t => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::ExpectedKind {
-                            expected: ", or `)`",
-                            found: t.clone(),
-                        }
-                    );
+                    return crate::err_at!(self.fn_comma_or_rparen_not_found(t.clone()));
                 }
             }
         }
@@ -198,7 +169,17 @@ impl Parser {
 
         while i < len {
             let tkns = self.tkns.as_ref().unwrap();
-            let is_generic_head = matches!(tkns[i].tkn, lex::Tkn::Name(_))
+            // `struct Name<T>` / `variant Name<T>` / `variant "unsafe" Name<T>`の
+            // `Name<`は、関数ではなく型の定義(関数の定義として読んではいけない)
+            let is_type_def_name = i > 0
+                && (matches!(
+                    tkns[i - 1].tkn,
+                    lex::Tkn::KeyWordStruct | lex::Tkn::KeyWordVariant
+                ) || (i > 1
+                    && matches!(tkns[i - 1].tkn, lex::Tkn::Str(_))
+                    && matches!(tkns[i - 2].tkn, lex::Tkn::KeyWordVariant)));
+            let is_generic_head = !is_type_def_name
+                && matches!(tkns[i].tkn, lex::Tkn::Name(_))
                 && matches!(
                     tkns.get(i + 1).map(|t| &t.tkn),
                     Some(lex::Tkn::LAngleBracket)
@@ -238,27 +219,12 @@ impl Parser {
         name_idx: usize,
     ) -> Result<(String, GenericFunc, usize), err::ErrKind> {
         let tkns = self.tkns.as_ref().unwrap();
-        // 指定位置のトークンの場所を、エラーの位置にする
-        // (範囲外は最後のトークンの位置)
-        let span_at = |i: usize| {
-            let t = &tkns[i.min(tkns.len() - 1)];
-            err::Span::new(t.line, t.pos)
-        };
+        // エラーは`generic_def_expected`/`generic_def_eof`が作る
+        // (エラーの位置は、指定位置のトークンの場所。範囲外は最後のトークンの位置)
         let expected = |i: usize, expected: &'static str| {
-            crate::syntax_err!(
-                span_at(i),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected,
-                    found: tkns[i].tkn.clone(),
-                }
-            )
+            crate::err_at!(self.generic_def_expected(i, expected))
         };
-        let eof = |expected: Vec<&'static str>| {
-            crate::syntax_err!(
-                span_at(tkns.len()),
-                err::SyntaxErrKind::TknIsEof { expected }
-            )
-        };
+        let eof = |expected: Vec<&'static str>| crate::err_at!(self.generic_def_eof(expected));
 
         let lex::Tkn::Name(name) = tkns[name_idx].tkn.clone() else {
             unreachable!("extract_generic_def: 関数名のトークンではありません");
@@ -422,32 +388,14 @@ impl Parser {
                 lex::Tkn::RAngleBracket if tys.len() == param_count => break,
                 // 型引数が多すぎる(`,`)
                 lex::Tkn::Comma => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::ExpectedKind {
-                            expected: "`>`",
-                            found: lex::Tkn::Comma,
-                        }
-                    );
+                    return crate::err_at!(self.generic_type_args_too_many());
                 }
                 // 型引数が足りない(`>`)
                 lex::Tkn::RAngleBracket => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::ExpectedKind {
-                            expected: "`,`",
-                            found: lex::Tkn::RAngleBracket,
-                        }
-                    );
+                    return crate::err_at!(self.generic_type_args_too_few());
                 }
                 t => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::ExpectedKind {
-                            expected: ", or `>`",
-                            found: t,
-                        }
-                    );
+                    return crate::err_at!(self.generic_type_args_comma_or_rangle_not_found(t));
                 }
             }
         }
@@ -463,13 +411,14 @@ impl Parser {
     /// ## Panics
     /// `name`が定義済みのジェネリクス関数でない、または現在のトークンが
     /// `<`でない場合(呼び出し元で`is_generic_call`を確認しておくこと)
-    pub(super) fn generic_call_expr(
+    pub(super) 
+    fn generic_call_expr(
         &mut self,
-        name: &String,
+        name: &str,
         ini_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LAngleBracket {
-            return self.fn_unexpect_tkn::<node::Expr>();
+            return crate::err_at!(self.fn_unexpect_tkn::<node::Expr>());
         }
         let param_count = self
             .generic_funcs
@@ -482,7 +431,7 @@ impl Parser {
 
         // `>`の次は`(`
         if self.next_tkn(&["("])? != lex::Tkn::LParen {
-            return self.not_found_lparen();
+            return crate::err_at!(self.not_found_lparen());
         }
 
         self.instantiate_generic_func(name, &ty_args, &ty_tkns)?;
@@ -497,7 +446,7 @@ impl Parser {
     /// ジェネリクス関数の型パラメータを、実際の型のトークンに置き換える
     fn substitute_ty_params(
         generic: &GenericFunc,
-        ty_tkns: &Vec<Vec<lex::LocatedTkn>>,
+        ty_tkns: &[Vec<lex::LocatedTkn>],
     ) -> Vec<lex::LocatedTkn> {
         let mut out = Vec::with_capacity(generic.tkns.len());
 
@@ -533,9 +482,9 @@ impl Parser {
     /// 前後で変わらない
     fn instantiate_generic_func(
         &mut self,
-        name: &String,
-        ty_args: &Vec<node::TyNode>,
-        ty_tkns: &Vec<Vec<lex::LocatedTkn>>,
+        name: &str,
+        ty_args: &[node::TyNode],
+        ty_tkns: &[Vec<lex::LocatedTkn>],
     ) -> Result<(), err::ErrKind> {
         if self
             .generated_funcs
@@ -545,11 +494,8 @@ impl Parser {
             return Ok(());
         }
         if self.generic_depth >= MAX_GENERIC_DEPTH {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::NotImplemented {
-                    feature: "型が増え続ける再帰的なジェネリクス関数",
-                }
+            return crate::err_at!(
+                self.fn_not_implemented("型が増え続ける再帰的なジェネリクス関数")
             );
         }
 
@@ -560,7 +506,7 @@ impl Parser {
             .clone();
         // 本体の中で自分自身を呼び出していても、無限に作らないよう
         // 解析を始める前に登録する
-        self.generated_funcs.push((name.clone(), ty_args.clone()));
+        self.generated_funcs.push((name.to_string(), ty_args.to_vec()));
 
         let tkns = Self::substitute_ty_params(&generic, ty_tkns);
 

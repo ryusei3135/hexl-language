@@ -35,6 +35,17 @@ pub(super) struct GenericFunc {
     pub(super) tkns: Vec<lex::LocatedTkn>,
 }
 
+// #[derive(Clone, Debug, PartialEq)]
+// pub(super) struct GenericData {
+//     pub(super) is_public: bool,
+//     /// `<T, U>`の型パラメータの名前
+//     pub(super) params: Vec<String>,
+//     /// 関数名から本体を閉じる`}`までのトークン。
+//     /// ただし`<T, U>`の部分は取り除いてある
+//     /// (`name(arg: T): T { .. }`という通常の関数と同じ形)
+//     pub(super) tkns: Vec<lex::LocatedTkn>,
+// }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parser {
     pub(super) gen_nodes: Vec<node::Group1Node>,
@@ -141,10 +152,7 @@ impl Parser {
                             self.gen_nodes.push(node);
                         }
                         t => {
-                            crate::syntax_err!(
-                                self.build_err_span(),
-                                err::SyntaxErrKind::UnexpectTknInStmt { found: t }
-                            )?;
+                            return crate::err_at!(self.unexpect_tkn_in_stmt(t));
                         }
                     };
                 }
@@ -220,13 +228,7 @@ impl Parser {
                         _ => self.ptr_stmt_node(&name)?,
                     }
                 } else {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::ExpectedKind {
-                            expected: "name",
-                            found: tkn,
-                        }
-                    );
+                    return crate::err_at!(self.stmt_name_not_found_after_lbracket(tkn));
                 }
             }
             lex::Tkn::KeyWordRet => node::StmtNode::Return(self.expr_add(true)?).wrap(),
@@ -245,10 +247,7 @@ impl Parser {
                 panic!("one_line_node: 空のブロックが処理されていません")
             }
             t => {
-                return crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::UnexpectTknInStmt { found: t }
-                );
+                return crate::err_at!(self.unexpect_tkn_in_stmt(t));
             }
         };
         Ok(node)
@@ -256,15 +255,7 @@ impl Parser {
 
     fn loop_control_node(&mut self, is_continue: bool) -> Result<node::Group2Node, err::ErrKind> {
         if self.loop_depth == 0 {
-            return Err(err::ErrKind::Syntax(Box::new(err::SyntaxErr {
-                kind: err::SyntaxErrKind::UnexpectTknInStmt {
-                    found: self.current_tkn().clone(),
-                },
-                loc: err::ErrLoc::new(
-                    self.build_err_span(),
-                    "parse::stmt::loop_control_node".to_string(),
-                ),
-            })));
+            return crate::err_at!(self.loop_control_outside_loop());
         }
         self.next_tkn(&[])?;
         let stmt = if is_continue {
@@ -280,14 +271,7 @@ impl Parser {
             lex::Tkn::Name(name) => self.build_func::<true>(&name),
             unexpect_tkn => {
                 // 期待したトークンじゃないので、エラー
-                crate::syntax_err!(
-                    self.build_err_span(),
-                    err::SyntaxErrKind::UnexpectTknAfterKeyword {
-                        keyword: lex::Tkn::KeyWordPub,
-                        expected: vec!["struct", "variant", "name"],
-                        found: unexpect_tkn,
-                    }
-                )
+                crate::err_at!(self.unexpect_tkn_after_pub(unexpect_tkn))
             }
         }
     }
@@ -306,13 +290,7 @@ impl Parser {
         };
         // "{"をスキップ
         if !matches!(self.current_tkn(), lex::Tkn::LBrace) {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "{",
-                    found: self.current_tkn().clone(),
-                }
-            );
+            return crate::err_at!(self.loop_lbrace_not_found());
         }
         self.next_tkn(&["{"])?;
 
@@ -349,13 +327,7 @@ impl Parser {
     pub(super) fn comple_syntax(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         let tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(name) = tkn.clone() else {
-            return crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::ExpectedKind {
-                    expected: "name",
-                    found: tkn,
-                }
-            );
+            return crate::err_at!(self.preproc_name_not_found(tkn));
         };
         self.make_preproc(&name)
     }

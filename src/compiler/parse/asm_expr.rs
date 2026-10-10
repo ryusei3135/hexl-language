@@ -23,10 +23,7 @@ impl Parser {
         lexer.analy(&src.to_string()).unwrap();
 
         if lexer.gen_tkns.is_empty() {
-            return Err(crate::preproc_err_at!(
-                err::Span::new(0, 0),
-                EmptyAsmOperand
-            ));
+            return crate::err_at!(Parser::empty_asm_operand());
         }
 
         let mut parser = Parser::new();
@@ -38,7 +35,7 @@ impl Parser {
         // `${...}`の中に、式として解析できない文字列が
         // 混ざっていることになるのでエラーにする
         if parser.peek_tkn().is_ok() {
-            crate::preproc_err!(parser, UnexpectedTrailingTokenInAsmOperand);
+            return crate::err_at!(parser.unexpected_trailing_tkn_in_asm_operand());
         }
 
         Ok(node)
@@ -103,7 +100,7 @@ impl Parser {
                 let inner = self.asm_operand_add()?;
 
                 if !matches!(self.current_tkn(), lex::Tkn::RBracket) {
-                    crate::preproc_err!(self, ExpectedRBracketInAsmOperand);
+                    return crate::err_at!(self.expected_rbracket_in_asm_operand());
                 }
                 self.advance_tkn();
 
@@ -132,14 +129,14 @@ impl Parser {
                 let inner = self.asm_operand_add()?;
 
                 if !matches!(self.current_tkn(), lex::Tkn::RParen) {
-                    crate::preproc_err!(self, ExpectedRParenInAsmOperand);
+                    return crate::err_at!(self.expected_rparen_in_asm_operand());
                 }
                 self.advance_tkn();
 
                 Ok(inner)
             }
             _ => {
-                crate::preproc_err!(self, UnexpectedTokenInAsmOperand);
+                return crate::err_at!(self.unexpected_tkn_in_asm_operand());
             }
         }
     }
@@ -152,7 +149,7 @@ impl Parser {
             self.advance_tkn().unwrap();
 
             let lex::Tkn::Name(field) = self.current_tkn().clone() else {
-                crate::preproc_err!(self, ExpectedMemberNameInAsmOperand);
+                return crate::err_at!(self.expected_member_name_in_asm_operand());
             };
             self.advance_tkn().unwrap();
 

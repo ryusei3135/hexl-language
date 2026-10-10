@@ -11,7 +11,7 @@ impl Parser {
     pub(in crate::compiler::parse) 
     fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
-            return self.struct_name_is_not_found();
+            return crate::err_at!(self.struct_name_is_not_found());
         };
         // 自身の構造体の名前を登録、`Self`をこれに入れ替える
         self.struct_self_name = Some(name.to_string());
@@ -19,7 +19,7 @@ impl Parser {
         match self.next_tkn(&["{"])? {
             lex::Tkn::LBrace => {}
             t => {
-                self.struct_lbrace_not_found(t)?;
+                crate::err_at!(self.struct_lbrace_not_found(t))?;
             }
         }
 
@@ -41,7 +41,7 @@ impl Parser {
     pub(in crate::compiler::parse)
     fn variant_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordVariant {
-            return self.variant_keyword_not_found();
+            return crate::err_at!(self.variant_keyword_not_found());
         }
 
         let (name, variant_mode) = match self.next_tkn(&["name", "str litral"])? {
@@ -50,19 +50,22 @@ impl Parser {
                 "unsafe" => match self.next_tkn(&["name"])? {
                     lex::Tkn::Name(variant_name) => (variant_name, node::VariantMode::Unsafe),
                     // オプションの続きに共用体の名前が来なかった
-                    _ => return self.variant_option_next_name_not_found(),
+                    _ => return crate::err_at!(self.variant_option_next_name_not_found()),
                 },
-                _ => return self.variant_option_unregister(variant_option),
+                _ => return crate::err_at!(self.variant_option_unregister(variant_option)),
             },
-            _ => return self.variant_name_is_not_found(),
+            _ => return crate::err_at!(self.variant_name_is_not_found()),
         };
         // 自身の共用体の名前を登録、`Self`をこれに入れ替える
         self.struct_self_name = Some(name.clone());
 
         match self.next_tkn(&["{"])? {
             lex::Tkn::LBrace => {}
+            lex::Tkn::LAngleBracket => {
+                //
+            }
             t => {
-                self.variant_lbrace_not_found(t)?;
+                crate::err_at!(self.variant_lbrace_not_found(t))?;
             }
         }
 
@@ -80,7 +83,7 @@ impl Parser {
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
-            self.struct_lbrace_not_found(self.current_tkn().clone())?;
+            crate::err_at!(self.struct_lbrace_not_found(self.current_tkn().clone()))?;
         }
         // {を飛ばす
         let _ = self.next_tkn(&[])?;
@@ -93,19 +96,12 @@ impl Parser {
                     break;
                 }
                 t => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::UnexpectedTkn {
-                            found: (*t).clone(),
-                            expected: lex::Tkn::Name("struct init".to_string()),
-                            context: lex::Tkn::KeyWordStruct
-                        }
-                    );
+                    return crate::err_at!(self.struct_init_name_not_found((*t).clone()));
                 }
             };
             // :じゃないとエラー
             if self.next_tkn(&[":"])? != lex::Tkn::Colon {
-                self.struct_in_unexpect_tkn(lex::Tkn::Colon)?;
+                crate::err_at!(self.struct_in_unexpect_tkn(lex::Tkn::Colon))?;
             }
             fields.insert(
                 name,
@@ -128,54 +124,46 @@ impl Parser {
         })
     }
 
-    /// 共用体を初期化する式を生成
-    /// 呼び出し時は current_tkn() が `LBrace` (`struct_init_node`と同じ)
+    /// バリアント型を初期化する式を生成
+    /// ```text
+    /// Variant::Name(expr)   // データ付きメンバー -> `Expr::InitVariant`
+    /// Variant::Name         // データなしメンバー -> `Expr::EnumVariant`
+    /// ```
+    /// 呼び出し時は current_tkn() が `Variant::`の次の`Name`(メンバー名)
+    /// 終了時は、式の最後のトークン(`)`、または`(`がない場合はメンバー名)を指す
+    /// (`struct_init_node`が最後の`}`を指して終わるのと同じ)
     pub(in crate::compiler::parse)
     fn variant_init_node<const T: bool>(
         &mut self,
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
-        if self.current_tkn() != &lex::Tkn::LBrace {
-            self.variant_lbrace_not_found(self.current_tkn().clone())?;
+        let member = match self.current_tkn() {
+            lex::Tkn::Name(member) => member.to_string(),
+            t => {
+                return crate::err_at!(self.variant_init_member_not_found((*t).clone()));
+            }
+        };
+
+        // `(`が続かなければ、データなしのメンバー(`Variant::Name`)
+        if self.peek_tkn()? != lex::Tkn::LParen {
+            return Ok(node::Expr::EnumVariant {
+                name: name.to_string(),
+                variant: member,
+            });
         }
-        // {を飛ばす
+
+        // `(`へ進み、さらに値の先頭のトークンへ進む
+        let _ = self.next_tkn(&["("])?;
         let _ = self.next_tkn(&[])?;
-        let mut fields = HashMap::<String, Box<node::Expr>>::new();
+        let value = Box::new(self.expr_cmp(true)?);
 
-        loop {
-            let name: String = match &self.current_tkn() {
-                lex::Tkn::Name(name) => name.to_string(),
-                lex::Tkn::RBrace => {
-                    break;
-                }
-                t => {
-                    return crate::syntax_err!(
-                        self.build_err_span(),
-                        err::SyntaxErrKind::UnexpectedTkn {
-                            found: (*t).clone(),
-                            expected: lex::Tkn::Name("variant init".to_string()),
-                            context: lex::Tkn::KeyWordVariant
-                        }
-                    );
-                }
-            };
-            // :じゃないとエラー
-            if self.next_tkn(&[":"])? != lex::Tkn::Colon {
-                self.variant_in_unexpect_tkn(lex::Tkn::Colon)?;
-            }
-            fields.insert(
-                name,
-                // 共用体のメンバーを初期化する
-                Box::new(self.expr_cmp(true)?),
-            );
-
-            match self.current_tkn() {
-                lex::Tkn::Name(..) => continue,
-                lex::Tkn::RBrace => break,
-                // 値の後ろに続けられるのは、次のメンバー名か`}`だけ
-                _ => self.variant_in_unexpect_tkn(lex::Tkn::RBrace)?,
-            }
+        // 値の後ろは`)`でなければならない
+        if self.current_tkn() != &lex::Tkn::RParen {
+            crate::err_at!(self.variant_in_unexpect_tkn(lex::Tkn::RParen))?;
         }
+
+        let mut fields = HashMap::<String, Box<node::Expr>>::new();
+        fields.insert(member, value);
         Ok(node::Expr::InitVariant {
             is_self: T,
             name: name.to_string(),
@@ -228,7 +216,7 @@ impl Parser {
     pub(in crate::compiler::parse) 
     fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
-            return Err(err::ErrKind::UnexpectedToken);
+            return crate::err_at!(self.ty_colon_not_found());
         }
         self.ty_node_after_delim()
     }
@@ -267,10 +255,7 @@ impl Parser {
                 let ty =
                     match self.next_tkn(&["<", "*", "["])? {
                         lex::Tkn::LAngleBracket => {
-                            return crate::syntax_err!(
-                                self.build_err_span(),
-                                err::SyntaxErrKind::GenericsNotSupportedYet
-                            );
+                            return crate::err_at!(self.generics_not_supported_yet());
                         }
                         // 境界付きポインタ
                         lex::Tkn::LBracket => {

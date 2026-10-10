@@ -38,14 +38,7 @@ impl Parser {
             | lex::Tkn::KeyWordPub
             | lex::Tkn::Comma
             | lex::Tkn::RBrace => Ok(VariantField::typeless_new(field_name).wrap_variant_field_kind()),
-            t => crate::syntax_err!(
-                self.build_err_span(),
-                err::SyntaxErrKind::UnexpectedTkn {
-                    found: t,
-                    expected: lex::Tkn::RBrace,
-                    context: lex::Tkn::KeyWordVariant
-                }
-            ),
+            t => crate::err_at!(self.variant_member_unexpected_tkn(t)),
         }
     }
 
@@ -65,7 +58,7 @@ impl Parser {
         // 型の次のトークンを指して終了する
         let ty = self.ty_node_after_delim()?;
         if self.current_tkn() != &lex::Tkn::RParen {
-            self.variant_in_unexpect_tkn(lex::Tkn::RParen)?;
+            crate::err_at!(self.variant_in_unexpect_tkn(lex::Tkn::RParen))?;
         }
         Ok(ty)
     }

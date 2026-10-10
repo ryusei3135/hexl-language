@@ -46,7 +46,7 @@ impl Parser {
             // match のガード条件 `if` は Rust らしくて非常に綺麗です！
             lex::Tkn::Name(first_seg) if alias.is_none() => self.build_mod_path_segments(first_seg),
             _ => {
-                return crate::preproc_err!(self, ExpectedPathSegment);
+                return crate::err_at!(self.expected_path_segment());
             }
         }
     }
@@ -94,7 +94,7 @@ impl Parser {
             lex::Tkn::Name(func_name) => node::ImportKind::Func(func_name),
             lex::Tkn::Mul => node::ImportKind::Glob,
             _ => {
-                crate::preproc_err!(self, ExpectedPathSegment);
+                return crate::err_at!(self.expected_path_segment());
             }
         };
 
@@ -118,7 +118,7 @@ impl Parser {
                 lex::Tkn::Name(name) => mod_path.add_path(&name),
                 lex::Tkn::Str(val) => mod_path.add_path(&val),
                 _ => {
-                    crate::preproc_err!(self, ExpectedPathSegment);
+                    return crate::err_at!(self.expected_path_segment());
                 }
             }
         }
@@ -131,7 +131,7 @@ impl Parser {
         if let lex::Tkn::Name(asm_name) = self.next_tkn(&["name"])? {
             Ok(asm_name)
         } else {
-            crate::preproc_err!(self, NotFoundAsmName);
+            crate::err_at!(self.not_found_asm_name())
         }
     }
     /// ## 戻り値
@@ -139,13 +139,13 @@ impl Parser {
     fn build_asm_ast(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // #asm(...)なので、(以外が来たらエラー
         if self.next_tkn(&["not `(`"])? != lex::Tkn::LParen {
-            crate::preproc_err!(self, ExpectedLParenAfterAsm);
+            return crate::err_at!(self.expected_lparen_after_asm());
         }
         let asm_name = self.get_asm_name()?;
 
         // #asm(...)なので、(以外が来たらエラー
         if self.next_tkn(&[")"])? != lex::Tkn::RParen {
-            crate::preproc_err!(self, ExpectedRParenAfterAsm);
+            return crate::err_at!(self.expected_rparen_after_asm());
         }
         let nodes = self.gen_asm_preproc()?;
         Ok(node::Group2Node::CompleSyntax((asm_name, nodes)))
@@ -176,7 +176,7 @@ impl Parser {
             return Ok(nodes);
         }
 
-        Err(err::ErrKind::UnexpectedToken)
+        crate::err_at!(self.preproc_unexpected_token())
     }
 
     /// inlineアセンブラの1行分の文字列から`node::InlineAsm`を作成する。
