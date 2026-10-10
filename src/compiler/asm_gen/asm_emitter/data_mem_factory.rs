@@ -1,8 +1,11 @@
+//! メモリに配置するデータを生成するモジュール
+
 use super::*;
 
 impl AsmEmitter {
+    /// 構造体のメモリをスタック領域に配置するコードを生成
     pub(in crate::compiler::asm_gen) 
-    fn emit_struct_ini_asm(
+    fn emit_struct_init_asm(
         &mut self,
         struct_node: Vec<inst::MemoryInst>,
         this_is_self: bool,
@@ -17,16 +20,16 @@ impl AsmEmitter {
                 panic!();
             };
 
-            let member_size = Some(size.clone());
+            let member_size = Some(size);
 
             let value = self
-                .extract_operand_text(*value_idx, &member_size)
+                .extract_operand_text(*value_idx, member_size)
                 .to_string();
             if value.is_empty() {
                 let inst::Inst::InitArr(arr) = self.inst_at(*value_idx) else {
                     panic!();
                 };
-                struct_txt.push_str(self.init_arr_txt::<true>(&arr, &member_size).as_str());
+                struct_txt.push_str(self.init_arr_txt::<true>(&arr, member_size).as_str());
                 continue;
             }
             // このメンバー分を足した「累積」サイズ
@@ -61,5 +64,10 @@ impl AsmEmitter {
             self.stk_use_counter += add_size;
         }
         return struct_txt;
+    }
+
+    pub(in crate::compiler::asm_gen)
+    fn emit_data_variant_init_asm(&self) {
+        //
     }
 }

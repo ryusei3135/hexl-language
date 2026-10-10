@@ -416,7 +416,7 @@ impl FnDefInfo {
         })
     }
 
-    pub fn get_ret_ty(&self) -> crate::asm_gen::SelfPtrInfo {
+    pub fn get_ret_ty(&self) -> Option<Size> {
         if self.ret_ty.is_none() {
             return types::Size::Void.wrap_dst_size();
         }

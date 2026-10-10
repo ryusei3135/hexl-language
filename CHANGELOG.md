@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-10-10
+### Changed
+- nodeの場所を整理`src/compiler/node/`
+### Fixed
+- 式の型が固定で32bitになるバグを修正
+### Changed
+- SelfPtrInfoを`Option<Size>`から`Option<&'a Size>`に変更 
+
 ## [0.13.1] - 2026-10-08
 ### Changed
 - `enum`と`union`を統合`variant`

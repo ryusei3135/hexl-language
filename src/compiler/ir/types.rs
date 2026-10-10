@@ -216,7 +216,7 @@ impl Size {
 
     #[inline(always)]
     pub(crate) 
-    fn wrap_dst_size(&self) -> crate::asm_gen::SelfPtrInfo {
+    fn wrap_dst_size(&self) -> Option<Size> {
         Some(self.clone())
     }
 

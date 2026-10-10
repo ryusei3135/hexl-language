@@ -6,7 +6,7 @@ impl AsmEmitter {
     /// 引数を参照するアセンブリコードの一部
     /// を生成する
     pub(super) 
-    fn param_ref(&mut self, param_name: &String) -> String {
+    fn param_ref(&mut self, param_name: &str) -> String {
         let var_info = self.var_info(param_name);
 
         if let Some(ty) = var_info.size.is_pointer() {
@@ -34,7 +34,7 @@ impl AsmEmitter {
         name: &String,
         dst: usize,
         index: usize,
-        this_is_self: &SelfPtrInfo,
+        this_is_self: SelfPtrInfo,
     ) -> String {
         let index_value = match self.inst_at(index) {
             inst::Inst::Num { value, .. } => value
@@ -51,14 +51,14 @@ impl AsmEmitter {
         if let Some(pointee) = var_info.size.is_pointer() {
             // ポインタは要素0を指し、要素`i`は`ポインタ - i * サイズ`
             let pos = pointee.to_bytes() * index_value;
-            let base = self.extract_operand_text(dst, &this_is_self);
+            let base = self.extract_operand_text(dst, this_is_self);
             self.ref_base_offset(&base, pos)
         } else {
             // 要素`i`は`%rbp - (arr_base + (i + 1) * size)`に置かれる
             // (添字が変数の場合のアドレス計算と同じ配置)
             let size = var_info.size.to_bytes();
             let pos = var_info.arr_base + size * (index_value + 1);
-            let base = self.extract_operand_text(dst, &this_is_self);
+            let base = self.extract_operand_text(dst, this_is_self);
             self.asm_fmt.fmt_ref_operand(&base, pos)
         }
     }
@@ -138,10 +138,11 @@ impl AsmEmitter {
     ///
     /// ## 引数
     /// - ids: 配列の各要素の値を持つノード(`Inst::Num`など)のid
-    pub(super) fn init_arr_txt<const RET_IS_ASM: bool>(
+    pub(super) 
+    fn init_arr_txt<const RET_IS_ASM: bool>(
         &mut self,
         ids: &[usize],
-        this_is_self: &SelfPtrInfo,
+        this_is_self: SelfPtrInfo,
     ) -> String {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
         let assign_reg = if this_is_self.is_none() {
@@ -170,7 +171,7 @@ impl AsmEmitter {
         self.stk_use_counter = arr_base + elem_bytes * ids.len();
 
         for (k, id) in ids.iter().enumerate() {
-            let value = self.extract_operand_text(*id, &this_is_self);
+            let value = self.extract_operand_text(*id, this_is_self);
 
             let dst = self
                 .asm_fmt
