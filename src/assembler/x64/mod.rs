@@ -20,7 +20,26 @@ pub use super::*;
 ///
 /// この関数はレキサ/パーサ/コード生成/バイナリ出力までをすべて内部で行うため、
 /// 呼び出し側はモード・ソースコード・対象OSを渡すだけでよい。
+///
+/// 出力ファイル名は形式ごとの既定名 (`a.o` など) になる。
+/// 出力先を指定したい場合は [`emitter_x64_to`] を使う。
 pub fn emitter_x64(mode: &str, source: &str, os: &str) -> Result<(), String> {
+    emitter_x64_to(mode, source, os, None).map(|_| ())
+}
+
+/// [`emitter_x64`] と同じ処理を行い、出力先のパスを指定できる版。
+///
+/// - `out_path` が `Some(path)` ならそのパスへ、`None` なら形式ごとの既定名へ書き出す。
+/// - 実際に書き出したファイルのパスを返す。
+///
+/// `#include` で複数のファイルをそれぞれ `-o` でオブジェクトファイルにする場合、
+/// 既定名 (`a.o`) では互いに上書きしてしまうため、ファイルごとに `out_path` を渡す。
+pub fn emitter_x64_to(
+    mode: &str,
+    source: &str,
+    os: &str,
+    out_path: Option<&str>,
+) -> Result<String, String> {
     let tokens = Lexer::new(source).tokenize();
 
     // 2. 構文解析
@@ -42,16 +61,18 @@ pub fn emitter_x64(mode: &str, source: &str, os: &str) -> Result<(), String> {
 
     let bytes = (format.write)(&emit)?;
 
-    std::fs::write(format.file_name, &bytes)
-        .map_err(|e| format!("{} の書き込みに失敗しました: {}", format.file_name, e))?;
+    let file_name = out_path.unwrap_or(format.file_name);
+
+    std::fs::write(file_name, &bytes)
+        .map_err(|e| format!("{} の書き込みに失敗しました: {}", file_name, e))?;
 
     if format.executable {
-        make_executable(format.file_name)?;
+        make_executable(file_name)?;
     }
 
-    println!("wrote {} ({} bytes)", format.file_name, bytes.len());
+    println!("wrote {} ({} bytes)", file_name, bytes.len());
 
-    Ok(())
+    Ok(file_name.to_string())
 }
 
 #[cfg(unix)]

@@ -14,3 +14,4 @@ hexl/
 *.exe
 library
 build.rs
+*.o

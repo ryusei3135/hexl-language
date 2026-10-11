@@ -8,6 +8,7 @@ mod assembler;
 mod compiler;
 mod macros;
 mod dump;
+mod linker;
 
 
 #[cfg(target_os = "linux")]
@@ -26,7 +27,7 @@ use compiler::{
     err,
 };
 
-use std::{error::Error, fs, process};
+use std::{error::Error, fs, process, sync::Mutex};
 
 // ---------------------------------------------------------------------------
 // コマンドラインオプション
@@ -146,6 +147,45 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
 }
 
 // ---------------------------------------------------------------------------
+// 生成したオブジェクトファイル(バイナリ)のパスの記憶
+// ---------------------------------------------------------------------------
+
+/// `#include` は IR 生成中に `crate::build` を再帰的に呼ぶため、
+/// 取り込んだファイルごとに生成された再配置可能オブジェクトファイル(`.o`)の
+/// パスもここへ集める。
+/// 依存先のファイルほど先に登録される (メインのファイルは最後)。
+static GENERATED_BIN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// 生成したバイナリのパスを記憶する。同じパスが登録済みなら何もしない
+/// (同じファイルを複数箇所から `#include` した場合の重複を避けるため)。
+fn remember_binary(path: String) {
+    let mut list = GENERATED_BIN.lock().unwrap_or_else(|e| e.into_inner());
+    if !list.contains(&path) {
+        list.push(path);
+    }
+}
+
+/// 記憶しているバイナリのパスを全て取り出す (記憶は空になる)
+fn take_generated_bin() -> Vec<String> {
+    let mut list = GENERATED_BIN.lock().unwrap_or_else(|e| e.into_inner());
+    std::mem::take(&mut *list)
+}
+
+/// 記憶した全てのオブジェクトファイルのパスを、登録順に出力する
+fn print_binaries() {
+    let paths = take_generated_bin();
+    if paths.is_empty() {
+        return;
+    }
+    println!("生成したオブジェクトファイル:");
+    let output = linker::linker(paths).unwrap();
+    output.write_to_file("a.out").unwrap();
+    // for path in &paths {
+    //     println!("  {}", path);
+    // }
+}
+
+// ---------------------------------------------------------------------------
 // ビルド
 // ---------------------------------------------------------------------------
 
@@ -196,12 +236,21 @@ pub fn build(
         settings.fmt_name.as_deref(),
     );
 
-    assembler::x64::emitter_x64("-c", &asm_text, DEFAULT);
-
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");
-    fs::write(format!("{}.s", asm_file), asm_text)
+    fs::write(format!("{}.s", asm_file), &asm_text)
         .map_err(|e| format!("ファイル`{}.s`へ書き込めません: {}", asm_file, e))?;
+
+    // 再配置可能オブジェクトファイル(ELF, `-o`)を生成する。
+    // `#include` したファイルも同じ関数を通るので、ファイルごとに
+    // `<ファイル名>.o` が作られる (出力名を分けないと互いに上書きしてしまう)。
+    // `.s` は先に書き出してあるので、失敗しても内容は確認できる。
+    let obj_file = format!("{}.o", asm_file);
+    let obj_path = assembler::x64::emitter_x64_to("-o", &asm_text, DEFAULT, Some(&obj_file))
+        .map_err(|e| format!("オブジェクトファイル`{}`の生成に失敗しました: {}", obj_file, e))?;
+
+    // `#include` したファイルの分も含め、生成したオブジェクトファイルのパスを記憶する
+    remember_binary(obj_path);
 
     Ok(func_def_meta_data)
 }
@@ -251,6 +300,9 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
 
     asm_setting::load_setting();
 
+    // 前回の実行で記憶したものが残らないようにする
+    take_generated_bin();
+
     // `hexl dump <file>`: dump だけ行って終了
     if settings.dump_only {
         return if dump_text(&settings) {
@@ -266,8 +318,13 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
     }
 
     match build(&settings) {
-        Ok(_) => process::ExitCode::SUCCESS,
+        Ok(_) => {
+            // `#include` したファイルも含め、生成した全てのバイナリのパスを出力する
+            print_binaries();
+            process::ExitCode::SUCCESS
+        }
         Err(e) => {
+            take_generated_bin();
             eprintln!("エラー: {}", e);
             process::ExitCode::FAILURE
         }

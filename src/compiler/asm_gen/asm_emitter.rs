@@ -5,6 +5,7 @@ mod operand_txt;
 mod data_mem_factory;
 mod arr;
 
+use super::emit_fn_name::emit_fn_name_id;
 use super::*;
 use crate::asm_setting;
 use crate::compiler::ir::types;
@@ -182,8 +183,9 @@ impl AsmEmitter {
     fn gen_global_func_asm(&mut self, global_funcs: &[String]) {
         // 自身が公開する関数を生成
         for func_name in global_funcs.iter() {
+            let label = emit_fn_name_id(func_name);
             self.asm_text
-                .push_str(self.asm_fmt.get_global_fmt(func_name).as_str());
+                .push_str(self.asm_fmt.get_global_fmt(&label).as_str());
         }
     }
 
@@ -191,8 +193,9 @@ impl AsmEmitter {
     fn gen_extern_func_asm(&mut self, extern_funcs: &[inst::Inst]) {
         for func in extern_funcs.iter() {
             if let inst::Inst::ExternFunc(name) = func {
+                let label = emit_fn_name_id(name);
                 self.asm_text
-                    .push_str(self.asm_fmt.get_extern_func(&name).as_str());
+                    .push_str(self.asm_fmt.get_extern_func(&label).as_str());
             } else {
                 panic!();
             }
@@ -827,6 +830,7 @@ impl AsmEmitter {
         let wrap_size = resolved_size.wrap_dst_size();
 
         let dst_text = self.get_reg(Some(self.reg_idx), &resolved_size);
+        let src1_text = self.extract_operand_text(expr.ls, wrap_size.as_ref());
 
         let mut tmpl = self.asm_fmt.get_opcode_tmpl(key);
         if expr.kind == inst::ExprKind::Mul {
@@ -835,7 +839,7 @@ impl AsmEmitter {
 
         let mut formated = tmpl
             .replace("{dst}", &dst_text)
-            .replace("{src1}", &self.extract_operand_text(expr.ls, wrap_size.as_ref()))
+            .replace("{src1}", &src1_text)
             .replace("{src2}", &self.extract_operand_text(expr.rs, wrap_size.as_ref()))
             .to_string();
 
@@ -847,6 +851,21 @@ impl AsmEmitter {
             mnemonic,
             is_memory_access,
         );
+        if dst_text == src1_text
+            && matches!(
+                expr.kind,
+                inst::ExprKind::Add
+                    | inst::ExprKind::Sub
+                    | inst::ExprKind::Mul
+                    | inst::ExprKind::LessThen
+                    | inst::ExprKind::GreaterThen
+                    | inst::ExprKind::Equal
+                    | inst::ExprKind::NotEq
+            )
+        {
+            let self_move = self.mov_line(&dst_text, &src1_text, &resolved_size, false);
+            formated = formated.replacen(&self_move, "", 1);
+        }
 
         // サイズがSelfでない場合
         if self.reserved_label_name.is_some() && formated.contains("{label}") {

@@ -305,7 +305,7 @@ impl AsmEmitter {
         match node {
             inst::Inst::ExpectJmp(name) => self.expect_jmp(name),
             inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
-            inst::Inst::Expr(expr) => self.gen_expr_asm(expr),
+            inst::Inst::Expr(expr) => self.gen_expr_asm(node_idx, expr),
             inst::Inst::Num { .. } => {}
             inst::Inst::InitArr(_) => {}
             inst::Inst::Block(name) => {
@@ -478,12 +478,14 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) 
-    fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
+    fn gen_expr_asm(&mut self, node_idx: usize, expr: &inst::ExprInst) {
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
         // (以前は`reg_idx`を進めるだけだったため、引数の`%rdi`などまで
         //  上書きしていた)
-        let dst = self.alloc_reg();
+        let dst = self
+            .direct_param_reg(node_idx, expr)
+            .unwrap_or_else(|| self.alloc_reg());
         self.reg_idx = dst;
 
         let asm = self.format_expr_inst(&expr);
@@ -497,6 +499,37 @@ impl AsmEmitter {
         // この式が使い終わった、オペランドの一時的な結果のレジスタを解放する
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);
+    }
+
+    /// 比較は引数レジスタを直接使い、引数への算術代入はそのレジスタを更新する
+    fn direct_param_reg(&self, node_idx: usize, expr: &inst::ExprInst) -> Option<usize> {
+        let inst::Inst::Param(param) = self.curr_inst.get(expr.ls)? else {
+            return None;
+        };
+
+        let is_comparison = matches!(
+            expr.kind,
+            inst::ExprKind::LessThen
+                | inst::ExprKind::GreaterThen
+                | inst::ExprKind::Equal
+                | inst::ExprKind::NotEq
+        );
+        let is_assignment = matches!(
+            expr.kind,
+            inst::ExprKind::Add | inst::ExprKind::Sub | inst::ExprKind::Mul
+        ) && self.curr_inst.iter().skip(node_idx + 1).any(|node| {
+            matches!(
+                node,
+                inst::Inst::AssignVar { name, value, .. }
+                    if name == &param.name && *value == expr.dst
+            )
+        });
+
+        if !is_comparison && !is_assignment {
+            return None;
+        }
+
+        self.var_reg(&param.name)
     }
 
     #[inline(always)]
@@ -543,6 +576,14 @@ impl AsmEmitter {
             //  引数や他の変数のレジスタを壊したり、ループの先頭が
             //  参照するレジスタと食い違ったりしていた)
             let current_reg = self.var_reg(name).unwrap_or(self.reg_idx);
+            if matches!(self.curr_inst[value], inst::Inst::Expr(..))
+                && self
+                    .last_inst_idx
+                    .iter()
+                    .any(|(idx, reg)| *idx == value && *reg == current_reg)
+            {
+                return;
+            }
             let s = if this_is_self {
                 None
             } else {
