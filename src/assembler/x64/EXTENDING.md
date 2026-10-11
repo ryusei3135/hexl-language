@@ -13,6 +13,11 @@
 各ファイルの先頭のコメントに、具体的な手順と見本があります。
 命令の見本は `emitter/inst_table.rs` の `nop` です。
 
+即値とメモリオペランドの組み合わせは、メモリ幅をレジスタから推測できません。
+`cmpb` / `cmpw` / `cmpl` / `cmpq` のようにニーモニックのサフィックスを
+`emitter/inst_table.rs` でビット幅に変換して `emitter.rs` へ渡し、
+`80 /digit` (byte) または `81` / `83 /digit` の即値グループ形式で出力します。
+
 ## `test` セクション (`.section test`)
 
 `.section test` (または `.test`) で、名前 `test` の独立したデータセクションに切り替わります

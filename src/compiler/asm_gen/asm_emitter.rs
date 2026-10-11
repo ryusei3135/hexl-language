@@ -812,7 +812,8 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) fn format_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
+    pub(super) 
+    fn format_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
         // `/`と`%`は`%rax`/`%rdx`を使う専用の手順で生成する
         // (`div_ir.rs`)。テンプレートでは、割られる数を`%rax`ではなく
         // `%rdx`に置いてしまい、さらに`%rdx`にある引数を壊していた

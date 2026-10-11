@@ -4,6 +4,7 @@ mod mem_ir;
 use super::*;
 use crate::compiler::asm_gen::emit_fn_name::*;
 use crate::compiler::ir::{self, types};
+use crate::compiler::parse::node;
 
 /// 関数の入口で`callee_saved`のレジスタを退避する位置の目印
 /// (本体の生成が終わってから、実際に使ったレジスタの`push`に置き換える)
@@ -249,10 +250,9 @@ impl AsmEmitter {
             returned_struct_idx,
             asm_fmt_name: &asm_fmt_name,
         };
-
-        for (node_idx, node) in self.curr_inst.clone().iter().enumerate() {
+        self.curr_inst.clone().iter().enumerate().for_each(|(node_idx, node)| {
             self.gen_node_asm(node_idx, node, &ctx);
-        }
+        });
         self.gen_implicit_ret(ctx.fn_name);
         self.fix_callee_saved(prologue_end);
 
@@ -270,6 +270,8 @@ impl AsmEmitter {
     fn begin_fn_state(&mut self, fn_def: &def_tree::FnDefInfo) {
         // 前の関数の変数・レジスタの状態を持ち越さない
         self.reset_fn_state();
+        // 引数のレジスタと名前を登録
+        self.setting_args_reg_alloc(&fn_def.args);
         // 変数の使用頻度に合わせてレジスタを割り当てる(`reg_mnger.rs`)
         // この関数自身の引数のレジスタには、まだ引数の値が入っているので使わない
         let param_regs = self.asm_fmt.param_regs(fn_def.args.len());
@@ -284,6 +286,17 @@ impl AsmEmitter {
         self.stk_use_counter = 0;
         // 生成済みの関数呼び出しの記録も、関数ごとにリセットする
         self.emitted_calls.clear();
+    }
+
+    /// 関数の引数を名前とセットでレジスタを登録
+    /// 引数が構造体などなら必ず64bitのサイズになる
+    fn setting_args_reg_alloc(&mut self, args_def: &[node::ArgsNode]) {
+        args_def.iter().enumerate().for_each(|(idx, arg)| {
+            self.used_reg.bind_var(
+                &arg.name, 
+                self.asm_fmt.get_fmt_param::<usize>(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ))
+            );
+        });
     }
 
     /// 戻り値として返される構造体の`Inst::Struct`のidを探す

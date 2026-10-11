@@ -180,28 +180,28 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "cmp_l",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jl {label}\n",
+                template: "{space}cmp {src2}, {src1}\n{space}jl {label}\n",
             },
         ),
         (
             "cmp_g",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jg {label}\n",
+                template: "{space}cmp {src2}, {src1}\n{space}jg {label}\n",
             },
         ),
         (
             "cmp_e",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jz {label}\n",
+                template: "{space}cmp {src2}, {src1}\n{space}jz {label}\n",
             },
         ),
         (
             "cmp_ne",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, {dst}\n{space}cmp {src2}, {dst}\n{space}jnz {label}\n",
+                template: "{space}cmp {src2}, {src1}\n{space}jnz {label}\n",
             },
         ),
         (

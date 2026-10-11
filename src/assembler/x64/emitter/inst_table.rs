@@ -33,6 +33,65 @@ fn mov_size_bits(mnemonic: &str) -> u32 {
     }
 }
 
+/// cmp系ニーモニックのサフィックスからメモリオペランドのサイズ(bit数)を求める。
+/// 即値とメモリの組み合わせはレジスタからサイズを推測できないため必要。
+fn cmp_size_bits(mnemonic: &str) -> u32 {
+    match mnemonic {
+        "cmpb" => 8,
+        "cmpw" => 16,
+        "cmpq" => 64,
+        _ => 32,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cmp_imm_mem_bytes(mnemonic: &str, value: i64, mem: MemoryOperand) -> Vec<u8> {
+        let mut emitter = Emitter::new();
+        dispatch(
+            &mut emitter,
+            &Instruction {
+                mnemonic: mnemonic.to_owned(),
+                operands: vec![Operand::Immediate(value), Operand::Memory(mem)],
+            },
+        )
+        .unwrap();
+        emitter.text
+    }
+
+    fn base_mem(base: Reg, displacement: i64) -> MemoryOperand {
+        MemoryOperand {
+            displacement,
+            base: Some(base),
+            index: None,
+            scale: 1,
+            symbol: None,
+        }
+    }
+
+    #[test]
+    fn cmp_immediate_to_memory_uses_mnemonic_width() {
+        assert_eq!(
+            cmp_imm_mem_bytes("cmpb", -1, base_mem(Reg::Rax, 0)),
+            [0x80, 0x38, 0xff]
+        );
+        assert_eq!(
+            cmp_imm_mem_bytes("cmpw", 0x1234, base_mem(Reg::Rax, 0)),
+            [0x66, 0x81, 0x38, 0x34, 0x12]
+        );
+        assert_eq!(
+            cmp_imm_mem_bytes("cmpl", 1, base_mem(Reg::Rbp, -4)),
+            [0x83, 0x7d, 0xfc, 0x01]
+        );
+        assert_eq!(
+            cmp_imm_mem_bytes("cmpq", 0x12345678, base_mem(Reg::Rax, 0)),
+            [0x48, 0x81, 0x38, 0x78, 0x56, 0x34, 0x12]
+        );
+    }
+}
+
 /// neg系ニーモニックのサフィックスからオペランドサイズ(bit数)を求める。
 /// サフィックス無しの `neg` は `None` を返す。
 /// レジスタ操作ならレジスタ名からサイズが決まるが、`negl -4(%rbp)` のような
@@ -81,7 +140,9 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "movslq" => e.emit_movslq(&inst.operands),
 
-        "cmp" | "cmpq" | "cmpl" | "cmpw" | "cmpb" => e.emit_cmp(&inst.operands),
+        "cmp" | "cmpq" | "cmpl" | "cmpw" | "cmpb" => {
+            e.emit_cmp(&inst.operands, cmp_size_bits(name))
+        }
 
         "lea" | "leaq" | "leal" => e.emit_lea(&inst.operands),
 

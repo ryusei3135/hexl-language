@@ -703,6 +703,51 @@ impl Emitter {
     // add/sub immediate
     // ========================================================
 
+    fn emit_group_imm_mem(
+        &mut self,
+        value: i64,
+        mem: &MemoryOperand,
+        group: u8,
+        size_bits: u32,
+    ) -> Result<(), String> {
+        if !matches!(size_bits, 8 | 16 | 32 | 64) {
+            return Err("unsupported immediate memory operand size".into());
+        }
+        if size_bits == 64 && i32::try_from(value).is_err() {
+            return Err("64-bit immediate memory operand must fit in signed 32 bits".into());
+        }
+
+        if size_bits == 16 {
+            self.emit_u8(0x66);
+        }
+        self.emit_rex(
+            size_bits == 64,
+            false,
+            self.memory_index_extended(mem),
+            self.memory_base_extended(mem),
+        );
+
+        if size_bits == 8 {
+            self.emit_u8(0x80);
+            self.emit_memory_modrm(group, mem)?;
+            self.emit_u8(value as u8);
+        } else if (-128..=127).contains(&value) {
+            self.emit_u8(0x83);
+            self.emit_memory_modrm(group, mem)?;
+            self.emit_u8(value as i8 as u8);
+        } else {
+            self.emit_u8(0x81);
+            self.emit_memory_modrm(group, mem)?;
+            match size_bits {
+                16 => self.emit_u16(value as u16),
+                32 | 64 => self.emit_i32(value as i32),
+                _ => unreachable!(),
+            }
+        }
+
+        Ok(())
+    }
+
     fn emit_group_imm(&mut self, value: i64, dst: Reg, group: u8) -> Result<(), String> {
         if dst.bits() == 16 {
             self.emit_u8(0x66);
@@ -969,7 +1014,7 @@ impl Emitter {
     // cmp
     // ========================================================
 
-    fn emit_cmp(&mut self, operands: &[Operand]) -> Result<(), String> {
+    fn emit_cmp(&mut self, operands: &[Operand], size_bits: u32) -> Result<(), String> {
         if operands.len() != 2 {
             return Err("cmp requires two operands".into());
         }
@@ -991,7 +1036,11 @@ impl Emitter {
                 self.emit_binary_mem_reg(mem, *dst, 0x3B)
             }
 
-            _ => Err("unsupported cmp operands".into()),
+            (Operand::Immediate(value), Operand::Memory(mem)) => {
+                self.emit_group_imm_mem(*value, mem, 7, size_bits)
+            }
+
+            (l, r) => Err(format!("unsupported cmp operands {:?} {:?}", l, r)),
         }
     }
 

@@ -2,7 +2,8 @@ use super::*;
 
 impl AsmEmitter {
     /// メモリに値を書き込むアセンブリ言語を生成
-    pub(super) fn write_mem(
+    pub(super) 
+    fn write_mem(
         &mut self,
         name: &str,
         dst: usize,

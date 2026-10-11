@@ -73,7 +73,8 @@ impl AsmEmitter {
     /// - pos = IRの、そのメンバーの終端までの累積サイズ
     /// - member_size = そのメンバー自身のサイズ
     ///   (`pos - member_size`が、ポインタからのオフセットになる)
-    pub(super) fn ref_struct_txt(&mut self, src: &str, pos: usize, member_size: usize) -> String {
+    pub(super) 
+    fn ref_struct_txt(&mut self, src: &str, pos: usize, member_size: usize) -> String {
         let size = Self::struct_member_offset(pos, member_size);
         let var_info = self.var_info(src);
 
@@ -114,7 +115,8 @@ impl AsmEmitter {
     }
 
     /// メモリを参照するコードを生成する
-    pub(super) fn ref_mem_value_txt(
+    pub(super) 
+    fn ref_mem_value_txt(
         &mut self,
         kind: &inst::MemoryKind,
         size: &Size,
