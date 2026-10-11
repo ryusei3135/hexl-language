@@ -46,8 +46,8 @@ func4(): int must=func5 {
     ret 10
 }
 
-func5(a: int of func4): int {
-    ret a + 10
+func5(a: int of func4): Result<int, byte> {
+    ret Result::Ok(a + 10)
 }
 
 func6(a: int must=func5) {

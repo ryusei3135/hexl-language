@@ -9,6 +9,12 @@ mod compiler;
 mod macros;
 mod dump;
 
+
+#[cfg(target_os = "linux")]
+const DEFAULT: &str = "linux";
+#[cfg(target_os = "windows")]
+const DEFAULT: &str = "windows";
+
 // 他モジュールが `crate::err` / `crate::parse` / `crate::node` などの形で
 // 参照している可能性があるため、元の `use` はそのまま残している。
 #[allow(unused_imports)]
@@ -21,6 +27,8 @@ use compiler::{
 };
 
 use std::{error::Error, fs, process};
+
+use crate::compiler::err::PreprocErrs::NotFoundAsmName;
 
 // ---------------------------------------------------------------------------
 // コマンドラインオプション
@@ -38,6 +46,7 @@ pub struct OptSettings {
     pub dump: bool,
     /// `dump <file>` 形式で指定されたか（dump のみ行いビルドしない）
     pub dump_only: bool,
+    pub os: Option<String>,
 
     opt_flags: Option<OptFlags>,
 }
@@ -49,6 +58,7 @@ impl OptSettings {
             file_name: None,
             dump: false,
             dump_only: false,
+            os: None,
 
             opt_flags: Some(first_flag),
         }
@@ -60,6 +70,7 @@ impl OptSettings {
             file_name: Some(file_name.to_owned()),
             dump: self.dump,
             dump_only: self.dump_only,
+            os: None,
             opt_flags: Some(OptFlags::SetFile),
         }
     }
@@ -118,17 +129,19 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
 
         match *opt {
             "dump" => settings.dump = true,
-            "-f" => {
-                if let Err(e) = settings.set_flag(OptFlags::FmtAsm) {
-                    eprintln!("警告: オプション`-f`を無視しました: {}", e);
+            val => {
+                if val.ends_with(".hexl") {
+                    settings.file_name = Some(val.to_string());
+                } else {
+                    panic!();
                 }
             }
-            // フラグ以外の文字
-            _ => {
-                if let Err(e) = settings.set_value(opt.to_string()) {
-                    eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
-                }
-            }
+            // // フラグ以外の文字
+            // _ => {
+            //     if let Err(e) = settings.set_value(opt.to_string()) {
+            //         eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
+            //     }
+            // }
         }
     }
     settings
@@ -185,7 +198,7 @@ pub fn build(
         &settings.fmt_name,
     );
 
-    assembler::x64::emitter_x64("-c", &asm_text, "linux");
+    assembler::x64::emitter_x64("-c", &asm_text, DEFAULT);
 
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");

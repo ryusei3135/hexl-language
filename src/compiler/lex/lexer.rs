@@ -110,7 +110,7 @@ impl Lexer {
             gen_flag: None,
             chr_stk: String::new(),
             gen_tkns: Vec::new(),
-            preproc_table: Preprocessor::new(),
+            preproc_table: Preprocessor::new().setup_defines(),
             saw_gap: true,
         }
     }

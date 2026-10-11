@@ -10,6 +10,12 @@ enum ReplaceVal {
     Str(String),
 }
 
+
+#[cfg(target_os = "linux")]
+const DEFAULT: &str = "linux";
+#[cfg(target_os = "windows")]
+const DEFAULT: &str = "windows";
+
 pub(in crate::compiler::lex) 
 enum PreprocKind {
     Define(ReplaceVal),
@@ -26,6 +32,11 @@ impl Preprocessor {
         Self {
             tables: HashMap::new(),
         }
+    }
+
+    pub fn setup_defines(mut self) -> Self {
+        self.tables.insert(DEFAULT.to_string(), PreprocKind::Define(ReplaceVal::Str(DEFAULT.to_string())));
+        self
     }
 
     /// 名前がまだ登録されていなければ追加する。
