@@ -750,6 +750,77 @@ mod tests {
     }
 
     #[test]
+    fn check_preprocessor_define_fn_macro() {
+        // `#define Name(arg, arg2, ..) BODY` で、仮引数を実引数に置き換えて展開する
+        let mut lex = lexer();
+        lex.analy(&"#define SET(a, b) (a = b + 1)\n#SET(x, 2)".to_string())
+            .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::LParen,
+                Tkn::Name("x".to_string()),
+                Tkn::Equal,
+                Tkn::Number("2".to_string()),
+                Tkn::Add,
+                Tkn::Number("1".to_string()),
+                Tkn::RParen,
+            ]
+        );
+    }
+
+    #[test]
+    fn check_preprocessor_fn_macro_arg_with_comma_in_parens() {
+        // 括弧の中の`,`は実引数の区切りにならない
+        let mut lex = lexer();
+        lex.analy(&"#define ADD(a, b) a + b\nret #ADD(f(1, 2), 3)".to_string())
+            .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::KeyWordRet,
+                Tkn::Name("f".to_string()),
+                Tkn::LParen,
+                Tkn::Number("1".to_string()),
+                Tkn::Comma,
+                Tkn::Number("2".to_string()),
+                Tkn::RParen,
+                Tkn::Add,
+                Tkn::Number("3".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn check_preprocessor_fn_macro_wrong_arg_count_panics() {
+        let mut lex = lexer();
+        let _ = lex.analy(&"#define F(a, b) a\n#F(1)".to_string());
+    }
+
+    #[test]
+    fn check_preprocessor_multiline_define() {
+        // `{{ ... }}` で囲むと、`#define`の本体を複数行で書ける
+        let mut lex = lexer();
+        lex.analy(&"#define N {{\n  expr = 10\n  expr2 = 10\n}}\n#N".to_string())
+            .unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::Name("expr".to_string()),
+                Tkn::Equal,
+                Tkn::Number("10".to_string()),
+                Tkn::Name("expr2".to_string()),
+                Tkn::Equal,
+                Tkn::Number("10".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn check_call_with_args() {
         let mut lex = lexer();
         lex.analy(&"f(1,2)".to_string()).unwrap();

@@ -1,5 +1,8 @@
 
-
+#define M(expr) {{
+    expr = 10
+    expr += 3
+}}
 
 struct Name {
     name: int
@@ -47,6 +50,8 @@ func4(): int must=func5 {
 }
 
 func5(a: int of func4): Result<int, byte> {
+    name mut: int = 10
+    #M(name)
     ret Result::Ok(a + 10)
 }
 
