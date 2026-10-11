@@ -11,12 +11,42 @@ const CALLEE_SAVE_MARK: &str = "{callee_save}";
 /// `leave`/`ret`の直前で、退避したレジスタを戻す位置の目印
 const CALLEE_RESTORE_MARK: &str = "{callee_restore}";
 
+/// 1つの関数のアセンブリを生成している間、各ノードの生成で共通して
+/// 参照する情報(`build_fn_process`で作り、`gen_node_asm`へ渡す)
+struct FnGenCtx<'a> {
+    /// 生成中の関数の名前(`_start`かどうかの判定に使う)
+    fn_name: &'a str,
+    /// 関数の戻り値の型(戻り値が無い/構造体を返す関数は`None`)
+    fn_ret_ty: SelfPtrInfo<'a>,
+    /// 先頭の引数が`self`か
+    this_is_self: bool,
+    /// 戻り値として返される構造体の`Inst::Struct`のid
+    returned_struct_idx: Option<usize>,
+    /// 出力するアセンブリ言語のフォーマットの名前
+    asm_fmt_name: &'a Option<String>,
+}
+
 impl AsmEmitter {
+    /// 関数のラベル名を作る。ジェネリクス関数は型引数を名前に含める
+    fn fn_label_of<T: std::fmt::Debug>(name: &str, temp_ty: &[T]) -> String {
+        if temp_ty.is_empty() {
+            emit_fn_name_id(name)
+        } else {
+            let generic_args = temp_ty
+                .iter()
+                .map(|ty| format!("{:?}", ty))
+                .collect::<Vec<_>>();
+            emit_generic_fn_name_id(name, &generic_args)
+        }
+    }
+
     /// 関数を呼び出す情報がある物を受け取りアセンブリ言語を生成する
     ///
     /// `gen/asm_emitter.rs`の`extract_operand_text`から、関数呼び出しの
     /// 結果を値として使う(戻り値を任意のレジスタへ代入する)際にも
     /// 使われるため`pub(super)`にしている
+    ///
+    /// 流れ: callerレジスタの退避 → 引数の設定 → `call` → 退避したレジスタの復元
     pub(super) 
     fn emit_call_func(
         &mut self,
@@ -26,27 +56,84 @@ impl AsmEmitter {
         // 生成するアセンブリコード
         let mut call_func = String::new();
 
+        // 関数を呼ぶためレジスタを退避
         let protected_regs: Vec<usize> = self
             .used_reg
             .used_regs()
             .into_iter()
             .filter(|reg| *reg != 0)
             .collect();
+        call_func.push_str(&self.push_caller_saved_regs(&protected_regs));
 
-        // 関数を呼ぶためレジスタを退避
-        for reg in protected_regs.iter() {
-            // callerレジスタのみ退避する
-            if self.callee_saved.iter().find(|x| *x == reg).is_none() {
-                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-                call_func.push_str(&self.asm_fmt.get_push(&reg_name));
-            }
-        }
-
-        // 各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
-        // 後で、引数レジスタを壊さない順序に並べ替えて出力する
-        let mut arg_lines: Vec<(usize, String, String)> = Vec::new();
         // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
         self.used_reg.start_scope();
+        let arg_lines = self.build_arg_lines(meta_data, expand_struct_return);
+        call_func.push_str(&self.order_arg_lines(&arg_lines));
+
+        let fn_label = Self::fn_label_of(&meta_data.name, &meta_data.temp_ty);
+        call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
+        // 引数で使ったレジスタを解放
+        self.used_reg.end_scope();
+
+        call_func.push_str(&self.pop_caller_saved_regs(&protected_regs));
+        call_func
+    }
+
+    /// `regs`のうちcallerが保存するレジスタだけを`push`するアセンブリを返す
+    /// (`callee_saved`のレジスタは呼ばれた側が保存するので退避しない)
+    fn push_caller_saved_regs(&self, regs: &[usize]) -> String {
+        let mut asm = String::new();
+        for reg in regs.iter() {
+            if !self.callee_saved.contains(reg) {
+                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                asm.push_str(&self.asm_fmt.get_push(&reg_name));
+            }
+        }
+        asm
+    }
+
+    /// `push_caller_saved_regs`で退避したレジスタを、退避した時とは逆順に復元する
+    fn pop_caller_saved_regs(&self, regs: &[usize]) -> String {
+        let mut asm = String::new();
+        for reg in regs.iter().rev() {
+            if !self.callee_saved.contains(reg) {
+                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                asm.push_str(&self.asm_fmt.get_pop(&reg_name));
+            }
+        }
+        asm
+    }
+
+    /// 引数`param`を引数レジスタへ渡す命令の種類を決める
+    ///
+    /// - `"address"`: 値ではなくアドレスを渡す(`lea`)
+    /// - `"mov"`: 値をそのまま渡す
+    fn arg_opcode(&self, param: usize, index: usize, expand_struct_return: bool) -> &'static str {
+        if expand_struct_return && index == 0 {
+            "address"
+        } else if self.curr_inst[param].is_pointer() {
+            "address"
+        } else if matches!(self.curr_inst[param], inst::Inst::Str { .. }) {
+            // 文字列の実体は静的領域(`M0`など)にあり、引数には
+            // その「アドレス」を渡す必要がある。`mov`だとラベルの指す
+            // 中身を読み込んでしまうので、`leaq M0(%rip), %rdi`のように
+            // `lea`(=`address`)でアドレスを求める
+            "address"
+        } else {
+            "mov"
+        }
+    }
+
+    /// 各引数を引数レジスタへ設定する命令を作る
+    ///
+    /// 戻り値は各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
+    /// 並び順は引数の順で、実際の出力順は`order_arg_lines`で決める
+    fn build_arg_lines(
+        &mut self,
+        meta_data: &inst::CallFuncMetaData,
+        expand_struct_return: bool,
+    ) -> Vec<(usize, String, String)> {
+        let mut arg_lines: Vec<(usize, String, String)> = Vec::new();
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数の実際の型のサイズ
@@ -65,19 +152,7 @@ impl AsmEmitter {
             };
             self.used_reg.mark_used(self.asm_fmt.get_fmt_param::<usize>(index, &param_ty));
 
-            let opcode = if expand_struct_return && index == 0 {
-                "address"
-            } else if self.curr_inst[*param].is_pointer() {
-                "address"
-            } else if matches!(self.curr_inst[*param], inst::Inst::Str { .. }) {
-                // 文字列の実体は静的領域(`M0`など)にあり、引数には
-                // その「アドレス」を渡す必要がある。`mov`だとラベルの指す
-                // 中身を読み込んでしまうので、`leaq M0(%rip), %rdi`のように
-                // `lea`(=`address`)でアドレスを求める
-                "address"
-            } else {
-                "mov"
-            };
+            let opcode = self.arg_opcode(*param, index, expand_struct_return);
 
             let resize_size = if opcode == "address" {
                 Size::DQ
@@ -94,13 +169,18 @@ impl AsmEmitter {
             let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty);
             arg_lines.push((param_reg_num, src1_text, asm));
         }
+        arg_lines
+    }
 
-        // === 引数のレジスタへ値を設定する順番を決める ===
-        // 先に`%rdi`へ値を書いてしまうと、後ろの引数が元の`%rdi`の値を
-        // 読む場合(`f(y, x)`で、`x`が`%rdi`にある場合など)に、
-        // 壊れた値を読んでしまう。「他の未出力の引数から読まれていない
-        // 引数レジスタ」を持つ引数から順に出力する。
-        // (引数同士が循環している場合だけは、元の順のまま出力する)
+    /// 引数レジスタへ値を設定する命令を、レジスタを壊さない順序に並べて返す
+    ///
+    /// 先に`%rdi`へ値を書いてしまうと、後ろの引数が元の`%rdi`の値を
+    /// 読む場合(`f(y, x)`で、`x`が`%rdi`にある場合など)に、
+    /// 壊れた値を読んでしまう。「他の未出力の引数から読まれていない
+    /// 引数レジスタ」を持つ引数から順に出力する。
+    /// (引数同士が循環している場合だけは、元の順のまま出力する)
+    fn order_arg_lines(&self, arg_lines: &[(usize, String, String)]) -> String {
+        let mut asm = String::new();
         let mut pending: Vec<usize> = (0..arg_lines.len()).collect();
         while !pending.is_empty() {
             let pos = pending
@@ -112,30 +192,9 @@ impl AsmEmitter {
                 })
                 .unwrap_or(0);
             let i = pending.remove(pos);
-            call_func.push_str(&arg_lines[i].2);
+            asm.push_str(&arg_lines[i].2);
         }
-
-        let fn_label = if meta_data.temp_ty.is_empty() {
-            emit_fn_name_id(&meta_data.name)
-        } else {
-            let generic_args = meta_data
-                .temp_ty
-                .iter()
-                .map(|ty| format!("{:?}", ty))
-                .collect::<Vec<_>>();
-            emit_generic_fn_name_id(&meta_data.name, &generic_args)
-        };
-        call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
-        // 引数で使ったレジスタを解放
-        self.used_reg.end_scope();
-        // === 退避したレジスタを、退避した時とは逆順に復元する ===
-        for reg in protected_regs.iter().rev() {
-            if self.callee_saved.iter().find(|x| *x == reg).is_none() {
-                let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-                call_func.push_str(&self.asm_fmt.get_pop(&reg_name));
-            }
-        }
-        call_func
+        asm
     }
 
     /// 関数のメタ情報のbodyのデータを元に
@@ -145,6 +204,14 @@ impl AsmEmitter {
     /// - func_meta_data
     /// - asm_fmt_name
     ///     出力するアセンブリ言語のフォーマットの名前
+    ///
+    /// ## 流れ
+    /// 1. ラベルを出力し、関数ごとの状態を初期化する(`begin_fn_state`)
+    /// 2. 仮のスタックフレームを出力し、位置を控える
+    /// 3. IRのノードを順に変換する(`gen_node_asm`)
+    /// 4. `ret`が無ければ付ける(`gen_implicit_ret`)
+    /// 5. `callee_saved`の退避/復元を確定する(`fix_callee_saved`)
+    /// 6. スタックフレームを実際の使用量で作り直す
     pub(super) 
     fn build_fn_process(
         &mut self,
@@ -154,34 +221,10 @@ impl AsmEmitter {
         let this_is_self = fn_meta_data.1.first_param_is_self();
         let fn_ret_ty = fn_meta_data.1.get_ret_ty();
         // 新しく関数の作成、
-        let fn_label = if fn_meta_data.1.temp_ty.is_empty() {
-            emit_fn_name_id(&fn_meta_data.1.name)
-        } else {
-            let generic_args = fn_meta_data
-                .1
-                .temp_ty
-                .iter()
-                .map(|ty| format!("{:?}", ty))
-                .collect::<Vec<_>>();
-            emit_generic_fn_name_id(&fn_meta_data.1.name, &generic_args)
-        };
+        let fn_label = Self::fn_label_of(&fn_meta_data.1.name, &fn_meta_data.1.temp_ty);
         self.asm_text.push_str(&format!("{}:\n", &fn_label));
-        // 前の関数の変数・レジスタの状態を持ち越さない
-        self.reset_fn_state();
-        // 変数の使用頻度に合わせてレジスタを割り当てる(`reg_mnger.rs`)
-        // この関数自身の引数のレジスタには、まだ引数の値が入っているので使わない
-        let param_regs = self.asm_fmt.param_regs(fn_meta_data.1.args.len());
-        // 構造体の変数(`s: Name = Name { .. }`)はスタックに置くので、
-        // レジスタの割り当てから外し、次の変数に割り当てる
-        let stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_meta_data.1.body);
-        self.used_reg
-            .allocation_register(&fn_meta_data.1.var_counter, &param_regs, &stack_vars);
-        // 関数ごとにスタックの使用量をリセットする
-        // (前の関数の`stk_use_counter`を持ち越すと、この関数の
-        //  ローカル変数のオフセットが正しく計算できない)
-        self.stk_use_counter = 0;
-        // 生成済みの関数呼び出しの記録も、関数ごとにリセットする
-        self.emitted_calls.clear();
+        self.begin_fn_state(&fn_meta_data.1);
+
         // 関数の先頭のスタックフレームの生成位置を控えておく。
         // 本体を生成しながらスタックの使用量を数え、最後にこの位置の
         // スタックフレームを、数えた使用量(アライメント済み)で作り直す
@@ -198,120 +241,173 @@ impl AsmEmitter {
         }
 
         self.curr_inst = mem::take(&mut fn_meta_data.1.body);
-        let returned_struct_idx = if fn_ret_ty.is_none() {
-            self.curr_inst.iter().find_map(|node| match node {
-                inst::Inst::Ret(idx) => self.resolve_struct_idx(*idx),
-                _ => None,
-            })
-        } else {
-            None
+        let returned_struct_idx = self.find_returned_struct_idx(fn_ret_ty.is_none());
+        let ctx = FnGenCtx {
+            fn_name: &fn_meta_data.0,
+            fn_ret_ty: fn_ret_ty.as_ref(),
+            this_is_self,
+            returned_struct_idx,
+            asm_fmt_name,
         };
 
         for (node_idx, node) in self.curr_inst.clone().iter().enumerate() {
-            match &node {
-                inst::Inst::ExpectJmp(name) => {
-                    // build_fn_proc.rs
-                    self.expect_jmp(name);
-                }
-                inst::Inst::Str { dst, value } => {
-                    // build_fn_proc.rs
-                    self.gen_str_asm(*dst, value);
-                }
-                inst::Inst::Expr(expr) => {
-                    // build_fn_proc.rs
-                    self.gen_expr_asm(expr);
-                }
-                inst::Inst::Num { .. } => {}
-                inst::Inst::InitArr(_) => {}
-                inst::Inst::Block(name) => {
-                    self.asm_text.push_str(&format!("{}:\n", name));
-                }
-                inst::Inst::StartScope => {
-                    self.start_scope_asm();
-                }
-                inst::Inst::EndScope => {
-                    self.end_scope_asm();
-                }
-                inst::Inst::Comple { name, lines } => {
-                    // build_fn_proc.rs
-                    self.gen_complie_asm(name, lines, asm_fmt_name);
-                }
-                inst::Inst::Jmp(name) => {
-                    // build_fn_proc.rs
-                    self.asm_text.push_str(&format!("jmp {}\n", name));
-                }
-                inst::Inst::AssignVar { name, dst, value } => {
-                    self.gen_assign_var_asm(name, *dst, *value, this_is_self);
-                }
-                inst::Inst::Ret(idx) => {
-                    // build_fn_proc.rs
-                    self.gen_ret_asm(fn_ret_ty.as_ref(), *idx, &fn_meta_data.0);
-                }
-                inst::Inst::Mov {
-                    name,
-                    size,
-                    dst,
-                    src,
-                } => {
-                    // 戻り値として返される構造体の初期化かどうか。
-                    //
-                    // `returned_struct_idx`が`None`(=この関数は構造体を返さない)
-                    // の場合に、`resolve_struct_idx(*dst)`も`None`(=`dst`が
-                    // `a: A = A::new()`のようなコンストラクタ呼び出しで、
-                    // `Inst::Struct`を直接指していない)だと、`None == None`で
-                    // 「返される構造体」と誤判定されていた。その結果
-                    // `mov_value_ir`が呼ばれず、変数`a`が`var_hash_map`へ
-                    // 登録されないまま、以降の参照で「存在しない変数」に
-                    // なってしまっていた。
-                    // そのため、構造体が実際に返される場合(`Some`)のみ比較する
-                    let is_returned_struct = matches!(size, types::Size::Struct(..))
-                        && returned_struct_idx.is_some()
-                        && returned_struct_idx == self.resolve_struct_idx(*dst);
-                    if !is_returned_struct {
-                        self.mov_value_ir(size, *dst, *src, name.as_deref(), Some(size));
-                    }
-                } // メモリに配置されている値の生成
-                inst::Inst::MemoryValue(mem_value) => {
-                    // call_func/mem_ir.rs
-                    self.mem_val_ir(mem_value);
-                }
-                inst::Inst::Param(param) => {
-                    let ty = node.get_param_ty().unwrap();
-                    // 引数に使うレジスタを取得する
-                    let reg_num = self.asm_fmt.get_fmt_param::<usize>(param.num, &ty);
-                    self.insert_var_info(
-                        &param.name,
-                        asm_emitter::VarIndexInfo::new(reg_num, &ty, param.dst),
-                    );
-                }
-                inst::Inst::CallFunc(meta_data) => {
-                    // 関数を呼ぶノードが変数に戻り値を代入しないばあいのみ生成
-                    if meta_data.parent == ir::IS_NOT_ASSIGN_EXPR {
-                        let asm_text = self.emit_call_func(&meta_data, false);
-                        self.asm_text.push_str(asm_text.as_str());
-                        // 値として参照された場合(`a: int = func(10)`など)に
-                        // 戻り値のレジスタを返せるよう、生成済みとして記録する
-                        self.emitted_calls.push(node_idx);
-                    }
-                }
-                /*inst::Inst::Struct { mem, is_self, .. } => {
-                    if *is_self {
-                        let ini_struct_asm = self.emit_struct_ini_asm(mem.to_vec(), this_is_self);
-                        self.asm_text.push_str(&ini_struct_asm);
-                    }
-                }*/
-                _ => {}
-            }
+            self.gen_node_asm(node_idx, node, &ctx);
         }
-        // retがない場合つけたす
-        // `_start`はOSから直接呼ばれるエントリーポイントで、`ret`で戻る先が
-        // 無い(終了は`exit`のsyscallで行う)ため、`leave; ret`は付けない
-        if fn_meta_data.0 != "_start" && !self.asm_text.ends_with("ret\n") {
+        self.gen_implicit_ret(ctx.fn_name);
+        self.fix_callee_saved(prologue_end);
+
+        // === スタックフレームで確保するサイズを確定させる ===
+        // IRが見積もったサイズ(`stk_size`)と、本体の生成で実際に数えた
+        // スタックの使用量(`stk_use_counter`)の大きい方を使う。
+        // `gen_stack_frame`が8/16byte境界へ切り上げる
+        let used_stk_size = self.stk_use_counter.max(ir_stk_size);
+        let prologue = self.gen_fn_prologue(ctx.fn_name, used_stk_size);
+        self.asm_text
+            .replace_range(prologue_start..prologue_end, &prologue);
+    }
+
+    /// 関数ごとの状態を初期化し、変数へレジスタを割り当てる
+    fn begin_fn_state(&mut self, fn_def: &def_tree::FnDefInfo) {
+        // 前の関数の変数・レジスタの状態を持ち越さない
+        self.reset_fn_state();
+        // 変数の使用頻度に合わせてレジスタを割り当てる(`reg_mnger.rs`)
+        // この関数自身の引数のレジスタには、まだ引数の値が入っているので使わない
+        let param_regs = self.asm_fmt.param_regs(fn_def.args.len());
+        // 構造体の変数(`s: Name = Name { .. }`)はスタックに置くので、
+        // レジスタの割り当てから外し、次の変数に割り当てる
+        let stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_def.body);
+        self.used_reg
+            .allocation_register(&fn_def.var_counter, &param_regs, &stack_vars);
+        // 関数ごとにスタックの使用量をリセットする
+        // (前の関数の`stk_use_counter`を持ち越すと、この関数の
+        //  ローカル変数のオフセットが正しく計算できない)
+        self.stk_use_counter = 0;
+        // 生成済みの関数呼び出しの記録も、関数ごとにリセットする
+        self.emitted_calls.clear();
+    }
+
+    /// 戻り値として返される構造体の`Inst::Struct`のidを探す
+    ///
+    /// `fn_returns_nothing`は、関数の戻り値の型が無い(構造体は
+    /// 暗黙の`self`ポインタ経由で返す)場合に`true`
+    fn find_returned_struct_idx(&self, fn_returns_nothing: bool) -> Option<usize> {
+        if !fn_returns_nothing {
+            return None;
+        }
+        self.curr_inst.iter().find_map(|node| match node {
+            inst::Inst::Ret(idx) => self.resolve_struct_idx(*idx),
+            _ => None,
+        })
+    }
+
+    /// IRのノード1つぶんのアセンブリを生成する
+    fn gen_node_asm(&mut self, node_idx: usize, node: &inst::Inst, ctx: &FnGenCtx) {
+        match node {
+            inst::Inst::ExpectJmp(name) => self.expect_jmp(name),
+            inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
+            inst::Inst::Expr(expr) => self.gen_expr_asm(expr),
+            inst::Inst::Num { .. } => {}
+            inst::Inst::InitArr(_) => {}
+            inst::Inst::Block(name) => {
+                self.asm_text.push_str(&format!("{}:\n", name));
+            }
+            inst::Inst::StartScope => self.start_scope_asm(),
+            inst::Inst::EndScope => self.end_scope_asm(),
+            inst::Inst::Comple { name, lines } => {
+                self.gen_complie_asm(name, lines, ctx.asm_fmt_name)
+            }
+            inst::Inst::Jmp(name) => {
+                self.asm_text.push_str(&format!("jmp {}\n", name));
+            }
+            inst::Inst::AssignVar { name, dst, value } => {
+                self.gen_assign_var_asm(name, *dst, *value, ctx.this_is_self)
+            }
+            inst::Inst::Ret(idx) => self.gen_ret_asm(ctx.fn_ret_ty, *idx, ctx.fn_name),
+            inst::Inst::Mov {
+                name,
+                size,
+                dst,
+                src,
+            } => self.gen_mov_node_asm(name.as_deref(), size, *dst, *src, ctx.returned_struct_idx),
+            // メモリに配置されている値の生成
+            inst::Inst::MemoryValue(mem_value) => self.mem_val_ir(mem_value),
+            inst::Inst::Param(_) => self.gen_param_asm(node),
+            inst::Inst::CallFunc(meta_data) => self.gen_call_node_asm(node_idx, meta_data),
+            _ => {}
+        }
+    }
+
+    /// `Inst::Mov`(変数の定義)のアセンブリを生成する
+    fn gen_mov_node_asm(
+        &mut self,
+        name: Option<&str>,
+        size: &types::Size,
+        dst: usize,
+        src: usize,
+        returned_struct_idx: Option<usize>,
+    ) {
+        // 戻り値として返される構造体の初期化かどうか。
+        //
+        // `returned_struct_idx`が`None`(=この関数は構造体を返さない)
+        // の場合に、`resolve_struct_idx(dst)`も`None`(=`dst`が
+        // `a: A = A::new()`のようなコンストラクタ呼び出しで、
+        // `Inst::Struct`を直接指していない)だと、`None == None`で
+        // 「返される構造体」と誤判定されていた。その結果
+        // `mov_value_ir`が呼ばれず、変数`a`が`var_hash_map`へ
+        // 登録されないまま、以降の参照で「存在しない変数」に
+        // なってしまっていた。
+        // そのため、構造体が実際に返される場合(`Some`)のみ比較する
+        let is_returned_struct = matches!(size, types::Size::Struct(..))
+            && returned_struct_idx.is_some()
+            && returned_struct_idx == self.resolve_struct_idx(dst);
+        if !is_returned_struct {
+            self.mov_value_ir(size, dst, src, name, Some(size));
+        }
+    }
+
+    /// `Inst::Param`(関数の引数)を変数として登録する
+    fn gen_param_asm(&mut self, node: &inst::Inst) {
+        let inst::Inst::Param(param) = node else {
+            return;
+        };
+        let ty = node.get_param_ty().unwrap();
+        // 引数に使うレジスタを取得する
+        let reg_num = self.asm_fmt.get_fmt_param::<usize>(param.num, &ty);
+        self.insert_var_info(
+            &param.name,
+            asm_emitter::VarIndexInfo::new(reg_num, &ty, param.dst),
+        );
+    }
+
+    /// 関数を呼ぶノード(`Inst::CallFunc`)のアセンブリを生成する
+    fn gen_call_node_asm(&mut self, node_idx: usize, meta_data: &inst::CallFuncMetaData) {
+        // 関数を呼ぶノードが変数に戻り値を代入しないばあいのみ生成
+        if meta_data.parent == ir::IS_NOT_ASSIGN_EXPR {
+            let asm_text = self.emit_call_func(meta_data, false);
+            self.asm_text.push_str(asm_text.as_str());
+            // 値として参照された場合(`a: int = func(10)`など)に
+            // 戻り値のレジスタを返せるよう、生成済みとして記録する
+            self.emitted_calls.push(node_idx);
+        }
+    }
+
+    /// 関数の最後に`ret`が無い場合に、`leave; ret`を付ける
+    ///
+    /// `_start`はOSから直接呼ばれるエントリーポイントで、`ret`で戻る先が
+    /// 無い(終了は`exit`のsyscallで行う)ため、`leave; ret`は付けない
+    fn gen_implicit_ret(&mut self, fn_name: &str) {
+        if fn_name != "_start" && !self.asm_text.ends_with("ret\n") {
             self.asm_text.push_str(CALLEE_RESTORE_MARK);
             self.asm_text.push_str("leave\nret\n");
         }
+    }
 
-        // === 使った`callee_saved`のレジスタを、入口で退避・出口で復元する ===
+    /// 使った`callee_saved`のレジスタを、入口で退避・出口で復元する
+    ///
+    /// 本体に置いた目印(`CALLEE_SAVE_MARK`/`CALLEE_RESTORE_MARK`)を、
+    /// 実際に使ったレジスタの`push`/`pop`に置き換える。
+    /// `prologue_end`は、スタックフレームの直後(=本体の先頭)の位置
+    fn fix_callee_saved(&mut self, prologue_end: usize) {
         let callee_regs = self.used_reg.callee_regs_to_save();
         let mut save_asm = String::new();
         let mut restore_asm = String::new();
@@ -323,22 +419,13 @@ impl AsmEmitter {
             let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
             restore_asm.push_str(&self.asm_fmt.get_pop(&name));
         }
-        // スタックフレームの作り直し(下の`replace_range`)は`prologue_end`より
-        // 前の範囲だけを書き換えるので、先に本体側の目印を置き換えておく
+        // スタックフレームの作り直し(`build_fn_process`の`replace_range`)は
+        // `prologue_end`より前の範囲だけを書き換えるので、先に本体側の目印を置き換えておく
         let body = self.asm_text.split_off(prologue_end);
         let body = body
             .replace(CALLEE_SAVE_MARK, &save_asm)
             .replace(CALLEE_RESTORE_MARK, &restore_asm);
         self.asm_text.push_str(&body);
-
-        // === スタックフレームで確保するサイズを確定させる ===
-        // IRが見積もったサイズ(`stk_size`)と、本体の生成で実際に数えた
-        // スタックの使用量(`stk_use_counter`)の大きい方を使う。
-        // `gen_stack_frame`が8/16byte境界へ切り上げる
-        let used_stk_size = self.stk_use_counter.max(ir_stk_size);
-        let prologue = self.gen_fn_prologue(&fn_meta_data.0, used_stk_size);
-        self.asm_text
-            .replace_range(prologue_start..prologue_end, &prologue);
     }
 
     /// 関数の先頭のスタックフレームのアセンブリを生成する

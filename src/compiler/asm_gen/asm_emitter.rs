@@ -384,45 +384,12 @@ impl AsmEmitter {
         src2: Option<usize>,
         this_is_self: SelfPtrInfo,
     ) -> String {
-        let base_size: Size = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
         let mut formated = if let Some(variant_idx) = self.resolve_variant_idx(src1) {
-            // バリアントの生成: 初期化の命令を出した後、先頭(タグ)の
-            // アドレスをdstへ渡す(構造体と同じ扱い)
-            let mut txt = self.extract_operand_text(variant_idx, this_is_self);
-            let is_self = matches!(self.curr_inst[variant_idx], inst::Inst::Variant { is_self: true, .. });
-            if !is_self {
-                let stk = self.ptr_stk(variant_idx, 0);
-                let src = self.rbp_ref(stk);
-                let dst_text = self.get_reg(dst, &Size::DQ);
-                let line = self.fill_tmpl("address", &dst_text, &src);
-                txt.push_str(&self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ));
-            }
-            txt
+            self.format_variant_init_line(variant_idx, dst, this_is_self)
         } else if let Some(struct_idx) = self.resolve_struct_idx(src1) {
-            // 構造体の生成
-            let mut txt = self.extract_operand_text(struct_idx, this_is_self);
-
-            let ret_line = if this_is_self.is_none() {
-                let self_ptr_reg = self.self_ptr_reg();
-                let line = self.fill_tmpl("address", &self.get_reg(dst, &Size::DQ), &self_ptr_reg);
-                self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
-            } else {
-                self.fill_tmpl(opcode, &self.get_reg(dst, &base_size), FRAME_BASE_REG)
-            };
-            txt.push_str(&ret_line);
-            txt
+            self.format_struct_init_line(opcode, struct_idx, dst, src1, this_is_self)
         } else {
-            let dst_size = self.resolve_dst_reg_size(opcode, src1, this_is_self);
-            let dst_text = self.get_reg(dst, &dst_size);
-            let src_text = self.extract_operand_text(src1, this_is_self);
-            // srcがレジスタの場合は、dstとサイズを揃える
-            // (`movl %rcx, %edx`のような、サイズの混在を防ぐ)
-            let src_text = if opcode == "address" {
-                src_text
-            } else {
-                self.asm_fmt.resize_reg_operand(&src_text, &dst_size)
-            };
-            self.fill_tmpl(opcode, &dst_text, &src_text)
+            self.format_value_line(opcode, dst, src1, this_is_self)
         };
 
         if let Some(resized_asm) = self.gen_resize_mnemonic(&formated, opcode, src1) {
@@ -434,6 +401,71 @@ impl AsmEmitter {
         } else {
             formated
         }
+    }
+
+    /// バリアントの生成: 初期化の命令を出した後、先頭(タグ)の
+    /// アドレスをdstへ渡す(構造体と同じ扱い)
+    fn format_variant_init_line(
+        &mut self,
+        variant_idx: usize,
+        dst: Option<usize>,
+        this_is_self: SelfPtrInfo,
+    ) -> String {
+        let mut txt = self.extract_operand_text(variant_idx, this_is_self);
+        let is_self = matches!(self.curr_inst[variant_idx], inst::Inst::Variant { is_self: true, .. });
+        if !is_self {
+            let stk = self.ptr_stk(variant_idx, 0);
+            let src = self.rbp_ref(stk);
+            let dst_text = self.get_reg(dst, &Size::DQ);
+            let line = self.fill_tmpl("address", &dst_text, &src);
+            txt.push_str(&self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ));
+        }
+        txt
+    }
+
+    /// 構造体の生成: 初期化の命令を出した後、構造体のアドレス
+    /// (`self`の中なら暗黙の`self`ポインタ)をdstへ渡す
+    fn format_struct_init_line(
+        &mut self,
+        opcode: &str,
+        struct_idx: usize,
+        dst: Option<usize>,
+        src1: usize,
+        this_is_self: SelfPtrInfo,
+    ) -> String {
+        let base_size: Size = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
+        let mut txt = self.extract_operand_text(struct_idx, this_is_self);
+
+        let ret_line = if this_is_self.is_none() {
+            let self_ptr_reg = self.self_ptr_reg();
+            let line = self.fill_tmpl("address", &self.get_reg(dst, &Size::DQ), &self_ptr_reg);
+            self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
+        } else {
+            self.fill_tmpl(opcode, &self.get_reg(dst, &base_size), FRAME_BASE_REG)
+        };
+        txt.push_str(&ret_line);
+        txt
+    }
+
+    /// 普通の値(数値・変数・式の結果など)をdstへ渡す命令を作る
+    fn format_value_line(
+        &mut self,
+        opcode: &str,
+        dst: Option<usize>,
+        src1: usize,
+        this_is_self: SelfPtrInfo,
+    ) -> String {
+        let dst_size = self.resolve_dst_reg_size(opcode, src1, this_is_self);
+        let dst_text = self.get_reg(dst, &dst_size);
+        let src_text = self.extract_operand_text(src1, this_is_self);
+        // srcがレジスタの場合は、dstとサイズを揃える
+        // (`movl %rcx, %edx`のような、サイズの混在を防ぐ)
+        let src_text = if opcode == "address" {
+            src_text
+        } else {
+            self.asm_fmt.resize_reg_operand(&src_text, &dst_size)
+        };
+        self.fill_tmpl(opcode, &dst_text, &src_text)
     }
 
     /// レジスタに載せる値の型`ty`から、実際に使うレジスタの
@@ -685,45 +717,95 @@ impl AsmEmitter {
                 String::new()
             }
             inst::Inst::CallFunc(call_fn_info) => {
-                // 関数呼び出しのアセンブリが`build_fn_process`側で
-                // 既に生成済みか
-                let already_emitted = self.emitted_calls.contains(&parent_id);
-
-                if !already_emitted && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR {
-                    // 呼び出しを生成する対象ではない
-                    String::new()
-                } else {
-                    if !already_emitted {
-                        let call_asm = self.emit_call_func(
-                            &call_fn_info,
-                            matches!(this_is_self, Some(types::Size::Struct(..))),
-                        );
-                        self.asm_text.push_str(&call_asm);
-                    }
-                    // 戻り値のレジスタ(0番、`%eax`など)を返す。
-                    // 戻り値を受ける側の型(`this_is_self`)がある
-                    // 場合はそのサイズ、なければ64bit(`%rax`)
-                    let ret_size = this_is_self
-                        .map(Self::value_reg_size)
-                        .unwrap_or(Size::DQ);
-                    self.asm_fmt.get_fmt_reg(0, &ret_size)
-                }
+                self.call_result_operand(parent_id, &call_fn_info, this_is_self)
             }
             inst::Inst::Pointer(index) => self.extract_operand_text(index, this_is_self),
-            t => {
-                if let Some(result) = self.last_inst_idx.iter().find(|i| i.0 == parent_id) {
-                    // 式の結果を持つレジスタは、その式自身の型のサイズで
-                    // 取得する(常に64bitにすると、`movl %rcx, %edx`の
-                    // ように32bitの命令へ64bitのレジスタが混ざる)
-                    let size = match &t {
-                        inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(parent_id)),
-                        _ => Size::DQ,
-                    };
-                    self.asm_fmt.get_fmt_reg(result.1, &size)
-                } else {
-                    panic!("{:?}", t);
-                }
-            }
+            t => self.expr_result_operand(parent_id, &t),
+        }
+    }
+
+    /// 関数呼び出しのノード`parent_id`を値として使う際のオペランドを返す
+    ///
+    /// まだ呼び出しのアセンブリが生成されていなければここで生成し、
+    /// 戻り値のレジスタ(0番、`%eax`など)を返す
+    fn call_result_operand(
+        &mut self,
+        parent_id: usize,
+        call_fn_info: &inst::CallFuncMetaData,
+        this_is_self: SelfPtrInfo,
+    ) -> String {
+        // 関数呼び出しのアセンブリが`build_fn_process`側で
+        // 既に生成済みか
+        let already_emitted = self.emitted_calls.contains(&parent_id);
+
+        if !already_emitted && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR {
+            // 呼び出しを生成する対象ではない
+            return String::new();
+        }
+        if !already_emitted {
+            let call_asm = self.emit_call_func(
+                call_fn_info,
+                matches!(this_is_self, Some(types::Size::Struct(..))),
+            );
+            self.asm_text.push_str(&call_asm);
+        }
+        // 戻り値のレジスタ(0番、`%eax`など)を返す。
+        // 戻り値を受ける側の型(`this_is_self`)がある
+        // 場合はそのサイズ、なければ64bit(`%rax`)
+        let ret_size = this_is_self
+            .map(Self::value_reg_size)
+            .unwrap_or(Size::DQ);
+        self.asm_fmt.get_fmt_reg(0, &ret_size)
+    }
+
+    /// 式などの計算結果を持つレジスタのオペランドを返す
+    /// (`last_inst_idx`に結果のレジスタが記録されているノード)
+    fn expr_result_operand(&mut self, parent_id: usize, node: &inst::Inst) -> String {
+        if let Some(result) = self.last_inst_idx.iter().find(|i| i.0 == parent_id) {
+            // 式の結果を持つレジスタは、その式自身の型のサイズで
+            // 取得する(常に64bitにすると、`movl %rcx, %edx`の
+            // ように32bitの命令へ64bitのレジスタが混ざる)
+            let reg = result.1;
+            let size = match node {
+                inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(parent_id)),
+                _ => Size::DQ,
+            };
+            self.asm_fmt.get_fmt_reg(reg, &size)
+        } else {
+            panic!("{:?}", node);
+        }
+    }
+
+    /// 式の種類から、アセンブリのテンプレートを引くキーを返す
+    fn expr_tmpl_key(kind: &inst::ExprKind) -> &'static str {
+        match kind {
+            inst::ExprKind::Add => "add",
+            inst::ExprKind::Sub => "sub",
+            // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
+            // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
+            inst::ExprKind::Mul => "add",
+            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+            inst::ExprKind::LessThen => "cmp_l",
+            inst::ExprKind::GreaterThen => "cmp_g",
+            inst::ExprKind::Equal => "cmp_e",
+            inst::ExprKind::NotEq => "cmp_ne",
+        }
+    }
+
+    /// 式の種類から、ニーモニックのサイズ調整に使う、実際のニーモニックの文字列を返す
+    /// (`cmp_l`/`cmp_g`はテンプレートを引くためのキーであって、
+    ///  実際にテンプレート中で使われるニーモニックは"cmp"なので、
+    ///  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
+    fn expr_mnemonic(kind: &inst::ExprKind) -> &'static str {
+        match kind {
+            inst::ExprKind::Add => "add",
+            inst::ExprKind::Sub => "sub",
+            inst::ExprKind::Mul => "imul",
+            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+            inst::ExprKind::LessThen
+            | inst::ExprKind::GreaterThen
+            | inst::ExprKind::NotEq
+            | inst::ExprKind::Equal => "cmp",
         }
     }
 
@@ -738,32 +820,8 @@ impl AsmEmitter {
             return self.format_div_expr_inst(expr);
         }
 
-        let key = match expr.kind {
-            inst::ExprKind::Add => "add",
-            inst::ExprKind::Sub => "sub",
-            // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
-            // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
-            inst::ExprKind::Mul => "add",
-            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
-            inst::ExprKind::LessThen => "cmp_l",
-            inst::ExprKind::GreaterThen => "cmp_g",
-            inst::ExprKind::Equal => "cmp_e",
-            inst::ExprKind::NotEq => "cmp_ne",
-        };
-        // ニーモニックのサイズ調整に使う、実際のニーモニックの文字列
-        // (`cmp_l`/`cmp_g`はテンプレートを引くためのキーであって、
-        //  実際にテンプレート中で使われるニーモニックは"cmp"なので、
-        //  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
-        let mnemonic = match expr.kind {
-            inst::ExprKind::Add => "add",
-            inst::ExprKind::Sub => "sub",
-            inst::ExprKind::Mul => "imul",
-            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
-            inst::ExprKind::LessThen
-            | inst::ExprKind::GreaterThen
-            | inst::ExprKind::NotEq
-            | inst::ExprKind::Equal => "cmp",
-        };
+        let key = Self::expr_tmpl_key(&expr.kind);
+        let mnemonic = Self::expr_mnemonic(&expr.kind);
 
         let resolved_size: Size = self.get_expr_ty(expr.ls);
         let wrap_size = resolved_size.wrap_dst_size();

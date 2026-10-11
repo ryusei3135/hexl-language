@@ -48,3 +48,34 @@
     - `reg_mnger.rs`の`UsedRegManager::stack_var_names`が、関数のIR(`Inst::Mov`の`size`が`Struct`で`name`がある)から名前を集め、`allocation_register`の`stack_vars`に渡す。該当する変数は飛ばし、次の変数にレジスタを割り当てる(`call_func.rs`の`build_fn_process`)
     - 配列(`Inst::MemoryValue`)も同じくレジスタを持たないが、今回は対象外
 
+
+## リファクタリング(2026-10-11)
+長かった関数を役割ごとに分けた。**生成されるアセンブリは変えていない**。
+
+### `arr.rs` の`ref_arr_for_struct_member`
+配列の添字が構造体のメンバー(`[arr a.a else 0]`)のときの、添字付きアドレッシングを作る。
+
+| 順 | 処理 | 関数 |
+|----|------|------|
+| 1 | 前回の添字用の一時レジスタを解放 | (本体) |
+| 2 | 配列/ポインタの基準(要素サイズ・`arr_base`・ベースのレジスタ・要素数)を調べる | `arr_ref_base`(`ArrRefBase`) |
+| 3 | 構造体のメンバーを、添字用のレジスタへ64bitに符号拡張して読み込む | `load_index_reg` |
+| 4 | 符号を反転(`neg`)し、配列なら`要素数-1`を足して、参照のオフセットを決める | `adjust_index_reg` |
+| 5 | `-offset(%rbp, %reg, 要素サイズ)`を組み立てる | (本体) |
+
+- `load_index_reg`: 8/16bitは`movs?q`でメモリから直接符号拡張、32bitは`movl`→`movslq`、64bitはそのまま`movq`。
+- `adjust_index_reg`: ポインタは要素0を指すのでオフセット0、配列は`arr_base + 要素サイズ * 要素数`。
+
+### `asm_emitter.rs`
+- `extract_operand_text`(ノードのオペランドの文字列を返す)
+    - 関数呼び出しのノード → `call_result_operand`(未生成なら`emit_call_func`で生成し、戻り値のレジスタ`%eax`などを返す)
+    - 式などの計算結果のノード → `expr_result_operand`(`last_inst_idx`のレジスタを、式自身の型のサイズで返す)
+- `format_line`(1行の命令を作る)は、`src1`の種類で振り分ける
+    - バリアント → `format_variant_init_line`
+    - 構造体 → `format_struct_init_line`
+    - それ以外の値 → `format_value_line`
+    - 振り分けのあとの共通処理(ニーモニックのサイズ調整、`{src2}`の置換)は`format_line`に残している
+- `format_expr_inst`(式の命令を作る)
+    - テンプレートを引くキー → `expr_tmpl_key`(`Mul`は`add`のテンプレートを`imul`に置き換えて使う)
+    - ニーモニックのサイズ調整に渡す実際のニーモニック → `expr_mnemonic`(`cmp_l`などのキーではなく`cmp`)
+    - `/`と`%`は`format_div_expr_inst`(`div_ir.rs`)へ

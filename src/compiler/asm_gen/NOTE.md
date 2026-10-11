@@ -39,3 +39,9 @@
 - 命令の1行: `fill_tmpl`(テンプレートの穴埋めのみ) /
     `tmpl_line`(ニーモニックのサイズ調整まで) / `mov_line`
 - IRのノード: `inst_at`(`curr_inst[idx].clone()`)
+
+## リファクタリングの記録(2026-10-11)
+- 長い関数を役割ごとの関数に分けた(生成するアセンブリは変えていない)。
+- 分けた関数の一覧と処理の流れは、各モジュールのNOTE.mdに記載している。
+    - `call_func/NOTE.md`: `build_fn_process` / `emit_call_func` / `mov_value_ir` / `mem_val_ir`
+    - `asm_emitter/NOTE.md`: `ref_arr_for_struct_member` / `extract_operand_text` / `format_line` / `format_expr_inst`
