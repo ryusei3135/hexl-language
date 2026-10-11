@@ -9,11 +9,11 @@ impl AsmEmitter {
     /// (`%rax`など)を検出し、対応する内部のレジスタ番号を返す。
     fn detect_literal_regs(&self, template: &str) -> Vec<usize> {
         let mut found = Vec::new();
-        for (reg_idx, reg_name) in self.asm_fmt.all_reg_names() {
-            if template.contains(reg_name.as_str()) && !found.contains(&reg_idx) {
-                found.push(reg_idx);
+        self.asm_fmt.all_reg_names().iter().for_each(|(reg_idx, reg_name)| {
+            if template.contains(reg_name.as_str()) && !found.contains(reg_idx) {
+                found.push(*reg_idx);
             }
-        }
+        });
         found
     }
 
@@ -86,7 +86,8 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) fn deploy_inline_asm(
+    pub(super) 
+    fn deploy_inline_asm(
         &mut self, 
         name: &str, 
         lines: &[(String, Vec<usize>)]
@@ -100,35 +101,33 @@ impl AsmEmitter {
         {
             // === 1. インラインアセンブラ中で使われているレジスタを検出する ===
             let mut literal_regs = Vec::<usize>::new();
-            for (template, _) in lines.iter() {
-                for reg in self.detect_literal_regs(template) {
+            lines.iter().for_each(|(template, _)| {
+                self.detect_literal_regs(template).iter().for_each(|reg| {
                     if !literal_regs.contains(&reg) {
-                        literal_regs.push(reg);
+                        literal_regs.push(*reg);
                     }
-                }
-            }
+                });
+            });
 
             // スタックへ退避した(=後で必ずpopして戻す必要がある)レジスタ
             let mut stacked_regs: Vec<usize> = Vec::new();
 
             // === 2. 検出したレジスタが使用中なら、退避方法を決めて処理する ===
-            for reg in literal_regs.iter() {
+            literal_regs.iter().for_each(|reg| {
                 if let Some((var_name, size)) = self.var_using_reg(*reg) {
-                    if let Some(free_reg) = self.find_free_reg(&literal_regs) {
-                        self.mov_register_val_to_reg(free_reg, &size, &var_name, *reg);
-                    } else {
-                        self.mov_register_val_to_stack(*reg, &mut stacked_regs);
-                    }
+                    let reg_name = self.reg64(*reg);
+                    let pop_asm = self.asm_fmt.get_push(&reg_name);
+                    stacked_regs.push(*reg);
                 }
-            }
+            });
             // === インラインアセンブラ本体を展開する ===
             self.gen_inline_asm_txt(&lines);
             // === スタックに退避したレジスタを、退避した時とは逆順に戻す ===
-            for reg in stacked_regs.iter().rev() {
+            stacked_regs.iter().rev().for_each(|reg| {
                 let reg_name = self.reg64(*reg);
                 let pop_asm = self.asm_fmt.get_pop(&reg_name);
                 self.asm_text.push_str(&pop_asm);
-            }
+            });
         } else {
             panic!();
         }
