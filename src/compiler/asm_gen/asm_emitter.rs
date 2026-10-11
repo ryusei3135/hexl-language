@@ -697,7 +697,7 @@ impl AsmEmitter {
                     this_is_self.is_none(),
                 )
             }
-            inst::Inst::Variant { name, tag, value, tagged, size, is_self } => {
+            inst::Inst::Variant {tag, value, size, is_self, .. } => {
                 self.emit_data_variant_init_asm(parent_id, value.as_ref(), tag, is_self, &size)
             }
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { kind, size, .. }) => {

@@ -1,4 +1,5 @@
-use super::*;
+//! 関数の名前を生成するモジュール
+
 
 fn sanitize_label_part(part: &str) -> String {
     let mut sanitized = String::new();

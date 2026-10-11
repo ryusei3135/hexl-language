@@ -1,6 +1,5 @@
 use crate::compiler::err::{self, undef::UndefKind::*};
 use crate::compiler::err::compile::CompileErr;
-use crate::compiler::ir::inst::Inst::ExpectJmp;
 
 
 /// ===================

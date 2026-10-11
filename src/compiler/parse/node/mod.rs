@@ -12,7 +12,7 @@ pub(in crate::compiler) use test_utils::*;
 pub(in crate::compiler) use expr_node::*;
 pub(in crate::compiler) use stmt_node::*;
 
-use crate::compiler::{models::Body, node, parse::VarMutAttr};
+use crate::compiler::{models::Body, parse::VarMutAttr};
 
 pub const IS_MUST: usize = 0;
 pub const IS_OF: usize = 1;

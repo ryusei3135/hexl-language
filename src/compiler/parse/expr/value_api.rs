@@ -1,9 +1,6 @@
 //! self.expr_valueのmatchの中から呼び出すAPIを提供
 
-use super::{
-    *,
-    arr_access::*,
-};
+use super::*;
 
 impl Parser {
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が

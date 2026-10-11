@@ -345,22 +345,6 @@ impl Expr {
         (Box::new(left), Box::new(right))
     }
 
-    pub fn get_assign_node_name(&self) -> String {
-        match &self {
-            Self::Assign(assign_node) => assign_node.clone().name,
-            _ => panic!(),
-        }
-    }
-
-    pub fn get_assign_node(&mut self) -> &mut AssignVar {
-        match self {
-            Self::Assign(name) => {
-                return name;
-            }
-            _ => panic!(),
-        }
-    }
-
     pub fn wrap_group2(self) -> Group2Node {
         Group2Node::Expr(self)
     }

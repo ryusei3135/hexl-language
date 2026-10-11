@@ -6,7 +6,6 @@
 //! `GCC_X64.to_asm_format()` で変換できる。
 
 use std::collections::HashMap;
-use super::*;
 
 use crate::asm_setting::{
     AsmFormat, DataFmt, Func, FuncArgsReg, OpSizeFmt, OperandInfo, Reg, ValueFmt,

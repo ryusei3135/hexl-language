@@ -1,4 +1,3 @@
-use crate::compiler::models::*;
 use std::collections::HashMap;
 
 /// `#define NAME VALUE` の右辺として実際に登録される値。

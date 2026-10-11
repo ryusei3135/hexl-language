@@ -1,5 +1,4 @@
 use super::*;
-use crate::compiler::err::PreprocErrs::NotFoundAsmName;
 use crate::compiler::ir::IR;
 
 mod access_mem;

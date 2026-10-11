@@ -116,14 +116,14 @@ impl VariantField {
         }
     }
 
-    /// `Unsafe`モードのフィールドを作る
-    pub fn unsafe_new(name: String, ty: TyNode) -> Self {
-        Self {
-            name,
-            ty: Some(ty),
-            mode: VariantMode::Unsafe,
-        }
-    }
+    // /// `Unsafe`モードのフィールドを作る
+    // pub fn unsafe_new(name: String, ty: TyNode) -> Self {
+    //     Self {
+    //         name,
+    //         ty: Some(ty),
+    //         mode: VariantMode::Unsafe,
+    //     }
+    // }
 
     pub fn wrap_variant_field_kind(self) -> VariantFieldKind {
         VariantFieldKind::Field(self)
@@ -150,19 +150,6 @@ impl VariantDefine {
             fields,
             methods,
         })
-    }
-
-    /// `VariantFieldKind`の一覧から、フィールドとメゾットに振り分けて作る
-    pub fn from_kinds(name: String, kinds: Vec<VariantFieldKind>) -> Group1Node {
-        let mut fields = Vec::new();
-        let mut methods = Vec::new();
-        for kind in kinds {
-            match kind {
-                VariantFieldKind::Field(f) => fields.push(f),
-                VariantFieldKind::Method(m) => methods.push(m),
-            }
-        }
-        Self::new(name, fields, methods)
     }
 
     /// タグ付き共用体(`Normal`)かどうか。
@@ -268,14 +255,5 @@ impl TyNode {
     #[inline(always)]
     pub fn is_constract_of(&self) -> bool {
         self.as_constract_of().is_some()
-    }
-
-    /// 契約(`must`/`of`)が付いている場合は、その内側の型を返す
-    /// 付いていない場合は自分自身をそのまま返す
-    pub fn unwrap_constract(&self) -> TyNode {
-        match self {
-            Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty(),
-            t => t.clone(),
-        }
     }
 }

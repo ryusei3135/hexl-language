@@ -1,5 +1,5 @@
 use crate::compiler::{
-    err::compile::CompileErr, node::ImportKind::Module, parse::{self, VarMutAttr},
+    err::compile::CompileErr, parse,
 };
 
 use super::types::*;
@@ -140,17 +140,17 @@ impl VarTree {
         self.hash.get(name).unwrap().var_attr.clone()
     }
 
-    /// 既に登録されている変数の型だけを上書きする
-    ///
-    /// 契約(`must`/`of`)が付いた変数は、値の生成自体は
-    /// 内側の型として行うため、登録後に契約付きの型へ戻すのに使う
-    /// (`src/ir/builder/expr_node.rs`の`def_var_node`)
-    pub(in crate::compiler::ir) 
-    fn overwrite_ty(&mut self, var_name: &str, ty: &node::TyNode) {
-        if let Some(var) = self.hash.get_mut(var_name) {
-            var.size = ty.clone();
-        }
-    }
+    // /// 既に登録されている変数の型だけを上書きする
+    // ///
+    // /// 契約(`must`/`of`)が付いた変数は、値の生成自体は
+    // /// 内側の型として行うため、登録後に契約付きの型へ戻すのに使う
+    // /// (`src/ir/builder/expr_node.rs`の`def_var_node`)
+    // pub(in crate::compiler::ir) 
+    // fn overwrite_ty(&mut self, var_name: &str, ty: &node::TyNode) {
+    //     if let Some(var) = self.hash.get_mut(var_name) {
+    //         var.size = ty.clone();
+    //     }
+    // }
 
     /// 契約を終わらせる
     pub(in crate::compiler::ir) 
@@ -393,11 +393,11 @@ impl VariantTree {
         })
     }
 
-    /// メンバーの定義順のインデックス(タグの値)を取得する
-    pub(in crate::compiler::ir) 
-    fn get_tag(&self, name: &str, field_name: &str) -> Option<usize> {
-        self.tree.get(name)?.tag_of(field_name)
-    }
+    // /// メンバーの定義順のインデックス(タグの値)を取得する
+    // pub(in crate::compiler::ir) 
+    // fn get_tag(&self, name: &str, field_name: &str) -> Option<usize> {
+    //     self.tree.get(name)?.tag_of(field_name)
+    // }
 
     pub(in crate::compiler::ir) 
     fn get_variant(&self, name: &str) -> Result<node::VariantDefine, err::ErrKind> {

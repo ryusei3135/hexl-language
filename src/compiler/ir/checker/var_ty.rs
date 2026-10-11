@@ -11,7 +11,7 @@ impl IR {
         println!("{:?} fond var_ty {:?}", expect_ty, var_ty);
 
         match expect_ty {
-            types::Size::Pointer { ty, is_const, range } => {
+            types::Size::Pointer { ty, .. } => {
                 if let types::Size::GetAddr(var_t) = var_ty {
                     if var_t != ty {
                         panic!();

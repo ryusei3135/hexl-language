@@ -1,5 +1,5 @@
+#[cfg(test)]
 use super::*;
-
 
 #[cfg(test)]
 pub fn gen_var_node(name: &str, value: &str, ty: &str, line: usize) -> Group2Info {

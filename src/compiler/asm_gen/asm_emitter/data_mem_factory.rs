@@ -1,7 +1,5 @@
 //! メモリに配置するデータを生成するモジュール
 
-use crate::compiler::ir::inst::MemoryInst::Member;
-
 use super::*;
 
 impl AsmEmitter {

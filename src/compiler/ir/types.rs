@@ -1,5 +1,4 @@
 use super::*;
-use crate::compiler::err::undef::UndefKind;
 use crate::compiler::parse::node::TyNode;
 use std::convert::TryFrom;
 
@@ -235,7 +234,7 @@ impl Size {
 
     pub(in crate::compiler)
     fn extract_variant_largest_size(&self) -> &Size {
-        if let Self::Variant { name, fields, tagged } = self {
+        if let Self::Variant { fields, .. } = self {
             let idx = fields
                 .iter()
                 .enumerate()

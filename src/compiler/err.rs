@@ -1,4 +1,4 @@
-use crate::compiler::{err, lex};
+use crate::compiler::lex;
 use std::fmt;
 
 pub mod lex_err;

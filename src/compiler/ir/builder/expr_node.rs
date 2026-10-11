@@ -1,7 +1,4 @@
-use crate::compiler::{
-    err::PreprocErrs::NotFoundAsmName,
-    parse::{self, VarMutAttr},
-};
+use crate::compiler::parse::{self, VarMutAttr};
 
 use super::*;
 use err_factory::expr_node;

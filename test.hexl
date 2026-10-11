@@ -21,6 +21,11 @@ variant Option<T> {
     None
 }
 
+variant Result<T, E> {
+    Ok(T)
+    Err(E)
+}
+
 f<T>(): T {
     e mut: E = E::b(10)
     cond E::b(val) mut:= e {

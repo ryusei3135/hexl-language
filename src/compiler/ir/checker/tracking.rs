@@ -1,8 +1,6 @@
 //! 配列やポインタが契約した範囲にいるかを
 //! 探索
 
-use crate::compiler::err::undef;
-
 use super::*;
 
 impl IR {
@@ -167,9 +165,9 @@ impl IR {
                 range: Some(range), ..
             }) => range.1 - range.0,
             // 長さの指定がないので、1
-            Ok(types::Size::Pointer { range , ..}) => 1,
+            Ok(types::Size::Pointer { ..}) => 1,
             Ok(types::Size::Array { len, .. }) => *len,
-            t => {
+            _ => {
                 // panic!(
                 //     "変数 `{}` の長さを決定できません: 配列/文字列リテラルでの初期化か、範囲の指定が必要です {:?}",
                 //     name,

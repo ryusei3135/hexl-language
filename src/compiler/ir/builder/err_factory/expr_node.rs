@@ -1,7 +1,6 @@
-use crate::compiler::err::{self, PreprocErrs::NotFoundAsmName, undef::UndefKind::*};
+use crate::compiler::err::{self, undef::UndefKind::*};
 
 use crate::compiler::ir::inst;
-use super::*;
 
 /// 構造体が存在しなかった
 pub(in crate::compiler::ir::builder) 

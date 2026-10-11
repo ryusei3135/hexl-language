@@ -139,7 +139,7 @@ pub fn gen_asm_text(
     global_funcs: &Vec<String>,
     inline_name: &Option<String>,
 ) -> String {
-    if let Some(n) = inline_name {
+    if inline_name.is_some() {
         let asm_settings = load_setting();
 
         let asm_fmt = asm_settings.get_asm_fmt(inline_name);
