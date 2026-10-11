@@ -8,9 +8,10 @@ pub mod stmt_node;
 use std::collections::HashMap;
 
 pub(in crate::compiler) use data_node::*;
-pub(in crate::compiler) use test_utils::*;
 pub(in crate::compiler) use expr_node::*;
 pub(in crate::compiler) use stmt_node::*;
+#[cfg(test)]
+pub(in crate::compiler) use test_utils::*;
 
 use crate::compiler::{models::Body, parse::VarMutAttr};
 

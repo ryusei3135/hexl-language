@@ -86,6 +86,7 @@ impl Parser {
 
     /// 渡されたモジュールの名前とフィールドの名前がすでに出現している場合、
     /// これはバリアントなのでtrueを返す
+    pub(in crate::compiler::parse)
     fn is_variant_field(&self, type_name: &str, field_name: &str) -> bool {
         self.gen_nodes
             .iter()

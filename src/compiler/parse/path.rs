@@ -25,7 +25,10 @@ impl Parser {
                 // バリアントか調べる
                 self.advance_tkn().unwrap();
                 if let lex::Tkn::Name(next_name) = self.peek_tkn()? {
-                    return self.variant_init_node::<false>(name);
+                    if self.is_variant_field(name, &next_name) {
+                        self.advance_tkn().unwrap();
+                        return self.variant_init_node::<false>(name);
+                    }
                 }
                 self.back_tkn();
             }

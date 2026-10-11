@@ -1,3 +1,5 @@
+#include io="library/os/io.hexl"
+
 
 #define M(expr) {{
     expr = 10
@@ -67,13 +69,7 @@ add(a mut: int, b: int): Option<int> {
     loop a > 0 {
         cond {
             a > 5 => {
-                #asm(gcc_x64) {
-                    "{space}movl $1, %eax"
-                    "{space}movl $1, %edi"
-                    "{space}leaq (${c}), %rsi"
-                    "{space}movl $12, %edx"
-                    "{space}syscall"
-                }
+                io::print(c, 11)
             }
             else => {
                 #asm(gcc_x64) {
