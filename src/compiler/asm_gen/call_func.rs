@@ -23,7 +23,7 @@ struct FnGenCtx<'a> {
     /// 戻り値として返される構造体の`Inst::Struct`のid
     returned_struct_idx: Option<usize>,
     /// 出力するアセンブリ言語のフォーマットの名前
-    asm_fmt_name: &'a Option<String>,
+    asm_fmt_name: &'a Option<&'a str>,
 }
 
 impl AsmEmitter {
@@ -216,7 +216,7 @@ impl AsmEmitter {
     fn build_fn_process(
         &mut self,
         fn_meta_data: &mut (String, def_tree::FnDefInfo),
-        asm_fmt_name: &Option<String>,
+        asm_fmt_name: Option<&str>,
     ) {
         let this_is_self = fn_meta_data.1.first_param_is_self();
         let fn_ret_ty = fn_meta_data.1.get_ret_ty();
@@ -247,7 +247,7 @@ impl AsmEmitter {
             fn_ret_ty: fn_ret_ty.as_ref(),
             this_is_self,
             returned_struct_idx,
-            asm_fmt_name,
+            asm_fmt_name: &asm_fmt_name,
         };
 
         for (node_idx, node) in self.curr_inst.clone().iter().enumerate() {
@@ -314,7 +314,7 @@ impl AsmEmitter {
             inst::Inst::StartScope => self.start_scope_asm(),
             inst::Inst::EndScope => self.end_scope_asm(),
             inst::Inst::Comple { name, lines } => {
-                self.gen_complie_asm(name, lines, ctx.asm_fmt_name)
+                self.gen_complie_asm(name, lines, ctx.asm_fmt_name.as_deref())
             }
             inst::Inst::Jmp(name) => {
                 self.asm_text.push_str(&format!("jmp {}\n", name));
@@ -505,10 +505,10 @@ impl AsmEmitter {
         &mut self,
         name: &str,
         lines: &[(String, Vec<usize>)],
-        asm_fmt_name: &Option<String>,
+        asm_fmt_name: Option<&str>,
     ) {
         if let Some(asm_name) = asm_fmt_name {
-            if name == asm_name.as_str() {
+            if name == asm_name {
                 self.deploy_inline_asm(name, &lines);
             } else {
                 panic!("unmatch asm name");

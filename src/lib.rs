@@ -195,7 +195,7 @@ pub fn build(
         ir_builder.func_tree,
         &ir_builder.extern_funcs,
         &ir_builder.public_func_tree,
-        &settings.fmt_name,
+        settings.fmt_name.as_deref(),
     );
 
     assembler::x64::emitter_x64("-c", &asm_text, DEFAULT);

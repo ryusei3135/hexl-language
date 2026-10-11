@@ -97,10 +97,10 @@ pub struct AsmSetting {
 }
 
 impl AsmSetting {
-    pub fn get_asm_fmt(&self, inline_name: &Option<String>) -> AsmFormat {
+    pub fn get_asm_fmt(&self, inline_name: Option<&str>) -> AsmFormat {
         // フォーマットするアセンブリコードの情報が入ったファイルの名前を取得
         let file_name = || -> &str {
-            if let Some(name) = &inline_name {
+            if let Some(name) = inline_name {
                 self.settings
                     .iter()
                     .find(|v| &v.name == name)
@@ -135,20 +135,20 @@ pub fn load_setting() -> AsmSetting {
 /// アセンブリ言語のフォーマットを取得し、生成する
 pub fn gen_asm_text(
     mut tree: ir::def_tree::FuncTree,
-    extern_funcs: &Vec<ir::inst::Inst>,
-    global_funcs: &Vec<String>,
-    inline_name: &Option<String>,
+    extern_funcs: &[ir::inst::Inst],
+    global_funcs: &[String],
+    inline_name: Option<&str>,
 ) -> String {
     if inline_name.is_some() {
         let asm_settings = load_setting();
 
         let asm_fmt = asm_settings.get_asm_fmt(inline_name);
         let mut writer = asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt));
-        writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
+        writer.to_asm_text(&mut tree, inline_name, &extern_funcs, &global_funcs)
     } else {
         println!("現在アセンブリコードのフォーマットをハードコード `asm_setting`");
         let asm_settings = load_setting();
         let mut writer = asm_gen::AsmEmitter::new(asm_settings, None);
-        writer.to_asm_text(&mut tree, &inline_name, &extern_funcs, &global_funcs)
+        writer.to_asm_text(&mut tree, inline_name, &extern_funcs, &global_funcs)
     }
 }

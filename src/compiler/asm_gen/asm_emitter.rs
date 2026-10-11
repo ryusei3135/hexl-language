@@ -138,7 +138,7 @@ impl AsmEmitter {
     pub fn to_asm_text(
         &mut self,
         func_tree: &mut def_tree::FuncTree,
-        asm_fmt_name: &Option<String>,
+        asm_fmt_name: Option<&str>,
         extern_funcs: &[inst::Inst],
         global_funcs: &[String],
     ) -> String {
@@ -158,12 +158,12 @@ impl AsmEmitter {
 
         // エントリーポイントを先頭に配置
         if let Some(ref mut meta_data) = func_tree.func.remove_entry("_start") {
-            self.build_fn_process(meta_data, &asm_fmt_name);
+            self.build_fn_process(meta_data, asm_fmt_name);
         }
 
         for mut func_meta_data in func_tree.func.drain() {
             // == アセンブリ言語の生成 ==
-            self.build_fn_process(&mut func_meta_data, &asm_fmt_name);
+            self.build_fn_process(&mut func_meta_data, asm_fmt_name);
             // == データの初期化 ==
             self.var_hash_map = HashMap::new();
             self.reg_idx = 0;
