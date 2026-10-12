@@ -329,7 +329,18 @@ impl AsmEmitter {
                 self.gen_complie_asm(name, lines, ctx.asm_fmt_name.as_deref())
             }
             inst::Inst::Jmp(name) => {
-                self.asm_text.push_str(&format!("jmp {}\n", name));
+                // 直前が無条件ジャンプ(`break`の`jmp L1`など)なら、
+                // 次のラベルまで到達できないので`jmp`を生成しない
+                let after_jmp = self
+                    .asm_text
+                    .lines()
+                    .rev()
+                    .map(str::trim)
+                    .find(|l| !l.is_empty())
+                    .is_some_and(|l| l.starts_with("jmp "));
+                if !after_jmp {
+                    self.asm_text.push_str(&format!("jmp {}\n", name));
+                }
             }
             inst::Inst::AssignVar { name, dst, value } => {
                 self.gen_assign_var_asm(name, *dst, *value, ctx.this_is_self)

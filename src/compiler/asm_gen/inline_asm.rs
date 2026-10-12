@@ -1,4 +1,4 @@
-use crate::compiler::asm_gen::asm_emitter::VarIndexInfo;
+use crate::compiler::asm_gen::asm_emitter::{VarIndexInfo, RESERVED_REGS};
 //use crate::ir::def_tree::{VarMetaData, VarTree};
 
 use super::*;
@@ -17,20 +17,32 @@ impl AsmEmitter {
         found
     }
 
-    /// 指定したレジスタ番号を、現在使用中の値として保持している変数を探す。
-    /// (`(変数名, その変数の型のサイズ)`を返す。見つからなければ`None`)
-    fn var_using_reg(&self, reg: usize) -> Option<(String, Size)> {
-        self.var_hash_map
-            .iter()
-            .find(|(_, info)| !info.is_stack && !info.in_mem && info.reg == reg)
-            .map(|(name, info)| (name.clone(), info.size.clone()))
+    /// `exclude`(インラインアセンブラ自身が使うレジスタ)を除いた上で、
+    /// 現在使われていない、空いているレジスタ番号を1つ探す。
+    ///
+    /// `%rax`/`%rdx`(`RESERVED_REGS`)と、まだ定義されていない変数のために
+    /// 取り置かれているレジスタは選ばない。
+    fn find_free_reg(&self, exclude: &[usize]) -> Option<usize> {
+        (0..self.asm_fmt.reg_count()).find(|reg| {
+            !RESERVED_REGS.contains(reg)
+                && !exclude.contains(reg)
+                && !self.used_reg.is_used(*reg)
+                && !self.used_reg.is_reserved(*reg)
+        })
     }
 
-    /// `exclude`(インラインアセンブラ自身が使うレジスタ)を除いた上で、
-    /// 現在どの変数にも使われていない、空いているレジスタ番号を1つ探す。
-    fn find_free_reg(&self, exclude: &[usize]) -> Option<usize> {
-        let used = self.used_reg.used_regs();
-        (0..self.asm_fmt.reg_count()).find(|reg| !used.contains(reg) && !exclude.contains(reg))
+    /// インラインアセンブラが暗黙に書き換えるレジスタ
+    /// (`syscall`は`%rcx`と`%r11`を書き換える)
+    fn implicit_clobbered_regs(&self, lines: &[(String, Vec<usize>)]) -> Vec<usize> {
+        if !lines.iter().any(|(template, _)| template.contains("syscall")) {
+            return Vec::new();
+        }
+        self.asm_fmt
+            .all_reg_names()
+            .iter()
+            .filter(|(_, name)| name == "%rcx" || name == "%r11")
+            .map(|(reg, _)| *reg)
+            .collect()
     }
 
     fn resolve_operand_var_size(&self, node_idx: usize) -> Option<Size> {
@@ -108,20 +120,38 @@ impl AsmEmitter {
                     }
                 });
             });
-
-            // スタックへ退避した(=後で必ずpopして戻す必要がある)レジスタ
-            let mut stacked_regs: Vec<usize> = Vec::new();
-
-            // === 2. 検出したレジスタが使用中なら、退避方法を決めて処理する ===
-            literal_regs.iter().for_each(|reg| {
-                if let Some((var_name, size)) = self.var_using_reg(*reg) {
-                    let reg_name = self.reg64(*reg);
-                    let pop_asm = self.asm_fmt.get_push(&reg_name);
-                    stacked_regs.push(*reg);
+            // `syscall`などが暗黙に書き換えるレジスタも、使われているものとして扱う
+            self.implicit_clobbered_regs(lines).into_iter().for_each(|reg| {
+                if !literal_regs.contains(&reg) {
+                    literal_regs.push(reg);
                 }
             });
+
+            // === 2. 使用中のレジスタは、空いている別のレジスタへ移す ===
+            // (`push`では、`${msg}`などの埋め込み先が書き換えられたレジスタの
+            //  ままになってしまう。移した先のレジスタを`${..}`に埋め込む)
+            // 移した (元のレジスタ, 移した先のレジスタ)
+            let mut moved_regs: Vec<(usize, usize)> = Vec::new();
+            // 空きレジスタが無く、スタックへ退避した(後で必ずpopする)レジスタ
+            let mut stacked_regs: Vec<usize> = Vec::new();
+            literal_regs.iter().for_each(|reg| {
+                if self.used_reg.is_used(*reg) {
+                    match self.mov_register_val_to_reg(*reg, &literal_regs) {
+                        Some(free_reg) => moved_regs.push((*reg, free_reg)),
+                        None => self.mov_register_val_to_stack(*reg, &mut stacked_regs),
+                    }
+                }
+            });
+
             // === インラインアセンブラ本体を展開する ===
             self.gen_inline_asm_txt(&lines);
+
+            // === 3. 移したレジスタの値を、元のレジスタへ戻す ===
+            // (インラインアセンブラが元のレジスタを別の値で書き換えているので、
+            //  この後のコードのために変数の位置を元に戻す)
+            moved_regs.iter().rev().for_each(|(reg, free_reg)| {
+                self.restore_register_val(*reg, *free_reg);
+            });
             // === スタックに退避したレジスタを、退避した時とは逆順に戻す ===
             stacked_regs.iter().rev().for_each(|reg| {
                 let reg_name = self.reg64(*reg);
@@ -133,36 +163,57 @@ impl AsmEmitter {
         }
     }
 
-    /// 一回しか呼び出されないからinline
+    /// レジスタ`reg`の値(変数・式の一時的な結果)を、インラインアセンブラが
+    /// 使わない空いているレジスタへ`mov`し、`reg`を指していた変数と式の結果の
+    /// 参照先を、移した先のレジスタに切り替える。
     ///
-    /// インラインアセンブラでレジスタを使うため
-    /// 空いているレジスタに値を移す
+    /// 空いているレジスタが無ければ何もせず`None`を返す。
     #[inline(always)]
-    fn mov_register_val_to_reg(
-        &mut self,
-        free_reg: usize,
-        size: &Size,
-        var_name: &str,
-        reg: usize,
-    ) {
-        // --- 2-a. 空いているレジスタが見つかった場合 ---
-        // 変数の正式な保持場所として扱う(恒久的な移動)
-        let src = self.asm_fmt.get_fmt_reg(reg, &size);
-        let dst = self.asm_fmt.get_fmt_reg(free_reg, &size);
-        let mov_asm = self.mov_line(&dst, &src, &size, false);
+    fn mov_register_val_to_reg(&mut self, reg: usize, asm_regs: &[usize]) -> Option<usize> {
+        let free_reg = self.find_free_reg(asm_regs)?;
+
+        // 上位ビットも含めて、レジスタ全体を移す
+        let src = self.reg64(reg);
+        let dst = self.reg64(free_reg);
+        let mov_asm = self.mov_line(&dst, &src, &Size::DQ, false);
         self.asm_text.push_str(&mov_asm);
 
-        self.update_value_reg(&var_name, free_reg);
+        self.retarget_reg(reg, free_reg);
+        Some(free_reg)
     }
 
-    /// 一回しか呼び出されないからinline
-    ///
+    /// `mov_register_val_to_reg`で`free_reg`へ移した値を、元の`reg`へ戻す
+    #[inline(always)]
+    fn restore_register_val(&mut self, reg: usize, free_reg: usize) {
+        let src = self.reg64(free_reg);
+        let dst = self.reg64(reg);
+        let mov_asm = self.mov_line(&dst, &src, &Size::DQ, false);
+        self.asm_text.push_str(&mov_asm);
+
+        self.retarget_reg(free_reg, reg);
+        // 一時的に使った`free_reg`を解放する
+        self.used_reg.release(free_reg);
+    }
+
+    /// レジスタ`from`を保持している変数と式の結果を、`to`を保持するように切り替える
+    fn retarget_reg(&mut self, from: usize, to: usize) {
+        let names: Vec<String> = self
+            .var_hash_map
+            .iter()
+            .filter(|(_, var)| !var.is_stack && var.reg == from)
+            .map(|(name, _)| name.clone())
+            .collect();
+        names.iter().for_each(|name| self.update_value_reg(name, to));
+        self.last_inst_idx
+            .iter_mut()
+            .filter(|(_, reg)| *reg == from)
+            .for_each(|(_, reg)| *reg = to);
+        self.used_reg.mark_used(to);
+    }
+
     /// レジスタが空いていない場合に、スタックに退避する
     #[inline(always)]
     fn mov_register_val_to_stack(&mut self, reg: usize, stacked_regs: &mut Vec<usize>) {
-        // --- 2-b. 空いているレジスタがない場合 ---
-        // インラインアセンブラの前後でこのレジスタの値を
-        // スタックに退避/復元する(一時的な退避)
         let reg_name = self.reg64(reg);
         let push_asm = self.asm_fmt.get_push(&reg_name);
         self.asm_text.push_str(&push_asm);
