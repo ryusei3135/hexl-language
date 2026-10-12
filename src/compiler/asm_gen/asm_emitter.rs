@@ -182,11 +182,11 @@ impl AsmEmitter {
     #[inline(always)]
     fn gen_global_func_asm(&mut self, global_funcs: &[String]) {
         // 自身が公開する関数を生成
-        for func_name in global_funcs.iter() {
-            let label = emit_fn_name_id(func_name);
+        global_funcs.iter().for_each(|fn_name| {
+            let label = emit_fn_name_id(fn_name);
             self.asm_text
                 .push_str(self.asm_fmt.get_global_fmt(&label).as_str());
-        }
+        });
     }
 
     #[inline(always)]

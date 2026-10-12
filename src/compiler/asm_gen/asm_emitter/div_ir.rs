@@ -53,14 +53,14 @@ impl AsmEmitter {
         let rax = self.asm_fmt.get_fmt_reg(0, &calc);
         let dst_txt = self.asm_fmt.get_fmt_reg(dst, &calc);
 
-        let mut asm = String::new();
-
         // === 書き換えられる`%rax`/`%rdx`のうち、使用中の物を退避 ===
         let saved = self.live_reserved_regs(dst);
-        for reg in saved.iter() {
-            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-            asm.push_str(&self.asm_fmt.get_push(&name));
-        }
+        let mut asm = saved
+                .iter()
+                .map(|reg| {
+                    let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                    self.asm_fmt.get_push(&name)
+                }).collect::<String>();
 
         // === 割る数を空きレジスタへ ===
         // (`idiv`は即値を直接取れないのと、`%rdx`を書き換える前に

@@ -2,12 +2,10 @@
 
 
 fn sanitize_label_part(part: &str) -> String {
-    let mut sanitized = String::new();
-    for ch in part.chars() {
-        if matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_') {
-            sanitized.push(ch);
-        }
-    }
+    let mut sanitized: String = part
+        .chars()
+        .filter(|&ch| matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
+        .collect();
     if sanitized.is_empty() {
         sanitized.push('a');
     }

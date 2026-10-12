@@ -83,26 +83,25 @@ impl AsmEmitter {
     /// `regs`のうちcallerが保存するレジスタだけを`push`するアセンブリを返す
     /// (`callee_saved`のレジスタは呼ばれた側が保存するので退避しない)
     fn push_caller_saved_regs(&self, regs: &[usize]) -> String {
-        let mut asm = String::new();
-        for reg in regs.iter() {
-            if !self.callee_saved.contains(reg) {
+        regs.iter()
+            .filter(|reg| !self.callee_saved.contains(reg))
+            .map(|reg| {
                 let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-                asm.push_str(&self.asm_fmt.get_push(&reg_name));
-            }
-        }
-        asm
+                self.asm_fmt.get_push(&reg_name)
+            })
+            .collect::<String>()
     }
 
     /// `push_caller_saved_regs`で退避したレジスタを、退避した時とは逆順に復元する
     fn pop_caller_saved_regs(&self, regs: &[usize]) -> String {
-        let mut asm = String::new();
-        for reg in regs.iter().rev() {
-            if !self.callee_saved.contains(reg) {
+        regs.iter()
+            .rev()
+            .filter(|reg| !self.callee_saved.contains(reg))
+            .map(|reg| {
                 let reg_name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-                asm.push_str(&self.asm_fmt.get_pop(&reg_name));
-            }
-        }
-        asm
+                self.asm_fmt.get_pop(&reg_name)
+            })
+            .collect::<String>()
     }
 
     /// 引数`param`を引数レジスタへ渡す命令の種類を決める
@@ -424,14 +423,16 @@ impl AsmEmitter {
         let callee_regs = self.used_reg.callee_regs_to_save();
         let mut save_asm = String::new();
         let mut restore_asm = String::new();
-        for reg in callee_regs.iter() {
-            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-            save_asm.push_str(&self.asm_fmt.get_push(&name));
-        }
-        for reg in callee_regs.iter().rev() {
-            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-            restore_asm.push_str(&self.asm_fmt.get_pop(&name));
-        }
+        
+        let save_asm = callee_regs.iter()
+                .map(|reg| self.asm_fmt.get_fmt_reg(*reg, &Size::DQ))
+                .map(|name| self.asm_fmt.get_push(&name))
+                .collect::<String>();
+        let restore_asm = callee_regs.iter().rev()
+                .map(|reg| self.asm_fmt.get_fmt_reg(*reg, &Size::DQ))
+                .map(|name| self.asm_fmt.get_pop(&name))
+                .collect::<String>();
+
         // スタックフレームの作り直し(`build_fn_process`の`replace_range`)は
         // `prologue_end`より前の範囲だけを書き換えるので、先に本体側の目印を置き換えておく
         let body = self.asm_text.split_off(prologue_end);

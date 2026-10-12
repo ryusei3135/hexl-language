@@ -245,9 +245,7 @@ impl UsedRegManager {
     /// 指定したレジスタを使用中として登録し直す
     /// (スコープ終了後も生きている変数のレジスタを残すために使う)
     pub fn restore(&mut self, regs: &[usize]) {
-        for reg in regs {
-            self.mark_used(*reg);
-        }
+        regs.iter().for_each(|reg| {self.mark_used(*reg);});
     }
 }
 
