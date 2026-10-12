@@ -1,11 +1,15 @@
 //! ELF64 (x86-64 / リトルエンディアン) リロケータブルオブジェクトのパーサ。
 //!
+//! このモジュールの [`ElfObject`] はリンカ全体の内部表現でもあり、COFF 入力
+//! ([`super::coff`]) もここへ変換されてからリンクされる。
+//!
 //! 入力は信頼できない前提で、範囲外アクセスや巨大なサイズはすべて
 //! パニックではなくエラーとして返す。
 
 use super::error::{LinkError, Result};
 
 pub const SHT_NULL: u32 = 0;
+pub const SHT_PROGBITS: u32 = 1;
 pub const SHT_SYMTAB: u32 = 2;
 pub const SHT_STRTAB: u32 = 3;
 pub const SHT_RELA: u32 = 4;
@@ -44,6 +48,10 @@ pub const R_X86_64_32S: u32 = 11;
 pub const R_X86_64_PC64: u32 = 24;
 pub const R_X86_64_GOTPCRELX: u32 = 41;
 pub const R_X86_64_REX_GOTPCRELX: u32 = 42;
+
+/// COFF の `IMAGE_REL_AMD64_ADDR32NB` (イメージベースからの 32 ビット RVA) に対応する内部用の型。
+/// ELF の値とは衝突しない範囲に置いてある。COFF パーサだけが生成する。
+pub const R_PE_ADDR32NB: u32 = 0x8000_0001;
 
 pub const GRP_COMDAT: u32 = 1;
 
@@ -137,6 +145,28 @@ fn read_cstr(tab: &[u8], off: usize) -> Option<String> {
 }
 
 impl ElfObject {
+    /// 他の形式 (COFF など) のパーサが、変換済みの内部表現から組み立てるための入口。
+    ///
+    /// `sections` / `relocs` はセクション番号で引ける形 (index 0 がヌルセクション) で、
+    /// `symbols` は index 0 がヌルシンボルであること。範囲の検証は呼び出し側の責任。
+    pub(super) fn from_parts(
+        name: String,
+        data: Vec<u8>,
+        sections: Vec<SectionHeader>,
+        symbols: Vec<Symbol>,
+        relocs: Vec<Vec<Reloc>>,
+        groups: Vec<Group>,
+    ) -> Self {
+        ElfObject {
+            name,
+            data,
+            sections,
+            symbols,
+            relocs,
+            groups,
+        }
+    }
+
     pub fn parse(name: impl Into<String>, data: Vec<u8>) -> Result<Self> {
         let name = name.into();
         let perr = |m: String| LinkError::Parse {

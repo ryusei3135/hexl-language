@@ -6,13 +6,18 @@
 //! 2. グローバルシンボルの解決 (強/弱/COMMON のルールに従う)
 //! 3. レイアウト決定 (`.text` / `.rodata` / `.got` + `.data` / `.bss` の 3 セグメント)
 //! 4. リロケーション適用 (オーバーフロー検査付き)
-//! 5. ELF 実行ファイル (ET_EXEC) の書き出し
+//! 5. 実行ファイルの書き出し (ELF の ET_EXEC、または PE32+)
+//!
+//! 入力は ELF64 / COFF (x86-64) のオブジェクトを混在させて渡せる (COFF は [`super::coff`] が
+//! 内部表現へ変換する)。出力形式は [`LinkOptions::format`] で選ぶ。
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use super::coff;
 use super::elf::*;
 use super::error::{LinkError, Result, UndefinedRef};
+use super::pe::{self, DllImport, PeHeaderInfo, PeSection, PeSubsystem};
 
 /// 出力の既定ロードアドレス
 pub const DEFAULT_BASE_ADDRESS: u64 = 0x40_0000;
@@ -30,13 +35,30 @@ const RODATA: usize = 1;
 const DATA: usize = 2;
 const BSS: usize = 3;
 
+/// 出力する実行ファイルの形式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OutputFormat {
+    /// ELF64 実行ファイル (ET_EXEC)
+    #[default]
+    Elf,
+    /// PE32+ 実行ファイル (Windows x64)
+    Pe,
+}
+
 /// リンクの設定。
 #[derive(Debug, Clone)]
 pub struct LinkOptions {
     /// エントリポイントのシンボル名 (既定: `_start`)
     pub entry: String,
-    /// ロードアドレス (4096 の倍数であること)
+    /// ロードアドレス。ELF では 4096 の倍数、PE では 0x10000 の倍数であること
     pub base_address: u64,
+    /// 出力形式 (既定: ELF)
+    pub format: OutputFormat,
+    /// PE のサブシステム (PE 出力のときだけ使う。既定: コンソール)
+    pub subsystem: PeSubsystem,
+    /// PE が DLL から取り込む関数 (PE 出力のときだけ使える)。
+    /// 実際に参照されたものだけが import テーブルに載る。詳しくは [`DllImport`]。
+    pub imports: Vec<DllImport>,
 }
 
 impl Default for LinkOptions {
@@ -44,6 +66,19 @@ impl Default for LinkOptions {
         LinkOptions {
             entry: "_start".to_string(),
             base_address: DEFAULT_BASE_ADDRESS,
+            format: OutputFormat::Elf,
+            subsystem: PeSubsystem::Console,
+            imports: Vec::new(),
+        }
+    }
+}
+
+impl LinkOptions {
+    /// PE32+ (Windows x64) を出力する設定。ほかは既定値。
+    pub fn pe() -> Self {
+        LinkOptions {
+            format: OutputFormat::Pe,
+            ..Default::default()
         }
     }
 }
@@ -68,8 +103,10 @@ pub struct OutputSymbol {
 /// リンク結果。
 #[derive(Debug)]
 pub struct LinkOutput {
-    /// ELF 実行ファイルのバイト列
+    /// 実行ファイル (ELF または PE) のバイト列
     pub image: Vec<u8>,
+    /// `image` の形式
+    pub format: OutputFormat,
     /// エントリポイントの仮想アドレス
     pub entry: u64,
     pub sections: Vec<OutputSection>,
@@ -78,7 +115,7 @@ pub struct LinkOutput {
 }
 
 impl LinkOutput {
-    /// ファイルに書き出す (Unix では実行権限 0755 を付ける)。
+    /// ファイルに書き出す (ELF を Unix で書くときは実行権限 0755 を付ける)。
     pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let io_err = |source| LinkError::Io {
@@ -87,7 +124,7 @@ impl LinkOutput {
         };
         std::fs::write(path, &self.image).map_err(io_err)?;
         #[cfg(unix)]
-        {
+        if self.format == OutputFormat::Elf {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
                 .map_err(io_err)?;
@@ -349,6 +386,107 @@ struct Layout {
     bss_start: u64,
     end: u64,
     out_sections: Vec<OutputSection>,
+    /// PE 出力のときだけ Some
+    pe: Option<PeLayout>,
+}
+
+/// PE 固有のレイアウト結果。
+#[derive(Debug)]
+struct PeLayout {
+    sections: Vec<PeSection>,
+    size_of_headers: u32,
+    size_of_image: u32,
+    size_of_code: u32,
+    size_of_init: u32,
+    size_of_uninit: u32,
+    base_of_code: u32,
+    /// `.idata` の RVA とファイルオフセット (無ければ 0)
+    idata_rva: u32,
+    idata_foff: u64,
+    /// import スタブ領域の仮想アドレスとファイルオフセット (`.text` の末尾)
+    thunk_addr: u64,
+    thunk_foff: u64,
+}
+
+/// 種別ごとのセクション連結結果 (ELF / PE 共通)。
+struct Merged {
+    size: [u64; 4],
+    align: [u64; 4],
+    /// 入力セクションごとの、種別内でのオフセット
+    sec_off: Vec<Vec<u64>>,
+    /// COMMON シンボル (グローバル番号 → .bss 内オフセット)
+    common_off: HashMap<usize, u64>,
+}
+
+fn merge_kinds(objects: &[ElfObject], plan: &[Vec<Fate>], table: &SymTable) -> Merged {
+    let mut size = [0u64; 4];
+    let mut align = [1u64; 4];
+    let mut sec_off: Vec<Vec<u64>> = objects
+        .iter()
+        .map(|o| vec![0u64; o.sections.len()])
+        .collect();
+
+    // 種別ごとに入力順で連結する
+    for kind in KINDS {
+        let k = kind.idx();
+        for (oi, obj) in objects.iter().enumerate() {
+            for (si, sec) in obj.sections.iter().enumerate() {
+                if plan[oi][si] != Fate::Keep(kind) {
+                    continue;
+                }
+                let a = sec.align.max(1);
+                size[k] = align_up(size[k], a);
+                sec_off[oi][si] = size[k];
+                size[k] += sec.size;
+                align[k] = align[k].max(a);
+            }
+        }
+    }
+
+    // COMMON シンボルは .bss の末尾に割り当てる
+    let mut common_off: HashMap<usize, u64> = HashMap::new();
+    for (gi, g) in table.syms.iter().enumerate() {
+        if let Def::Common { size: csz, align: cal } = g.def {
+            size[BSS] = align_up(size[BSS], cal);
+            common_off.insert(gi, size[BSS]);
+            size[BSS] += csz;
+            align[BSS] = align[BSS].max(cal);
+        }
+    }
+
+    Merged {
+        size,
+        align,
+        sec_off,
+        common_off,
+    }
+}
+
+/// PE セクションを順に並べていくための作業用構造体。
+struct PeBuilder {
+    sections: Vec<PeSection>,
+    rva: u64,
+    foff: u64,
+}
+
+impl PeBuilder {
+    /// 末尾にセクションを追加し、(RVA, ファイルオフセット) を返す。
+    fn place(&mut self, name: &'static str, vsize: u64, rawsize: u64, characteristics: u32) -> (u64, u64) {
+        let rva = self.rva;
+        let foff = self.foff;
+        let raw = align_up(rawsize, pe::FILE_ALIGN);
+        self.sections.push(PeSection {
+            name,
+            vsize: vsize as u32,
+            rva: rva as u32,
+            rawsize: raw as u32,
+            rawptr: if raw == 0 { 0 } else { foff as u32 },
+            characteristics,
+        });
+        self.rva = align_up(rva + vsize.max(1), pe::SECTION_ALIGN);
+        self.foff = foff + raw;
+        (rva, foff)
+    }
 }
 
 impl Layout {
@@ -359,40 +497,12 @@ impl Layout {
         got_count: usize,
         base: u64,
     ) -> Layout {
-        let mut size = [0u64; 4];
-        let mut align = [1u64; 4];
-        let mut sec_off: Vec<Vec<u64>> = objects
-            .iter()
-            .map(|o| vec![0u64; o.sections.len()])
-            .collect();
-
-        // 種別ごとに入力順で連結する
-        for kind in KINDS {
-            let k = kind.idx();
-            for (oi, obj) in objects.iter().enumerate() {
-                for (si, sec) in obj.sections.iter().enumerate() {
-                    if plan[oi][si] != Fate::Keep(kind) {
-                        continue;
-                    }
-                    let a = sec.align.max(1);
-                    size[k] = align_up(size[k], a);
-                    sec_off[oi][si] = size[k];
-                    size[k] += sec.size;
-                    align[k] = align[k].max(a);
-                }
-            }
-        }
-
-        // COMMON シンボルは .bss の末尾に割り当てる
-        let mut common_off: HashMap<usize, u64> = HashMap::new();
-        for (gi, g) in table.syms.iter().enumerate() {
-            if let Def::Common { size: csz, align: cal } = g.def {
-                size[BSS] = align_up(size[BSS], cal);
-                common_off.insert(gi, size[BSS]);
-                size[BSS] += csz;
-                align[BSS] = align[BSS].max(cal);
-            }
-        }
+        let Merged {
+            size,
+            align,
+            sec_off,
+            common_off,
+        } = merge_kinds(objects, plan, table);
 
         let got_size = 8 * got_count as u64;
         let has_ro = size[RODATA] > 0;
@@ -524,7 +634,195 @@ impl Layout {
             bss_start: base + bss_start,
             end: base + end,
             out_sections,
+            pe: None,
         }
+    }
+
+    /// PE32+ 用のレイアウト。
+    ///
+    /// `.text` (+ import スタブ) / `.rdata` / `.data` (GOT + データ + BSS) / `.idata` を
+    /// 0x1000 境界の RVA に並べる。ファイル上は 0x200 境界。
+    fn compute_pe(
+        objects: &[ElfObject],
+        plan: &[Vec<Fate>],
+        table: &SymTable,
+        got_count: usize,
+        base: u64,
+        n_thunks: usize,
+        idata_size: u64,
+    ) -> Result<Layout> {
+        let Merged {
+            size,
+            align,
+            sec_off,
+            common_off,
+        } = merge_kinds(objects, plan, table);
+        let too_big = |what: &str| LinkError::Unsupported {
+            object: "(output)".to_string(),
+            message: what.to_string(),
+        };
+        for k in KINDS {
+            if align[k.idx()] > pe::SECTION_ALIGN {
+                return Err(too_big(&format!(
+                    "section alignment {:#x} exceeds the PE section alignment ({:#x})",
+                    align[k.idx()],
+                    pe::SECTION_ALIGN
+                )));
+            }
+        }
+
+        // import スタブ (jmp *[rip+disp32], 6 バイト) は .text の末尾に置く
+        let thunk_off = align_up(size[TEXT], 16);
+        let text_total = if n_thunks > 0 {
+            thunk_off + 6 * n_thunks as u64
+        } else {
+            size[TEXT]
+        };
+        let got_size = 8 * got_count as u64;
+        let has_text = text_total > 0;
+        let has_ro = size[RODATA] > 0;
+        let has_rw = size[DATA] > 0 || size[BSS] > 0 || got_size > 0;
+        let has_idata = idata_size > 0;
+
+        let nsec = has_text as usize + has_ro as usize + has_rw as usize + has_idata as usize;
+        let size_of_headers = align_up(pe::headers_size(nsec), pe::FILE_ALIGN);
+        let mut b = PeBuilder {
+            sections: Vec::new(),
+            rva: align_up(size_of_headers, pe::SECTION_ALIGN),
+            foff: size_of_headers,
+        };
+
+        // .data の内部配置: GOT → .data → .bss (BSS はファイル上の実体なし)
+        let data_rel = align_up(got_size, align[DATA]);
+        let data_end = data_rel + size[DATA];
+        let (rw_filesz, bss_rel) = if size[DATA] > 0 {
+            (data_end, align_up(data_end, align[BSS]))
+        } else {
+            (got_size, align_up(got_size, align[BSS]))
+        };
+        let rw_vsize = if size[BSS] > 0 {
+            bss_rel + size[BSS]
+        } else {
+            rw_filesz
+        };
+
+        let (mut text, mut rodata, mut rw, mut idata) = ((0, 0), (0, 0), (0, 0), (0, 0));
+        if has_text {
+            text = b.place(".text", text_total, text_total, pe::SCN_TEXT);
+        }
+        if has_ro {
+            rodata = b.place(".rdata", size[RODATA], size[RODATA], pe::SCN_RDATA);
+        }
+        if has_rw {
+            rw = b.place(".data", rw_vsize, rw_filesz, pe::SCN_DATA);
+        }
+        if has_idata {
+            idata = b.place(".idata", idata_size, idata_size, pe::SCN_DATA);
+        }
+        if b.rva > u32::MAX as u64 || b.foff > u32::MAX as u64 || base.checked_add(b.rva).is_none() {
+            return Err(too_big("output image is too large for PE"));
+        }
+
+        // 出力に載らなかった種別 (サイズ 0 のセクションだけがある場合) はイメージ末尾を指す
+        let mut kind_rva = [b.rva; 4];
+        let mut kind_foff = [b.foff; 4];
+        if has_text {
+            kind_rva[TEXT] = text.0;
+            kind_foff[TEXT] = text.1;
+        }
+        if has_ro {
+            kind_rva[RODATA] = rodata.0;
+            kind_foff[RODATA] = rodata.1;
+        }
+        if has_rw {
+            kind_rva[DATA] = rw.0 + data_rel;
+            kind_foff[DATA] = rw.1 + data_rel;
+            kind_rva[BSS] = rw.0 + bss_rel;
+            kind_foff[BSS] = rw.1 + bss_rel;
+        }
+
+        let mut sec_addr = Vec::with_capacity(objects.len());
+        let mut sec_foff = Vec::with_capacity(objects.len());
+        for (oi, obj) in objects.iter().enumerate() {
+            let mut addrs = vec![0u64; obj.sections.len()];
+            let mut offs = vec![0u64; obj.sections.len()];
+            for si in 0..obj.sections.len() {
+                if let Fate::Keep(kind) = plan[oi][si] {
+                    addrs[si] = base + kind_rva[kind.idx()] + sec_off[oi][si];
+                    offs[si] = kind_foff[kind.idx()] + sec_off[oi][si];
+                }
+            }
+            sec_addr.push(addrs);
+            sec_foff.push(offs);
+        }
+        let common_addr = common_off
+            .into_iter()
+            .map(|(gi, off)| (gi, base + kind_rva[BSS] + off))
+            .collect();
+
+        let mut out_sections = Vec::new();
+        let mut push = |name: &'static str, rva: u64, foff: u64, sz: u64| {
+            if sz > 0 {
+                out_sections.push(OutputSection {
+                    name,
+                    addr: base + rva,
+                    file_offset: foff,
+                    size: sz,
+                });
+            }
+        };
+        push(".text", text.0, text.1, size[TEXT]);
+        push(".rdata", rodata.0, rodata.1, size[RODATA]);
+        push(".got", rw.0, rw.1, got_size);
+        push(".data", kind_rva[DATA], kind_foff[DATA], size[DATA]);
+        push(".bss", kind_rva[BSS], kind_foff[BSS], size[BSS]);
+        push(".idata", idata.0, idata.1, idata_size);
+
+        let etext = base + text.0 + size[TEXT];
+        let (edata, bss_start, end) = if has_rw {
+            (
+                base + rw.0 + rw_filesz,
+                base + rw.0 + bss_rel,
+                base + rw.0 + rw_vsize,
+            )
+        } else {
+            (etext, etext, etext)
+        };
+        let size_of_init: u64 = b
+            .sections
+            .iter()
+            .filter(|s| s.name != ".text")
+            .map(|s| s.rawsize as u64)
+            .sum();
+
+        let pe = PeLayout {
+            size_of_headers: size_of_headers as u32,
+            size_of_image: b.rva as u32,
+            size_of_code: align_up(text_total, pe::FILE_ALIGN) as u32,
+            size_of_init: size_of_init as u32,
+            size_of_uninit: size[BSS] as u32,
+            base_of_code: if has_text { text.0 as u32 } else { 0 },
+            idata_rva: idata.0 as u32,
+            idata_foff: idata.1,
+            thunk_addr: base + text.0 + thunk_off,
+            thunk_foff: text.1 + thunk_off,
+            sections: b.sections,
+        };
+        Ok(Layout {
+            sec_addr,
+            sec_foff,
+            common_addr,
+            got_addr: base + rw.0,
+            got_foff: rw.1,
+            segments: Vec::new(),
+            file_size: b.foff,
+            etext,
+            edata,
+            bss_start,
+            end,
+            out_sections,
+            pe: Some(pe),
+        })
     }
 }
 
@@ -608,7 +906,8 @@ fn reloc_width(t: u32) -> Option<u64> {
     match t {
         R_X86_64_NONE => Some(0),
         R_X86_64_64 | R_X86_64_PC64 => Some(8),
-        R_X86_64_PC32
+        R_PE_ADDR32NB
+        | R_X86_64_PC32
         | R_X86_64_PLT32
         | R_X86_64_32
         | R_X86_64_32S
@@ -631,6 +930,7 @@ fn reloc_name(t: u32) -> &'static str {
         R_X86_64_PC64 => "R_X86_64_PC64",
         R_X86_64_GOTPCRELX => "R_X86_64_GOTPCRELX",
         R_X86_64_REX_GOTPCRELX => "R_X86_64_REX_GOTPCRELX",
+        R_PE_ADDR32NB => "IMAGE_REL_AMD64_ADDR32NB",
         _ => "R_X86_64_?",
     }
 }
@@ -679,8 +979,17 @@ impl Linker {
     }
 
     /// メモリ上のオブジェクトファイルを追加する。
+    ///
+    /// ELF64 か COFF (x86-64) かは内容から自動で判定する。出力形式とは独立なので、
+    /// たとえば COFF の入力から ELF を出力することもできる。
     pub fn add_object(&mut self, name: impl Into<String>, data: Vec<u8>) -> Result<()> {
-        self.objects.push(ElfObject::parse(name, data)?);
+        let obj = if !data.starts_with(b"\x7fELF") && coff::looks_like_coff(&data) {
+            coff::parse(name, data)?
+        } else {
+            // ELF でも COFF でもないものは、ELF パーサのエラーとして報告する
+            ElfObject::parse(name, data)?
+        };
+        self.objects.push(obj);
         Ok(())
     }
 
@@ -697,12 +1006,20 @@ impl Linker {
     /// リンクを実行する。
     pub fn link(self) -> Result<LinkOutput> {
         let Linker { options, objects } = self;
-        if options.base_address % PAGE_SIZE != 0 {
+        let is_pe = options.format == OutputFormat::Pe;
+        let base_unit = if is_pe { 0x1_0000 } else { PAGE_SIZE };
+        if options.base_address % base_unit != 0 {
             return Err(LinkError::InvalidOption(format!(
-                "base address {:#x} is not a multiple of {PAGE_SIZE:#x}",
+                "base address {:#x} is not a multiple of {base_unit:#x}",
                 options.base_address
             )));
         }
+        if !is_pe && !options.imports.is_empty() {
+            return Err(LinkError::InvalidOption(
+                "DLL imports can only be used with PE output".to_string(),
+            ));
+        }
+        let base = options.base_address;
 
         // 1-2. セクション選択とシンボル解決
         let plan = plan_sections(&objects)?;
@@ -723,14 +1040,57 @@ impl Linker {
             }
         }
 
+        // PE: 実際に参照された DLL インポートだけを集める。
+        //   `foo` が未定義 → `call foo` 用のスタブが要る / `__imp_foo` が未定義 → IAT スロットだけ要る
+        let is_undef = |t: &SymTable, n: &str| {
+            t.index
+                .get(n)
+                .is_some_and(|&i| matches!(t.syms[i].def, Def::Undefined))
+        };
+        let mut used_imports: Vec<(String, Vec<String>)> = Vec::new();
+        let mut thunk_syms: Vec<String> = Vec::new();
+        {
+            let mut seen: HashSet<&str> = HashSet::new();
+            for d in &options.imports {
+                let mut syms = Vec::new();
+                for name in &d.symbols {
+                    // 同じ名前が複数の DLL に載っていたら最初のものを使う
+                    if !seen.insert(name.as_str()) {
+                        continue;
+                    }
+                    let direct = is_undef(&table, name);
+                    if direct || is_undef(&table, &format!("__imp_{name}")) {
+                        syms.push(name.clone());
+                        if direct {
+                            thunk_syms.push(name.clone());
+                        }
+                    }
+                }
+                if !syms.is_empty() {
+                    used_imports.push((d.dll.clone(), syms));
+                }
+            }
+        }
+        let idata_size = if used_imports.is_empty() {
+            0
+        } else {
+            pe::build_imports(&used_imports, 0).bytes.len() as u64
+        };
+
         // 3. レイアウト
-        let layout = Layout::compute(
-            &objects,
-            &plan,
-            &table,
-            got_slots.len(),
-            options.base_address,
-        );
+        let layout = if is_pe {
+            Layout::compute_pe(
+                &objects,
+                &plan,
+                &table,
+                got_slots.len(),
+                base,
+                thunk_syms.len(),
+                idata_size,
+            )?
+        } else {
+            Layout::compute(&objects, &plan, &table, got_slots.len(), base)
+        };
         table.define_synthetic("_GLOBAL_OFFSET_TABLE_", layout.got_addr);
         table.define_synthetic("_etext", layout.etext);
         table.define_synthetic("etext", layout.etext);
@@ -739,6 +1099,19 @@ impl Linker {
         table.define_synthetic("__bss_start", layout.bss_start);
         table.define_synthetic("_end", layout.end);
         table.define_synthetic("end", layout.end);
+        let built_imports = match &layout.pe {
+            Some(pl) if !used_imports.is_empty() => {
+                let built = pe::build_imports(&used_imports, pl.idata_rva);
+                for (name, rva) in &built.slots {
+                    table.define_synthetic(&format!("__imp_{name}"), base + *rva as u64);
+                }
+                for (i, name) in thunk_syms.iter().enumerate() {
+                    table.define_synthetic(name, pl.thunk_addr + 6 * i as u64);
+                }
+                Some(built)
+            }
+            _ => None,
+        };
 
         // 4. セクション内容をイメージにコピー
         let mut image = vec![0u8; layout.file_size as usize];
@@ -750,6 +1123,23 @@ impl Linker {
                         image[off..off + sec.size as usize].copy_from_slice(obj.section_data(si));
                     }
                 }
+            }
+        }
+
+        // PE: import テーブルとスタブ (jmp *[rip+disp32]) をイメージに書き込む
+        if let (Some(pl), Some(built)) = (&layout.pe, &built_imports) {
+            let off = pl.idata_foff as usize;
+            image[off..off + built.bytes.len()].copy_from_slice(&built.bytes);
+            let iat_of: HashMap<&str, u32> =
+                built.slots.iter().map(|(n, r)| (n.as_str(), *r)).collect();
+            for (i, name) in thunk_syms.iter().enumerate() {
+                let at = pl.thunk_foff as usize + 6 * i;
+                let thunk_addr = pl.thunk_addr + 6 * i as u64;
+                let slot_addr = base + iat_of[name.as_str()] as u64;
+                let disp = slot_addr as i64 - (thunk_addr as i64 + 6);
+                image[at] = 0xFF;
+                image[at + 1] = 0x25;
+                image[at + 2..at + 6].copy_from_slice(&(disp as i32).to_le_bytes());
             }
         }
 
@@ -858,6 +1248,14 @@ impl Linker {
                             }
                             image[at..at + 4].copy_from_slice(&(v as i32).to_le_bytes());
                         }
+                        // COFF の ADDR32NB: イメージベースからの 32 ビット RVA
+                        R_PE_ADDR32NB => {
+                            let v = s + a - base as i128;
+                            if v < 0 || v > u32::MAX as i128 {
+                                return Err(overflow(v));
+                            }
+                            image[at..at + 4].copy_from_slice(&(v as u32).to_le_bytes());
+                        }
                         // GOT 経由のロード: スロットにシンボルの絶対アドレスを置き、
                         // 命令にはスロットへの PC 相対オフセットを書く (緩和はしない)。
                         _ => {
@@ -886,7 +1284,36 @@ impl Linker {
             .get(&options.entry)
             .and_then(|&gi| res.def_addr(gi))
             .ok_or_else(|| LinkError::EntryNotFound(options.entry.clone()))?;
-        write_headers(&mut image, &layout, entry);
+        match &layout.pe {
+            Some(pl) => {
+                let entry_rva = entry
+                    .checked_sub(base)
+                    .filter(|&r| r <= u32::MAX as u64)
+                    .ok_or_else(|| {
+                        LinkError::InvalidOption(format!(
+                            "entry address {entry:#x} is outside the image"
+                        ))
+                    })?;
+                pe::write_headers(
+                    &mut image,
+                    &PeHeaderInfo {
+                        image_base: base,
+                        entry_rva: entry_rva as u32,
+                        sections: &pl.sections,
+                        size_of_headers: pl.size_of_headers,
+                        size_of_image: pl.size_of_image,
+                        size_of_code: pl.size_of_code,
+                        size_of_initialized_data: pl.size_of_init,
+                        size_of_uninitialized_data: pl.size_of_uninit,
+                        base_of_code: pl.base_of_code,
+                        subsystem: options.subsystem,
+                        import_dir: built_imports.as_ref().map_or((0, 0), |b| b.dir),
+                        iat: built_imports.as_ref().map_or((0, 0), |b| b.iat),
+                    },
+                );
+            }
+            None => write_headers(&mut image, &layout, entry),
+        }
 
         let mut symbols: Vec<OutputSymbol> = (0..table.syms.len())
             .filter_map(|gi| {
@@ -900,6 +1327,7 @@ impl Linker {
 
         Ok(LinkOutput {
             image,
+            format: options.format,
             entry,
             sections: layout.out_sections.clone(),
             symbols,
@@ -960,8 +1388,71 @@ mod tests {
         let opts = LinkOptions {
             entry: "_start".into(),
             base_address: 0x400123,
+            ..Default::default()
         };
         let err = Linker::with_options(opts).link().unwrap_err();
         assert!(matches!(err, LinkError::InvalidOption(_)));
+    }
+
+    fn pe_options_with_import() -> LinkOptions {
+        let mut o = LinkOptions::pe();
+        o.imports.push(DllImport::new("kernel32.dll", ["foo"]));
+        o
+    }
+
+    #[test]
+    fn pe_rejects_base_not_multiple_of_64k() {
+        let mut o = LinkOptions::pe();
+        o.base_address = 0x401000; // ELF なら 4K 境界で通るが、PE は 64K 境界が必要
+        let err = Linker::with_options(o).link().unwrap_err();
+        assert!(matches!(err, LinkError::InvalidOption(_)));
+    }
+
+    #[test]
+    fn imports_are_rejected_for_elf_output() {
+        let mut o = LinkOptions::default();
+        o.imports.push(DllImport::new("kernel32.dll", ["foo"]));
+        let err = Linker::with_options(o).link().unwrap_err();
+        assert!(matches!(err, LinkError::InvalidOption(_)));
+    }
+
+    #[test]
+    fn pe_without_import_leaves_symbol_undefined() {
+        let mut l = Linker::with_options(LinkOptions::pe());
+        l.add_object("tiny.obj", coff::tests::tiny_object()).unwrap();
+        let err = l.link().unwrap_err();
+        assert!(matches!(err, LinkError::UndefinedSymbols(_)));
+    }
+
+    #[test]
+    fn pe_links_coff_object_through_import_thunk() {
+        let mut l = Linker::with_options(pe_options_with_import());
+        l.add_object("tiny.obj", coff::tests::tiny_object()).unwrap();
+        let out = l.link().unwrap();
+        let img = &out.image;
+        assert_eq!(out.format, OutputFormat::Pe);
+
+        // DOS / PE ヘッダ
+        assert_eq!(&img[0..2], b"MZ");
+        let lfanew = u32::from_le_bytes(img[0x3c..0x40].try_into().unwrap()) as usize;
+        assert_eq!(&img[lfanew..lfanew + 4], b"PE\0\0");
+        assert_eq!(u16::from_le_bytes(img[lfanew + 4..lfanew + 6].try_into().unwrap()), 0x8664);
+        // 全セクションの RVA / ファイルオフセットが境界に揃っている
+        let nsec = u16::from_le_bytes(img[lfanew + 6..lfanew + 8].try_into().unwrap()) as usize;
+        assert_eq!(nsec, 2); // .text + .idata
+        assert_eq!(img.len() % 0x200, 0);
+
+        // `call foo` の飛び先が import スタブ (FF 25) を指している
+        let text = out.sections.iter().find(|s| s.name == ".text").unwrap();
+        assert_eq!(text.addr, DEFAULT_BASE_ADDRESS + 0x1000);
+        let at = text.file_offset as usize;
+        assert_eq!(img[at], 0xE8);
+        let rel = i32::from_le_bytes(img[at + 1..at + 5].try_into().unwrap());
+        let target = (text.addr as i64 + 5 + rel as i64) as u64;
+        let foo = out.symbols.iter().find(|s| s.name == "foo").unwrap().addr;
+        assert_eq!(target, foo);
+        let thunk = (text.file_offset + (foo - text.addr)) as usize;
+        assert_eq!(&img[thunk..thunk + 2], &[0xFF, 0x25]);
+        assert_eq!(out.entry, text.addr);
     }
 }

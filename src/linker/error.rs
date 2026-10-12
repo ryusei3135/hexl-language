@@ -16,9 +16,9 @@ pub struct UndefinedRef {
 
 #[derive(Debug)]
 pub enum LinkError {
-    /// 入力ファイルが壊れている / ELF として不正
+    /// 入力ファイルが壊れている / ELF・COFF として不正
     Parse { object: String, message: String },
-    /// 正しい ELF だが、このリンカが未対応の機能を含む
+    /// 形式としては正しいが、このリンカが未対応の機能を含む
     Unsupported { object: String, message: String },
     /// 強いシンボルが複数のオブジェクトで定義されている
     DuplicateSymbol {
