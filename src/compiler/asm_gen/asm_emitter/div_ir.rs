@@ -91,10 +91,17 @@ impl AsmEmitter {
         asm.push_str(&self.mov_line(&dst_txt, &result, &calc, false));
 
         // === 退避したレジスタを逆順に復元 ===
-        for reg in saved.iter().rev() {
-            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-            asm.push_str(&self.asm_fmt.get_pop(&name));
-        }
+        asm.push_str(
+            saved
+                .iter()
+                .rev()
+                .map(|reg| {
+                    let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                    self.asm_fmt.get_pop(&name)
+                })
+                .collect::<String>()
+                .as_str()
+        );
         asm
     }
 }
