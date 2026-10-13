@@ -19,6 +19,13 @@
 //! mov %rax(/) か %rdx(%), <dst>
 //! (push したものを逆順に pop)
 //! ```
+//!
+//! 符号なし整数(`UDB`〜`UDQ`)の場合は、符号拡張(`cqto`/`cltd`)と`idiv`の
+//! 代わりに、`%rdx`をゼロクリアして`div`を使う。
+//! ```text
+//! xor %rdx, %rdx               ; 32bitなら %edx
+//! div <dst>
+//! ```
 
 use super::*;
 
@@ -33,6 +40,8 @@ impl AsmEmitter {
         let dst = self.reg_idx;
         let ty = self.get_expr_ty(expr.ls);
         let wrap_size = ty.wrap_dst_size();
+        // どちらかのオペランドが符号なしなら符号なしの除算
+        let unsigned = ty.is_unsigned() || self.get_expr_ty(expr.rs).is_unsigned();
 
         // 64bitの型だけ64bitで計算し、それ以外は32bitで計算する
         // (`idiv`は8/16bitの除算を`%ax`などで行うので、
@@ -69,17 +78,26 @@ impl AsmEmitter {
         // === 割られる数を`%rax`へ ===
         asm.push_str(&self.mov_line(&rax, &src1, &calc, mem1));
 
-        // === 符号拡張(`%rdx:%rax`)と除算 ===
-        let att = self.asm_fmt.mnemonic_size();
-        let extend = match (&calc, att) {
-            (Size::DQ, true) => "cqto",
-            (Size::DQ, false) => "cqo",
-            (_, true) => "cltd",
-            (_, false) => "cdq",
-        };
-        asm.push_str(&format!("{{space}}{}\n", extend));
-        let idiv = format!("{{space}}idiv {}\n", dst_txt);
-        asm.push_str(&self.asm_fmt.fmt_mnemonic_resize("idiv", &idiv, &calc));
+        // === `%rdx:%rax`の上位(`%rdx`)の準備と除算 ===
+        // - 符号付き: `%rax`の符号を`%rdx`へ拡張して`idiv`
+        // - 符号なし: `%rdx`を0にして`div`
+        let div_mnemonic = if unsigned { "div" } else { "idiv" };
+        if unsigned {
+            let rdx = self.asm_fmt.get_fmt_reg(2, &calc);
+            let clear = format!("{{space}}xor {}, {}\n", rdx, rdx);
+            asm.push_str(&self.asm_fmt.fmt_mnemonic_resize("xor", &clear, &calc));
+        } else {
+            let att = self.asm_fmt.mnemonic_size();
+            let extend = match (&calc, att) {
+                (Size::DQ, true) => "cqto",
+                (Size::DQ, false) => "cqo",
+                (_, true) => "cltd",
+                (_, false) => "cdq",
+            };
+            asm.push_str(&format!("{{space}}{}\n", extend));
+        }
+        let div = format!("{{space}}{} {}\n", div_mnemonic, dst_txt);
+        asm.push_str(&self.asm_fmt.fmt_mnemonic_resize(div_mnemonic, &div, &calc));
 
         // === 商(`%rax`)か余り(`%rdx`)を、結果のレジスタへ ===
         let result_reg = if expr.kind == inst::ExprKind::Div {

@@ -483,6 +483,8 @@ impl AsmEmitter {
     fn value_reg_size(ty: &Size) -> Size {
         match ty {
             Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
+            // 符号なしは、同じ幅の符号付きと同じレジスタを使う
+            Size::UDB | Size::UDW | Size::UDD | Size::UDQ => ty.to_signed(),
             Size::Array { size, .. } => Self::value_reg_size(size),
             _ => Size::DQ,
         }
@@ -830,12 +832,23 @@ impl AsmEmitter {
         let mnemonic = Self::expr_mnemonic(&expr.kind);
 
         let resolved_size: Size = self.get_expr_ty(expr.ls);
+        // `<`/`>`は、どちらかのオペランドが符号なしなら符号なしの比較
+        // (`jl`/`jg`ではなく`jb`/`ja`)にする。`==`/`!=`は符号に関係ない
+        let is_unsigned_cmp = matches!(
+            expr.kind,
+            inst::ExprKind::LessThen | inst::ExprKind::GreaterThen
+        ) && (resolved_size.is_unsigned()
+            || self.get_expr_ty(expr.rs).is_unsigned());
         let wrap_size = resolved_size.wrap_dst_size();
 
         let dst_text = self.get_reg(Some(self.reg_idx), &resolved_size);
         let src1_text = self.extract_operand_text(expr.ls, wrap_size.as_ref());
 
-        let mut tmpl = self.asm_fmt.get_opcode_tmpl(key);
+        let mut tmpl = if is_unsigned_cmp {
+            self.asm_fmt.get_unsigned_cmp_tmpl(key)
+        } else {
+            self.asm_fmt.get_opcode_tmpl(key)
+        };
         if expr.kind == inst::ExprKind::Mul {
             tmpl = tmpl.replace("add", "imul");
         }

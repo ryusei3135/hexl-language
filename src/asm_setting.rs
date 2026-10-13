@@ -13,6 +13,9 @@ pub struct Reg {
     pub dw: Vec<String>,
     pub dd: Vec<String>,
     pub dq: Vec<String>,
+    pub xmm: Vec<String>,
+    pub ymm: Vec<String>,
+    pub zmm: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

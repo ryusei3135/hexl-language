@@ -128,25 +128,39 @@ impl AsmEmitter {
     }
 
     /// 構造体のメンバー`member`(サイズ`size`)を、レジスタ`reg_num`へ
-    /// 64bitに符号拡張して読み込む。`reg64`は`reg_num`の64bitの名前
+    /// 64bitに拡張して読み込む。`reg64`は`reg_num`の64bitの名前
+    ///
+    /// 符号付きの添字は符号拡張(`movs?q`)、符号なしの添字は
+    /// ゼロ拡張(`movz?q`)する
     fn load_index_reg(&mut self, member: &str, size: &Size, reg_num: usize, reg64: &str) {
+        let unsigned = size.is_unsigned();
         let idx_size = Self::value_reg_size(size);
         match idx_size {
-            // 8/16bitの添字は、メモリから直接符号拡張して読み込む
+            // 8/16bitの添字は、メモリから直接拡張して読み込む
             Size::DB | Size::DW => {
                 let kind = if matches!(idx_size, Size::DB) { 'b' } else { 'w' };
-                let load = self.asm_fmt.get_sign_extend(kind, member, reg64);
+                let load = if unsigned {
+                    self.asm_fmt.get_zero_extend(kind, member, reg64)
+                } else {
+                    self.asm_fmt.get_sign_extend(kind, member, reg64)
+                };
                 self.asm_text.push_str(&load);
             }
-            // 32bitの添字: 32bitで読み込んでから64bitへ符号拡張する
-            //   movl -28(%rbp), %ecx
-            //   movslq %ecx, %rcx
+            // 32bitの添字: 32bitで読み込んでから64bitへ拡張する
+            //   符号付き:
+            //     movl -28(%rbp), %ecx
+            //     movslq %ecx, %rcx
+            //   符号なし(32bitレジスタへの書き込みで上位32bitは0になるので
+            //   movl だけでよい):
+            //     movl -28(%rbp), %ecx
             Size::DD => {
                 let reg32 = self.asm_fmt.get_fmt_reg(reg_num, &Size::DD);
                 let load = self.mov_line(&reg32, member, &Size::DD, true);
                 self.asm_text.push_str(&load);
-                let ext = self.asm_fmt.get_sign_extend('l', &reg32, reg64);
-                self.asm_text.push_str(&ext);
+                if !unsigned {
+                    let ext = self.asm_fmt.get_sign_extend('l', &reg32, reg64);
+                    self.asm_text.push_str(&ext);
+                }
             }
             // 64bitの添字: そのまま読み込む
             _ => {

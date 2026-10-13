@@ -160,6 +160,46 @@ impl MngAsmFmt {
             .replace("{dst}", dst)
     }
 
+    /// ゼロ拡張して64bitレジスタへ読み込む命令を返す
+    /// (AT&Tなら`movzbq`/`movzwq`)
+    ///
+    /// 32bitからのゼロ拡張には専用の命令が要らない
+    /// (32bitレジスタへの`mov`で上位32bitが0になる)ので、
+    /// `kind`は`b`/`w`のみ。
+    ///
+    /// フォーマットに`movzbq`/`movzwq`が定義されていればそのテンプレートを、
+    /// なければAT&T形式のテンプレートを使う
+    pub(in crate::compiler::asm_gen) 
+    fn get_zero_extend(&self, kind: char, src: &str, dst: &str) -> String {
+        let key = format!("movz{}q", kind);
+        self.opcode_fmt
+            .get(&key)
+            .map(|o| o.template.clone())
+            .unwrap_or_else(|| format!("{{space}}movz{}q {{src1}}, {{dst}}\n", kind))
+            .replace("{src1}", src)
+            .replace("{dst}", dst)
+    }
+
+    /// 符号なし整数の比較(`<`/`>`)のテンプレートを返す。
+    /// `key`は符号付きの比較のキー(`cmp_l`/`cmp_g`)
+    ///
+    /// フォーマットに`cmp_b`(below)/`cmp_a`(above)が定義されていれば
+    /// それを使う。なければ符号付きのテンプレートの`jl`/`jg`を
+    /// `jb`/`ja`に置き換えて使う。
+    /// `==`/`!=`は符号に関係ないので、他のキーはそのまま返す
+    pub(in crate::compiler::asm_gen) 
+    fn get_unsigned_cmp_tmpl(&self, key: &str) -> String {
+        let (unsigned_key, from, to) = match key {
+            "cmp_l" => ("cmp_b", "jl", "jb"),
+            "cmp_g" => ("cmp_a", "jg", "ja"),
+            _ => return self.get_opcode_tmpl(key),
+        };
+        match self.opcode_fmt.get(unsigned_key) {
+            Some(o) => o.template.clone(),
+            None => self.get_opcode_tmpl(key).replace(from, to),
+        }
+    }
+
     /// オフセット無しのメモリ参照(AT&T構文なら`(%rbx)`)を作る。
     ///
     /// `ref_stack`のテンプレート(`-{size}({src})`など)から、オフセット部分
@@ -234,10 +274,10 @@ impl MngAsmFmt {
             .replace("{dst}", value.as_str())
             .replace("{size}", offset.to_string().as_str());
         let s_fmt = match &size {
-            types::Size::DB => crate::mov_size_fmt!(self, db),
-            types::Size::DW => crate::mov_size_fmt!(self, dw),
-            types::Size::DD => crate::mov_size_fmt!(self, dd),
-            types::Size::DQ => crate::mov_size_fmt!(self, dq),
+            types::Size::DB | types::Size::UDB => crate::mov_size_fmt!(self, db),
+            types::Size::DW | types::Size::UDW => crate::mov_size_fmt!(self, dw),
+            types::Size::DD | types::Size::UDD => crate::mov_size_fmt!(self, dd),
+            types::Size::DQ | types::Size::UDQ => crate::mov_size_fmt!(self, dq),
             types::Size::Array { size, .. } => {
                 return self.get_fmt_struct_member(value, &size, offset);
             }
@@ -290,10 +330,10 @@ impl MngAsmFmt {
         }
 
         let s_fmt = match &size {
-            types::Size::DB => crate::mov_size_fmt!(self, db),
-            types::Size::DW => crate::mov_size_fmt!(self, dw),
-            types::Size::DD => crate::mov_size_fmt!(self, dd),
-            types::Size::DQ => crate::mov_size_fmt!(self, dq),
+            types::Size::DB | types::Size::UDB => crate::mov_size_fmt!(self, db),
+            types::Size::DW | types::Size::UDW => crate::mov_size_fmt!(self, dw),
+            types::Size::DD | types::Size::UDD => crate::mov_size_fmt!(self, dd),
+            types::Size::DQ | types::Size::UDQ => crate::mov_size_fmt!(self, dq),
             types::Size::Pointer { .. } => unreachable!(),
             types::Size::Array { size, .. } => {
                 return self.fmt_mnemonic_resize_inner(mnemonic, value, size, is_memory_access);
@@ -389,10 +429,10 @@ impl MngAsmFmt {
     pub(in crate::compiler::asm_gen) 
     fn get_fmt_reg(&self, reg_num: usize, size: &Size) -> String {
         let reg = match &size {
-            Size::DB => &self.reg_fmt.db,
-            Size::DW => &self.reg_fmt.dw,
-            Size::DD => &self.reg_fmt.dd,
-            Size::DQ => &self.reg_fmt.dq,
+            Size::DB | Size::UDB => &self.reg_fmt.db,
+            Size::DW | Size::UDW => &self.reg_fmt.dw,
+            Size::DD | Size::UDD => &self.reg_fmt.dd,
+            Size::DQ | Size::UDQ => &self.reg_fmt.dq,
             Size::Pointer { .. } => &self.reg_fmt.dq,
             _ => panic!(),
         };

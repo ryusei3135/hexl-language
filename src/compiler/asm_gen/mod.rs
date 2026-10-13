@@ -10,8 +10,10 @@ mod emit_fn_name;
 mod inline_asm;
 mod asm_fmt;
 mod reg_mnger;
+mod sign;
 
 use crate::compiler::ir::{def_tree, inst, types::Size};
+use sign::SizeSign;
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;

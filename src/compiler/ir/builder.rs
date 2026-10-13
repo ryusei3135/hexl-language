@@ -411,6 +411,7 @@ impl IR {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::NotEq)
             }
             node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
+            node::Expr::Float(value) => inst::Inst::gen_float(&value, &expect_byte, self.id_counter),
             node::Expr::Assign(assign_node) => {
                 let var_attr = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`

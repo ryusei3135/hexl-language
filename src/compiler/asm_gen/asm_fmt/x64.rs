@@ -16,6 +16,9 @@ pub struct StaticReg {
     pub dw: &'static [&'static str],
     pub dd: &'static [&'static str],
     pub dq: &'static [&'static str],
+    pub xmm: &'static [&'static str],
+    pub ymm: &'static [&'static str],
+    pub zmm: &'static [&'static str],
 }
 
 pub struct StaticOperandInfo {
@@ -89,6 +92,9 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "rax", "rcx", "rdx", "rbx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13",
             "r14", "r15",
         ],
+        xmm: &["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15"],
+        ymm: &["ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm8", "ymm9", "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15"],
+        zmm: &["zmm0", "zmm1", "zmm2", "zmm3", "zmm4", "zmm5", "zmm6", "zmm8", "zmm9", "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15"],
     },
 
     args: StaticFuncArgsReg {
@@ -204,6 +210,36 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
                 template: "{space}cmp {src2}, {src1}\n{space}jnz {label}\n",
             },
         ),
+        // 符号なし整数の比較(`<`はbelow, `>`はabove)
+        (
+            "cmp_b",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n{space}jb {label}\n",
+            },
+        ),
+        (
+            "cmp_a",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n{space}ja {label}\n",
+            },
+        ),
+        // 符号なし整数を64bitへゼロ拡張する(`movl`は上位32bitが0になるので不要)
+        (
+            "movzbq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movzbq {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movzwq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movzwq {src1}, {dst}\n",
+            },
+        ),
         (
             "ret",
             StaticOperandInfo {
@@ -240,6 +276,9 @@ impl StaticAsmFormat {
                 dw: to_strings(self.reg.dw),
                 dd: to_strings(self.reg.dd),
                 dq: to_strings(self.reg.dq),
+                xmm: to_strings(self.reg.xmm),
+                ymm: to_strings(self.reg.ymm),
+                zmm: to_strings(self.reg.zmm),
             },
             args: FuncArgsReg {
                 fmt: self

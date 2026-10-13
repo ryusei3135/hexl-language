@@ -131,8 +131,20 @@ impl Lexer {
         // 現在の行
         let mut line_counter: usize = 1;
 
-        for chr in content.chars() {
+        let chars: Vec<char> = content.chars().collect();
+
+        for (idx, &chr) in chars.iter().enumerate() {
             let curr_kind = &char_table[chr as usize];
+
+            // `3.14` の `.`: 整数部に小数点を積み、以降の数字を同じ数値トークンに続ける。
+            // (`1..2` や `a.b` は、次の文字が数字ではないのでここには入らない)
+            if chr == '.' && self.continues_as_float(chars.get(idx + 1).copied()) {
+                self.chr_stk.push(chr);
+                self.last_kind = Some(CharKind::Num);
+                self.gen_flag = Some(GenFlag::Number);
+                chr_counter += 1;
+                continue;
+            }
 
             // もし*`last_kind`*がNoneなら、現在の種類同士を比較し、条件をfalseにする
             // もし文字の種類が記号の場合必ず実行する
@@ -250,6 +262,15 @@ impl Lexer {
                             );
                         };
                         Tkn::Number(num.to_string())
+                    } else if self.chr_stk.contains('.') {
+                        // `3.14x` のように数字以外が混ざったものは不正な数値
+                        if self.chr_stk.parse::<f64>().is_err() {
+                            return crate::lex_err!(
+                                err::Span::new(line_counter, chr_counter),
+                                NumIsInvalid
+                            );
+                        }
+                        Tkn::Float(self.chr_stk.clone())
                     } else {
                         Tkn::Number(self.chr_stk.clone())
                     }
@@ -285,6 +306,22 @@ impl Lexer {
         } else {
             crate::lex_err!(err::Span::new(line_counter, chr_counter), FlagNotFound)
         }
+    }
+
+    /// 今積んでいる数字の列に、次の `.` を小数点として続けてよいか調べる。
+    /// - `next`: `.` の次の文字
+    ///
+    /// 次の全てを満たすときだけ小数点になる:
+    /// - 積んでいるのが10進の整数だけ (`0x1F` / 名前 / すでに `.` を含む数値は除く)
+    /// - `.` の次が数字 (`1..2` や `3.foo` は小数にしない)
+    /// - 直前のトークンが `.` ではない (`a.0.1` は2つのメンバーアクセスとして扱う)
+    fn continues_as_float(&self, next: Option<char>) -> bool {
+        self.last_kind == Some(CharKind::Num)
+            && matches!(self.gen_flag, None | Some(GenFlag::Number))
+            && !self.chr_stk.is_empty()
+            && self.chr_stk.chars().all(|c| c.is_ascii_digit())
+            && next.map_or(false, |c| c.is_ascii_digit())
+            && !matches!(self.gen_tkns.last().map(|t| &t.tkn), Some(Tkn::Dot))
     }
 
     fn redict_kind_using_flag(&self) -> Option<GenFlag> {
@@ -836,5 +873,105 @@ mod tests {
                 Tkn::RParen,
             ]
         );
+    }
+
+    fn lex_tkns(src: &str) -> Vec<Tkn> {
+        let mut lex = lexer();
+        lex.analy(&src.to_string()).unwrap();
+        lex.gen_tkns.into_iter().map(|t| t.tkn).collect()
+    }
+
+    #[test]
+    fn check_float_literal() {
+        assert_eq!(lex_tkns("3.14"), vec![Tkn::Float("3.14".to_string())]);
+        assert_eq!(lex_tkns("0.5"), vec![Tkn::Float("0.5".to_string())]);
+    }
+
+    #[test]
+    fn check_float_in_expression() {
+        assert_eq!(
+            lex_tkns("a = 0.5 + 10.25"),
+            vec![
+                Tkn::Name("a".to_string()),
+                Tkn::Equal,
+                Tkn::Float("0.5".to_string()),
+                Tkn::Add,
+                Tkn::Float("10.25".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_float_in_call_args() {
+        assert_eq!(
+            lex_tkns("f(1.5, 2)"),
+            vec![
+                Tkn::Name("f".to_string()),
+                Tkn::LParen,
+                Tkn::Float("1.5".to_string()),
+                Tkn::Comma,
+                Tkn::Number("2".to_string()),
+                Tkn::RParen,
+            ]
+        );
+    }
+
+    #[test]
+    fn check_range_is_not_float() {
+        assert_eq!(
+            lex_tkns("1..2"),
+            vec![
+                Tkn::Number("1".to_string()),
+                Tkn::RangeTkn,
+                Tkn::Number("2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_member_access_is_not_float() {
+        assert_eq!(
+            lex_tkns("a.b"),
+            vec![Tkn::Name("a".to_string()), Tkn::Dot, Tkn::Name("b".to_string())]
+        );
+        // 数字の後ろの `.` が数字で続かないなら小数にしない
+        assert_eq!(
+            lex_tkns("3.foo"),
+            vec![Tkn::Number("3".to_string()), Tkn::Dot, Tkn::Name("foo".to_string())]
+        );
+        // `.` の直後の数字列は、その手前の `.` と合わせて小数にしない
+        assert_eq!(
+            lex_tkns("a.0.1"),
+            vec![
+                Tkn::Name("a".to_string()),
+                Tkn::Dot,
+                Tkn::Number("0".to_string()),
+                Tkn::Dot,
+                Tkn::Number("1".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_second_dot_ends_float() {
+        assert_eq!(
+            lex_tkns("1.2.3"),
+            vec![
+                Tkn::Float("1.2".to_string()),
+                Tkn::Dot,
+                Tkn::Number("3".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_hex_is_not_float() {
+        assert_eq!(lex_tkns("0x1F"), vec![Tkn::Number("31".to_string())]);
+    }
+
+    #[test]
+    fn check_float_with_trailing_letters_errors() {
+        let mut lex = lexer();
+        assert!(lex.analy(&"3.14x".to_string()).is_err());
     }
 }

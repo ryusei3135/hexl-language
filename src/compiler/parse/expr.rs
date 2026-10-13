@@ -230,12 +230,13 @@ impl Parser {
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
-        let v = match self.next_tkn(&["[", "*", "number", "string", "name", "(", "{"])? {
+        let v = match self.next_tkn(&["[", "*", "number", "float", "string", "name", "(", "{"])? {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
             lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
             lex::Tkn::Number(value) => node::Expr::Number(value),
+            lex::Tkn::Float(value) => node::Expr::Float(value),
             lex::Tkn::KeyWordSelf => {
                 let self_name = self.struct_self_name.as_ref().unwrap().to_string();
                 // `expr/value_api.rs`
@@ -279,6 +280,7 @@ impl Parser {
             match self.current_tkn() {
                 lex::Tkn::Name(_)
                 | lex::Tkn::Number(_)
+                | lex::Tkn::Float(_)
                 | lex::Tkn::Str(_)
                 | lex::Tkn::RParen
                 | lex::Tkn::RBracket => {
@@ -419,6 +421,27 @@ mod expr_tests {
                 args: vec![
                     node::Expr::Number("10".to_string()),
                     node::Expr::Var("a".to_string()),
+                ]
+            })
+            .wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_float_literal_arg() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): b1 { a(1.5, 2) }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
+            panic!("not func");
+        };
+        assert_eq!(
+            node.body[0].get_node(),
+            &node::Expr::CallFunc(node::CallInfo {
+                name: "a".to_string(),
+                temp_ty: Vec::new(),
+                args: vec![
+                    node::Expr::Float("1.5".to_string()),
+                    node::Expr::Number("2".to_string()),
                 ]
             })
             .wrap_group2()

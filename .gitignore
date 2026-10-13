@@ -15,3 +15,4 @@ hexl/
 library
 build.rs
 *.o
+a

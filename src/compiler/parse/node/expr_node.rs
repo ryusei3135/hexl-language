@@ -264,6 +264,8 @@ pub enum Expr {
     ConnectAddr(Box<Expr>),
 
     Number(String),
+    /// 小数点を含む数値リテラル: `3.14` (ソース上の文字列のまま保持する)
+    Float(String),
     Str(String),
     Var(String),
     CallFunc(CallInfo),

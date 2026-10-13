@@ -45,3 +45,21 @@
 - 分けた関数の一覧と処理の流れは、各モジュールのNOTE.mdに記載している。
     - `call_func/NOTE.md`: `build_fn_process` / `emit_call_func` / `mov_value_ir` / `mem_val_ir`
     - `asm_emitter/NOTE.md`: `ref_arr_for_struct_member` / `extract_operand_text` / `format_line` / `format_expr_inst`
+
+## 符号付き/符号なし整数(2026-10-13)
+- `types::Size`の`DB/DW/DD/DQ`(符号付き)と`UDB/UDW/UDD/UDQ`(符号なし)を区別して生成する。
+- レジスタの選択・ニーモニックのサイズ接尾辞は「幅」だけで決まるので、符号なしは同じ幅の符号付きと同じ扱い
+    (`mng_fmt.rs`の`get_fmt_reg` / `fmt_mnemonic_resize` / `get_fmt_struct_member`、`asm_emitter.rs`の`value_reg_size`)。
+- 符号の有無で出力が変わる処理(判定は`sign.rs`の`SizeSign::is_unsigned`):
+
+    | 処理 | 符号付き | 符号なし | 場所 |
+    |------|----------|----------|------|
+    | `<` `>` | `cmp_l`/`cmp_g`(`jl`/`jg`) | `cmp_b`/`cmp_a`(`jb`/`ja`) | `format_expr_inst` / `get_unsigned_cmp_tmpl` |
+    | `/` `%` | `cltd`/`cqto` + `idiv` | `xor %edx, %edx` + `div` | `div_ir.rs` |
+    | 構造体メンバーの添字 | `movs?q` | `movz?q`(32bitは`movl`のみ) | `arr.rs`の`load_index_reg` / `get_zero_extend` |
+
+- `+` `-` `*`(2オペランドの`imul`)と`==` `!=`は符号に関係なく共通。
+- 比較のどちらか一方のオペランドが符号なしなら、符号なしとして扱う。
+- アセンブリのフォーマット(`asm_fmts/gcc_x64.yaml` / `asm_fmt/x64.rs`)に、`cmp_b` / `cmp_a` / `movzbq` / `movzwq`を追加した。
+    フォーマットに定義がない場合は、`cmp_l`/`cmp_g`の`jl`/`jg`を`jb`/`ja`に置き換えるか、AT&T形式の
+    テンプレートを使うので、古いフォーマットファイルでも動く。

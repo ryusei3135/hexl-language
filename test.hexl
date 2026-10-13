@@ -88,7 +88,7 @@ add(a mut: int, b: int): Option<int> {
 }
 
 _start(): int {
-    arr2 mut: [int 3] = {0}
+    arr2 mut: [uint 3] = {0}
     [arr2 0] = 2
     o: Option<int> = Option::Some(10)
     h: int must=func5 = func4()

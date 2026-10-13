@@ -1,3 +1,5 @@
+use crate::compiler::node::TyNode;
+
 use super::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -169,6 +171,11 @@ pub enum Inst {
         value: String,
         size: types::Size,
     },
+    Float {
+        dst: ValueId,
+        value: String,
+        size: types::Size,
+    },
     Str {
         dst: ValueId,
         value: String,
@@ -248,19 +255,55 @@ impl Inst {
         }
     }
 
+    pub(in crate::compiler::ir) 
+    fn gen_float(value: &str, size: &types::Size, dst: usize) -> Self {
+        match size {
+            types::Size::F32 => {
+                value.parse::<f32>().unwrap();
+            }
+            types::Size::F64 => {
+                value.parse::<f64>().unwrap();
+            }
+            _ => {},
+        }
+        Self::Float {
+            dst,
+            value: value.to_string(),
+            size: size.clone(),
+        }
+    }
+
     pub fn gen_num(value: &str, size: &types::Size, dst: usize) -> Self {
         match size {
-            types::Size::DB => {
+            types::Size::UDB => {
                 value.parse::<u8>().unwrap();
             }
-            types::Size::DW => {
+            types::Size::UDW => {
                 value.parse::<u16>().unwrap();
             }
-            types::Size::DD => {
+            types::Size::UDD => {
                 value.parse::<u32>().unwrap();
             }
-            types::Size::DQ => {
+            types::Size::UDQ => {
                 value.parse::<u64>().unwrap();
+            }
+            types::Size::DB => {
+                value.parse::<i8>().unwrap();
+            }
+            types::Size::DW => {
+                value.parse::<i16>().unwrap();
+            }
+            types::Size::DD => {
+                value.parse::<i32>().unwrap();
+            }
+            types::Size::DQ => {
+                value.parse::<i64>().unwrap();
+            }
+            types::Size::F32 => {
+                value.parse::<f32>().unwrap();
+            }
+            types::Size::F64 => {
+                value.parse::<f64>().unwrap();
             }
             types::Size::Struct(_) => {
                 panic!("gen_num: 構造体型に数値を直接代入することはできません");
