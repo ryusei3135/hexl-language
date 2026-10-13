@@ -506,7 +506,7 @@ pub fn write_object(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
     let mut shstrtab: Vec<u8> = vec![0];
 
-    let mut push_name = |shstrtab: &mut Vec<u8>, s: &str| -> u32 {
+    let push_name = |shstrtab: &mut Vec<u8>, s: &str| -> u32 {
         let off = shstrtab.len() as u32;
         shstrtab.extend_from_slice(s.as_bytes());
         shstrtab.push(0);

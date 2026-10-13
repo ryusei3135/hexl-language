@@ -380,7 +380,7 @@ mod ty_tests {
     #[test]
     fn struct_init() {
         let mut func = node::FuncDefine::new(
-            "main",
+            "main".to_string(),
             Vec::new(),
             node::TyNode::Ty("int".to_string()),
             false,
@@ -417,7 +417,7 @@ mod ty_tests {
     #[test]
     fn struct_method() {
         let mut f = vec![node::FuncDefine::new(
-            "new",
+            "new".to_string(),
             Vec::new(),
             node::TyNode::Ty("ty".to_string()),
             false,
@@ -425,7 +425,7 @@ mod ty_tests {
         let node::Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
         };
-        func.self_module_name(&"Name".to_string());
+        func.self_module_name("Name".to_string());
         assert_eq!(
             &build("struct Name { a: int new(): ty {}}"),
             &vec![node::StructDefine::new(
@@ -502,8 +502,8 @@ mod ty_tests {
             &vec![node::VariantDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::VariantField::unsafe_new("a".to_string(), node::TyNode::Ty("int".to_string())),
-                    node::VariantField::unsafe_new("b".to_string(), node::TyNode::Ty("i64".to_string())),
+                    node::VariantField::new("a".to_string(), node::TyNode::Ty("int".to_string())),
+                    node::VariantField::new("b".to_string(), node::TyNode::Ty("i64".to_string())),
                 ],
                 Vec::new()
             )]
@@ -513,7 +513,7 @@ mod ty_tests {
     #[test]
     fn variant_method() {
         let mut f = vec![node::FuncDefine::new(
-            "new",
+            "new".to_string(),
             Vec::new(),
             node::TyNode::Ty("ty".to_string()),
             false,
@@ -521,7 +521,7 @@ mod ty_tests {
         let node::Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
         };
-        func.self_module_name(&"Name".to_string());
+        func.self_module_name("Name".to_string());
         assert_eq!(
             &build("variant Name { A(int) new(): ty {}}"),
             &vec![node::VariantDefine::new(

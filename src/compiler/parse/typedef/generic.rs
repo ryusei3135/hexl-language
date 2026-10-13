@@ -787,8 +787,8 @@ mod generic_type_tests {
         assert_eq!(
             v.fields,
             vec![
-                node::VariantField::unsafe_new("a".to_string(), ty("int")),
-                node::VariantField::unsafe_new("b".to_string(), ty("i64")),
+                node::VariantField::new("a".to_string(), ty("int")),
+                node::VariantField::new("b".to_string(), ty("i64")),
             ]
         );
         assert!(!v.is_tagged());
