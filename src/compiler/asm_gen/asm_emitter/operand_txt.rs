@@ -31,7 +31,7 @@ impl AsmEmitter {
     pub(super) 
     fn insert_arr_txt(
         &mut self,
-        name: &str,
+        name: &String,
         dst: usize,
         index: usize,
         this_is_self: SelfPtrInfo,
@@ -72,10 +72,13 @@ impl AsmEmitter {
         } else {
             // 要素`i`は`%rbp - (arr_base + (i + 1) * size)`に置かれる
             // (添字が変数の場合のアドレス計算と同じ配置)
+            //
+            // ベースは常に`%rbp`にする。`dst`のオペランドは配列自身を指す
+            // `-4(%rbp)`のようなメモリ参照なので、ベースに使うと
+            // `-4(-4(%rbp))`になってしまう(`arr_ref_base`と同じ理由)
             let size = var_info.size.to_bytes();
             let pos = var_info.arr_base + size * (index_value + 1);
-            let base = self.extract_operand_text(dst, this_is_self);
-            self.asm_fmt.fmt_ref_operand(&base, pos)
+            self.rbp_ref(pos)
         }
     }
 
@@ -178,6 +181,8 @@ impl AsmEmitter {
             t => panic!("配列の要素には数字のノードが必要です: {:?}", t),
         };
 
+        let mut txt = String::new();
+
         // 要素0が最も%rbpに近い位置に来て、要素が増えるほどアドレスが
         // 小さくなる。領域全体を先に確保し、要素`k`のオフセットは
         // `arr_base + (k + 1) * 要素のサイズ`(要素0のオフセットが`head_offset`)
@@ -186,17 +191,15 @@ impl AsmEmitter {
         let head_offset = arr_base + elem_bytes;
         self.stk_use_counter = arr_base + elem_bytes * ids.len();
 
-        let txt = ids
-            .iter()
-            .enumerate()
-            .map(|(k, id)| {
-                let val = self.extract_operand_text(*id, this_is_self);
-                let dst = self
-                    .asm_fmt
-                    .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
-                self.mov_line(&dst, &val, &size, true)
-            })
-            .collect::<String>();
+        for (k, id) in ids.iter().enumerate() {
+            let value = self.extract_operand_text(*id, this_is_self);
+
+            let dst = self
+                .asm_fmt
+                .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
+
+            txt.push_str(&self.mov_line(&dst, &value, &size, true));
+        }
 
         if RET_IS_ASM {
             return txt;
