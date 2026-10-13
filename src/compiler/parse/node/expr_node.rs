@@ -275,8 +275,18 @@ pub enum Expr {
     Mul((Box<Expr>, Box<Expr>)),
     Div((Box<Expr>, Box<Expr>)),
     Surplus((Box<Expr>, Box<Expr>)),
+
     LessThen((Box<Expr>, Box<Expr>)),
     GreaterThen((Box<Expr>, Box<Expr>)),
+    LessThenEq((Box<Expr>, Box<Expr>)),
+    GreaterThenEq((Box<Expr>, Box<Expr>)),
+
+    AndCalcul((Box<Expr>, Box<Expr>)),
+    XorCalcul((Box<Expr>, Box<Expr>)),
+    OrCalcul((Box<Expr>, Box<Expr>)),
+
+    LShift((Box<Expr>, Box<Expr>)),
+    RShift((Box<Expr>, Box<Expr>)),
     /// `==` 値の等価比較
     Equal((Box<Expr>, Box<Expr>)),
     NotEq((Box<Expr>, Box<Expr>)),

@@ -113,6 +113,20 @@ fn neg_suffix_bits(mnemonic: &str) -> Option<u32> {
     }
 }
 
+/// `base` (`and` / `shl` など) にサイズ接尾辞 (`b`/`w`/`l`/`q`) が付いた
+/// ニーモニックから、オペランドサイズ(bit数)を求める。接尾辞無しは `None`。
+/// レジスタ操作ならレジスタ名からサイズが決まるが、`andl $1, -4(%rbp)` のような
+/// メモリ操作ではサフィックスだけが手がかりになる。
+fn mnemonic_suffix_bits(mnemonic: &str, base: &str) -> Option<u32> {
+    match mnemonic.strip_prefix(base)? {
+        "b" => Some(8),
+        "w" => Some(16),
+        "l" => Some(32),
+        "q" => Some(64),
+        _ => None,
+    }
+}
+
 // ============================================================
 // SSE 命令の表
 // ============================================================
@@ -272,6 +286,35 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "cmp" | "cmpq" | "cmpl" | "cmpw" | "cmpb" => {
             e.emit_cmp(&inst.operands, cmp_size_bits(name))
+        }
+
+        "and" | "andq" | "andl" | "andw" | "andb" => {
+            e.emit_alu(AluOp::And, &inst.operands, mnemonic_suffix_bits(name, "and"))
+        }
+
+        "or" | "orq" | "orl" | "orw" | "orb" => {
+            e.emit_alu(AluOp::Or, &inst.operands, mnemonic_suffix_bits(name, "or"))
+        }
+
+        "xor" | "xorq" | "xorl" | "xorw" | "xorb" => {
+            e.emit_alu(AluOp::Xor, &inst.operands, mnemonic_suffix_bits(name, "xor"))
+        }
+
+        // `sal` は `shl` と同じ命令 (左シフトは算術/論理で同じ)
+        "shl" | "shlq" | "shll" | "shlw" | "shlb" => {
+            e.emit_shift(ShiftOp::Shl, &inst.operands, mnemonic_suffix_bits(name, "shl"))
+        }
+
+        "sal" | "salq" | "sall" | "salw" | "salb" => {
+            e.emit_shift(ShiftOp::Shl, &inst.operands, mnemonic_suffix_bits(name, "sal"))
+        }
+
+        "shr" | "shrq" | "shrl" | "shrw" | "shrb" => {
+            e.emit_shift(ShiftOp::Shr, &inst.operands, mnemonic_suffix_bits(name, "shr"))
+        }
+
+        "sar" | "sarq" | "sarl" | "sarw" | "sarb" => {
+            e.emit_shift(ShiftOp::Sar, &inst.operands, mnemonic_suffix_bits(name, "sar"))
         }
 
         "lea" | "leaq" | "leal" => e.emit_lea(&inst.operands),
@@ -584,6 +627,375 @@ impl Emitter {
         }
     }
 }
+
+// ============================================================
+// and / or / xor / shl / shr / sar
+// ============================================================
+
+/// 2オペランドの論理演算 (ALU 命令)
+#[derive(Clone, Copy)]
+enum AluOp {
+    And,
+    Or,
+    Xor,
+}
+
+impl AluOp {
+    fn name(self) -> &'static str {
+        match self {
+            AluOp::And => "and",
+            AluOp::Or => "or",
+            AluOp::Xor => "xor",
+        }
+    }
+
+    /// 即値グループ (`80` / `81` / `83` の `/digit`)
+    fn group(self) -> u8 {
+        match self {
+            AluOp::Or => 1,
+            AluOp::And => 4,
+            AluOp::Xor => 6,
+        }
+    }
+
+    /// `op r, r/m` (レジスタ -> レジスタ/メモリ) の8bit版オペコード。
+    /// 16/32/64bit 版は `+1`、`op r/m, r` (メモリ -> レジスタ) 版は `+2`、
+    /// アキュムレータ (`%al` / `%eax` ...) と即値の短縮形は `+4` (8bit) / `+5`。
+    fn base_opcode(self) -> u8 {
+        match self {
+            AluOp::Or => 0x08,
+            AluOp::And => 0x20,
+            AluOp::Xor => 0x30,
+        }
+    }
+}
+
+/// シフト命令
+#[derive(Clone, Copy)]
+enum ShiftOp {
+    Shl,
+    Shr,
+    Sar,
+}
+
+impl ShiftOp {
+    fn name(self) -> &'static str {
+        match self {
+            ShiftOp::Shl => "shl",
+            ShiftOp::Shr => "shr",
+            ShiftOp::Sar => "sar",
+        }
+    }
+
+    /// `C0` / `C1` / `D0` - `D3` の `/digit`
+    fn group(self) -> u8 {
+        match self {
+            ShiftOp::Shl => 4,
+            ShiftOp::Shr => 5,
+            ShiftOp::Sar => 7,
+        }
+    }
+}
+
+/// シフト量の指定方法
+enum ShiftCount {
+    /// 1ビット (`shl %eax` / `shl $1, %eax`)
+    One,
+    /// 即値 (`shl $3, %eax`)
+    Imm(u8),
+    /// `%cl` (`shl %cl, %eax`)
+    Cl,
+}
+
+/// 8bit レジスタ `%spl` / `%bpl` / `%sil` / `%dil` は、REX プレフィックスが
+/// 無いと `%ah` / `%ch` / `%dh` / `%bh` の意味になるため、空の REX (0x40) が要る
+fn needs_empty_rex(reg: Reg) -> bool {
+    reg.bits() == 8 && (4..=7).contains(&reg.id())
+}
+
+/// 即値がオペランドサイズに収まるか確かめ、符号付きに正規化して返す
+/// (`andl $0xFFFFFFFF, %eax` は `-1` と同じ)
+fn normalize_imm(name: &str, value: i64, bits: u32) -> Result<i64, String> {
+    let ok = match bits {
+        8 => (-128..=255).contains(&value),
+        16 => (-32768..=65535).contains(&value),
+        32 => (i32::MIN as i64..=u32::MAX as i64).contains(&value),
+        // 64bit の即値は符号拡張される32bitまで
+        64 => (i32::MIN as i64..=i32::MAX as i64).contains(&value),
+        _ => false,
+    };
+    if !ok {
+        return Err(format!(
+            "{}: immediate {} does not fit in {} bit operand",
+            name, value, bits
+        ));
+    }
+    Ok(match bits {
+        8 => value as i8 as i64,
+        16 => value as i16 as i64,
+        32 => value as i32 as i64,
+        _ => value,
+    })
+}
+
+/// `symbol(%rip)` は命令の末尾の即値の分だけ RIP からの距離がずれるが、
+/// その再配置は未対応なので弾く (`cmpl $1, symbol(%rip)` と同じ制約)
+fn reject_rip_symbol_with_imm(name: &str, mem: &MemoryOperand) -> Result<(), String> {
+    if mem.base == Some(Reg::Rip) && mem.symbol.is_some() {
+        return Err(format!(
+            "{}: symbol(%rip) operand with an immediate is not supported",
+            name
+        ));
+    }
+    Ok(())
+}
+
+impl Emitter {
+    /// `[0x66] [REX]` を出力する。`bits` が 16 なら `0x66`、64 なら REX.W
+    fn emit_sized_prefix(&mut self, bits: u32, r: bool, x: bool, b: bool, empty_rex: bool) {
+        if bits == 16 {
+            self.emit_u8(0x66);
+        }
+        let rex = 0x40
+            | (((bits == 64) as u8) << 3)
+            | ((r as u8) << 2)
+            | ((x as u8) << 1)
+            | (b as u8);
+        if rex != 0x40 || empty_rex {
+            self.emit_u8(rex);
+        }
+    }
+
+    /// オペランドサイズ(bit数)が接尾辞と食い違っていないか確かめる
+    fn check_suffix(name: &str, suffix_bits: Option<u32>, bits: u32) -> Result<(), String> {
+        match suffix_bits {
+            Some(suffix) if suffix != bits => Err(format!(
+                "{}: operand size suffix ({} bit) does not match register size ({} bit)",
+                name, suffix, bits
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    // --------------------------------------------------------
+    // and / or / xor
+    //
+    //   andl $0xff, %eax       -> 25 ff 00 00 00   (アキュムレータの短縮形)
+    //   orq  $1, %rbx          -> REX.W 83 /1 ib
+    //   xor  %edx, %edx        -> 31 d2            (op r, r/m)
+    //   and  -4(%rbp), %ecx    -> 23 4d fc         (op r/m, r)
+    //   orb  $1, -1(%rbp)      -> 80 /1 ib
+    //
+    // - レジスタ: サイズはレジスタ名で決まる。接尾辞が付いていて
+    //   レジスタ幅と食い違う場合はエラー。
+    // - メモリ + 即値: サイズは接尾辞で決まる。無印は `mov` と同じく32bit扱い。
+    // --------------------------------------------------------
+    fn emit_alu(
+        &mut self,
+        op: AluOp,
+        operands: &[Operand],
+        suffix_bits: Option<u32>,
+    ) -> Result<(), String> {
+        let name = op.name();
+        if operands.len() != 2 {
+            return Err(format!("{} requires two operands", name));
+        }
+
+        let base = op.base_opcode();
+
+        match (&operands[0], &operands[1]) {
+            (Operand::Immediate(value), Operand::Register(dst)) => {
+                let bits = dst.bits() as u32;
+                Self::check_suffix(name, suffix_bits, bits)?;
+                let value = normalize_imm(name, *value, bits)?;
+
+                // `%al` / `%ax` / `%eax` / `%rax` は、即値が1byteに収まらない
+                // ときだけ、ModRM の無い短縮形 (`op + 4/5`) になる
+                // (8bit は常に短縮形。GNU as と同じ選び方)
+                let accumulator = dst.id() == 0;
+                let fits_i8 = (-128..=127).contains(&value);
+
+                if bits == 8 {
+                    if accumulator {
+                        self.emit_u8(base + 4);
+                        self.emit_u8(value as u8);
+                        return Ok(());
+                    }
+                    self.emit_sized_prefix(bits, false, false, dst.id() >= 8, needs_empty_rex(*dst));
+                    self.emit_u8(0x80);
+                    self.emit_u8(0b11_000_000 | (op.group() << 3) | (dst.id() & 7));
+                    self.emit_u8(value as u8);
+                    return Ok(());
+                }
+
+                self.emit_sized_prefix(bits, false, false, dst.id() >= 8, false);
+                if accumulator && !fits_i8 {
+                    self.emit_u8(base + 5);
+                } else {
+                    self.emit_u8(if fits_i8 { 0x83 } else { 0x81 });
+                    self.emit_u8(0b11_000_000 | (op.group() << 3) | (dst.id() & 7));
+                }
+                if fits_i8 {
+                    self.emit_u8(value as i8 as u8);
+                } else if bits == 16 {
+                    self.emit_u16(value as u16);
+                } else {
+                    self.emit_i32(value as i32);
+                }
+                Ok(())
+            }
+
+            (Operand::Immediate(value), Operand::Memory(mem)) => {
+                let bits = suffix_bits.unwrap_or(32);
+                reject_rip_symbol_with_imm(name, mem)?;
+                let value = normalize_imm(name, *value, bits)?;
+                self.emit_group_imm_mem(value, mem, op.group(), bits)
+            }
+
+            (Operand::Register(src), Operand::Register(dst)) => {
+                if src.bits() != dst.bits() {
+                    return Err(format!("{}: register size mismatch", name));
+                }
+                let bits = src.bits() as u32;
+                Self::check_suffix(name, suffix_bits, bits)?;
+
+                self.emit_sized_prefix(
+                    bits,
+                    src.id() >= 8,
+                    false,
+                    dst.id() >= 8,
+                    needs_empty_rex(*src) || needs_empty_rex(*dst),
+                );
+                self.emit_u8(base + (bits != 8) as u8);
+                self.emit_u8(0b11_000_000 | ((src.id() & 7) << 3) | (dst.id() & 7));
+                Ok(())
+            }
+
+            (Operand::Register(src), Operand::Memory(mem)) => {
+                let bits = src.bits() as u32;
+                Self::check_suffix(name, suffix_bits, bits)?;
+
+                self.emit_sized_prefix(
+                    bits,
+                    src.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    needs_empty_rex(*src),
+                );
+                self.emit_u8(base + (bits != 8) as u8);
+                self.emit_memory_modrm(src.id(), mem)
+            }
+
+            (Operand::Memory(mem), Operand::Register(dst)) => {
+                let bits = dst.bits() as u32;
+                Self::check_suffix(name, suffix_bits, bits)?;
+
+                self.emit_sized_prefix(
+                    bits,
+                    dst.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    needs_empty_rex(*dst),
+                );
+                self.emit_u8(base + 2 + (bits != 8) as u8);
+                self.emit_memory_modrm(dst.id(), mem)
+            }
+
+            (l, r) => Err(format!("unsupported {} operands {:?} {:?}", name, l, r)),
+        }
+    }
+
+    // --------------------------------------------------------
+    // shl / sal / shr / sar
+    //
+    //   shl  $3, %eax        -> C1 /4 ib
+    //   shl  $1, %eax        -> D1 /4        (1bit は短縮形。GNU as と同じ)
+    //   shl  %eax            -> D1 /4        (`$1` の省略形)
+    //   sarq %cl, %rdx       -> REX.W D3 /7  (シフト量は `%cl` のみ)
+    //   shrl $2, -4(%rbp)    -> C1 /5 ib
+    //
+    // 8bit は `C0` / `D0` / `D2`、それ以外は `C1` / `D1` / `D3`。
+    // サイズの決め方は `and` などと同じ (レジスタは名前、メモリは接尾辞)。
+    // --------------------------------------------------------
+    fn emit_shift(
+        &mut self,
+        op: ShiftOp,
+        operands: &[Operand],
+        suffix_bits: Option<u32>,
+    ) -> Result<(), String> {
+        let name = op.name();
+
+        let (count, dest) = match operands {
+            [dest] => (ShiftCount::One, dest),
+            [Operand::Immediate(1), dest] => (ShiftCount::One, dest),
+            [Operand::Immediate(value), dest] => {
+                if !(0..=255).contains(value) {
+                    return Err(format!(
+                        "{}: shift count must be in 0..=255 (got {})",
+                        name, value
+                    ));
+                }
+                (ShiftCount::Imm(*value as u8), dest)
+            }
+            [Operand::Register(Reg::Cl), dest] => (ShiftCount::Cl, dest),
+            [Operand::Register(_), _] => {
+                return Err(format!("{}: shift count register must be %cl", name));
+            }
+            _ => return Err(format!("{} requires one or two operands", name)),
+        };
+
+        let bits = match dest {
+            Operand::Register(reg) => reg.bits() as u32,
+            Operand::Memory(_) => suffix_bits.unwrap_or(32),
+            _ => return Err(format!("invalid {} operand", name)),
+        };
+        if !matches!(bits, 8 | 16 | 32 | 64) {
+            return Err(format!("{}: unsupported operand size", name));
+        }
+        if let Operand::Register(reg) = dest {
+            Self::check_suffix(name, suffix_bits, reg.bits() as u32)?;
+        }
+
+        let opcode = match (&count, bits == 8) {
+            (ShiftCount::One, true) => 0xD0,
+            (ShiftCount::One, false) => 0xD1,
+            (ShiftCount::Imm(_), true) => 0xC0,
+            (ShiftCount::Imm(_), false) => 0xC1,
+            (ShiftCount::Cl, true) => 0xD2,
+            (ShiftCount::Cl, false) => 0xD3,
+        };
+
+        match dest {
+            Operand::Register(reg) => {
+                self.emit_sized_prefix(bits, false, false, reg.id() >= 8, needs_empty_rex(*reg));
+                self.emit_u8(opcode);
+                self.emit_u8(0b11_000_000 | (op.group() << 3) | (reg.id() & 7));
+            }
+            Operand::Memory(mem) => {
+                if matches!(count, ShiftCount::Imm(_)) {
+                    reject_rip_symbol_with_imm(name, mem)?;
+                }
+                self.emit_sized_prefix(
+                    bits,
+                    false,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    false,
+                );
+                self.emit_u8(opcode);
+                self.emit_memory_modrm(op.group(), mem)?;
+            }
+            _ => unreachable!(),
+        }
+
+        if let ShiftCount::Imm(value) = count {
+            self.emit_u8(value);
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod sse_tests {
     use crate::assembler::x64::{convert, Lexer, Parser};
@@ -675,6 +1087,202 @@ mod sse_tests {
             "movss %xmm0",               // オペランド不足
             "add %xmm0, %xmm1",          // SSE 以外の命令はベクトルレジスタ不可
             "mov %xmm0, %rax",
+        ];
+
+        for asm in cases {
+            assert!(assemble(asm).is_err(), "{} should fail", asm);
+        }
+    }
+}
+
+#[cfg(test)]
+mod alu_shift_tests {
+    use crate::assembler::x64::{convert, Lexer, Parser};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize();
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// GNU as (binutils) の出力と一致するか。期待値は `as` + `objcopy` で生成したもの
+    #[test]
+    fn and_or_xor_shift_match_gnu_as() {
+        let cases: &[(&str, &str)] = &[
+            ("and %ecx, %eax", "21c8"),
+            ("and %rcx, %rax", "4821c8"),
+            ("and %cx, %ax", "6621c8"),
+            ("and %cl, %al", "20c8"),
+            ("and %sil, %dil", "4020f7"),
+            ("and %r9b, %al", "4420c8"),
+            ("and %al, %r10b", "4120c2"),
+            ("and %r8, %r15", "4d21c7"),
+            ("and %r8d, %ecx", "4421c1"),
+            ("and %cx, %r9w", "664121c9"),
+            ("and -4(%rbp), %eax", "2345fc"),
+            ("and -8(%rbp), %r9", "4c234df8"),
+            ("and 8(%r12,%r13,4), %r10d", "472354ac08"),
+            ("and %eax, -4(%rbp)", "2145fc"),
+            ("and %r11, (%rsp)", "4c211c24"),
+            ("and %sil, -1(%rbp)", "402075ff"),
+            ("and -1(%rbp), %dil", "40227dff"),
+            ("andw %cx, 2(%rax)", "66214802"),
+            ("and $1, %eax", "83e001"),
+            ("and $255, %eax", "25ff000000"),
+            ("and $0xff, %ecx", "81e1ff000000"),
+            ("and $0x1234, %eax", "2534120000"),
+            ("and $0x12345678, %eax", "2578563412"),
+            ("and $0x12345678, %ebx", "81e378563412"),
+            ("and $-1, %rax", "4883e0ff"),
+            ("and $0x7fffffff, %rax", "4825ffffff7f"),
+            ("and $-2, %rbx", "4883e3fe"),
+            ("and $0x12345678, %r9", "4981e178563412"),
+            ("and $15, %al", "240f"),
+            ("and $15, %bl", "80e30f"),
+            ("and $15, %sil", "4080e60f"),
+            ("and $15, %r9b", "4180e10f"),
+            ("and $1, %ax", "6683e001"),
+            ("and $0x1234, %ax", "66253412"),
+            ("and $0x1234, %cx", "6681e13412"),
+            ("and $0xffff, %ax", "6683e0ff"),
+            ("and $0xffffffff, %eax", "83e0ff"),
+            ("andl $1, -4(%rbp)", "8365fc01"),
+            ("andl $0x1000, -4(%rbp)", "8165fc00100000"),
+            ("andq $7, -8(%rbp)", "488365f807"),
+            ("andq $0x12345678, (%rax)", "48812078563412"),
+            ("andw $3, 2(%rax)", "6683600203"),
+            ("andw $0x1234, 2(%rax)", "668160023412"),
+            ("andb $1, -1(%rbp)", "8065ff01"),
+            ("andb $0xff, (%rdi)", "8027ff"),
+            ("andl $1, 8(%r12,%r13,4)", "438364ac0801"),
+            ("andq %rax, %rbx", "4821c3"),
+            ("or %ecx, %eax", "09c8"),
+            ("or %rcx, %rax", "4809c8"),
+            ("or %cl, %al", "08c8"),
+            ("or %r9d, %r10d", "4509ca"),
+            ("or -4(%rbp), %eax", "0b45fc"),
+            ("or %eax, -4(%rbp)", "0945fc"),
+            ("or $1, %eax", "83c801"),
+            ("or $0x12345678, %eax", "0d78563412"),
+            ("or $0x12345678, %edx", "81ca78563412"),
+            ("or $-1, %rcx", "4883c9ff"),
+            ("or $1, %al", "0c01"),
+            ("or $1, %cl", "80c901"),
+            ("orl $1, -4(%rbp)", "834dfc01"),
+            ("orb $0x80, -1(%rbp)", "804dff80"),
+            ("orq $0x12345678, 16(%rax)", "4881481078563412"),
+            ("orw $1, (%rax)", "66830801"),
+            ("xor %eax, %eax", "31c0"),
+            ("xor %edx, %edx", "31d2"),
+            ("xor %r8d, %r8d", "4531c0"),
+            ("xor %rax, %rax", "4831c0"),
+            ("xor %rdx, %rdx", "4831d2"),
+            ("xor %cx, %cx", "6631c9"),
+            ("xor %cl, %cl", "30c9"),
+            ("xor %esi, %edi", "31f7"),
+            ("xor -4(%rbp), %ecx", "334dfc"),
+            ("xor %ecx, -4(%rbp)", "314dfc"),
+            ("xor %r12, 8(%rbp)", "4c316508"),
+            ("xor $1, %eax", "83f001"),
+            ("xor $0x12345678, %eax", "3578563412"),
+            ("xor $-1, %ebx", "83f3ff"),
+            ("xor $0x55, %al", "3455"),
+            ("xor $0x55, %dl", "80f255"),
+            ("xorl $1, -4(%rbp)", "8375fc01"),
+            ("xorb $1, -1(%rbp)", "8075ff01"),
+            ("xorq $-1, -8(%rbp)", "488375f8ff"),
+            ("xorw $0x1234, -2(%rbp)", "668175fe3412"),
+            ("shl $3, %eax", "c1e003"),
+            ("shl $1, %eax", "d1e0"),
+            ("shl %eax", "d1e0"),
+            ("shl $0, %eax", "c1e000"),
+            ("shl $31, %r9d", "41c1e11f"),
+            ("shl $63, %rax", "48c1e03f"),
+            ("shl $255, %eax", "c1e0ff"),
+            ("shl $4, %ax", "66c1e004"),
+            ("shl $1, %ax", "66d1e0"),
+            ("shl $2, %al", "c0e002"),
+            ("shl $1, %al", "d0e0"),
+            ("shl $2, %sil", "40c0e602"),
+            ("shl $2, %r10b", "41c0e202"),
+            ("shl $5, %r9", "49c1e105"),
+            ("shl %cl, %eax", "d3e0"),
+            ("shl %cl, %rax", "48d3e0"),
+            ("shl %cl, %ax", "66d3e0"),
+            ("shl %cl, %al", "d2e0"),
+            ("shl %cl, %r11d", "41d3e3"),
+            ("shl %cl, %sil", "40d2e6"),
+            ("shll $2, -4(%rbp)", "c165fc02"),
+            ("shll $1, -4(%rbp)", "d165fc"),
+            ("shll -4(%rbp)", "d165fc"),
+            ("shlq $3, -8(%rbp)", "48c165f803"),
+            ("shlw $3, 2(%rax)", "66c1600203"),
+            ("shlb $3, -1(%rbp)", "c065ff03"),
+            ("shlb $1, -1(%rbp)", "d065ff"),
+            ("shll %cl, -4(%rbp)", "d365fc"),
+            ("shlq %cl, (%rax)", "48d320"),
+            ("shlb %cl, (%rdi)", "d227"),
+            ("shlw %cl, (%rax)", "66d320"),
+            ("shll $2, 8(%r12,%r13,4)", "43c164ac0802"),
+            ("sal $3, %eax", "c1e003"),
+            ("sal %cl, %rax", "48d3e0"),
+            ("sall $2, -4(%rbp)", "c165fc02"),
+            ("shr $3, %eax", "c1e803"),
+            ("shr $1, %rdx", "48d1ea"),
+            ("shr %rdx", "48d1ea"),
+            ("shr $2, %r8", "49c1e802"),
+            ("shr %cl, %edx", "d3ea"),
+            ("shr %cl, %r8b", "41d2e8"),
+            ("shrl $5, -4(%rbp)", "c16dfc05"),
+            ("shrq %cl, -8(%rbp)", "48d36df8"),
+            ("shrb $1, (%rax)", "d028"),
+            ("shrw $7, (%rbx)", "66c12b07"),
+            ("sar $3, %eax", "c1f803"),
+            ("sar $1, %eax", "d1f8"),
+            ("sar $63, %rax", "48c1f83f"),
+            ("sar %cl, %eax", "d3f8"),
+            ("sar %cl, %r9", "49d3f9"),
+            ("sarl $2, -4(%rbp)", "c17dfc02"),
+            ("sarq %cl, -8(%rbp)", "48d37df8"),
+            ("sarb $4, -1(%rbp)", "c07dff04"),
+            ("sarw $1, -2(%rbp)", "66d17dfe"),
+            ("sarq $63, 16(%r9)", "49c179103f"),
+        ];
+
+        for (asm, expected) in cases {
+            let bytes = assemble(asm).unwrap_or_else(|e| panic!("{}: {}", asm, e));
+            assert_eq!(hex(&bytes), *expected, "{}", asm);
+        }
+    }
+
+    #[test]
+    fn and_or_xor_shift_reject_invalid_operands() {
+        let cases = [
+            "and %eax, %rbx",             // レジスタのサイズ不一致
+            "andq %eax, %ebx",            // 接尾辞とレジスタ幅が不一致
+            "or $0x100000000, %eax",      // 即値が32bitに収まらない
+            "or $0x100, %al",             // 即値が8bitに収まらない
+            "xor $0x80000000, %rax",      // 64bit の即値は符号付き32bitまで
+            "and $1, foo(%rip)",          // 即値付きの RIP 相対シンボルは未対応
+            "and %xmm0, %xmm1",           // ベクトルレジスタ
+            "and %eax",                   // オペランド不足
+            "shl %al, %eax",              // シフト量のレジスタは %cl のみ
+            "shl %ecx, %eax",             // %cl 以外
+            "shl $256, %eax",             // シフト量は 0..=255
+            "shl $-1, %eax",
+            "shlq $1, %eax",              // 接尾辞とレジスタ幅が不一致
+            "shl $1, $2",                 // 宛先が即値
+            "shl $1, %eax, %ebx",         // オペランド過多
+            "shl $2, foo(%rip)",          // 即値付きの RIP 相対シンボルは未対応
         ];
 
         for asm in cases {

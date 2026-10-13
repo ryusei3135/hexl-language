@@ -268,7 +268,7 @@ impl Parser {
                     return crate::err_at!(self.stmt_name_not_found_after_lbracket(tkn));
                 }
             }
-            lex::Tkn::KeyWordRet => node::StmtNode::Return(self.expr_add(true)?).wrap(),
+            lex::Tkn::KeyWordRet => node::StmtNode::Return(self.expr_branch()?).wrap(),
             lex::Tkn::KeyWordContinue => self.loop_control_node(true)?,
             lex::Tkn::KeyWordBreak => self.loop_control_node(false)?,
             lex::Tkn::KeyWordLoop => self.make_loop_node()?,
@@ -327,7 +327,7 @@ impl Parser {
                     return crate::err_at!(self.variant_bind_outside_cond());
                 }
                 // 条件に構造体の初期化を使うことはできない
-                Some(Box::new(self.expr_cmp(false)?))
+                Some(Box::new(self.expr_or(false)?))
             }
         };
         // "{"をスキップ

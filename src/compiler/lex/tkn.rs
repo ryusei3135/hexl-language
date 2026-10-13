@@ -13,6 +13,8 @@ pub enum Tkn {
     Colon,
     // %
     Surplus,
+    And,
+    Xor,
     Or,
     Dot,
     LAngleBracket,
@@ -20,12 +22,17 @@ pub enum Tkn {
     LBracket,
     RBracket,
 
+    GreaterThanEq,
+    LessThanEq,
     /// `==` (値の比較用の等価演算子)
     EqEq,
     NotEq,
     Not,
     /// `=>` (matchの条件/パターンの後に付ける矢印)
     Arrow,
+
+    LShift,
+    RShift,
 
     AddEq, // +=
     SubEq, // -=

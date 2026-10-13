@@ -113,7 +113,7 @@ impl Parser {
         if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {
             loop {
                 // 初期化構造体のノードを作成可能
-                items.push(self.expr_cmp(true)?);
+                items.push(self.expr_or(true)?);
 
                 match self.current_tkn() {
                     lex::Tkn::Comma => continue,

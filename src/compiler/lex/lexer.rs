@@ -57,6 +57,8 @@ mod local {
         RBrace,
         Comma,
         Colon,
+        And,
+        Xor,
         Or,
         Dot,
         LAngleBracket,
@@ -239,6 +241,8 @@ impl Lexer {
                 GenFlag::Comma => Tkn::Comma,
                 GenFlag::Colon => Tkn::Colon,
                 GenFlag::Surplus => Tkn::Surplus,
+                GenFlag::And => Tkn::And,
+                GenFlag::Xor => Tkn::Xor,
                 GenFlag::Or => Tkn::Or,
                 GenFlag::Dot => Tkn::Dot,
                 GenFlag::LAngleBracket => Tkn::LAngleBracket,
@@ -350,6 +354,8 @@ impl Lexer {
             Some('>') => GenFlag::RAngleBracket,
             Some('[') => GenFlag::LBracket,
             Some(']') => GenFlag::RBracket,
+            Some('&') => GenFlag::And,
+            Some('^') => GenFlag::Xor,
             Some('|') => GenFlag::Or,
             Some('.') => GenFlag::Dot,
             Some('!') => GenFlag::Not,
@@ -973,5 +979,10 @@ mod tests {
     fn check_float_with_trailing_letters_errors() {
         let mut lex = lexer();
         assert!(lex.analy(&"3.14x".to_string()).is_err());
+    }
+
+    #[test]
+    fn check_bitwise_operator_tokens() {
+        assert_eq!(lex_tkns("& ^ |"), vec![Tkn::And, Tkn::Xor, Tkn::Or]);
     }
 }

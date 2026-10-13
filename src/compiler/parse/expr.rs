@@ -120,27 +120,102 @@ impl Parser {
             self.next_tkn(&[])?;
             self.expr_match()
         } else {
-            self.expr_cmp(true)
+            self.expr_or(true)
         }
     }
 
-    pub(in crate::compiler::parse) 
+    pub(in crate::compiler::parse)
+    fn expr_or(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_xor(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::Or => node::Expr::OrCalcul(node::Expr::wrap(left, self.expr_xor(init_struct)?)),
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn expr_xor(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_and(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::Xor => node::Expr::XorCalcul(node::Expr::wrap(left, self.expr_and(init_struct)?)),
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn expr_and(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_eq(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::And => node::Expr::AndCalcul(node::Expr::wrap(left, self.expr_eq(init_struct)?)),
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn expr_eq(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_cmp(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::EqEq => {
+                    node::Expr::Equal(node::Expr::wrap(left, self.expr_cmp(init_struct)?))
+                }
+                lex::Tkn::NotEq => {
+                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_cmp(init_struct)?))
+                }
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
     fn expr_cmp(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
-        let mut left = self.expr_add(ini_struct)?;
+        let mut left = self.expr_shift(ini_struct)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::LAngleBracket => {
-                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_add(ini_struct)?))
+                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
                 }
                 lex::Tkn::RAngleBracket => {
-                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_add(ini_struct)?))
+                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
                 }
-                lex::Tkn::EqEq => {
-                    node::Expr::Equal(node::Expr::wrap(left, self.expr_add(ini_struct)?))
+                lex::Tkn::LessThanEq => {
+                    node::Expr::LessThenEq(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
                 }
-                lex::Tkn::NotEq => {
-                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_add(ini_struct)?))
+                lex::Tkn::GreaterThanEq => {
+                    node::Expr::GreaterThenEq(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
+                }
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn expr_shift(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_add(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::LShift => {
+                    node::Expr::LShift(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                }
+                lex::Tkn::RShift => {
+                    node::Expr::RShift(node::Expr::wrap(left, self.expr_add(init_struct)?))
                 }
                 _ => break,
             };
@@ -245,7 +320,7 @@ impl Parser {
             lex::Tkn::Str(value) => node::Expr::Str(value),
             lex::Tkn::Name(name) => self.gen_name_node::<false>(name, init_struct)?,
             lex::Tkn::LParen => {
-                let result = self.expr_cmp(init_struct)?;
+                let result = self.expr_or(init_struct)?;
 
                 if self.current_tkn() == &lex::Tkn::LParen {
                     dbg!(self.current_tkn());
@@ -333,7 +408,7 @@ impl Parser {
         if self.next_tkn_ref(&["not `)`"])? != lex::Tkn::RParen {
             loop {
                 // 引数の式を取得
-                args.push(self.expr_cmp(ini_struct)?);
+                args.push(self.expr_or(ini_struct)?);
 
                 match self.current_tkn() {
                     lex::Tkn::Comma => {
@@ -446,6 +521,48 @@ mod expr_tests {
             })
             .wrap_group2()
         );
+    }
+
+    #[test]
+    fn check_bitwise_operator_precedence() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): int { a: int = 1 | 2 ^ 3 & 4 }");
+        let node::Group1Node::FuncDefine(ref function) = p.parser(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        let node::Group2Node::Expr(node::Expr::DefVar(var)) = function.body[0].get_node() else {
+            panic!("not variable definition");
+        };
+
+        let expected = node::Expr::OrCalcul(node::Expr::wrap(
+            node::Expr::Number("1".to_string()),
+            node::Expr::XorCalcul(node::Expr::wrap(
+                node::Expr::Number("2".to_string()),
+                node::Expr::AndCalcul(node::Expr::wrap(
+                    node::Expr::Number("3".to_string()),
+                    node::Expr::Number("4".to_string()),
+                )),
+            )),
+        ));
+        assert_eq!(var.value.as_ref(), &expected);
+    }
+
+    #[test]
+    fn check_bitwise_operator_in_return() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): int { ret 1 & 2 }");
+        let node::Group1Node::FuncDefine(ref function) = p.parser(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+
+        let expected = node::StmtNode::Return(node::Expr::AndCalcul(node::Expr::wrap(
+            node::Expr::Number("1".to_string()),
+            node::Expr::Number("2".to_string()),
+        )))
+        .wrap();
+        assert_eq!(function.body[0].get_node(), &expected);
     }
 
     #[test]

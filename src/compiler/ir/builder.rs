@@ -404,11 +404,32 @@ impl IR {
             node::Expr::GreaterThen(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::GreaterThen)
             }
+            node::Expr::LessThenEq(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::GreaterThenEq)
+            }
+            node::Expr::GreaterThenEq(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::GreaterThenEq)
+            }
             node::Expr::Equal(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::Equal)
             }
             node::Expr::NotEq(node) => {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::NotEq)
+            }
+            node::Expr::AndCalcul(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::AndCalcul)
+            }
+            node::Expr::XorCalcul(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::XorCalcul)
+            }
+            node::Expr::OrCalcul(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::OrCalcul)
+            }
+            node::Expr::LShift(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::LShift)
+            }
+            node::Expr::RShift(node) => {
+                self.build_expr_inst(node, &expect_byte, inst::ExprKind::RShift)
             }
             node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
             node::Expr::Float(value) => inst::Inst::gen_float(&value, &expect_byte, self.id_counter),

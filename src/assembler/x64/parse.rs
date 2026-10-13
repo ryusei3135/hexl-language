@@ -65,6 +65,25 @@ impl<'a> Lexer<'a> {
     // `.` の直後が数字のときだけ小数として扱う
     // (`1.` のような形は従来どおり整数 + 識別子の扱いのまま)。
     fn number(&mut self) -> Token {
+        // 16進数 (`0xff` / `0XFF`)。`0x` の直後が16進数字のときだけ。
+        // 64bit に収まらない桁は上位を切り捨てる (`0xFFFFFFFFFFFFFFFF` は `-1`)
+        if self.current == Some('0')
+            && matches!(self.peek(0), Some('x' | 'X'))
+            && matches!(self.peek(1), Some(c) if c.is_ascii_hexdigit())
+        {
+            self.advance(); // '0'
+            self.advance(); // 'x'
+
+            let mut value: u64 = 0;
+
+            while let Some(digit) = self.current.and_then(|c| c.to_digit(16)) {
+                value = value.wrapping_mul(16).wrapping_add(digit as u64);
+                self.advance();
+            }
+
+            return Token::Number(value as i64);
+        }
+
         let mut value = String::new();
 
         while let Some(c) = self.current {

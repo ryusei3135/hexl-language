@@ -143,6 +143,43 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
                 template: "{space}pop {dst}\n",
             },
         ),
+        // 論理演算
+        (
+            "and",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}mov {src1}, {dst}\n{space}and {src2}, {dst}\n",
+            },
+        ),
+        (
+            "xor",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}mov {src1}, {dst}\n{space}xor {src2}, {dst}\n",
+            },
+        ),
+        (
+            "or",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}mov {src1}, {dst}\n{space}or {src2}, {dst}\n",
+            },
+        ),
+        (
+            "lshift",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}mov {src1}, {dst}\n{space}shl {src2}, {dst}\n",
+            },
+        ),
+        (
+            "rshift",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}mov {src1}, {dst}\n{space}shr {src2}, {dst}\n",
+            },
+        ),
+
         (
             "add",
             StaticOperandInfo {
@@ -197,6 +234,20 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             StaticOperandInfo {
                 len: 2,
                 template: "{space}cmp {src2}, {src1}\n{space}jg {label}\n",
+            },
+        ),
+        (
+            "cmp_l_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n{space}jle {label}\n",
+            },
+        ),
+        (
+            "cmp_g_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n{space}jge {label}\n",
             },
         ),
         (

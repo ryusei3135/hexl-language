@@ -19,7 +19,7 @@ impl Parser {
             Some(Box::new(self.expr_variant_bind()?))
         } else {
             // 構造体を初期化する式を代入することはできないので、`false`
-            Some(Box::new(self.expr_cmp(STRUCT_NOT_INIT)?))
+            Some(Box::new(self.expr_or(STRUCT_NOT_INIT)?))
         };
 
         // 真偽値(比較式)が与えられた場合は、単純なif/elseとして扱う
@@ -59,7 +59,7 @@ impl Parser {
                 }
                 self.expr_variant_bind()?
             } else {
-                self.expr_cmp(STRUCT_NOT_INIT)?
+                self.expr_or(STRUCT_NOT_INIT)?
             };
 
             // => 構文エラーを返す

@@ -842,11 +842,19 @@ impl AsmEmitter {
                 inst::ExprKind::Div | inst::ExprKind::Surplus => "float_div",
                 inst::ExprKind::LessThen => "cmp_l",
                 inst::ExprKind::GreaterThen => "cmp_g",
+                inst::ExprKind::LessThenEq => "cmp_l_e",
+                inst::ExprKind::GreaterThenEq => "cmp_g_e",
                 inst::ExprKind::Equal => "cmp_e",
                 inst::ExprKind::NotEq => "cmp_ne",
+                _ => panic!(),
             }
         } else {
             match kind {
+                inst::ExprKind::AndCalcul => "and",
+                inst::ExprKind::XorCalcul => "xor",
+                inst::ExprKind::OrCalcul => "or",
+                inst::ExprKind::LShift => "lshift",
+                inst::ExprKind::RShift => "rshist",
                 inst::ExprKind::Add => "add",
                 inst::ExprKind::Sub => "sub",
                 // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
@@ -855,6 +863,8 @@ impl AsmEmitter {
                 inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
                 inst::ExprKind::LessThen => "cmp_l",
                 inst::ExprKind::GreaterThen => "cmp_g",
+                inst::ExprKind::LessThenEq => "cmp_l_e",
+                inst::ExprKind::GreaterThenEq => "cmp_g_e",
                 inst::ExprKind::Equal => "cmp_e",
                 inst::ExprKind::NotEq => "cmp_ne",
             }
@@ -867,12 +877,19 @@ impl AsmEmitter {
     ///  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
     fn expr_mnemonic(kind: &inst::ExprKind) -> &'static str {
         match kind {
+            inst::ExprKind::AndCalcul => "and",
+            inst::ExprKind::XorCalcul => "xor",
+            inst::ExprKind::OrCalcul => "or",
+            inst::ExprKind::LShift => "lshift",
+            inst::ExprKind::RShift => "rshist",
             inst::ExprKind::Add => "add",
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "imul",
             inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
             inst::ExprKind::LessThen
             | inst::ExprKind::GreaterThen
+            | inst::ExprKind::LessThenEq
+            | inst::ExprKind::GreaterThenEq
             | inst::ExprKind::NotEq
             | inst::ExprKind::Equal => "cmp",
         }
@@ -934,9 +951,16 @@ impl AsmEmitter {
                 expr.kind,
                 inst::ExprKind::Add
                     | inst::ExprKind::Sub
+                    | inst::ExprKind::AndCalcul
+                    | inst::ExprKind::XorCalcul
+                    | inst::ExprKind::OrCalcul
+                    | inst::ExprKind::LShift
+                    | inst::ExprKind::RShift
                     | inst::ExprKind::Mul
                     | inst::ExprKind::LessThen
                     | inst::ExprKind::GreaterThen
+                    | inst::ExprKind::LessThenEq
+                    | inst::ExprKind::GreaterThenEq
                     | inst::ExprKind::Equal
                     | inst::ExprKind::NotEq
             )

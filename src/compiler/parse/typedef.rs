@@ -107,7 +107,7 @@ impl Parser {
             fields.insert(
                 name,
                 // 構造体を初期化する
-                Box::new(self.expr_cmp(true)?),
+                Box::new(self.expr_or(true)?),
             );
 
             match self.current_tkn() {
@@ -155,7 +155,7 @@ impl Parser {
 
         // `(`へ進み、さらに値の先頭のトークンへ進む
         let _ = self.next_tkn(&["("])?;
-        let value = Box::new(self.expr_cmp(true)?);
+        let value = Box::new(self.expr_or(true)?);
 
         // 値の後ろは`)`でなければならない
         if self.current_tkn() != &lex::Tkn::RParen {

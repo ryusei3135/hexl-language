@@ -11,8 +11,15 @@ pub enum ExprKind {
     Surplus,
     LessThen,
     GreaterThen,
+    LessThenEq,
+    GreaterThenEq,
     Equal,
     NotEq,
+    LShift,
+    RShift,
+    AndCalcul,
+    XorCalcul,
+    OrCalcul,
 }
 
 pub type ValueId = usize;
