@@ -151,6 +151,12 @@ impl AsmEmitter {
             "address"
         } else if self.curr_inst[param].is_pointer() {
             "address"
+        } else if self.curr_inst[param].is_float(&self.curr_inst) {
+            match self.curr_inst[param].get_param_ty() {
+                Some(types::Size::F32) => "float_mov",
+                Some(types::Size::F64) => "f64_mov",
+                _ => panic!("floating-point argument has non-floating-point type"),
+            }
         } else if matches!(self.curr_inst[param], inst::Inst::Str { .. }) {
             // 文字列の実体は静的領域(`M0`など)にあり、引数には
             // その「アドレス」を渡す必要がある。`mov`だとラベルの指す
@@ -316,7 +322,7 @@ impl AsmEmitter {
             .args
             .iter()
             .enumerate()
-            .map(|(idx, arg)| self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap()))
+            .map(|(idx, arg)| self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ)))
             .collect();
         // 構造体の変数(`s: Name = Name { .. }`)はスタックに置くので、
         // レジスタの割り当てから外し、次の変数に割り当てる
@@ -344,7 +350,7 @@ impl AsmEmitter {
     /// 引数が構造体などなら必ず64bitのサイズになる
     fn setting_args_reg_alloc(&mut self, args_def: &[node::ArgsNode]) {
         args_def.iter().enumerate().for_each(|(idx, arg)| {
-            let reg = self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap());
+            let reg = self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ));
             self.used_reg.bind_var(&arg.name, &reg);
         });
     }
@@ -370,6 +376,9 @@ impl AsmEmitter {
             inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
             inst::Inst::Expr(expr) => self.gen_expr_asm(expr),
             inst::Inst::Num { .. } => {}
+            inst::Inst::Float { dst, value, size } => {
+                self.gen_float_asm(*dst, value, size)
+            }
             inst::Inst::InitArr(_) => {}
             inst::Inst::Block(name) => {
                 self.asm_text.push_str(&format!("{}:\n", name));
@@ -547,6 +556,15 @@ impl AsmEmitter {
     fn gen_str_asm(&mut self, dst: usize, value: &str) {
         let label_name = format!("M{}", self.data_idx.to_string());
         let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
+        self.data_sec_text.push_str(&fmt_data);
+        self.data_map.push((dst, label_name));
+        self.data_idx += 1;
+    }
+
+    #[inline(always)]
+    fn gen_float_asm(&mut self, dst: usize, value: &str, size: &types::Size) {
+        let label_name = format!("M{}", self.data_idx);
+        let fmt_data = self.asm_fmt.get_float_fmt(value, &label_name, size);
         self.data_sec_text.push_str(&fmt_data);
         self.data_map.push((dst, label_name));
         self.data_idx += 1;

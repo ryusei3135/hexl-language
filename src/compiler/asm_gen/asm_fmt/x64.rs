@@ -269,28 +269,28 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "float_add",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}addss {src1}, {src2}\n{space}movss {src2}, {dst}\n",
+                template: "{space}movss {src2}, {dst}\n{space}addss {src1}, {dst}\n",
             },
         ),
         (
             "float_mul",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}mulss {src1}, {src2}\n{space}movss {src2}, {dst}\n",
+                template: "{space}movss {src2}, {dst}\n{space}mulss {src1}, {dst}\n",
             },
         ),
         (
             "float_div",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}divss {src1}, {src2}\n{space}movss {src2}, {dst}\n",
+                template: "{space}movss {src2}, {dst}\n{space}divss {src1}, {dst}\n",
             },
         ),
         (
             "float_sub",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}subss {src1}, {src2}\n{space}movss {src2}, {dst}\n",
+                template: "{space}movss {src2}, {dst}\n{space}subss {src1}, {dst}\n",
             },
         ),
         (
@@ -319,28 +319,28 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "f64_add",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}addsd {src2}, {src1}\n{space}movsd {src1}, {dst}\n",
+                template: "{space}movsd {src1}, {dst}\n{space}addsd {src2}, {dst}\n",
             },
         ),
         (
             "f64_mul",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}mulsd {src2}, {src1}\n{space}movsd {src1}, {dst}\n",
+                template: "{space}movsd {src1}, {dst}\n{space}mulsd {src2}, {dst}\n",
             },
         ),
         (
             "f64_div",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}divsd {src2}, {src1}\n{space}movsd {src1}, {dst}\n",
+                template: "{space}movsd {src1}, {dst}\n{space}divsd {src2}, {dst}\n",
             },
         ),
         (
             "f64_sub",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}subsd {src2}, {src1}\n{space}movsd {src1}, {dst}\n",
+                template: "{space}movsd {src1}, {dst}\n{space}subsd {src2}, {dst}\n",
             },
         ),
         (
@@ -369,28 +369,28 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "float_p_add",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}addps {src2}, {src1}\n{space}movaps {src1}, {dst}\n",
+                template: "{space}movaps {src1}, {dst}\n{space}addps {src2}, {dst}\n",
             },
         ),
         (
             "float_p_mul",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}mulps {src2}, {src1}\n{space}movaps {src1}, {dst}\n",
+                template: "{space}movaps {src1}, {dst}\n{space}mulps {src2}, {dst}\n",
             },
         ),
         (
             "float_p_div",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}divps {src2}, {src1}\n{space}movaps {src1}, {dst}\n",
+                template: "{space}movaps {src1}, {dst}\n{space}divps {src2}, {dst}\n",
             },
         ),
         (
             "float_p_sub",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}subps {src2}, {src1}\n{space}movaps {src1}, {dst}\n",
+                template: "{space}movaps {src1}, {dst}\n{space}subps {src2}, {dst}\n",
             },
         ),
         (

@@ -282,6 +282,7 @@ impl Inst {
             inst::Inst::Param(p) => Some(p.clone().ty),
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),
             inst::Inst::Num { size, .. } => Some(size.clone()),
+            inst::Inst::Float { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
             inst::Inst::RefStructPtr { size, .. } => Some(size.clone()),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { size, .. }) => Some(size.clone()),

@@ -382,6 +382,16 @@ impl MngAsmFmt {
         format!(".align 4\n{}: .long {}\n", label, value.replace("$", ""))
     }
 
+    pub(in crate::compiler::asm_gen)
+    fn get_float_fmt(&self, value: &str, label: &str, size: &types::Size) -> String {
+        let (alignment, directive) = match size {
+            types::Size::F32 => (4, ".float"),
+            types::Size::F64 => (8, ".double"),
+            _ => panic!("float literal has non-floating-point type: {:?}", size),
+        };
+        format!(".align {alignment}\n{label}: {directive} {value}\n")
+    }
+
     #[inline(always)]
     pub(in crate::compiler::asm_gen) 
     fn get_global_fmt(&self, name: &str) -> String {

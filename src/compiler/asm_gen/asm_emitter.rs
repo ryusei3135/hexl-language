@@ -697,6 +697,12 @@ impl AsmEmitter {
     ) -> String {
         match self.inst_at(parent_id) {
             inst::Inst::Num { value, .. } => self.asm_fmt.get_fmt_num(&value),
+            inst::Inst::Float { .. } => {
+                let label = self
+                    .static_label(parent_id)
+                    .expect("float literal data label not found");
+                self.asm_fmt.fmt_static_var_rip(&label)
+            }
             inst::Inst::GetPtr { size: _, stk } => {
                 // スタック上に置かれた値そのもの(値が置かれているメモリ)
                 // を指すオペランドを、`%rbp`からのオフセットを使って生成する

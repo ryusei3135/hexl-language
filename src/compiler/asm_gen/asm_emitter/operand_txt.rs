@@ -129,7 +129,7 @@ impl AsmEmitter {
         // ポインタでない、レジスタ上の変数が static領域の値なら、そのラベルを返す
         if !var.is_stack && var.size.is_pointer().is_none() {
             if let Some(label) = self.static_label(src) {
-                return label;
+                return self.asm_fmt.fmt_static_var_rip(&label);
             }
         }
 
