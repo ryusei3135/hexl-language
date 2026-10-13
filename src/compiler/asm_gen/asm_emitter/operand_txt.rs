@@ -31,7 +31,7 @@ impl AsmEmitter {
     pub(super) 
     fn insert_arr_txt(
         &mut self,
-        name: &String,
+        name: &str,
         dst: usize,
         index: usize,
         this_is_self: SelfPtrInfo,

@@ -69,7 +69,7 @@ impl AsmEmitter {
     /// 流れ: 前回の一時レジスタの解放 → 基準の取得(`arr_ref_base`) →
     /// 添字の読み込み(`load_index_reg`) → 符号の反転と補正(`adjust_index_reg`) →
     /// オペランドの組み立て
-    fn ref_arr_indexed(&mut self, name: &str, index_operand: &String, index_size: &Size) -> String {
+    fn ref_arr_indexed(&mut self, name: &str, index_operand: &str, index_size: &Size) -> String {
         // 前回の添字用レジスタが解放されていなければ、ここで解放する
         if let Some(old) = self.arr_index_temp.take() {
             self.used_reg.release(old);
@@ -129,7 +129,7 @@ impl AsmEmitter {
 
     /// 構造体のメンバー`member`(サイズ`size`)を、レジスタ`reg_num`へ
     /// 64bitに符号拡張して読み込む。`reg64`は`reg_num`の64bitの名前
-    fn load_index_reg(&mut self, member: &String, size: &Size, reg_num: usize, reg64: &String) {
+    fn load_index_reg(&mut self, member: &str, size: &Size, reg_num: usize, reg64: &str) {
         let idx_size = Self::value_reg_size(size);
         match idx_size {
             // 8/16bitの添字は、メモリから直接符号拡張して読み込む
@@ -160,7 +160,7 @@ impl AsmEmitter {
     /// 補正して、参照に使うオフセットを返す
     fn adjust_index_reg(
         &mut self,
-        reg64: &String,
+        reg64: &str,
         is_ptr: bool,
         arr_len: usize,
         arr_base: usize,
