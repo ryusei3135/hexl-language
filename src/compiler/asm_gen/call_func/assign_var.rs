@@ -118,7 +118,7 @@ impl AsmEmitter {
     fn assign_val_is_float(
         &mut self,
         current_reg: RegisterMode,
-        value: usize,
+        value_idx: usize,
         size: &types::Size,
         this_is_self: SelfPtrInfo,
     ) -> String {
@@ -131,7 +131,7 @@ impl AsmEmitter {
             _ => panic!("floating-point variable has non-floating-point type: {:?}", size),
         };
         let dst = self.asm_fmt.get_fmt_float_reg(index, size);
-        let src = self.extract_operand_text(value, this_is_self);
+        let src = self.extract_operand_text(value_idx, this_is_self);
         self.asm_fmt
             .get_opcode_tmpl(opcode)
             .replace("{src1}", &src)

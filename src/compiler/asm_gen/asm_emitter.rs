@@ -345,6 +345,13 @@ impl AsmEmitter {
         self.expr_vars.clear();
         self.last_inst_idx.clear();
         self.reserved_label_name = None;
+        // `data_map`は「IRのノードid → 静的領域のラベル」の対応表で、
+        // ノードidは関数ごとに振り直される。前の関数の分が残っていると、
+        // `static_label`が先頭から探すため、別の関数の同じidのラベル
+        // (`M1`など)を誤って返してしまう。ラベル名の重複は`data_idx`
+        // (関数をまたいで増え続ける)で防いでおり、データ領域の
+        // テキスト(`data_sec_text`)は残すので、表だけを捨てる
+        self.data_map.clear();
     }
 
     /// `Inst::StartScope`の処理
@@ -831,8 +838,8 @@ impl AsmEmitter {
                 inst::ExprKind::Sub => "float_sub",
                 // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
                 // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
-                inst::ExprKind::Mul => "float_add",
-                inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+                inst::ExprKind::Mul => "float_mul",
+                inst::ExprKind::Div | inst::ExprKind::Surplus => "float_div",
                 inst::ExprKind::LessThen => "cmp_l",
                 inst::ExprKind::GreaterThen => "cmp_g",
                 inst::ExprKind::Equal => "cmp_e",
