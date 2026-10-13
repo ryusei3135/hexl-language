@@ -334,6 +334,11 @@ impl IR {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("error: {:?}", e);
+                // テスト中は`exit`するとテストのプロセス全体が終了してしまうので、
+                // panicして`catch_unwind`で捕まえられるようにする
+                if cfg!(test) {
+                    panic!("{:?}", e);
+                }
                 std::process::exit(1);
             }
         }
@@ -1227,11 +1232,11 @@ mod match_expr_ir_tests {
     }
 
     const VARIANT_BIND_SRC: &str = "variant V { A B(int) }
-        main(): int {
-            v: V = V { B: 5 }
+        _start() {
+            v: V = V::B(10)
             cond B(val) := v {
                 x: int = val
-            } | {
+            } else {
                 x: int = 0
             }
         }";

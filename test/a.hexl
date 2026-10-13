@@ -26,7 +26,6 @@ fizzbuzz(n: i64) {
         }
     }
 }
-
 _start() {
     i mut: i64 = 1
     loop i < 10 {

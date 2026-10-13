@@ -470,16 +470,14 @@ g(v: int must=d) { d(v) }
     fn ending_contract_in_only_one_branch_is_error() {
         // 片方の分岐でしか終了しない(両方で終了する場合は、
         // 下の`each_branch_may_end_the_contract_once`を参照)
-        assert_err(&main_with(
-            "x: int must=c = a()\ncond 1 {\n 1 => { c(x) }\n | => { }\n}",
-        ));
+        assert_err(&main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n}"));
     }
 
     #[test]
     #[ignore = "未実装: 各分岐で一度ずつ終了しているのに、2つ目の分岐が`二重終了`として弾かれる"]
     fn each_branch_may_end_the_contract_once() {
         assert_ok(&main_with(
-            "x: int must=c = a()\ncond 1 {\n 1 => { c(x) }\n | => { c(x) }\n}",
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {\n c(x)\n}",
         ));
     }
 
@@ -503,22 +501,29 @@ g(v: int must=d) { d(v) }
     // ------------------------------------------------------------------
     #[test]
     fn same_name_in_sibling_scopes_is_tracked_independently() {
-        let both_ended = "cond 1 {
- 1 => { x: int must=c = a()\n c(x) }
- | => { x: int must=c = a()\n c(x) }
+        let both_ended = "cond 1 == 1 {
+ x: int must=c = a()
+ c(x)
+} else {
+ x: int must=c = a()
+ c(x)
 }";
         assert_ok(&main_with(both_ended));
 
         // 片方のスコープの`x`だけ終了していなければ、そのスコープの`x`がエラーになる
-        let second_not_ended = "cond 1 {
- 1 => { x: int must=c = a()\n c(x) }
- | => { x: int must=c = a() }
+        let second_not_ended = "cond 1 == 1 {
+ x: int must=c = a()
+ c(x)
+} else {
+ x: int must=c = a()
 }";
         assert_err(&main_with(second_not_ended));
 
-        let first_not_ended = "cond 1 {
- 1 => { x: int must=c = a() }
- | => { x: int must=c = a()\n c(x) }
+        let first_not_ended = "cond 1 == 1 {
+ x: int must=c = a()
+} else {
+ x: int must=c = a()
+ c(x)
 }";
         assert_err(&main_with(first_not_ended));
     }
@@ -527,7 +532,7 @@ g(v: int must=d) { d(v) }
     fn same_name_must_and_plain_var_in_sibling_scopes() {
         // 片方のスコープの`x`が契約のない変数でも、互いに影響しない
         assert_ok(&main_with(
-            "cond 1 {\n 1 => { x: int must=c = a()\n c(x) }\n | => { x: int = 1 }\n}",
+            "cond 1 == 1 {\n x: int must=c = a()\n c(x)\n} else {\n x: int = 1\n}",
         ));
     }
 
@@ -592,7 +597,7 @@ g(v: int must=d) { d(v) }
                 関数のどこかで譲渡されていれば通ってしまう"]
     fn early_return_before_ending_contract_is_error() {
         assert_err(&main_with(
-            "x: int must=c = a()\ncond 1 {\n 1 => { ret 1 }\n}\nc(x)",
+            "x: int must=c = a()\ncond 1 == 1 {\n ret 1\n}\nc(x)",
         ));
     }
 
@@ -600,7 +605,7 @@ g(v: int must=d) { d(v) }
     #[ignore = "未実装: `continue`で次の周へ進む経路の契約の検査はない"]
     fn continue_before_ending_contract_is_error() {
         assert_err(&main_with(
-            "loop {\n x: int must=c = a()\n cond 1 {\n 1 => { continue }\n }\n c(x)\n break\n}",
+            "loop {\n x: int must=c = a()\n cond 1 == 1 {\n continue\n }\n c(x)\n break\n}",
         ));
     }
 }
