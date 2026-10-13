@@ -31,7 +31,7 @@ impl AsmEmitter {
     pub(super) 
     fn insert_arr_txt(
         &mut self,
-        name: &String,
+        name: &str,
         dst: usize,
         index: usize,
         this_is_self: SelfPtrInfo,
@@ -45,7 +45,23 @@ impl AsmEmitter {
                 // 構造体からindexを取り出す処理を追加
                 return self.ref_arr_for_struct_member(name, &src, pos, &size, dst, this_is_self);
             }
-            t => panic!("配列の添字には数字のノードが必要です: {:?}", t),
+            // 配列の添字が普通の変数の場合(`[arr index2 else 0]`)
+            // ローカル変数
+            inst::Inst::Mov {
+                name: Some(_),
+                size: index_size,
+                ..
+            } => {
+                return self.ref_arr_for_var(name, index, &index_size, this_is_self);
+            }
+            // 関数の引数
+            inst::Inst::Param(param) => {
+                return self.ref_arr_for_var(name, index, &param.ty, this_is_self);
+            }
+            t => panic!(
+                "配列の添字には数字・変数・構造体のメンバーのノードが必要です: {:?}",
+                t
+            ),
         };
         let var_info = self.var_info(name);
         if let Some(pointee) = var_info.size.is_pointer() {
@@ -162,8 +178,6 @@ impl AsmEmitter {
             t => panic!("配列の要素には数字のノードが必要です: {:?}", t),
         };
 
-        let mut txt = String::new();
-
         // 要素0が最も%rbpに近い位置に来て、要素が増えるほどアドレスが
         // 小さくなる。領域全体を先に確保し、要素`k`のオフセットは
         // `arr_base + (k + 1) * 要素のサイズ`(要素0のオフセットが`head_offset`)
@@ -172,15 +186,17 @@ impl AsmEmitter {
         let head_offset = arr_base + elem_bytes;
         self.stk_use_counter = arr_base + elem_bytes * ids.len();
 
-        for (k, id) in ids.iter().enumerate() {
-            let value = self.extract_operand_text(*id, this_is_self);
-
-            let dst = self
-                .asm_fmt
-                .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
-
-            txt.push_str(&self.mov_line(&dst, &value, &size, true));
-        }
+        let txt = ids
+            .iter()
+            .enumerate()
+            .map(|(k, id)| {
+                let val = self.extract_operand_text(*id, this_is_self);
+                let dst = self
+                    .asm_fmt
+                    .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
+                self.mov_line(&dst, &val, &size, true)
+            })
+            .collect::<String>();
 
         if RET_IS_ASM {
             return txt;

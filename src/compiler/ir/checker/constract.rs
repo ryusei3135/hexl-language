@@ -93,17 +93,15 @@ impl IR {
         arg: &node::Expr,
         must: Option<&String>,
     ) -> Result<bool, err::ErrKind> {
-        // 引数が契約を譲渡するならOk
-        if param
-            .ty
-            .as_constract_must()
-            .is_some_and(|v| v.must_name() == must)
-        {
+        if let Some(var_name) = Self::arg_var_name(arg) {
             self.var_tree
-                .finish_constract_var(Self::arg_var_name(&arg).unwrap())
+                .finish_constract_var(var_name)
                 .map_err(|err| err.with_span(self.current_span))?;
+
             Ok(true)
         } else {
+            // 式から契約の移動元を特定できない。
+            // 仕様に応じて明示的なコンパイルエラーにする。
             Ok(false)
         }
     }
@@ -136,21 +134,24 @@ impl IR {
 
         // 引数として受け取った`must`の値も、この関数の中で
         // 別の関数へ渡す義務がある
-        for param in func.params.iter() {
-            if param.ty.is_constract_must() {
+        func.params
+            .iter()
+            .filter(|param| param.ty.is_constract_must())
+            .map(|param| {
                 must_vars.push(MustVar {
                     name: param.name.clone(),
                     used: false,
                 });
-            }
-        }
+            });
 
         Self::walk_group2_nodes(&func.body, &mut must_vars);
 
-        for var in must_vars.iter() {
-            if !var.used {
-                CompileErr::constract_must_not_used(&func.name, &var.name).unwrap();
-            }
+        for var in must_vars.iter().filter(|var| !var.used) {
+            CompileErr::constract_must_not_used(
+                &func.name,
+                &var.name,
+            )
+            .unwrap();
         }
     }
 
@@ -194,12 +195,12 @@ impl IR {
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
             node::Expr::CallFunc(call_info) => {
-                for arg in call_info.args.iter() {
+                call_info.args.iter().for_each(|arg| {
                     if let Some(name) = Self::arg_var_name(arg) {
                         Self::mark_used(name, must_vars);
                     }
                     Self::walk_expr(arg, must_vars);
-                }
+                });
             }
             node::Expr::Scope { target, .. }
             | node::Expr::Member { target, .. }
@@ -257,14 +258,10 @@ impl IR {
                 must_vars.truncate(scope_start);
             }
             node::Expr::InitStruct { fields, .. } => {
-                for value in fields.values() {
-                    Self::walk_expr(value, must_vars);
-                }
+                fields.values().for_each(|val| Self::walk_expr(val, must_vars));
             }
             node::Expr::Array(values) => {
-                for value in values.iter() {
-                    Self::walk_expr(value, must_vars);
-                }
+                values.iter().for_each(|val| Self::walk_expr(val, must_vars));
             }
             node::Expr::RefArray { dst, index, .. } => {
                 Self::walk_expr(dst, must_vars);
@@ -286,7 +283,7 @@ impl IR {
         }
     }
 
-    fn mark_used(name: &String, must_vars: &mut Vec<MustVar>) {
+    fn mark_used(name: &str, must_vars: &mut Vec<MustVar>) {
         if let Some(ref mut var) = must_vars.iter_mut().rev().find(|var| &var.name == name) {
             var.used = true;
         }

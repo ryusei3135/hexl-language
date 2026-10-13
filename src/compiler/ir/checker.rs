@@ -6,7 +6,8 @@ mod constract;
 mod tracking;
 mod var_ty;
 
-// `builder`が、範囲外のときの分岐IRを生成するために使う
+// 範囲外のときの分岐IRを生成する`ir/insert/array_guard.rs`が使う
+// (`builder`が`check_mem_access`の結果を`insert`へ渡す)
 pub(in crate::compiler::ir) 
 use access_mem::ArrIdxGuard;
 

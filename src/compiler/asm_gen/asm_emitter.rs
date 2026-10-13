@@ -191,15 +191,17 @@ impl AsmEmitter {
 
     #[inline(always)]
     fn gen_extern_func_asm(&mut self, extern_funcs: &[inst::Inst]) {
-        for func in extern_funcs.iter() {
-            if let inst::Inst::ExternFunc(name) = func {
-                let label = emit_fn_name_id(name);
-                self.asm_text
-                    .push_str(self.asm_fmt.get_extern_func(&label).as_str());
-            } else {
-                panic!();
-            }
-        }
+        extern_funcs
+            .iter()
+            .for_each(|func| {
+                if let inst::Inst::ExternFunc(name) = func {
+                    let label = emit_fn_name_id(name);
+                    self.asm_text
+                        .push_str(self.asm_fmt.get_extern_func(&label).as_str());
+                } else {
+                    panic!();
+                }
+            });
     }
 
     /// 指定された名前の変数の型を返す

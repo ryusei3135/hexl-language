@@ -12,6 +12,7 @@ pub mod def_tree;
 pub mod inst;
 pub mod counter_mnger;
 mod param;
+mod insert;
 
 use crate::compiler::err::{self, undef::UndefKind::*};
 

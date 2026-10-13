@@ -79,3 +79,5 @@
     - テンプレートを引くキー → `expr_tmpl_key`(`Mul`は`add`のテンプレートを`imul`に置き換えて使う)
     - ニーモニックのサイズ調整に渡す実際のニーモニック → `expr_mnemonic`(`cmp_l`などのキーではなく`cmp`)
     - `/`と`%`は`format_div_expr_inst`(`div_ir.rs`)へ
+
+- `2026-10-13`配列の添字が普通の変数(ローカル変数/関数の引数)の場合(`[arr index2 else 0] = 10`)に対応。`operand_txt.rs`の`insert_arr_txt`が`Inst::Mov`/`Inst::Param`の添字を`arr.rs`の`ref_arr_for_var`へ渡す。`ref_arr_for_struct_member`と`ref_arr_for_var`は、添字のオペランドを受け取る共通の`ref_arr_indexed`(一時レジスタの解放→基準の取得→添字の読み込み→`neg`/補正→組み立て)を使う

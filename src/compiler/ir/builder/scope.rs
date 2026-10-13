@@ -42,10 +42,10 @@ impl IR {
             self.scope_states.last().into_iter().collect::<Vec<_>>()
         };
 
-        for state in states {
+        states.iter().try_for_each(|state| {
             // 契約が終了しているかを確認
-            self.var_tree.all_var_is_end_constract(state)?;
-        }
+            self.var_tree.all_var_is_end_constract(state)
+        })?;
 
         if from_break == false {
             let state = self

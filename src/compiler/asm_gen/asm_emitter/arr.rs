@@ -17,13 +17,10 @@ struct ArrRefBase {
 impl AsmEmitter {
     /// 配列の添字が構造体のメンバー変数の場合に、構造体から添字を取り出して
     /// 添字付きアドレッシングのオペランドを生成する
-    /// 
+    /// (`[arr a.a else 0]`)
+    ///
     /// 添字を載せた一時レジスタは`self.arr_index_temp`に記録し、
     /// 書き込み後に`write_mem`が解放する
-    ///
-    /// 流れ: 前回の一時レジスタの解放 → 基準の取得(`arr_ref_base`) →
-    /// 添字の読み込み(`load_index_reg`) → 符号の反転と補正(`adjust_index_reg`) →
-    /// オペランドの組み立て
     pub(in crate::compiler::asm_gen::asm_emitter)
     fn ref_arr_for_struct_member(
         &mut self,
@@ -34,6 +31,45 @@ impl AsmEmitter {
         dst: usize,
         this_is_self: SelfPtrInfo,
     ) -> String {
+        let _ = (dst, this_is_self);
+        // 構造体のメンバーの位置(`-4(%rbp)`など)が、添字の読み込み元になる
+        let member = self.ref_struct_txt(src, pos, size.to_bytes());
+        self.ref_arr_indexed(name, &member, size)
+    }
+
+    /// 配列の添字が普通の変数(ローカル変数/関数の引数)の場合に、
+    /// 添字付きアドレッシングのオペランドを生成する
+    /// (`[arr index2 else 0]`)
+    ///
+    /// ## 引数
+    /// - index: 添字のノード(`Inst::Mov`か`Inst::Param`)のid
+    /// - index_size: 添字の変数の型
+    ///
+    /// 変数のオペランド(レジスタ/静的領域のラベル)は`extract_operand_text`が
+    /// 返すので、レジスタに置かれた変数も、メモリに置かれた変数も同じ
+    /// 流れで`ref_arr_indexed`に渡せる。
+    pub(in crate::compiler::asm_gen::asm_emitter)
+    fn ref_arr_for_var(
+        &mut self,
+        name: &str,
+        index: usize,
+        index_size: &Size,
+        this_is_self: SelfPtrInfo,
+    ) -> String {
+        let operand = self.extract_operand_text(index, this_is_self);
+        self.ref_arr_indexed(name, &operand, index_size)
+    }
+
+    /// 添字が`index_operand`(サイズ`index_size`)にある場合の、
+    /// 配列(またはポインタ)`name`の添字付きアドレッシングのオペランドを作る
+    ///
+    /// 添字を載せた一時レジスタは`self.arr_index_temp`に記録し、
+    /// 書き込み後に`write_mem`が解放する
+    ///
+    /// 流れ: 前回の一時レジスタの解放 → 基準の取得(`arr_ref_base`) →
+    /// 添字の読み込み(`load_index_reg`) → 符号の反転と補正(`adjust_index_reg`) →
+    /// オペランドの組み立て
+    fn ref_arr_indexed(&mut self, name: &str, index_operand: &String, index_size: &Size) -> String {
         // 前回の添字用レジスタが解放されていなければ、ここで解放する
         if let Some(old) = self.arr_index_temp.take() {
             self.used_reg.release(old);
@@ -46,16 +82,14 @@ impl AsmEmitter {
             base,
             arr_len,
         } = self.arr_ref_base(name);
-        let _ = (dst, this_is_self);
 
-        // 構造体のメンバーを、添字用のレジスタへ読み込む
-        let member = self.ref_struct_txt(src, pos, size.to_bytes());
+        // 添字を、添字用のレジスタへ読み込む
         let reg_num = self.alloc_reg();
         self.used_reg.mark_used(reg_num);
         self.arr_index_temp = Some(reg_num);
 
         let reg64 = self.reg64(reg_num);
-        self.load_index_reg(&member, size, reg_num, &reg64);
+        self.load_index_reg(index_operand, index_size, reg_num, &reg64);
         let offset = self.adjust_index_reg(&reg64, is_ptr, arr_len, arr_base, elem_size);
         self.asm_fmt
             .fmt_ref_operand_indexed(&base, &reg64, elem_size, offset)

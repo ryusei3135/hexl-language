@@ -103,7 +103,7 @@ _start(): int {
     #asm(gcc_x64) {
         "{space}movl $60, %eax"
         "{space}movl $0, %edi"
-        "syscall"
+        "{space}syscall"
     }
     ll: Name = f<Name>()
     ret 0

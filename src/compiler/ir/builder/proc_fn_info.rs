@@ -67,10 +67,10 @@ impl IR {
     /// アセンブリ言語を出力する際にだけ使う
     pub(super) 
     fn make_extern_func_inst(&mut self, fn_tree: &[def_tree::FnDefMetaData]) {
-        for func in fn_tree {
+        fn_tree.iter().for_each(|func| {
             self.extern_funcs
                 .push(inst::Inst::ExternFunc(func.name.clone()));
-        }
+        });
     }
 
     /// もし戻り値が契約ならフラグを立てる

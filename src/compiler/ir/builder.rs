@@ -360,6 +360,7 @@ impl IR {
     /// `expect_byte`は期待する型。`None`の場合は未確定で、
     /// `Assign`ノードが来たら代入先の変数の型で確定させる
     /// (それ以外のノードでは`DD`にフォールバックする)
+    pub(in crate::compiler::ir)
     fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: Option<&types::Size>) -> usize {
         // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
         // (`src/ir/builder/variant_bind.rs`)
@@ -426,9 +427,10 @@ impl IR {
                 // 配列変数を使ったことを記録(`src/ir/counter_mnger.rs`)
                 self.count_var_use(&name);
                 // 添字が可変: `if lo <= idx < hi { arr[idx] } else { arr[else_idx] }`
-                // `src/ir/builder/expr_node.rs`
+                // の条件分岐を差し込む
+                // `src/ir/insert/array_guard.rs`
                 if let Some(guard) = arr_guard {
-                    return self.ref_array_guarded_node(guard, *dst, &expect_byte);
+                    return self.insert_arr_guard(guard, *dst, &expect_byte);
                 }
                 // 添字が`const`/即値: 静的検査済みなのでそのまま
                 // `src/ir/builder/expr_node.rs`
@@ -767,6 +769,8 @@ impl IR {
         self.id_counter - 1
     }
 
+    /// `ir/insert/*`からも使う
+    pub(in crate::compiler::ir)
     fn next_pattern_label(&mut self) -> usize {
         loop {
             let label = self.pattern_labels;
