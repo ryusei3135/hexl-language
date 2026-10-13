@@ -86,6 +86,11 @@ fn convert_operand(operand: &parse::Operand) -> Result<emitter::Operand, String>
             "string literal is not valid as an instruction operand: {:?}",
             value
         )),
+
+        parse::Operand::Float(value) => Err(format!(
+            "floating-point literal is not valid as an instruction operand: {}",
+            value
+        )),
     }
 }
 

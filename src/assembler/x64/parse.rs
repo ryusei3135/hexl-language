@@ -12,6 +12,9 @@ pub enum Token {
 
     Number(i64),
 
+    // 小数点を含む数値リテラル (例: `1.1`, `-` は別トークン)
+    Float(f64),
+
     Str(String),
 
     Comma,
@@ -57,7 +60,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn number(&mut self) -> i64 {
+    // 整数 (`30`) または小数 (`1.1`, `2.5e3`) を読み取る。
+    //
+    // `.` の直後が数字のときだけ小数として扱う
+    // (`1.` のような形は従来どおり整数 + 識別子の扱いのまま)。
+    fn number(&mut self) -> Token {
         let mut value = String::new();
 
         while let Some(c) = self.current {
@@ -69,7 +76,63 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        value.parse().unwrap()
+        let mut is_float = false;
+
+        if self.current == Some('.') && self.peek_is_digit(0) {
+            is_float = true;
+            value.push('.');
+            self.advance();
+
+            while let Some(c) = self.current {
+                if c.is_ascii_digit() {
+                    value.push(c);
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // 指数部 (`e` / `E` + 省略可能な符号 + 数字)
+        if matches!(self.current, Some('e' | 'E')) {
+            let sign = matches!(self.peek(0), Some('+' | '-'));
+            let digit_at = if sign { 1 } else { 0 };
+
+            if self.peek_is_digit(digit_at) {
+                is_float = true;
+                value.push('e');
+                self.advance();
+
+                if sign {
+                    value.push(self.current.unwrap());
+                    self.advance();
+                }
+
+                while let Some(c) = self.current {
+                    if c.is_ascii_digit() {
+                        value.push(c);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if is_float {
+            Token::Float(value.parse().unwrap())
+        } else {
+            Token::Number(value.parse().unwrap())
+        }
+    }
+
+    // current の `n` 文字先 (0 なら current の次) を先読みする
+    fn peek(&self, n: usize) -> Option<char> {
+        self.input.clone().nth(n)
+    }
+
+    fn peek_is_digit(&self, n: usize) -> bool {
+        matches!(self.peek(n), Some(c) if c.is_ascii_digit())
     }
 
     fn identifier(&mut self) -> String {
@@ -229,7 +292,7 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Token::Star
                 }
-                Some(c) if c.is_ascii_digit() => Token::Number(self.number()),
+                Some(c) if c.is_ascii_digit() => self.number(),
                 Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '.' => {
                     Token::Ident(self.identifier())
                 }
@@ -282,6 +345,9 @@ pub enum Operand {
     Register(String),
 
     Immediate(i64),
+
+    // `.float 1.1` のような小数リテラル (ディレクティブ引数のみ)
+    Float(f64),
 
     Symbol(String),
 
@@ -431,6 +497,7 @@ impl Parser {
 
                 match self.advance() {
                     Token::Number(n) => Ok(Operand::Immediate(-n)),
+                    Token::Float(f) => Ok(Operand::Float(-f)),
                     token => Err(format!("expected number, got {:?}", token)),
                 }
             }
@@ -440,7 +507,16 @@ impl Parser {
 
                 match self.advance() {
                     Token::Number(n) => Ok(Operand::Immediate(n)),
+                    Token::Float(f) => Ok(Operand::Float(f)),
                     token => Err(format!("expected number, got {:?}", token)),
+                }
+            }
+
+            Token::Float(_) => {
+                if let Token::Float(f) = self.advance() {
+                    Ok(Operand::Float(f))
+                } else {
+                    unreachable!()
                 }
             }
 

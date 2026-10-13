@@ -61,6 +61,11 @@ pub enum Directive {
     Dd(Vec<DataValue>),
     Dq(Vec<DataValue>),
 
+    // `.float` / `.single` : 単精度 (IEEE 754 binary32, 4 バイト) の小数
+    // `.double`            : 倍精度 (IEEE 754 binary64, 8 バイト) の小数
+    Float(Vec<f64>),
+    Double(Vec<f64>),
+
     // `.align N` : 現在のセクションを N バイト境界まで詰める
     Align(usize),
 
@@ -233,6 +238,14 @@ impl Emitter {
                 self.emit_data(values, 8)?;
             }
 
+            Directive::Float(values) => {
+                self.emit_float(values, 4)?;
+            }
+
+            Directive::Double(values) => {
+                self.emit_float(values, 8)?;
+            }
+
             Directive::Align(align) => {
                 self.emit_align(*align)?;
             }
@@ -278,6 +291,25 @@ impl Emitter {
     fn emit_zero(&mut self, count: usize) {
         let buffer = self.current_buffer();
         buffer.extend(std::iter::repeat(0u8).take(count));
+    }
+
+    // `.float` (size = 4) / `.double` (size = 8)
+    fn emit_float(&mut self, values: &[f64], size: usize) -> Result<(), String> {
+        if self.current_section == Section::Text {
+            return Err("data directive outside .data / .section test".into());
+        }
+
+        for &value in values {
+            if size == 4 {
+                self.current_buffer()
+                    .extend_from_slice(&(value as f32).to_le_bytes());
+            } else {
+                self.current_buffer()
+                    .extend_from_slice(&value.to_le_bytes());
+            }
+        }
+
+        Ok(())
     }
 
     fn emit_data(&mut self, values: &[DataValue], size: usize) -> Result<(), String> {
