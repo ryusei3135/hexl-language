@@ -29,27 +29,34 @@ use super::*;
 /// 現在使用中のレジスタを管理する
 #[derive(Debug, Clone, Default)]
 pub struct UsedRegManager {
-    used: Vec<usize>,
+    used: Vec<RegisterMode>,
     /// `StartScope`が来た時点で使用中だったレジスタの一覧
     /// (スコープがネストしても対応できるようにスタックで持つ)
     ///
     /// 式の一時的な結果を途中で`release`すると`used`の並びが
     /// ずれるので、長さではなくレジスタ番号そのものを控えておく
-    scope_marks: Vec<Vec<usize>>,
+    scope_marks: Vec<Vec<RegisterMode>>,
     /// 現在の関数で、変数の名前 -> 割り当てたレジスタ
-    allocated: HashMap<String, usize>,
+    allocated: HashMap<String, RegisterMode>,
     /// 割り当て済みだが、まだ変数が定義されていないレジスタ
     /// (他の式の結果に使わせない)
-    pending: Vec<usize>,
+    pending: Vec<RegisterMode>,
     /// 現在の関数で、一度でも使用中にしたレジスタ
     /// (`callee_saved`のうち、退避が必要なものを調べるために使う)
-    touched: Vec<usize>,
+    touched: Vec<RegisterMode>,
     callee_saved: Rc<Vec<usize>>,
     caller_saved: Rc<Vec<usize>>,
+    float_callee_saved: Rc<Vec<usize>>,
+    float_caller_saved: Rc<Vec<usize>>,
 }
 
 impl UsedRegManager {
-    pub fn new(callee: Rc<Vec<usize>>, caller: Rc<Vec<usize>>) -> Self {
+    pub fn new(
+        callee: Rc<Vec<usize>>,
+        caller: Rc<Vec<usize>>,
+        float_callee: Rc<Vec<usize>>,
+        float_caller: Rc<Vec<usize>>,
+    ) -> Self {
         Self {
             used: Vec::new(),
             scope_marks: Vec::new(),
@@ -62,6 +69,8 @@ impl UsedRegManager {
             // - `rax`/`rdx`(0/2)は`idiv`などが書き換えるので割り当てない
             callee_saved: callee,
             caller_saved: caller,
+            float_callee_saved: float_callee,
+            float_caller_saved: float_caller,
         }
     }
 
@@ -80,17 +89,26 @@ impl UsedRegManager {
     pub fn allocation_register(
         &mut self,
         var_counter: &counter_mnger::VarCounter,
-        unavailable: &[usize],
+        unavailable: &[RegisterMode],
         stack_vars: &[String],
+        body: &[inst::Inst],
     ) {
         self.allocated.clear();
         self.pending.clear();
 
-        let mut candidates = self.callee_saved
+        let mut normal_candidates = self.callee_saved
             .iter()
             .chain(self.caller_saved.iter())
             .copied()
-            .filter(|reg| !RESERVED_REGS.contains(reg) && !unavailable.contains(reg));
+            .filter(|reg| !RESERVED_REGS.contains(reg))
+            .map(RegisterMode::Normal)
+            .filter(|reg| !unavailable.contains(reg));
+        let mut float_candidates = self.float_callee_saved
+            .iter()
+            .chain(self.float_caller_saved.iter())
+            .copied()
+            .map(RegisterMode::Float)
+            .filter(|reg| !unavailable.contains(reg));
 
         for (name, _count) in var_counter.vars_by_priority() {
             // スタックに置く変数(`s: Name = Name { .. }`など)は、
@@ -100,8 +118,23 @@ impl UsedRegManager {
             if stack_vars.iter().any(|stack_var| stack_var == name) {
                 continue;
             }
-            let Some(reg) = candidates.next() else {
-                break;
+            let is_float = body.iter().any(|node| {
+                matches!(
+                    node,
+                    inst::Inst::Mov {
+                        name: Some(var_name),
+                        size,
+                        ..
+                    } if var_name == name && size.is_float()
+                )
+            });
+            let reg = if is_float {
+                float_candidates.next()
+            } else {
+                normal_candidates.next()
+            };
+            let Some(reg) = reg else {
+                continue;
             };
             self.allocated.insert(name.to_string(), reg);
             self.pending.push(reg);
@@ -132,33 +165,33 @@ impl UsedRegManager {
     }
 
     /// 変数`name`に割り当てたレジスタ(割り当てていなければ`None`)
-    pub fn allocated_reg(&self, name: &str) -> Option<usize> {
+    pub fn allocated_reg(&self, name: &str) -> Option<RegisterMode> {
         self.allocated.get(name).copied()
     }
 
     /// `reg`が、まだ定義されていない変数のために取り置かれているか
     /// (他の式の一時的な結果に使ってはいけない)
-    pub fn is_reserved(&self, reg: usize) -> bool {
+    pub fn is_reserved(&self, reg: RegisterMode) -> bool {
         self.pending.contains(&reg)
     }
 
     /// 変数`name`を定義し、レジスタ`reg`に置いたことを記録する
     /// (割り当てたレジスタなら、取り置きをやめて使用中として扱う)
-    pub fn bind_var(&mut self, name: &str, reg: usize) {
+    pub fn bind_var(&mut self, name: &str, reg: &RegisterMode) {
         if self.allocated.get(name) == Some(&reg) {
-            self.pending.retain(|r| *r != reg);
+            self.pending.retain(|r| r != reg);
         }
-        self.mark_used(reg);
+        self.mark_used(&reg);
     }
 
     /// 指定したレジスタを使用中として記録する
     /// Some(..)の場合使われていないレジスタを返す
-    pub fn mark_used(&mut self, reg: usize) -> bool {
+    pub fn mark_used(&mut self, reg: &RegisterMode) -> bool {
         if !self.touched.contains(&reg) {
-            self.touched.push(reg);
+            self.touched.push(reg.clone());
         }
         if !self.used.contains(&reg) {
-            self.used.push(reg);
+            self.used.push(reg.clone());
             MARKED_REG
         } else {
             UNMARKED_REG
@@ -166,7 +199,7 @@ impl UsedRegManager {
     }
 
     /// 現在使用中のレジスタ番号を、使用され始めた順(昇順)に取得する
-    pub fn used_regs(&self) -> Vec<usize> {
+    pub fn used_regs(&self) -> Vec<RegisterMode> {
         let mut regs = self.used.clone();
         regs.sort();
         regs
@@ -174,12 +207,21 @@ impl UsedRegManager {
 
     /// 現在の関数で使ったレジスタのうち、`callee_saved`に当たるもの
     /// (関数の入口で退避し、出口で戻す必要がある。昇順)
-    pub fn callee_regs_to_save(&self) -> Vec<usize> {
-        let mut regs: Vec<usize> = self
+    pub fn callee_regs_to_save(&self) -> Vec<RegisterMode> {
+        let mut regs: Vec<RegisterMode> = self
             .touched
             .iter()
             .copied()
-            .filter(|reg| self.callee_saved.contains(reg))
+            .filter(|reg| {
+                match reg {
+                    RegisterMode::Float(r) => {
+                        self.float_callee_saved.contains(r)
+                    }
+                    RegisterMode::Normal(r) => {
+                        self.callee_saved.contains(r)
+                    }
+                }
+            })
             .collect();
         regs.sort();
         regs
@@ -210,12 +252,12 @@ impl UsedRegManager {
     /// 以降は他の変数や式が使える。変数の名前と割り当ては残るので、
     /// 同じ名前の変数を別のスコープで定義するときは、空いていれば
     /// 同じレジスタを使う。
-    pub fn end_scope(&mut self) -> Vec<usize> {
+    pub fn end_scope(&mut self) -> Vec<RegisterMode> {
         let outer = self
             .scope_marks
             .pop()
             .expect("StartScopeに対応しないEndScopeです");
-        let released: Vec<usize> = self
+        let released: Vec<RegisterMode> = self
             .used
             .iter()
             .copied()
@@ -227,25 +269,29 @@ impl UsedRegManager {
 
     /// 指定したレジスタを、使用中の記録から外す
     /// (式の一時的な結果を、使い終わった時点で解放するために使う)
-    pub fn release(&mut self, reg: usize) {
-        self.used.retain(|r| *r != reg);
+    pub fn release(&mut self, reg: &RegisterMode) {
+        self.used.retain(|r| r != reg);
     }
 
     /// 指定したレジスタが使用中かどうか
-    pub fn is_used(&self, reg: usize) -> bool {
+    pub fn is_used(&self, reg: &RegisterMode) -> bool {
         self.used.contains(&reg)
     }
 
     /// `regs`の中で、現在使用中でないレジスタのうち最小の番号を返す
     /// (`EndScope`で解放したレジスタから、次に使うレジスタを選ぶために使う)
-    pub fn lowest_free(&self, regs: &[usize]) -> Option<usize> {
-        regs.iter().copied().filter(|r| !self.is_used(*r)).min()
+    pub fn lowest_free<'a>(&self, regs: &'a [RegisterMode]) -> Option<&'a RegisterMode> {
+        regs.iter()
+            .filter(|reg| !self.is_used(reg))
+            .min_by_key(|reg| match reg {
+                RegisterMode::Normal(index) | RegisterMode::Float(index) => *index,
+            })
     }
 
     /// 指定したレジスタを使用中として登録し直す
     /// (スコープ終了後も生きている変数のレジスタを残すために使う)
-    pub fn restore(&mut self, regs: &[usize]) {
-        regs.iter().for_each(|reg| {self.mark_used(*reg);});
+    pub fn restore(&mut self, regs: &[RegisterMode]) {
+        regs.iter().for_each(|reg| {self.mark_used(reg);});
     }
 }
 
@@ -255,7 +301,27 @@ mod stack_var_tests {
 
     fn manager() -> UsedRegManager {
         // callee_saved: rbx(3), r12(12) / caller_saved: rcx(1)
-        UsedRegManager::new(Rc::new(vec![3, 12]), Rc::new(vec![1]))
+        UsedRegManager::new(
+            Rc::new(vec![3, 12]),
+            Rc::new(vec![1]),
+            Rc::new(vec![]),
+            Rc::new(vec![0, 1, 2]),
+        )
+    }
+
+    #[test]
+    fn lowest_free_returns_the_smallest_register_index() {
+        let regs = manager();
+        let candidates = [
+            RegisterMode::Normal(8),
+            RegisterMode::Float(2),
+            RegisterMode::Normal(5),
+        ];
+
+        assert_eq!(
+            regs.lowest_free(&candidates),
+            Some(RegisterMode::Float(2))
+        );
     }
 
     #[test]
@@ -270,14 +336,17 @@ mod stack_var_tests {
         counter.use_var("b");
 
         let mut regs = manager();
-        regs.allocation_register(&counter, &[], &["s".to_string()]);
+        regs.allocation_register(&counter, &[], &["s".to_string()], &[]);
 
         // `s`には割り当てず、取り置きもしない
         assert_eq!(regs.allocated_reg("s"), None);
         // 次の変数に、先頭のレジスタから順に割り当てる
-        assert_eq!(regs.allocated_reg("a"), Some(3));
-        assert_eq!(regs.allocated_reg("b"), Some(12));
-        assert!(regs.is_reserved(3) && regs.is_reserved(12));
+        assert_eq!(regs.allocated_reg("a"), Some(RegisterMode::Normal(3)));
+        assert_eq!(regs.allocated_reg("b"), Some(RegisterMode::Normal(12)));
+        assert!(
+            regs.is_reserved(RegisterMode::Normal(3))
+                && regs.is_reserved(RegisterMode::Normal(12))
+        );
     }
 
     #[test]
@@ -288,9 +357,42 @@ mod stack_var_tests {
         counter.use_var("a");
 
         let mut regs = manager();
-        regs.allocation_register(&counter, &[], &[]);
-        assert_eq!(regs.allocated_reg("s"), Some(3));
-        assert_eq!(regs.allocated_reg("a"), Some(12));
+        regs.allocation_register(&counter, &[], &[], &[]);
+        assert_eq!(regs.allocated_reg("s"), Some(RegisterMode::Normal(3)));
+        assert_eq!(regs.allocated_reg("a"), Some(RegisterMode::Normal(12)));
+    }
+
+    #[test]
+    fn allocation_register_uses_float_registers_for_float_variables() {
+        let mut counter = counter_mnger::VarCounter::new();
+        counter.use_var("i");
+        counter.use_var("i");
+        counter.use_var("f");
+        counter.use_var("f");
+        counter.use_var("f");
+
+        let body = vec![
+            inst::Inst::Mov {
+                name: Some("i".to_string()),
+                size: Size::DD,
+                dst: 0,
+                src: 1,
+            },
+            inst::Inst::Mov {
+                name: Some("f".to_string()),
+                size: Size::F32,
+                dst: 2,
+                src: 3,
+            },
+        ];
+
+        let mut regs = manager();
+        regs.allocation_register(&counter, &[], &[], &body);
+
+        assert_eq!(regs.allocated_reg("f"), Some(RegisterMode::Float(0)));
+        assert_eq!(regs.allocated_reg("i"), Some(RegisterMode::Normal(3)));
+        assert!(regs.is_reserved(RegisterMode::Float(0)));
+        assert!(regs.is_reserved(RegisterMode::Normal(3)));
     }
 
     #[test]

@@ -63,8 +63,12 @@ impl MngAsmFmt {
 
         if TypeId::of::<R>() == TypeId::of::<String>() {
             let result: Box<dyn Any> = Box::new(
-                self.get_fmt_reg(self.param_fmt[param_idx], &size)
-                    .to_string(),
+                if size.is_float() {
+                    self.get_fmt_float_reg(self.param_fmt[param_idx], &size)
+                } else {
+                    self.get_fmt_reg(self.param_fmt[param_idx], &size)
+                }
+                .to_string(),
             );
             result.downcast::<R>().ok().map(|b| *b).unwrap()
         } else {
@@ -329,6 +333,10 @@ impl MngAsmFmt {
             );
         }
 
+        if size.is_float() {
+            return value.to_string();
+        }
+
         let s_fmt = match &size {
             types::Size::DB | types::Size::UDB => crate::mov_size_fmt!(self, db),
             types::Size::DW | types::Size::UDW => crate::mov_size_fmt!(self, dw),
@@ -443,6 +451,21 @@ impl MngAsmFmt {
             .to_string()
     }
 
+    pub(in crate::compiler::asm_gen)
+    fn get_fmt_float_reg(&self, reg_num: usize, size: &Size) -> String {
+        let reg = match &size {
+            Size::F32 => &self.reg_fmt.xmm,
+            Size::F64 => &self.reg_fmt.xmm,
+            Size::Pointer { .. } => &self.reg_fmt.dq,
+            _ => panic!(),
+        };
+        self.fmt
+            .fmt
+            .reg
+            .replace("{}", reg[reg_num].as_str())
+            .to_string()
+    }
+
     // /// レジスタ文字列からレジスタのサイズを取得する
     // pub(in crate::compiler::asm_gen) 
     // fn get_reg_size(
@@ -494,6 +517,11 @@ impl MngAsmFmt {
     pub(in crate::compiler::asm_gen) 
     fn reg_count(&self) -> usize {
         self.reg_fmt.dq.len()
+    }
+
+    pub(in crate::compiler::asm_gen)
+    fn float_reg_count(&self) -> usize {
+        self.reg_fmt.xmm.len()
     }
 
     /// `(レジスタ番号, レジスタ名)`のペアを、確保されている

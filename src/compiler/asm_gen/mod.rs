@@ -12,6 +12,7 @@ mod asm_fmt;
 mod reg_mnger;
 mod sign;
 
+use crate::compiler::asm_gen::asm_emitter::VarIndexInfo;
 use crate::compiler::ir::{def_tree, inst, types::Size};
 use sign::SizeSign;
 use std::collections::HashMap;
@@ -20,6 +21,29 @@ use std::rc::Rc;
 use crate::compiler::models::AsmFmtData;
 
 pub type SelfPtrInfo<'a> = Option<&'a Size>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
+pub(in crate::compiler::asm_gen)
+enum RegisterMode {
+    Normal(usize),
+    Float(usize),
+}
+
+impl RegisterMode {
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Normal(idx) | Self::Float(idx) => *idx,
+        }
+    }
+
+    pub fn unwrap_normal(&self) -> usize {
+        if let Self::Normal(idx) = self {
+            *idx
+        } else {
+            panic!();
+        }
+    }
+}
 
 pub struct AsmEmitter {
     pub(super) asm_text: String,
@@ -34,7 +58,7 @@ pub struct AsmEmitter {
     pub(in crate::compiler::asm_gen) curr_inst: Vec<inst::Inst>,
     // (親のid, 変数の名前)
     pub(super) data_map: Vec<(usize, String)>,
-    pub(super) last_inst_idx: Vec<(usize, usize)>,
+    pub(super) last_inst_idx: Vec<(usize, RegisterMode)>,
     pub(super) var_hash_map: HashMap<String, asm_emitter::VarIndexInfo>,
     // 現在使用中のレジスタを管理する
     pub(super) used_reg: reg_mnger::UsedRegManager,
@@ -61,4 +85,6 @@ pub struct AsmEmitter {
 
     callee_saved: Rc<Vec<usize>>,
     caller_saved: Rc<Vec<usize>>,
+    float_callee_saved: Rc<Vec<usize>>,
+    float_caller_saved: Rc<Vec<usize>>,
 }

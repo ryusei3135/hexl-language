@@ -12,10 +12,17 @@ impl AsmEmitter {
         if let Some(ty) = var_info.size.is_pointer() {
             // ポインタ型はアドレス(常に8byte)を保持するため、
             // 64bitレジスタ(`%rcx`など)を経由してメモリを参照する
-            let reg = self.reg64(var_info.reg);
+            let reg = self.reg64(&var_info.reg);
             self.asm_fmt.fmt_ref_operand(&reg, ty.to_bytes())
         } else {
-            self.asm_fmt.get_fmt_reg(var_info.reg, &var_info.size)
+            match var_info.reg {
+                RegisterMode::Float(idx) => {
+                    self.asm_fmt.get_fmt_float_reg(idx, &var_info.size)
+                }
+                RegisterMode::Normal(idx) => {
+                    self.asm_fmt.get_fmt_reg(idx, &var_info.size)
+                }
+            }
         }
     }
     /// 文字列のメモリ参照を生成する
@@ -109,7 +116,7 @@ impl AsmEmitter {
             self.rbp_ref(var_info.offset + size)
         } else {
             // 先頭のメンバーは`(%rdi)`のようにオフセットなし
-            let reg = self.reg64(var_info.reg);
+            let reg = self.reg64(&var_info.reg);
             self.ref_base_offset(&reg, size)
         }
     }

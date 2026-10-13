@@ -186,7 +186,7 @@ impl Size {
         matches!(name, "byte" | "i16" | "int" | "i64" | "ubyte" | "u16" | "uint" | "u64" | "float" | "f64")
     }
 
-    fn is_float(&self) -> bool {
+    pub(crate) fn is_float(&self) -> bool {
         match self {
             Self::F32 | Self::F64 => true,
             _ => false,

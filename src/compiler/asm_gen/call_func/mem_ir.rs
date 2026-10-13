@@ -58,19 +58,19 @@ impl AsmEmitter {
     /// それを使い、そうでなければ使用中のレジスタ(引数など)と
     /// `%rax`/`%rdx`を避けて空きレジスタを確保する。
     /// このレジスタはスコープが終わると解放される
-    fn bind_var_reg(&mut self, name: Option<&str>) -> usize {
+    fn bind_var_reg(&mut self, name: Option<&str>, size: &types::Size) -> RegisterMode {
         let reg = match name
             .and_then(|n| self.used_reg.allocated_reg(n))
-            .filter(|r| !self.used_reg.is_used(*r))
+            .filter(|r| !self.used_reg.is_used(r))
         {
             Some(reg) => reg,
-            None => self.alloc_reg(),
+            None => self.alloc_reg(size),
         };
-        self.reg_idx = reg;
+        self.reg_idx = reg.index();
         match name {
-            Some(var_name) => self.used_reg.bind_var(var_name, reg),
+            Some(var_name) => self.used_reg.bind_var(var_name, &reg),
             None => {
-                self.used_reg.mark_used(reg);
+                self.used_reg.mark_used(&reg);
             }
         }
         reg
@@ -91,11 +91,11 @@ impl AsmEmitter {
         let offset = self
             .struct_mem(None, struct_ty, src, dst)
             .expect("構造体リテラルの初期化に失敗しました");
-        let reg = self.bind_var_reg(name);
+        let reg = self.bind_var_reg(name, size);
 
         let text = self.tmpl_line(
             "address",
-            &self.reg64(reg),
+            &self.reg64(&reg),
             &self.rbp_ref(offset),
             &types::Size::DQ,
             false,
@@ -185,7 +185,7 @@ impl AsmEmitter {
     fn mov_static_var(&mut self, size: &types::Size, dst: usize, name: Option<&str>) {
         self.insert_var_info(
             name.unwrap(),
-            asm_emitter::VarIndexInfo::new(self.reg_idx, size, dst),
+            asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.reg_idx), size, dst),
         );
     }
 
@@ -198,7 +198,7 @@ impl AsmEmitter {
         name: Option<&str>,
         this_is_self: SelfPtrInfo,
     ) {
-        let reg = self.bind_var_reg(name);
+        let reg = self.bind_var_reg(name, size);
         let formated = self.init_reg_line(size, reg, src, this_is_self);
         self.asm_text.push_str(&formated);
         // 初期値が式の結果だった場合、そのレジスタはもう不要
@@ -207,9 +207,9 @@ impl AsmEmitter {
         if let Some(var_name) = name {
             self.insert_var_info(
                 var_name,
-                asm_emitter::VarIndexInfo::new(self.reg_idx, size, dst),
+                asm_emitter::VarIndexInfo::new(reg, size, dst),
             );
-            let current_reg = self.reg_idx;
+            let current_reg = reg;
 
             if self
                 .expr_vars
@@ -217,7 +217,7 @@ impl AsmEmitter {
                 .find(|v| v.as_str() == var_name)
                 .is_some()
             {
-                self.update_value_reg(var_name, current_reg);
+                self.update_value_reg(var_name, &current_reg);
             }
         }
     }
@@ -226,7 +226,7 @@ impl AsmEmitter {
     fn init_reg_line(
         &mut self,
         size: &types::Size,
-        reg: usize,
+        reg: RegisterMode,
         src: usize,
         this_is_self: SelfPtrInfo,
     ) -> String {
@@ -238,7 +238,7 @@ impl AsmEmitter {
         let is_literal_num = matches!(self.curr_inst[src], inst::Inst::Num { .. });
 
         if size.is_pointer().is_some() && is_literal_num {
-            let dst_reg = self.reg64(reg);
+            let dst_reg = self.reg64(&reg);
             let value_operand = self.extract_operand_text(src, this_is_self);
             self.mov_line(&dst_reg, &value_operand, &Size::DQ, false)
         } else {
@@ -246,11 +246,39 @@ impl AsmEmitter {
             let mnemonic = if size.is_pointer().is_some() {
                 // ポインタの場合
                 "address"
+            } else if size.is_float() {
+                match size {
+                    types::Size::F32 => "float_mov",
+                    types::Size::F64 => "f64_mov",
+                    _ => unreachable!(),
+                }
             } else {
-                // 普通の場合
                 "mov"
             };
-            self.format_line(mnemonic, Some(reg), src, None, this_is_self)
+            match reg {
+                RegisterMode::Float(index) if size.is_float() => {
+                    let opcode = if matches!(size, types::Size::F32) {
+                        "float_mov"
+                    } else {
+                        "f64_mov"
+                    };
+                    let dst = self.asm_fmt.get_fmt_float_reg(index, size);
+                    let src = self.extract_operand_text(src, this_is_self);
+                    self.asm_fmt
+                        .get_opcode_tmpl(opcode)
+                        .replace("{src1}", &src)
+                        .replace("{dst}", &dst)
+                }
+                RegisterMode::Normal(index) => {
+                    if size.is_float() {
+                        panic!("floating-point variable allocated to a normal register");
+                    }
+                    self.format_line(mnemonic, Some(index), src, None, this_is_self)
+                }
+                RegisterMode::Float(_) => {
+                    panic!("non-floating-point variable allocated to a floating-point register")
+                }
+            }
         }
     }
 
@@ -309,7 +337,7 @@ impl AsmEmitter {
         }
         self.insert_var_info(
             name,
-            asm_emitter::VarIndexInfo::new(self.reg_idx, size, dst)
+            asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.reg_idx), size, dst)
                 .with_arr_base(arr_base),
         );
         self.asm_text.push_str(txt.as_str());
@@ -334,7 +362,11 @@ impl AsmEmitter {
         // 子のノードがstaticりょいきの値なので、変数名だけ登録する
         self.insert_var_info(
             &name,
-            asm_emitter::VarIndexInfo::new(self.reg_idx, this_is_self.as_ref().unwrap(), dst),
+            asm_emitter::VarIndexInfo::new(
+                RegisterMode::Normal(self.reg_idx),
+                this_is_self.as_ref().unwrap(),
+                dst,
+            ),
         );
     }
 

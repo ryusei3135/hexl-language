@@ -35,31 +35,46 @@ impl AsmEmitter {
             _ => self.get_var_ty(&name),
         };
 
-        let text = self.mov_line(&dst_operand, &value_operand, &mnemonic_size, true);
+        let text = if mnemonic_size.is_float() {
+            let opcode = match mnemonic_size {
+                types::Size::F32 => "float_mov",
+                types::Size::F64 => "f64_mov",
+                _ => unreachable!(),
+            };
+            self.asm_fmt
+                .get_opcode_tmpl(opcode)
+                .replace("{src1}", &value_operand)
+                .replace("{dst}", &dst_operand)
+        } else {
+            self.mov_line(&dst_operand, &value_operand, &mnemonic_size, true)
+        };
         self.asm_text.push_str(&text);
         // 配列の添字を載せていた一時レジスタは、書き込みが終わったので解放する
         if let Some(reg) = self.arr_index_temp.take() {
-            self.used_reg.release(reg);
+            self.used_reg.release(&RegisterMode::Normal(reg));
         }
     }
 
     pub(super) 
     fn assign_val_ty_is_ptr(
         &mut self,
-        current_reg: usize,
+        current_reg: RegisterMode,
         value: usize,
         this_is_self: SelfPtrInfo,
     ) -> String {
+        let RegisterMode::Normal(_) = current_reg else {
+            panic!("pointer variable is not stored in a normal register");
+        };
         // ポインタ型の変数へ数値リテラル(`ptr = 0`のようなNULL代入)を
         // 再代入する場合は、アドレスを求める`lea`ではなく、ポインタの
         // サイズ(64bit)に合わせた`movq`でそのまま即値を書き込む
         if matches!(self.curr_inst[value], inst::Inst::Num { .. }) {
-            let dst_reg = self.reg64(current_reg);
+            let dst_reg = self.reg64(&current_reg);
             let value_operand = self.extract_operand_text(value, this_is_self);
             return self.mov_line(&dst_reg, &value_operand, &Size::DQ, false);
         }
 
-        let dst_reg = self.reg64(current_reg);
+        let dst_reg = self.reg64(&current_reg);
 
         // `value`が実際に「メモリ上の場所」を指している場合のみ、その
         // アドレスを`lea`で求める必要がある。`value`が既にアドレス値
@@ -84,16 +99,42 @@ impl AsmEmitter {
     pub(super) 
     fn assign_val_is_not_ptr(
         &mut self,
-        current_reg: usize,
+        current_reg: RegisterMode,
         value: usize,
         this_is_self: SelfPtrInfo,
     ) -> String {
+        let RegisterMode::Normal(current_reg) = current_reg else {
+            panic!("non-floating-point value assigned to a floating-point register");
+        };
         let mnemonic = if self.curr_inst[value].is_pointer() {
             "address"
         } else {
             "mov"
         };
-
         self.format_line(mnemonic, Some(current_reg), value, None, this_is_self)
+    }
+
+    pub(super)
+    fn assign_val_is_float(
+        &mut self,
+        current_reg: RegisterMode,
+        value: usize,
+        size: &types::Size,
+        this_is_self: SelfPtrInfo,
+    ) -> String {
+        let RegisterMode::Float(index) = current_reg else {
+            panic!("floating-point value assigned to a normal register");
+        };
+        let opcode = match size {
+            types::Size::F32 => "float_mov",
+            types::Size::F64 => "f64_mov",
+            _ => panic!("floating-point variable has non-floating-point type: {:?}", size),
+        };
+        let dst = self.asm_fmt.get_fmt_float_reg(index, size);
+        let src = self.extract_operand_text(value, this_is_self);
+        self.asm_fmt
+            .get_opcode_tmpl(opcode)
+            .replace("{src1}", &src)
+            .replace("{dst}", &dst)
     }
 }

@@ -88,6 +88,9 @@ add(a mut: int, b: int): Option<int> {
 }
 
 _start(): int {
+    fv: float = 1.1
+    f2: float = 2.1
+    fv3: float = fv + f2
     arr2 mut: [uint 3] = {0}
     [arr2 0] = 2
     o: Option<int> = Option::Some(10)

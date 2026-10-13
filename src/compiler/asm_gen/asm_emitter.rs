@@ -40,11 +40,12 @@ pub(in crate::compiler::asm_gen)
 const RESERVED_REGS: [usize; 2] = [0, 2];
 
 #[derive(Debug, Clone)]
-pub(in crate::compiler::asm_gen) struct VarIndexInfo {
+pub(in crate::compiler::asm_gen)
+struct VarIndexInfo {
     /// レジスタ番号。`is_stack`が`true`の変数(ポインタでない構造体の
     /// 変数)はレジスタを持たないので[`VarIndexInfo::NO_REG`]が入る
     /// (`%rbp`からの位置は`offset`を使う)
-    pub reg: usize,
+    pub reg: RegisterMode,
     /// `is_stack`が`true`の場合の、`%rbp`からのバイトオフセット
     /// (構造体先頭のメンバーの位置)。`is_stack`が`false`の場合は`0`で意味を持たない
     pub offset: usize,
@@ -69,7 +70,7 @@ impl VarIndexInfo {
     /// オフセットをレジスタ番号と取り違えるバグを見逃さない
     pub const NO_REG: usize = usize::MAX;
 
-    pub fn new(reg: usize, size: &types::Size, index: usize) -> Self {
+    pub fn new(reg: RegisterMode, size: &types::Size, index: usize) -> Self {
         Self {
             reg: reg,
             offset: 0,
@@ -85,7 +86,7 @@ impl VarIndexInfo {
     /// 直接置かれている変数として登録する。レジスタは使わない
     pub fn new_stack(offset: usize, size: &types::Size, index: usize) -> Self {
         Self {
-            reg: Self::NO_REG,
+            reg: RegisterMode::Normal(Self::NO_REG),
             offset,
             size: size.clone(),
             index: index,
@@ -108,6 +109,9 @@ impl AsmEmitter {
     pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData) -> Self {
         let caller = Rc::new(vec![1, 4, 5, 6, 7, 8, 9]);
         let callee = Rc::new(vec![3, 10, 11, 12, 13]);
+        let float_caller = Rc::new((0..16).collect());
+        let float_callee = Rc::new(Vec::new());
+
         let mut me = Self {
             asm_text: String::new(),
             data_sec_text: String::new(),
@@ -121,7 +125,12 @@ impl AsmEmitter {
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
             var_hash_map: HashMap::new(),
-            used_reg: reg_mnger::UsedRegManager::new(Rc::clone(&callee), Rc::clone(&caller)),
+            used_reg: reg_mnger::UsedRegManager::new(
+                Rc::clone(&callee),
+                Rc::clone(&caller),
+                Rc::clone(&float_callee),
+                Rc::clone(&float_caller),
+            ),
             scope_outer_vars: Vec::new(),
             stk_use_counter: 0,
             emitted_calls: Vec::new(),
@@ -130,6 +139,9 @@ impl AsmEmitter {
 
             callee_saved: Rc::clone(&callee),
             caller_saved: Rc::clone(&caller),
+
+            float_callee_saved: Rc::clone(&float_callee),
+            float_caller_saved: Rc::clone(&float_caller),
         };
         me.data_sec_text
             .push_str(&me.asm_fmt.get_section_fmt("data"));
@@ -215,7 +227,7 @@ impl AsmEmitter {
         // 変数(`is_stack`)はレジスタを持たない(`offset`で保存する)ので、
         // レジスタを使用中にしない
         if !var.in_mem && !var.is_stack {
-            self.used_reg.mark_used(var.reg);
+            self.used_reg.mark_used(&var.reg);
         }
         self.expr_vars.push(name.to_string());
         self.var_hash_map.insert(name.to_owned(), var);
@@ -260,11 +272,20 @@ impl AsmEmitter {
     /// 返したレジスタを使用中にするのは呼び出し側の責任
     /// (`mark_used`を呼ぶ)。
     pub(in crate::compiler::asm_gen) 
-    fn alloc_reg(&self) -> usize {
-        (0..self.asm_fmt.reg_count())
+    fn alloc_reg(&self, size: &Size) -> RegisterMode {
+        let (count, mode) = if size.is_float() {
+            (self.asm_fmt.float_reg_count(), RegisterMode::Float(0))
+        } else {
+            (self.asm_fmt.reg_count(), RegisterMode::Normal(0))
+        };
+        (0..count)
+            .map(|index| match mode {
+                RegisterMode::Normal(_) => RegisterMode::Normal(index),
+                RegisterMode::Float(_) => RegisterMode::Float(index),
+            })
             .find(|reg| {
-                !RESERVED_REGS.contains(reg)
-                    && !self.used_reg.is_used(*reg)
+                !matches!(reg, RegisterMode::Normal(index) if RESERVED_REGS.contains(index))
+                    && !self.used_reg.is_used(reg)
                     // まだ定義されていない変数のために割り当てたレジスタは使わない
                     && !self.used_reg.is_reserved(*reg)
             })
@@ -288,9 +309,11 @@ impl AsmEmitter {
         else {
             return;
         };
-        if !self.is_reg_held_by_var(reg) {
-            self.used_reg.release(reg);
+        if self.is_reg_held_by_var(reg) {
+            return;
         }
+
+        self.used_reg.release(&reg);
     }
 
     /// 現在`reg`を使っている値を、`push`で退避するためのレジスタ名の一覧
@@ -300,7 +323,7 @@ impl AsmEmitter {
         RESERVED_REGS
             .iter()
             .copied()
-            .filter(|reg| *reg != dst && self.used_reg.is_used(*reg))
+            .filter(|reg| *reg != dst && self.used_reg.is_used(&RegisterMode::Normal(*reg)))
             .collect()
     }
 
@@ -349,7 +372,7 @@ impl AsmEmitter {
             .scope_outer_vars
             .pop()
             .expect("StartScopeに対応しないEndScopeです");
-        let live_regs: Vec<usize> = outer_vars
+        let live_regs: Vec<RegisterMode> = outer_vars
             .iter()
             .filter_map(|name| self.var_reg(name))
             .collect();
@@ -358,9 +381,9 @@ impl AsmEmitter {
         // 次の式の結果を置くレジスタ(`reg_idx`)を、解放したレジスタに戻す。
         // 外側の変数が使っているレジスタ(上で登録し直したもの)は
         // 除き、`reg_idx`より小さい番号に限る(番号を進めることはしない)
-        if let Some(reg) = self.used_reg.lowest_free(&released) {
-            if reg < self.reg_idx {
-                self.reg_idx = reg;
+        if let Some(RegisterMode::Normal(reg)) = self.used_reg.lowest_free(&released) {
+            if *reg < self.reg_idx {
+                self.reg_idx = *reg;
             }
         }
     }
@@ -373,9 +396,9 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(in crate::compiler::asm_gen) 
-    fn update_value_reg(&mut self, name: &str, reg: usize) {
+    fn update_value_reg(&mut self, name: &str, reg: &RegisterMode) {
         self.used_reg.mark_used(reg);
-        self.var_info_mut(name).reg = reg;
+        self.var_info_mut(name).reg = reg.clone();
     }
 
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
@@ -482,7 +505,7 @@ impl AsmEmitter {
     pub(in crate::compiler::asm_gen) 
     fn value_reg_size(ty: &Size) -> Size {
         match ty {
-            Size::DB | Size::DW | Size::DD | Size::DQ => ty.clone(),
+            Size::DB | Size::DW | Size::DD | Size::DQ | Size::F32 | Size::F64 => ty.clone(),
             // 符号なしは、同じ幅の符号付きと同じレジスタを使う
             Size::UDB | Size::UDW | Size::UDD | Size::UDQ => ty.to_signed(),
             Size::Array { size, .. } => Self::value_reg_size(size),
@@ -659,7 +682,11 @@ impl AsmEmitter {
         } else {
             reg_idx.unwrap()
         };
-        self.asm_fmt.get_fmt_reg(num, &size)
+        if size.is_float() {
+            self.asm_fmt.get_fmt_float_reg(num, size)
+        } else {
+            self.asm_fmt.get_fmt_reg(num, size)
+        }
     }
 
     pub(in crate::compiler::asm_gen) 
@@ -762,7 +789,11 @@ impl AsmEmitter {
         let ret_size = this_is_self
             .map(Self::value_reg_size)
             .unwrap_or(Size::DQ);
-        self.asm_fmt.get_fmt_reg(0, &ret_size)
+        if ret_size.is_float() {
+            self.asm_fmt.get_fmt_float_reg(0, &ret_size)
+        } else {
+            self.asm_fmt.get_fmt_reg(0, &ret_size)
+        }
     }
 
     /// 式などの計算結果を持つレジスタのオペランドを返す
@@ -777,25 +808,43 @@ impl AsmEmitter {
                 inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(parent_id)),
                 _ => Size::DQ,
             };
-            self.asm_fmt.get_fmt_reg(reg, &size)
+            match reg {
+                RegisterMode::Float(index) => self.asm_fmt.get_fmt_float_reg(index, &size),
+                RegisterMode::Normal(index) => self.asm_fmt.get_fmt_reg(index, &size),
+            }
         } else {
             panic!("{:?}", node);
         }
     }
 
     /// 式の種類から、アセンブリのテンプレートを引くキーを返す
-    fn expr_tmpl_key(kind: &inst::ExprKind) -> &'static str {
-        match kind {
-            inst::ExprKind::Add => "add",
-            inst::ExprKind::Sub => "sub",
-            // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
-            // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
-            inst::ExprKind::Mul => "add",
-            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
-            inst::ExprKind::LessThen => "cmp_l",
-            inst::ExprKind::GreaterThen => "cmp_g",
-            inst::ExprKind::Equal => "cmp_e",
-            inst::ExprKind::NotEq => "cmp_ne",
+    fn expr_tmpl_key(kind: &inst::ExprKind, is_float: bool) -> &'static str {
+        if is_float {
+            match kind {
+                inst::ExprKind::Add => "float_add",
+                inst::ExprKind::Sub => "float_sub",
+                // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
+                // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
+                inst::ExprKind::Mul => "float_add",
+                inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+                inst::ExprKind::LessThen => "cmp_l",
+                inst::ExprKind::GreaterThen => "cmp_g",
+                inst::ExprKind::Equal => "cmp_e",
+                inst::ExprKind::NotEq => "cmp_ne",
+            }
+        } else {
+            match kind {
+                inst::ExprKind::Add => "add",
+                inst::ExprKind::Sub => "sub",
+                // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
+                // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
+                inst::ExprKind::Mul => "add",
+                inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+                inst::ExprKind::LessThen => "cmp_l",
+                inst::ExprKind::GreaterThen => "cmp_g",
+                inst::ExprKind::Equal => "cmp_e",
+                inst::ExprKind::NotEq => "cmp_ne",
+            }
         }
     }
 
@@ -828,7 +877,7 @@ impl AsmEmitter {
             return self.format_div_expr_inst(expr);
         }
 
-        let key = Self::expr_tmpl_key(&expr.kind);
+        let key = Self::expr_tmpl_key(&expr.kind, expr.is_float(&self.curr_inst));
         let mnemonic = Self::expr_mnemonic(&expr.kind);
 
         let resolved_size: Size = self.get_expr_ty(expr.ls);

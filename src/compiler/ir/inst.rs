@@ -29,6 +29,11 @@ impl ExprInst {
     pub fn new(self) -> Inst {
         Inst::Expr(self)
     }
+
+    /// この式の結果が浮動小数点型かどうかを返す。
+    pub fn is_float(&self, insts: &[Inst]) -> bool {
+        insts[self.ls].is_float(insts)
+    }
 }
 
 /// 引数の定義の情報
@@ -226,6 +231,43 @@ pub enum Inst {
 }
 
 impl Inst {
+    /// この命令が表す値が浮動小数点型かどうかを返す。
+    ///
+    /// `Expr`などは型の代わりに他の命令のIDを持つため、
+    /// 型をたどるための命令一覧を受け取る。
+    pub fn is_float(&self, insts: &[Inst]) -> bool {
+        match self {
+            Self::Expr(expr) => expr.is_float(insts),
+            _ => self.value_ty(insts).is_some_and(|ty| ty.is_float()),
+        }
+    }
+
+    fn value_ty(&self, insts: &[Inst]) -> Option<types::Size> {
+        match self {
+            Self::Expr(expr) => insts[expr.ls].value_ty(insts),
+            Self::Pointer(inner) => match insts[*inner].value_ty(insts)? {
+                types::Size::Pointer { ty, .. } => Some(*ty),
+                ty => Some(ty),
+            },
+            Self::GetAddress(..) => Some(types::Size::DQ),
+            Self::AssignVar { value, .. } => insts[*value].value_ty(insts),
+            Self::Num { size, .. }
+            | Self::Float { size, .. }
+            | Self::Mov { size, .. }
+            | Self::RefStruct { size, .. }
+            | Self::RefStructPtr { size, .. } => Some(size.clone()),
+            Self::Param(param) => Some(param.ty.clone()),
+            Self::MemoryValue(MemoryInst::Memory { size, .. })
+            | Self::MemoryValue(MemoryInst::Member { size, .. }) => Some(size.clone()),
+            Self::Str { value, .. } => Some(types::Size::Pointer {
+                is_const: false,
+                ty: Box::new(types::Size::DB),
+                range: Some((0, value.len())),
+            }),
+            _ => None,
+        }
+    }
+
     pub fn is_pointer(&self) -> bool {
         match self {
             Self::Pointer(..) => true,

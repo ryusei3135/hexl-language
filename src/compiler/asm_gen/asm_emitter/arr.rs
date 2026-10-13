@@ -72,7 +72,7 @@ impl AsmEmitter {
     fn ref_arr_indexed(&mut self, name: &str, index_operand: &str, index_size: &Size) -> String {
         // 前回の添字用レジスタが解放されていなければ、ここで解放する
         if let Some(old) = self.arr_index_temp.take() {
-            self.used_reg.release(old);
+            self.used_reg.release(&RegisterMode::Normal(old));
         }
 
         let ArrRefBase {
@@ -84,11 +84,11 @@ impl AsmEmitter {
         } = self.arr_ref_base(name);
 
         // 添字を、添字用のレジスタへ読み込む
-        let reg_num = self.alloc_reg();
-        self.used_reg.mark_used(reg_num);
+        let reg_num = self.alloc_reg(&Size::DQ).unwrap_normal();
+        self.used_reg.mark_used(&RegisterMode::Normal(reg_num));
         self.arr_index_temp = Some(reg_num);
 
-        let reg64 = self.reg64(reg_num);
+        let reg64 = self.reg64(&RegisterMode::Normal(reg_num));
         self.load_index_reg(index_operand, index_size, reg_num, &reg64);
         let offset = self.adjust_index_reg(&reg64, is_ptr, arr_len, arr_base, elem_size);
         self.asm_fmt
@@ -114,7 +114,7 @@ impl AsmEmitter {
                 elem_size: ty.to_bytes(),
                 arr_base: 0,
                 is_ptr: true,
-                base: self.reg64(var_info.reg),
+                base: self.reg64(&var_info.reg),
                 arr_len: 0,
             },
             other => ArrRefBase {

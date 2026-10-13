@@ -1,19 +1,49 @@
-use crate::compiler::asm_gen::asm_emitter::{VarIndexInfo, RESERVED_REGS};
+use crate::{asm_setting::Reg, compiler::asm_gen::asm_emitter::{RESERVED_REGS, VarIndexInfo}};
 //use crate::ir::def_tree::{VarMetaData, VarTree};
 
 use super::*;
 
 impl AsmEmitter {
-    /// 渡されたテンプレート文字列(オペランドの`{0}`などを置換する前の、
-    /// 生のインラインアセンブラの1行)の中に、直接書かれているレジスタ名
-    /// (`%rax`など)を検出し、対応する内部のレジスタ番号を返す。
-    fn detect_literal_regs(&self, template: &str) -> Vec<usize> {
+    fn all_inline_reg_names(&self) -> Vec<(RegisterMode, String)> {
+        let mut names: Vec<_> = self
+            .asm_fmt
+            .all_reg_names()
+            .into_iter()
+            .map(|(index, name)| (RegisterMode::Normal(index), name))
+            .collect();
+        for index in 0..self.asm_fmt.reg_count() {
+            names.push((
+                RegisterMode::Float(index),
+                self.asm_fmt.get_fmt_float_reg(index, &Size::F32),
+            ));
+            names.push((
+                RegisterMode::Float(index),
+                self.asm_fmt.get_fmt_float_reg(index, &Size::F64),
+            ));
+        }
+        names
+    }
+
+    /// インラインアセンブラに直接書かれたレジスタを検出する。
+    fn detect_literal_regs(&self, template: &str) -> Vec<RegisterMode> {
         let mut found = Vec::new();
-        self.asm_fmt.all_reg_names().iter().for_each(|(reg_idx, reg_name)| {
-            if template.contains(reg_name.as_str()) && !found.contains(reg_idx) {
-                found.push(*reg_idx);
+        for (reg, name) in self.all_inline_reg_names() {
+            let mut from = 0;
+            while let Some(offset) = template[from..].find(&name) {
+                let end = from + offset + name.len();
+                let has_register_suffix = template[end..]
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_ascii_alphanumeric());
+                if !has_register_suffix {
+                    if !found.contains(&reg) {
+                        found.push(reg);
+                    }
+                    break;
+                }
+                from = end;
             }
-        });
+        }
         found
     }
 
@@ -22,26 +52,33 @@ impl AsmEmitter {
     ///
     /// `%rax`/`%rdx`(`RESERVED_REGS`)と、まだ定義されていない変数のために
     /// 取り置かれているレジスタは選ばない。
-    fn find_free_reg(&self, exclude: &[usize]) -> Option<usize> {
-        (0..self.asm_fmt.reg_count()).find(|reg| {
-            !RESERVED_REGS.contains(reg)
-                && !exclude.contains(reg)
-                && !self.used_reg.is_used(*reg)
-                && !self.used_reg.is_reserved(*reg)
-        })
+    fn find_free_reg(
+        &self,
+        mode: RegisterMode,
+        exclude: &[RegisterMode],
+    ) -> Option<RegisterMode> {
+        (0..self.asm_fmt.reg_count())
+            .map(|index| match mode {
+                RegisterMode::Normal(_) => RegisterMode::Normal(index),
+                RegisterMode::Float(_) => RegisterMode::Float(index),
+            })
+            .find(|reg| {
+                !matches!(reg, RegisterMode::Normal(index) if RESERVED_REGS.contains(index))
+                    && !exclude.contains(reg)
+                    && !self.used_reg.is_used(reg)
+                    && !self.used_reg.is_reserved(*reg)
+            })
     }
 
     /// インラインアセンブラが暗黙に書き換えるレジスタ
     /// (`syscall`は`%rcx`と`%r11`を書き換える)
-    fn implicit_clobbered_regs(&self, lines: &[(String, Vec<usize>)]) -> Vec<usize> {
+    fn implicit_clobbered_regs(&self, lines: &[(String, Vec<usize>)]) -> Vec<RegisterMode> {
         if !lines.iter().any(|(template, _)| template.contains("syscall")) {
             return Vec::new();
         }
-        self.asm_fmt
-            .all_reg_names()
-            .iter()
-            .filter(|(_, name)| name == "%rcx" || name == "%r11")
-            .map(|(reg, _)| *reg)
+        [1, 11]
+            .into_iter()
+            .map(RegisterMode::Normal)
             .collect()
     }
 
@@ -82,14 +119,14 @@ impl AsmEmitter {
                     return self.var_operand(&name);
                 }
                 let size = gen_reg_size(&var_info, &forced_size);
-                self.asm_fmt.get_fmt_reg(var_info.reg, &size)
+                self.reg_mode_operand(var_info.reg, &size)
             }
             inst::Inst::Param(param) => {
                 let var_info = self.var_info(&param.name);
                 if var_info.size.is_pointer().is_some() {
                     self.ptr_deref_operand(var_info.reg)
                 } else {
-                    self.asm_fmt.get_fmt_reg(var_info.reg, forced_size)
+                    self.reg_mode_operand(var_info.reg, forced_size)
                 }
             }
             // それ以外(メモリ参照/即値/ポインタなど)は、サイズの
@@ -112,36 +149,36 @@ impl AsmEmitter {
             .is_some()
         {
             // === 1. インラインアセンブラ中で使われているレジスタを検出する ===
-            let mut literal_regs = Vec::<usize>::new();
-            lines.iter().for_each(|(template, _)| {
-                self.detect_literal_regs(template).iter().for_each(|reg| {
+            let mut literal_regs = Vec::<RegisterMode>::new();
+            for (template, _) in lines {
+                for reg in self.detect_literal_regs(template) {
                     if !literal_regs.contains(&reg) {
-                        literal_regs.push(*reg);
+                        literal_regs.push(reg);
                     }
-                });
-            });
+                }
+            }
             // `syscall`などが暗黙に書き換えるレジスタも、使われているものとして扱う
-            self.implicit_clobbered_regs(lines).into_iter().for_each(|reg| {
+            for reg in self.implicit_clobbered_regs(lines) {
                 if !literal_regs.contains(&reg) {
                     literal_regs.push(reg);
                 }
-            });
+            }
 
             // === 2. 使用中のレジスタは、空いている別のレジスタへ移す ===
             // (`push`では、`${msg}`などの埋め込み先が書き換えられたレジスタの
             //  ままになってしまう。移した先のレジスタを`${..}`に埋め込む)
             // 移した (元のレジスタ, 移した先のレジスタ)
-            let mut moved_regs: Vec<(usize, usize)> = Vec::new();
+            let mut moved_regs: Vec<(RegisterMode, RegisterMode)> = Vec::new();
             // 空きレジスタが無く、スタックへ退避した(後で必ずpopする)レジスタ
-            let mut stacked_regs: Vec<usize> = Vec::new();
-            literal_regs.iter().for_each(|reg| {
-                if self.used_reg.is_used(*reg) {
+            let mut stacked_regs: Vec<RegisterMode> = Vec::new();
+            for reg in &literal_regs {
+                if self.used_reg.is_used(reg) {
                     match self.mov_register_val_to_reg(*reg, &literal_regs) {
                         Some(free_reg) => moved_regs.push((*reg, free_reg)),
                         None => self.mov_register_val_to_stack(*reg, &mut stacked_regs),
                     }
                 }
-            });
+            }
 
             // === インラインアセンブラ本体を展開する ===
             self.gen_inline_asm_txt(&lines);
@@ -153,11 +190,9 @@ impl AsmEmitter {
                 self.restore_register_val(*reg, *free_reg);
             });
             // === スタックに退避したレジスタを、退避した時とは逆順に戻す ===
-            stacked_regs.iter().rev().for_each(|reg| {
-                let reg_name = self.reg64(*reg);
-                let pop_asm = self.asm_fmt.get_pop(&reg_name);
-                self.asm_text.push_str(&pop_asm);
-            });
+            for reg in stacked_regs.iter().rev() {
+                self.restore_register_val_from_stack(*reg);
+            }
         } else {
             panic!();
         }
@@ -169,13 +204,14 @@ impl AsmEmitter {
     ///
     /// 空いているレジスタが無ければ何もせず`None`を返す。
     #[inline(always)]
-    fn mov_register_val_to_reg(&mut self, reg: usize, asm_regs: &[usize]) -> Option<usize> {
-        let free_reg = self.find_free_reg(asm_regs)?;
+    fn mov_register_val_to_reg(
+        &mut self,
+        reg: RegisterMode,
+        asm_regs: &[RegisterMode],
+    ) -> Option<RegisterMode> {
+        let free_reg = self.find_free_reg(reg, asm_regs)?;
 
-        // 上位ビットも含めて、レジスタ全体を移す
-        let src = self.reg64(reg);
-        let dst = self.reg64(free_reg);
-        let mov_asm = self.mov_line(&dst, &src, &Size::DQ, false);
+        let mov_asm = self.register_move(&free_reg, &reg);
         self.asm_text.push_str(&mov_asm);
 
         self.retarget_reg(reg, free_reg);
@@ -184,40 +220,126 @@ impl AsmEmitter {
 
     /// `mov_register_val_to_reg`で`free_reg`へ移した値を、元の`reg`へ戻す
     #[inline(always)]
-    fn restore_register_val(&mut self, reg: usize, free_reg: usize) {
-        let src = self.reg64(free_reg);
-        let dst = self.reg64(reg);
-        let mov_asm = self.mov_line(&dst, &src, &Size::DQ, false);
+    fn restore_register_val(&mut self, reg: RegisterMode, free_reg: RegisterMode) {
+        let mov_asm = self.register_move(&reg, &free_reg);
         self.asm_text.push_str(&mov_asm);
 
         self.retarget_reg(free_reg, reg);
         // 一時的に使った`free_reg`を解放する
-        self.used_reg.release(free_reg);
+        self.used_reg.release(&free_reg);
     }
 
     /// レジスタ`from`を保持している変数と式の結果を、`to`を保持するように切り替える
-    fn retarget_reg(&mut self, from: usize, to: usize) {
+    fn retarget_reg(&mut self, from: RegisterMode, to: RegisterMode) {
         let names: Vec<String> = self
             .var_hash_map
             .iter()
             .filter(|(_, var)| !var.is_stack && var.reg == from)
             .map(|(name, _)| name.clone())
             .collect();
-        names.iter().for_each(|name| self.update_value_reg(name, to));
+        names.iter().for_each(|name| self.update_value_reg(name, &to));
         self.last_inst_idx
             .iter_mut()
             .filter(|(_, reg)| *reg == from)
             .for_each(|(_, reg)| *reg = to);
-        self.used_reg.mark_used(to);
+        self.used_reg.mark_used(&to);
     }
 
     /// レジスタが空いていない場合に、スタックに退避する
     #[inline(always)]
-    fn mov_register_val_to_stack(&mut self, reg: usize, stacked_regs: &mut Vec<usize>) {
-        let reg_name = self.reg64(reg);
-        let push_asm = self.asm_fmt.get_push(&reg_name);
-        self.asm_text.push_str(&push_asm);
+    fn mov_register_val_to_stack(
+        &mut self,
+        reg: RegisterMode,
+        stacked_regs: &mut Vec<RegisterMode>,
+    ) {
+        match reg {
+            RegisterMode::Normal(_) => {
+                let reg_name = self.reg64(&reg);
+                let push_asm = self.asm_fmt.get_push(&reg_name);
+                self.asm_text.push_str(&push_asm);
+            }
+            RegisterMode::Float(_) => {
+                self.asm_text.push_str("sub $16, %rsp\n");
+                let size = self.float_reg_size(reg);
+                let opcode = Self::float_move_opcode(&size);
+                let line = self
+                    .asm_fmt
+                    .get_opcode_tmpl(opcode)
+                    .replace("{src1}", &self.reg_mode_operand(reg, &size))
+                    .replace("{dst}", "(%rsp)");
+                self.asm_text.push_str(&line);
+            }
+        }
         stacked_regs.push(reg);
+    }
+
+    fn restore_register_val_from_stack(&mut self, reg: RegisterMode) {
+        match reg {
+            RegisterMode::Normal(_) => {
+                let pop_asm = self.asm_fmt.get_pop(&self.reg64(&reg));
+                self.asm_text.push_str(&pop_asm);
+            }
+            RegisterMode::Float(_) => {
+                let size = self.float_reg_size(reg);
+                let opcode = Self::float_move_opcode(&size);
+                let line = self
+                    .asm_fmt
+                    .get_opcode_tmpl(opcode)
+                    .replace("{src1}", "(%rsp)")
+                    .replace("{dst}", &self.reg_mode_operand(reg, &size));
+                self.asm_text.push_str(&line);
+                self.asm_text.push_str("add $16, %rsp\n");
+            }
+        }
+    }
+
+    fn register_move(&self, dst: &RegisterMode, src: &RegisterMode) -> String {
+        match (dst, src) {
+            (RegisterMode::Normal(_), RegisterMode::Normal(_)) => {
+                self.mov_line(&self.reg64(dst), &self.reg64(src), &Size::DQ, false)
+            }
+            (RegisterMode::Float(_), RegisterMode::Float(_)) => {
+                let size = self.float_reg_size(*src);
+                let opcode = Self::float_move_opcode(&size);
+                self.asm_fmt
+                    .get_opcode_tmpl(opcode)
+                    .replace("{src1}", &self.reg_mode_operand(*src, &size))
+                    .replace("{dst}", &self.reg_mode_operand(*dst, &size))
+            }
+            _ => panic!("cannot move between normal and floating-point registers"),
+        }
+    }
+
+    pub(super) fn float_reg_size(&self, reg: RegisterMode) -> Size {
+        let from_var = self
+            .var_hash_map
+            .values()
+            .find(|var| !var.is_stack && var.reg == reg)
+            .map(|var| var.size.clone());
+        let from_expr = self
+            .last_inst_idx
+            .iter()
+            .find(|(_, result_reg)| *result_reg == reg)
+            .map(|(node_idx, _)| self.get_expr_ty(*node_idx));
+        from_var
+            .or(from_expr)
+            .filter(|size| size.is_float())
+            .unwrap_or(Size::F64)
+    }
+
+    pub(super) fn float_move_opcode(size: &Size) -> &'static str {
+        match size {
+            Size::F32 => "float_mov",
+            Size::F64 => "f64_mov",
+            _ => panic!("floating-point register has non-floating-point type: {:?}", size),
+        }
+    }
+
+    pub(super) fn reg_mode_operand(&self, reg: RegisterMode, size: &Size) -> String {
+        match reg {
+            RegisterMode::Normal(index) => self.asm_fmt.get_fmt_reg(index, size),
+            RegisterMode::Float(index) => self.asm_fmt.get_fmt_float_reg(index, size),
+        }
     }
 
     #[inline(always)]

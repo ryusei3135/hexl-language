@@ -79,7 +79,7 @@ impl AsmEmitter {
     /// 変数がレジスタに置かれている場合のレジスタ番号
     /// (未登録、または`%rbp`相対のメモリに置かれている場合は`None`)
     pub(in crate::compiler::asm_gen) 
-    fn var_reg(&self, name: &str) -> Option<usize> {
+    fn var_reg(&self, name: &str) -> Option<RegisterMode> {
         self.find_var_info(name)
             .filter(|var| !var.is_stack)
             .map(|var| var.reg)
@@ -87,7 +87,7 @@ impl AsmEmitter {
 
     /// レジスタ`reg`を、いずれかの変数が保持しているか
     pub(in crate::compiler::asm_gen) 
-    fn is_reg_held_by_var(&self, reg: usize) -> bool {
+    fn is_reg_held_by_var(&self, reg: RegisterMode) -> bool {
         self.var_hash_map
             .values()
             .any(|var| !var.is_stack && var.reg == reg)
@@ -104,12 +104,20 @@ impl AsmEmitter {
         if var.is_stack {
             return self.rbp_ref(var.offset);
         }
-        let size = if var.size.is_pointer().is_some() {
-            Size::DQ
-        } else {
-            var.size.clone()
-        };
-        self.asm_fmt.get_fmt_reg(var.reg, &size)
+        if var.size.is_pointer().is_some() {
+            return self.asm_fmt.get_fmt_reg(
+                match var.reg {
+                    RegisterMode::Normal(idx) => idx,
+                    RegisterMode::Float(_) => panic!("pointer variable uses a floating-point register"),
+                },
+                &Size::DQ,
+            );
+        }
+        let size = var.size.clone();
+        match var.reg {
+            RegisterMode::Float(idx) => self.asm_fmt.get_fmt_float_reg(idx, &size),
+            RegisterMode::Normal(idx) => self.asm_fmt.get_fmt_reg(idx, &size),
+        }
     }
 
     /// 配列/ポインタの変数`name`が指す、要素1つの型
@@ -191,15 +199,22 @@ impl AsmEmitter {
 
     /// レジスタ番号に対応する、64bitのレジスタ名
     pub(in crate::compiler::asm_gen) 
-    fn reg64(&self, reg: usize) -> String {
-        self.asm_fmt.get_fmt_reg(reg, &Size::DQ)
+    fn reg64(&self, reg: &RegisterMode) -> String {
+        match reg {
+            RegisterMode::Float(idx) => {
+                self.asm_fmt.get_fmt_float_reg(*idx, &Size::F64)
+            },
+            RegisterMode::Normal(idx) => {
+                self.asm_fmt.get_fmt_reg(*idx, &Size::DQ)
+            }
+        }
     }
 
     /// ポインタを持つレジスタ番号`reg`が指す先を、オフセット無しで参照する
     /// オペランド(`(%rdi)`など)
     pub(in crate::compiler::asm_gen) 
-    fn ptr_deref_operand(&self, reg: usize) -> String {
-        self.asm_fmt.fmt_ref_operand_no_offset(&self.reg64(reg))
+    fn ptr_deref_operand(&self, reg: RegisterMode) -> String {
+        self.asm_fmt.fmt_ref_operand_no_offset(&self.reg64(&reg))
     }
 }
 
