@@ -20,11 +20,11 @@ pub struct MngAsmFmt {
 
 impl MngAsmFmt {
     pub(in crate::compiler::asm_gen)
-    fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData) -> Self {
+    fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData, os: &str) -> Self {
         // === アセンブラのフォーマットの設定 ===
         if let Some(s) = asm_fmt {
             Self {
-                param_fmt: s.args.fmt.get("linux").unwrap().clone(),
+                param_fmt: s.args.fmt.get(os).unwrap().clone(),
                 reg_fmt: s.reg.clone(),
                 opcode_fmt: s.op.clone(),
                 asm_setting: Some(asm_setting),
@@ -33,7 +33,7 @@ impl MngAsmFmt {
         } else {
             let s = x64::GCC_X64.to_asm_format();
             Self {
-                param_fmt: s.args.fmt.get("linux").unwrap().clone(),
+                param_fmt: s.args.fmt.get(os).unwrap().clone(),
                 reg_fmt: s.reg.clone(),
                 opcode_fmt: s.op.clone(),
                 asm_setting: Some(asm_setting),

@@ -128,6 +128,8 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
 
         match *opt {
             "dump" => settings.dump = true,
+            "--linux" => settings.os = Some("linux".to_string()),
+            "--windows" => settings.os = Some("windows".to_string()),
             val => {
                 if val.ends_with(".hexl") {
                     settings.file_name = Some(val.to_string());
@@ -220,6 +222,12 @@ pub fn build(
 
     let nodes = parser.parser(&lexer.gen_tkns)?;
 
+    let os: String = if let Some(os) = &settings.os {
+        os.clone()
+    } else {
+        DEFAULT.to_string()
+    };
+
     let func_def_meta_data = ir_builder
         .builder(
             &nodes,
@@ -234,6 +242,7 @@ pub fn build(
         &ir_builder.extern_funcs,
         &ir_builder.public_func_tree,
         settings.fmt_name.as_deref(),
+        os.as_str(),
     );
 
     // 出力先のアセンブリ言語のファイル
@@ -246,7 +255,7 @@ pub fn build(
     // `<ファイル名>.o` が作られる (出力名を分けないと互いに上書きしてしまう)。
     // `.s` は先に書き出してあるので、失敗しても内容は確認できる。
     let obj_file = format!("{}.o", asm_file);
-    let obj_path = assembler::x64::emitter_x64_to("-o", &asm_text, DEFAULT, Some(&obj_file))
+    let obj_path = assembler::x64::emitter_x64_to("-o", &asm_text, &os, Some(&obj_file))
         .map_err(|e| format!("オブジェクトファイル`{}`の生成に失敗しました: {}", obj_file, e))?;
 
     // `#include` したファイルの分も含め、生成したオブジェクトファイルのパスを記憶する

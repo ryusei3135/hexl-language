@@ -107,7 +107,7 @@ impl VarIndexInfo {
 
 
 impl AsmEmitter {
-    pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData) -> Self {
+    pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData, os: &str) -> Self {
         let caller = Rc::new(vec![1, 4, 5, 6, 7, 8, 9]);
         let callee = Rc::new(vec![3, 10, 11, 12, 13]);
         let float_caller = Rc::new((0..16).collect());
@@ -121,7 +121,9 @@ impl AsmEmitter {
             expr_vars: Vec::new(),
             reserved_label_name: None,
 
-            asm_fmt: asm_fmt::mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt),
+            asm_fmt: asm_fmt::mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt, os),
+            os: os.to_string(),
+
             curr_inst: Vec::new(),
             data_map: Vec::new(),
             last_inst_idx: Vec::new(),
@@ -151,7 +153,7 @@ impl AsmEmitter {
 
     pub fn to_asm_text(
         &mut self,
-        func_tree: &mut def_tree::FuncTree,
+        mut func_tree: def_tree::FuncTree,
         asm_fmt_name: Option<&str>,
         extern_funcs: &[inst::Inst],
         global_funcs: &[String],
