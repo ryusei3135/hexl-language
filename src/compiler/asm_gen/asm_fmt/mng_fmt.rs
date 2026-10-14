@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::asm_setting;
+use crate::{asm_setting, compiler::asm_gen::RegisterMode};
 use crate::compiler::ir::types;
 use std::any::{Any, TypeId};
 use crate::compiler::models::AsmFmtData;
@@ -537,11 +537,16 @@ impl MngAsmFmt {
     /// `(レジスタ番号, レジスタ名)`のペアを、確保されている
     /// 全レジスタ・全サイズ分列挙する。
     pub(in crate::compiler::asm_gen) 
-    fn all_reg_names(&self) -> Vec<(usize, String)> {
+    fn all_reg_names(&self) -> Vec<(RegisterMode, String)> {
         let mut result = Vec::new();
         for reg_idx in 0..self.reg_count() {
             for size in [Size::DQ, Size::DD, Size::DW, Size::DB] {
-                result.push((reg_idx, self.get_fmt_reg(reg_idx, &size)));
+                result.push((RegisterMode::Normal(reg_idx), self.get_fmt_reg(reg_idx, &size)));
+            }
+        }
+        for reg_idx in 0..self.float_reg_count() {
+            for size in [Size::F32, Size::F64] {
+                result.push((RegisterMode::Float(reg_idx), self.get_fmt_float_reg(reg_idx, &size)));
             }
         }
         result

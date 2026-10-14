@@ -9,7 +9,7 @@ impl AsmEmitter {
             .asm_fmt
             .all_reg_names()
             .into_iter()
-            .map(|(index, name)| (RegisterMode::Normal(index), name))
+            .map(|(register, name)| (register, name))
             .collect();
         for index in 0..self.asm_fmt.reg_count() {
             names.push((

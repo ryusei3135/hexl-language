@@ -57,7 +57,7 @@ func5(a: int of func4): Result<int, byte> {
     ret Result::Ok(a + 10)
 }
 
-func6(a: int must=func5) {
+func6(a: int must=func5, f: float) {
     func5(a)
 }
 
@@ -69,14 +69,14 @@ add(a mut: int, b: int): Option<int> {
     loop a > 0 {
         cond {
             a > 5 => {
-                io::print(c, 11)
+                io::print(c, 12)
             }
             else => {
                 #asm(gcc_x64) {
                     "{space}movl $1, %eax"
                     "{space}movl $1, %edi"
                     "{space}leaq (${d}), %rsi"
-                    "{space}movl $7, %edx"
+                    "{space}movl $8, %edx"
                     "{space}syscall"
                 }
                 break
@@ -93,6 +93,8 @@ _start(): int {
     fv3: float = fv + f2
     arr2 mut: [uint 3] = {0}
     [arr2 0] = 2
+    calcul mut: int = 10
+    calcul = calcul << 3 & 10
     o: Option<int> = Option::Some(10)
     h: int must=func5 = func4()
     a: static[int] = 30
@@ -102,7 +104,7 @@ _start(): int {
         name: 10
         aa: 10
     }
-    func6(h)
+    func6(h, 2.3)
     add(s.name, a)
     add(a, 0)
     #asm(gcc_x64) {

@@ -193,6 +193,13 @@ impl Size {
         }
     }
 
+    pub(crate) fn is_unsigned(&self) -> bool {
+        match self {
+            Self::UDD | Self::UDB | Self::UDW | Self::UDQ => true,
+            _ => false,
+        }
+    }
+
     /// このサイズがバイト単位で何バイトかを返す
     pub(crate) 
     fn to_bytes(&self) -> usize {

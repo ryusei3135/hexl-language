@@ -69,7 +69,7 @@ impl AsmEmitter {
         // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
         self.used_reg.start_scope();
         let arg_lines = self.build_arg_lines(meta_data, expand_struct_return);
-        call_func.push_str(&self.order_arg_lines(&arg_lines));
+        call_func.push_str(&self.order_arg_lines(arg_lines));
 
         let fn_label = Self::fn_label_of(&meta_data.name, &meta_data.temp_ty);
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
@@ -119,7 +119,7 @@ impl AsmEmitter {
     fn pop_caller_saved_regs(&self, regs: &[RegisterMode]) -> String {
         regs.iter()
             .rev()
-            .filter(|reg| !self.is_callee_saved(*reg.clone()))
+            .filter(|reg| !self.is_callee_saved(**reg))
             .map(|reg| {
                 match reg {
                     RegisterMode::Normal(index) => {
@@ -176,8 +176,8 @@ impl AsmEmitter {
         &mut self,
         meta_data: &inst::CallFuncMetaData,
         expand_struct_return: bool,
-    ) -> Vec<(usize, String, String)> {
-        let mut arg_lines: Vec<(usize, String, String)> = Vec::new();
+    ) -> Vec<(RegisterMode, String, String)> {
+        let mut arg_lines: Vec<(RegisterMode, String, String)> = Vec::new();
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数の実際の型のサイズ
@@ -212,6 +212,11 @@ impl AsmEmitter {
             let is_memory = self.check_node_is_mem_val(*param).is_some();
             let asm = self.tmpl_line(opcode, &param_reg, &src1_text, &resize_size, is_memory);
             let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty);
+            let param_reg_num = if param_ty.is_float() {
+                RegisterMode::Float(param_reg_num)
+            } else {
+                RegisterMode::Normal(param_reg_num)
+            };
             arg_lines.push((param_reg_num, src1_text, asm));
         }
         arg_lines
@@ -224,16 +229,16 @@ impl AsmEmitter {
     /// 壊れた値を読んでしまう。「他の未出力の引数から読まれていない
     /// 引数レジスタ」を持つ引数から順に出力する。
     /// (引数同士が循環している場合だけは、元の順のまま出力する)
-    fn order_arg_lines(&self, arg_lines: &[(usize, String, String)]) -> String {
+    fn order_arg_lines(&self, arg_lines: Vec<(RegisterMode, String, String)>) -> String {
         let mut asm = String::new();
         let mut pending: Vec<usize> = (0..arg_lines.len()).collect();
+
         while !pending.is_empty() {
             let pos = pending
                 .iter()
-                .position(|&i| {
-                    pending
-                        .iter()
-                        .all(|&j| j == i || !self.text_reads_reg(&arg_lines[j].1, arg_lines[i].0))
+                .position(|i| {
+                    (0..arg_lines.len())
+                        .all(|j| j == *i || !self.text_reads_reg(&arg_lines[j].1, arg_lines[*i].0)) 
                 })
                 .unwrap_or(0);
             let i = pending.remove(pos);
@@ -532,7 +537,7 @@ impl AsmEmitter {
     /// オペランドのテキストが、レジスタ`reg`(どのサイズの名前でも)を
     /// 読み出しに使っているか(`(%rbx)`のようなメモリ参照も含む)
     pub(super) 
-    fn text_reads_reg(&self, text: &str, reg: usize) -> bool {
+    fn text_reads_reg(&self, text: &str, reg: RegisterMode) -> bool {
         self.asm_fmt
             .all_reg_names()
             .iter()

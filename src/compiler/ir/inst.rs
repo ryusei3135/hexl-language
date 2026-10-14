@@ -41,6 +41,11 @@ impl ExprInst {
     pub fn is_float(&self, insts: &[Inst]) -> bool {
         insts[self.ls].is_float(insts)
     }
+    
+    /// この式の結果が符号なし整数。
+    pub fn is_unsigned(&self, insts: &[Inst]) -> bool {
+        insts[self.ls].is_unsigned(insts)
+    }
 }
 
 /// 引数の定義の情報
@@ -246,6 +251,13 @@ impl Inst {
         match self {
             Self::Expr(expr) => expr.is_float(insts),
             _ => self.value_ty(insts).is_some_and(|ty| ty.is_float()),
+        }
+    }
+
+    pub fn is_unsigned(&self, insts: &[Inst]) -> bool {
+        match self {
+            Self::Expr(expr) => expr.is_unsigned(insts),
+            _ => self.value_ty(insts).is_some_and(|ty| ty.is_unsigned()),
         }
     }
 

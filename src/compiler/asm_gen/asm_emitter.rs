@@ -8,6 +8,7 @@ mod arr;
 use super::emit_fn_name::emit_fn_name_id;
 use super::*;
 use crate::asm_setting;
+use crate::compiler::ir::inst::Inst;
 use crate::compiler::ir::types;
 
 /// 演算結果を格納するレジスタの「適切なサイズ」が、テンプレートを
@@ -831,9 +832,9 @@ impl AsmEmitter {
     }
 
     /// 式の種類から、アセンブリのテンプレートを引くキーを返す
-    fn expr_tmpl_key(kind: &inst::ExprKind, is_float: bool) -> &'static str {
-        if is_float {
-            match kind {
+    fn expr_tmpl_key(expr: &inst::ExprInst, insts: &[Inst]) -> &'static str {
+        if expr.is_float(insts) {
+            match expr.kind {
                 inst::ExprKind::Add => "float_add",
                 inst::ExprKind::Sub => "float_sub",
                 // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
@@ -849,7 +850,7 @@ impl AsmEmitter {
                 _ => panic!(),
             }
         } else {
-            match kind {
+            match expr.kind {
                 inst::ExprKind::AndCalcul => "and",
                 inst::ExprKind::XorCalcul => "xor",
                 inst::ExprKind::OrCalcul => "or",
@@ -859,8 +860,8 @@ impl AsmEmitter {
                 inst::ExprKind::Sub => "sub",
                 // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
                 // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
-                inst::ExprKind::Mul => "add",
-                inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+                inst::ExprKind::Mul => if expr.is_unsigned(insts) {"mul"} else {"imul"},
+                inst::ExprKind::Div | inst::ExprKind::Surplus => if expr.is_unsigned(insts) {"div"} else {"idiv"},
                 inst::ExprKind::LessThen => "cmp_l",
                 inst::ExprKind::GreaterThen => "cmp_g",
                 inst::ExprKind::LessThenEq => "cmp_l_e",
@@ -907,7 +908,7 @@ impl AsmEmitter {
             return self.format_div_expr_inst(expr);
         }
 
-        let key = Self::expr_tmpl_key(&expr.kind, expr.is_float(&self.curr_inst));
+        let key = Self::expr_tmpl_key(&expr, &self.curr_inst);
         let mnemonic = Self::expr_mnemonic(&expr.kind);
 
         let resolved_size: Size = self.get_expr_ty(expr.ls);
