@@ -11,10 +11,11 @@ mod dump;
 mod linker;
 
 
-#[cfg(target_os = "linux")]
-const DEFAULT: &str = "linux";
 #[cfg(target_os = "windows")]
 const DEFAULT: &str = "windows";
+/// windows 以外は linux 扱い
+#[cfg(not(target_os = "windows"))]
+const DEFAULT: &str = "linux";
 
 // 他モジュールが `crate::err` / `crate::parse` / `crate::node` などの形で
 // 参照している可能性があるため、元の `use` はそのまま残している。
@@ -213,20 +214,26 @@ pub fn build(
     let content = fs::read_to_string(file_name)
         .map_err(|e| format!("ファイル`{}`を読み込めません: {}", file_name, e))?;
 
-    let mut lexer = lex::Lexer::new();
-    let mut parser = parse::Parser::new();
-    let mut ir_builder = ir::IR::new();
-
-    // アセンブリ言語のデータを作成
-    lexer.analy(&content)?;
-
-    let nodes = parser.parser(&lexer.gen_tkns)?;
-
+    // `--linux` / `--windows` で選んだOS(未指定なら実行環境のOS)
     let os: String = if let Some(os) = &settings.os {
         os.clone()
     } else {
         DEFAULT.to_string()
     };
+
+    // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
+    // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
+    let mut lexer = lex::Lexer::with_os(&os);
+    let mut parser = parse::Parser::new();
+    let mut ir_builder = ir::IR::new();
+
+    // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準
+    lexer.set_source_file(file_name);
+
+    // アセンブリ言語のデータを作成
+    lexer.analy(&content)?;
+
+    let nodes = parser.parser(&lexer.gen_tkns)?;
 
     let func_def_meta_data = ir_builder
         .builder(

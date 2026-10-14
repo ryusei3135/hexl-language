@@ -106,13 +106,30 @@ pub struct Lexer {
 }
 
 impl Lexer {
+    /// 実行環境のOS(`#linux` / `#windows` のどちらか)が定義された状態で作る
     pub fn new() -> Self {
+        Self::with_preproc(Preprocessor::new().setup_defines())
+    }
+
+    /// `--linux` / `--windows` で選んだOS名(`"linux"` / `"windows"`)のシンボルだけを
+    /// 定義して作る。`#if #windows` などの条件がこのOSで切り替わる。
+    pub fn with_os(os: &str) -> Self {
+        Self::with_preproc(Preprocessor::new().setup_defines_for(os))
+    }
+
+    /// これから解析するソースファイルのパスを教える。
+    /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
+    pub fn set_source_file(&mut self, file: &str) {
+        self.preproc_table.set_source_file(std::path::Path::new(file));
+    }
+
+    fn with_preproc(preproc_table: Preprocessor) -> Self {
         Self {
             last_kind: None,
             gen_flag: None,
             chr_stk: String::new(),
             gen_tkns: Vec::new(),
-            preproc_table: Preprocessor::new().setup_defines(),
+            preproc_table,
             saw_gap: true,
         }
     }
@@ -984,5 +1001,165 @@ mod tests {
     #[test]
     fn check_bitwise_operator_tokens() {
         assert_eq!(lex_tkns("& ^ |"), vec![Tkn::And, Tkn::Xor, Tkn::Or]);
+    }
+
+    fn ret_nums(os: &str, src: &str) -> Vec<String> {
+        let mut lex = Lexer::with_os(os);
+        lex.analy(&src.to_string()).unwrap();
+        lex.gen_tkns
+            .into_iter()
+            .filter_map(|t| match t.tkn {
+                Tkn::Number(n) => Some(n),
+                _ => None,
+            })
+            .collect()
+    }
+
+    const OS_SRC: &str = "#if #windows\nret 1\n#elif #linux\nret 2\n#else\nret 3\n#endif";
+
+    #[test]
+    fn check_preprocessor_os_windows() {
+        assert_eq!(ret_nums("windows", OS_SRC), vec!["1"]);
+    }
+
+    #[test]
+    fn check_preprocessor_os_linux() {
+        assert_eq!(ret_nums("linux", OS_SRC), vec!["2"]);
+    }
+
+    #[test]
+    fn check_preprocessor_os_unknown_takes_else() {
+        assert_eq!(ret_nums("macos", OS_SRC), vec!["3"]);
+    }
+
+    #[test]
+    fn check_preprocessor_os_symbol_expands() {
+        assert_eq!(ret_nums("linux", "#define A 5\n#if #linux\nret #A\n#endif"), vec!["5"]);
+    }
+
+    #[test]
+    fn check_preprocessor_elif_first_match_only() {
+        // 複数の `#elif` が当てはまっても、最初の枝だけが有効
+        let src = "#define A 1\n#define B 1\n#if #X\nret 1\n#elif #A\nret 2\n#elif #B\nret 3\n#else\nret 4\n#endif";
+        assert_eq!(ret_nums("linux", src), vec!["2"]);
+    }
+
+    #[test]
+    fn check_preprocessor_elif_skipped_when_if_taken() {
+        let src = "#define A 1\n#if #A\nret 1\n#elif #A\nret 2\n#endif";
+        assert_eq!(ret_nums("linux", src), vec!["1"]);
+    }
+
+    #[test]
+    fn check_preprocessor_elif_without_else_none_taken() {
+        let src = "#if #X\nret 1\n#elif #Y\nret 2\n#endif\nret 9";
+        assert_eq!(ret_nums("linux", src), vec!["9"]);
+    }
+
+    #[test]
+    fn check_preprocessor_elif_nested_in_inactive_parent() {
+        // 外側が無効なら、内側の `#elif` / `#else` が当てはまっても有効にならない
+        let src = "#if #windows\n#if #X\nret 1\n#elif #linux\nret 2\n#else\nret 3\n#endif\n#endif\nret 9";
+        assert_eq!(ret_nums("linux", src), vec!["9"]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn check_preprocessor_elif_after_else_panics() {
+        let _ = ret_nums("linux", "#if #X\n#else\n#elif #linux\n#endif");
+    }
+
+    /// 一時ディレクトリにファイルを作り、`main` を字句解析して数字だけ返す
+    fn include_nums(dir: &str, files: &[(&str, &str)], main: &str) -> Vec<String> {
+        let base = std::env::temp_dir().join(format!("hexl_inc_{}_{}", dir, std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        for (name, body) in files {
+            let path = base.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        }
+        let main_path = base.join(main);
+        let src = std::fs::read_to_string(&main_path).unwrap();
+        let mut lex = Lexer::with_os("linux");
+        lex.set_source_file(main_path.to_str().unwrap());
+        lex.analy(&src).unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+        lex.gen_tkns
+            .into_iter()
+            .filter_map(|t| match t.tkn {
+                Tkn::Number(n) => Some(n),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn check_include_plain_is_inlined() {
+        let nums = include_nums(
+            "plain",
+            &[("a.hexl", "ret 1\n"), ("m.hexl", "ret 0\n#include \"a.hexl\"\nret 2")],
+            "m.hexl",
+        );
+        assert_eq!(nums, vec!["0", "1", "2"]);
+    }
+
+    #[test]
+    fn check_include_with_comment_is_inlined() {
+        let nums = include_nums(
+            "cmt",
+            &[("a.hexl", "ret 1"), ("m.hexl", "#include \"a.hexl\" // 説明")],
+            "m.hexl",
+        );
+        assert_eq!(nums, vec!["1"]);
+    }
+
+    #[test]
+    fn check_include_shares_define_and_nested_relative_path() {
+        let nums = include_nums(
+            "nest",
+            &[
+                ("sub/b.hexl", "#define B 7\n"),
+                ("sub/a.hexl", "#include \"b.hexl\"\n"),
+                ("m.hexl", "#include \"sub/a.hexl\"\nret #B"),
+            ],
+            "m.hexl",
+        );
+        assert_eq!(nums, vec!["7"]);
+    }
+
+    #[test]
+    fn check_include_in_inactive_branch_is_skipped() {
+        // 無効な枝の `#include` は、ファイルが無くても読まない
+        let nums = include_nums(
+            "inactive",
+            &[("m.hexl", "#if #windows\n#include \"none.hexl\"\n#endif\nret 5")],
+            "m.hexl",
+        );
+        assert_eq!(nums, vec!["5"]);
+    }
+
+    #[test]
+    fn check_include_with_alias_is_left_for_parser() {
+        // `"file"::io` と `io="file"` は読み込まず、`#include` のまま残る
+        let mut lex = Lexer::with_os("linux");
+        lex.analy(&"#include \"x.hexl\"::io\n#include io=\"x.hexl\"".to_string())
+            .unwrap();
+        let names = lex
+            .gen_tkns
+            .iter()
+            .filter(|t| t.tkn == Tkn::Name("include".to_string()))
+            .count();
+        assert_eq!(names, 2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn check_include_circular_panics() {
+        let _ = include_nums(
+            "cycle",
+            &[("a.hexl", "#include \"m.hexl\""), ("m.hexl", "#include \"a.hexl\"")],
+            "m.hexl",
+        );
     }
 }

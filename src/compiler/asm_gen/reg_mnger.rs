@@ -320,7 +320,7 @@ mod stack_var_tests {
 
         assert_eq!(
             regs.lowest_free(&candidates),
-            Some(RegisterMode::Float(2))
+            Some(RegisterMode::Float(2)).as_ref()
         );
     }
 

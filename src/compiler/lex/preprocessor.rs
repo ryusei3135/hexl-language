@@ -1,4 +1,8 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// `#define NAME VALUE` の右辺として実際に登録される値。
 /// 今後 `define` 以外のプリプロセッサ命令が増える前提のため、
@@ -11,10 +15,15 @@ enum ReplaceVal {
 }
 
 
-#[cfg(target_os = "linux")]
-const DEFAULT: &str = "linux";
 #[cfg(target_os = "windows")]
 const DEFAULT: &str = "windows";
+/// windows 以外は linux 扱い
+#[cfg(not(target_os = "windows"))]
+const DEFAULT: &str = "linux";
+
+/// 組み込みの OS シンボル。`--windows` / `--linux` で選ばれた1つだけが定義される。
+/// (`#if #windows` / `#if #linux` / `#elif #linux` で使う)
+const OS_NAMES: [&str; 2] = ["linux", "windows"];
 
 /// 関数形式マクロの展開の入れ子の上限(`#define F(a) #F(a)`のような自己再帰の防止)
 const MAX_EXPAND_DEPTH: usize = 64;
@@ -33,6 +42,11 @@ enum PreprocKind {
 pub(in crate::compiler::lex) 
 struct Preprocessor {
     tables: HashMap<String, PreprocKind>,
+    /// `#include "file"` の相対パスの基準になるディレクトリ
+    /// (読み込み中のファイルがあるディレクトリ。未設定なら実行時のカレント)
+    base_dir: PathBuf,
+    /// 今インライン展開中のファイルの正規化したパス(循環した `#include` の検出用)
+    include_stack: Vec<PathBuf>,
 }
 
 impl Preprocessor {
@@ -40,11 +54,64 @@ impl Preprocessor {
     fn new() -> Self {
         Self {
             tables: HashMap::new(),
+            base_dir: PathBuf::new(),
+            include_stack: Vec::new(),
         }
     }
 
-    pub fn setup_defines(mut self) -> Self {
-        self.tables.insert(DEFAULT.to_string(), PreprocKind::Define(ReplaceVal::Str(DEFAULT.to_string())));
+    /// これから処理するソースファイルの場所を教える。
+    /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
+    pub(in crate::compiler::lex)
+    fn set_source_file(&mut self, file: &Path) {
+        self.base_dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
+        self.include_stack.clear();
+        if let Ok(canon) = fs::canonicalize(file) {
+            self.include_stack.push(canon);
+        }
+    }
+
+    /// `#include "rel"` のファイルを読み込み、プリプロセッサを通した結果を返す。
+    /// 取り込んだファイルの `#define` はそのまま以降のソースでも使える
+    /// (`#if` の状態は、ファイルの中で閉じる)。
+    ///
+    /// ファイルが読めない場合と、`#include` が循環している場合は panic する。
+    fn include_inline(&mut self, rel: &str) -> String {
+        let path = self.base_dir.join(rel);
+        let canon = fs::canonicalize(&path)
+            .unwrap_or_else(|e| panic!("`#include \"{}\"`: cannot open `{}`: {}", rel, path.display(), e));
+        if self.include_stack.contains(&canon) {
+            panic!("`#include \"{}\"`: circular include of `{}`", rel, canon.display());
+        }
+        let text = fs::read_to_string(&canon)
+            .unwrap_or_else(|e| panic!("`#include \"{}\"`: cannot read `{}`: {}", rel, canon.display(), e));
+
+        // 取り込んだファイルの中の `#include` は、そのファイルの場所が基準
+        let saved_base = std::mem::replace(
+            &mut self.base_dir,
+            canon.parent().map(Path::to_path_buf).unwrap_or_default(),
+        );
+        self.include_stack.push(canon);
+        let out = self.preprocess_text(&text);
+        self.include_stack.pop();
+        self.base_dir = saved_base;
+        out
+    }
+
+    /// 実行環境(`DEFAULT`)のOSシンボルを定義する。
+    pub fn setup_defines(self) -> Self {
+        self.setup_defines_for(DEFAULT)
+    }
+
+    /// `os`(`"linux"` / `"windows"`)のシンボルだけを定義する。
+    /// もう一方のOSは未定義のままなので、`#if #windows` などの条件で区別できる。
+    /// 知らないOS名の場合は何も定義しない(両方未定義)。
+    pub fn setup_defines_for(mut self, os: &str) -> Self {
+        if let Some(name) = OS_NAMES.iter().find(|n| **n == os) {
+            self.tables.insert(
+                name.to_string(),
+                PreprocKind::Define(ReplaceVal::Str(name.to_string())),
+            );
+        }
         self
     }
 
@@ -171,22 +238,31 @@ impl Preprocessor {
     /// - `#define NAME(arg, arg2, ..) BODY`: 関数形式マクロとして登録する。
     ///   `#NAME(a, b)`と書くと、`BODY`の仮引数を実引数に置き換えて展開する
     ///   (名前と`(`の間に空白を入れると、`NAME VALUE`の形式になる)
-    /// - `#if #NAME` / `#else` / `#endif`: `NAME` が定義済みなら `#if`〜`#else`間を、
-    ///   未定義なら `#else`〜`#endif`間を有効にする(`#else`は省略可、入れ子可)
+    /// - `#if #NAME` / `#elif #NAME` / `#else` / `#endif`: 上から順に条件を調べ、
+    ///   最初に `NAME` が定義済みだった枝だけを有効にする(どれも当てはまらなければ
+    ///   `#else` の枝)。`#elif`は何個でも、`#else`は省略可、入れ子可。
+    ///   `#windows` / `#linux` は `--windows` / `--linux` で選んだOSだけが定義済みになる
     pub(in crate::compiler::lex) 
     fn preprocess(&mut self, content: &str) -> Option<String> {
-        /// `#if` / `#else` の入れ子1段分の状態。
+        Some(self.preprocess_text(content))
+    }
+
+    /// `preprocess` の本体(`#include` のインライン展開から再帰的にも呼ばれる)
+    fn preprocess_text(&mut self, content: &str) -> String {
+        /// `#if` / `#elif` / `#else` の入れ子1段分の状態。
         struct CondFrame {
             /// 外側のスコープ自体が有効かどうか
             parent_active: bool,
-            /// `#if #NAME` の条件(NAMEが定義済みか)
+            /// 今いる枝(`#if` / `#elif` / `#else`)の条件が成り立っているか
             condition: bool,
+            /// これまでの枝のどれかが既に採用されたか(以降の `#elif` / `#else` は無効)
+            taken: bool,
             /// すでに `#else` を通過したか
             in_else: bool,
         }
         impl CondFrame {
             fn active(&self) -> bool {
-                self.parent_active && (self.condition != self.in_else)
+                self.parent_active && self.condition
             }
         }
         fn is_active(stack: &[CondFrame]) -> bool {
@@ -241,22 +317,50 @@ impl Preprocessor {
                         match name.as_str() {
                             "if" => {
                                 // `#if #A` のように、条件は `#NAME` の形で書く
-                                let target =
-                                    rest_of_line.trim().trim_start_matches('#').to_string();
+                                let condition = self.is_defined(cond_target(&rest_of_line));
                                 cond_stack.push(CondFrame {
                                     parent_active: active_here,
-                                    condition: self.is_defined(&target),
+                                    condition,
+                                    taken: condition,
                                     in_else: false,
                                 });
                                 i = line_end;
                                 continue;
                             }
+                            "elif" => {
+                                let condition = self.is_defined(cond_target(&rest_of_line));
+                                if let Some(frame) = cond_stack.last_mut() {
+                                    if frame.in_else {
+                                        panic!("`#elif` after `#else`");
+                                    }
+                                    // 既にどれかの枝を採用していたら、条件に関係なく無効
+                                    frame.condition = !frame.taken && condition;
+                                    frame.taken |= frame.condition;
+                                }
+                                i = line_end;
+                                continue;
+                            }
                             "else" => {
                                 if let Some(frame) = cond_stack.last_mut() {
+                                    frame.condition = !frame.taken;
+                                    frame.taken = true;
                                     frame.in_else = true;
                                 }
                                 i = line_end;
                                 continue;
+                            }
+                            "include" => {
+                                // `#include "file"`(別名なし)だけは、ここでファイルを読み込み、
+                                // その場にインライン展開する。`#include "file"::io` と
+                                // `#include io="file"` は、これまでどおり後段に任せる。
+                                if active_here {
+                                    if let Some(rel) = plain_include_path(&rest_of_line) {
+                                        let included = self.include_inline(&rel);
+                                        output.push_str(&included);
+                                        i = line_end;
+                                        continue;
+                                    }
+                                }
                             }
                             "endif" => {
                                 cond_stack.pop();
@@ -345,7 +449,7 @@ impl Preprocessor {
             i += 1;
         }
 
-        Some(output)
+        output
     }
 
 }
@@ -379,6 +483,25 @@ fn sort_preproc<'a>(
             Some((target_name, PreprocKind::Define(ReplaceVal::Str(value))))
         }
         _ => None,
+    }
+}
+
+/// `#if #NAME` / `#elif #NAME` の条件部分(`#NAME`)から `NAME` を取り出す
+fn cond_target(rest_of_line: &str) -> &str {
+    rest_of_line.trim().trim_start_matches('#')
+}
+
+/// `#include` の後ろ(`rest_of_line`)が `"file"` だけ(後ろは空白か `//` のコメントのみ)なら
+/// `file` を返す。`"file"::io` や `io="file"` の形なら `None`。
+fn plain_include_path(rest_of_line: &str) -> Option<String> {
+    let rest = rest_of_line.trim();
+    let after_quote = rest.strip_prefix('"')?;
+    let close = after_quote.find('"')?;
+    let tail = after_quote[close + 1..].trim();
+    if tail.is_empty() || tail.starts_with("//") {
+        Some(after_quote[..close].to_string())
+    } else {
+        None
     }
 }
 

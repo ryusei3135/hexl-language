@@ -1205,7 +1205,7 @@ mod match_expr_ir_tests {
                 a: int = 10
                 cond a == 10 {
                     b: int = 1
-                } | {
+                } else {
                     b: int = 0
                 }
             }",
@@ -1230,7 +1230,7 @@ mod match_expr_ir_tests {
                 cond 1 {
                     1 => { a: int = 1 }
                     2 => { a: int = 2 }
-                    | => { a: int = 0 }
+                    else => { a: int = 0 }
                 }
                 ret 1
             }",

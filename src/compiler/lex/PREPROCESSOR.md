@@ -74,6 +74,38 @@ ret #A + 1      // ret 10 + 1
 - 従来の`#define A { x }`(`{{`で始まらない値)はそのまま値として使える。
     ただし`#define A {{1}}`のように`{{`で始まる値は、`{{`と`}}`を外した`1`になる。
 
+## 条件付きコンパイル(`#if` / `#elif` / `#else` / `#endif`)
+```
+#if #windows
+  ret 1
+#elif #linux
+  ret 2
+#else
+  ret 3
+#endif
+```
+- 条件は`#NAME`の形で書き、`NAME`が定義済みなら成り立つ。上から順に調べ、**最初に成り立った枝だけ**が有効になる。
+- `#elif`は何個でも書ける。`#else`は省略可、入れ子も可。`#else`の後ろに`#elif`を書くと`panic`する。
+- 組み込みのOSシンボル`#linux` / `#windows`は、`--linux` / `--windows`で選んだOS(未指定なら実行環境のOS)の
+  **1つだけ**が定義される。もう一方は未定義(`Lexer::with_os(os)` → `Preprocessor::setup_defines_for(os)`)。
+
+## `#include "file"` のインライン展開
+```
+#include "test.hexl"         // ここで読み込み、その場に展開する
+#include "test.hexl"::io     // 展開しない(後段が処理する)
+#include io="test.hexl"      // 展開しない(後段が処理する)
+```
+- 別名のない1番目の形だけを、プリプロセッサがファイルを読み込んで、その場に展開する。
+  `"file"`の後ろは、空白か`//`のコメントだけ書ける。
+- 相対パスは、`#include`を書いたファイルのあるディレクトリが基準(入れ子でも、そのファイルの場所が基準)。
+  基準は`Lexer::set_source_file`で教える(`lib.rs`の`build`が呼ぶ)。
+- 取り込んだファイルもプリプロセッサを通る(`#if`などが使える)。そこで`#define`したものは、以降のソースでも使える。
+  `#if`の状態は、取り込んだファイルの中で閉じる。
+- 無効な`#if`の枝の中の`#include`は、読み込まない(ファイルが無くてもよい)。
+- ファイルが開けない、`#include`が循環している(自分自身を含む)場合は`panic`する。
+- 同じファイルを2回`#include`すると、2回ともそのまま展開される(重複した定義は呼び出し側で避ける)。
+- 行番号: 展開した分だけ、`#include`より後ろの行番号(`#line`、トークンの行)が後ろへずれる。
+
 ## 実装の場所
 | 処理 | 関数 |
 |------|------|
@@ -82,4 +114,5 @@ ret #A + 1      // ret 10 + 1
 | 呼び出しの実引数の読み取り | `parse_macro_args` |
 | 仮引数の置き換え | `substitute_params` |
 | 展開(実引数→置き換え→再展開) | `Preprocessor::expand_fn_macro` / `expand_inline` |
+| `#include "file"`の判定/読み込み | `plain_include_path` / `Preprocessor::include_inline` |
 | ソース全体の処理(行頭の`#define`/`#if`、インライン展開) | `Preprocessor::preprocess` |

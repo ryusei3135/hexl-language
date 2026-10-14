@@ -470,7 +470,7 @@ g(v: int must=d) { d(v) }
     fn ending_contract_in_only_one_branch_is_error() {
         // 片方の分岐でしか終了しない(両方で終了する場合は、
         // 下の`each_branch_may_end_the_contract_once`を参照)
-        assert_err(&main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n}"));
+        assert_err(&main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {}"));
     }
 
     #[test]
@@ -605,7 +605,7 @@ g(v: int must=d) { d(v) }
     #[ignore = "未実装: `continue`で次の周へ進む経路の契約の検査はない"]
     fn continue_before_ending_contract_is_error() {
         assert_err(&main_with(
-            "loop {\n x: int must=c = a()\n cond 1 == 1 {\n continue\n }\n c(x)\n break\n}",
+            "loop {\n x: int must=c = a()\n cond 1 == 1 {\n continue\n } else {}\n c(x)\n break\n}",
         ));
     }
 }

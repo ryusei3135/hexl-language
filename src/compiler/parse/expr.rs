@@ -646,7 +646,7 @@ mod expr_tests {
                 10 == 10 => {
                   hh: b1 = 100
                 }
-                | => {
+                else=> {
                   a: b1 = 10
                 }
               }
@@ -679,7 +679,7 @@ mod expr_tests {
             main(): int {
               cond a == 10 {
                 hh: int = 100
-              } | {
+              } else {
                 a: int = 10
               }
             }
@@ -719,7 +719,7 @@ mod expr_tests {
                 20 => {
                   hh: int = 200
                 }
-                | => {
+                else => {
                   a: int = 10
                 }
               }

@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-14
+### Added
+- #elifの追加
+### Changed
+- #include の仕様変更
+    ```
+    #include "test.hexl"
+    #include "test.hexl"::mod
+    #include io="test.hexl"
+    ```
+    一番目のものだけインライン展開
+### Fixed
+- プリプロセッサの修正
+    - #linux
+    - #windows
+- 警告を少し修正
+
+
 ## [0.15.0] - 2026-10-14
 ### Added
 - 符号なし整数型を追加

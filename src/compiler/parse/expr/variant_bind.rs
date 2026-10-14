@@ -194,7 +194,7 @@ mod variant_bind_tests {
             main(): int {
               cond M(val) := a {
                 x: int = 1
-              } | {
+              } else {
                 y: int = 2
               }
             }
@@ -219,7 +219,7 @@ mod variant_bind_tests {
             main(): int {
               cond M(val): int = a {
                 x: int = 1
-              } | {
+              } else {
                 y: int = 2
               }
             }
@@ -250,7 +250,7 @@ mod variant_bind_tests {
                 M(val) := a => {
                   x: int = 1
                 }
-                | => {
+                else => {
                   y: int = 2
                 }
               }
@@ -272,10 +272,10 @@ mod variant_bind_tests {
         // `f(a) == 1`は、パターン束縛ではなく通常の関数呼び出しの比較
         let body = gen_main_body(
             "
-            main(): int {
+            main() {
               cond f(a) == 1 {
                 x: int = 1
-              } | {
+              } else {
                 y: int = 2
               }
             }
@@ -303,7 +303,7 @@ mod variant_bind_tests {
                 M(val) := b => {
                   x: int = 1
                 }
-                | => {
+                else => {
                   y: int = 2
                 }
               }
@@ -322,7 +322,7 @@ mod variant_bind_tests {
             main(): int {
               cond A::M(val) := a {
                 x: int = 1
-              } | {
+              } else {
                 y: int = 2
               }
             }
