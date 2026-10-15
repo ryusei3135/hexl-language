@@ -104,6 +104,7 @@ impl AsmEmitter {
         let last_inst_idx = mem::take(&mut self.last_inst_idx);
         let scope_outer_vars = mem::take(&mut self.scope_outer_vars);
         let emitted_calls = mem::take(&mut self.emitted_calls);
+        let unused_var_nodes = mem::take(&mut self.unused_var_nodes);
         let arr_index_temp = self.arr_index_temp.take();
         let used_reg = self.used_reg.clone();
         let reg_idx = self.reg_idx;
@@ -123,6 +124,7 @@ impl AsmEmitter {
         self.last_inst_idx = last_inst_idx;
         self.scope_outer_vars = scope_outer_vars;
         self.emitted_calls = emitted_calls;
+        self.unused_var_nodes = unused_var_nodes;
         self.arr_index_temp = arr_index_temp;
         self.used_reg = used_reg;
         self.reg_idx = reg_idx;
@@ -383,6 +385,28 @@ impl AsmEmitter {
         let stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_def.body);
         self.used_reg
             .allocation_register(&fn_def.var_counter, &param_regs, &stack_vars, &fn_def.body);
+        // 使用回数が0回の変数は、アセンブリを生成しない
+        self.unused_var_nodes =
+            reg_mnger::UsedRegManager::unused_var_nodes(&fn_def.var_counter, &fn_def.body);
+        // 生成しない変数に割り当てたレジスタは取り消す
+        // (同じ名前の定義が1つでも生成される場合は取り消さない)
+        for (idx, node) in fn_def.body.iter().enumerate() {
+            if let inst::Inst::Mov {
+                name: Some(name), ..
+            } = node
+            {
+                let all_removed = fn_def.body.iter().enumerate().all(|(i, other)| match other {
+                    inst::Inst::Mov {
+                        name: Some(other_name),
+                        ..
+                    } if other_name == name => self.unused_var_nodes.contains(&i),
+                    _ => true,
+                });
+                if self.unused_var_nodes.contains(&idx) && all_removed {
+                    self.used_reg.release_allocation(name);
+                }
+            }
+        }
         // 関数ごとにスタックの使用量をリセットする
         // (前の関数の`stk_use_counter`を持ち越すと、この関数の
         //  ローカル変数のオフセットが正しく計算できない)
@@ -465,7 +489,12 @@ impl AsmEmitter {
                 size,
                 dst,
                 src,
-            } => self.gen_mov_node_asm(name.as_deref(), size, *dst, *src, ctx.returned_struct_idx),
+            } => {
+                // 使用回数が0回の変数(`unused_var_nodes`)は生成しない
+                if !self.unused_var_nodes.contains(&node_idx) {
+                    self.gen_mov_node_asm(name.as_deref(), size, *dst, *src, ctx.returned_struct_idx)
+                }
+            }
             // メモリに配置されている値の生成
             inst::Inst::MemoryValue(mem_value) => self.mem_val_ir(mem_value),
             inst::Inst::Param(_) => self.gen_param_asm(node),

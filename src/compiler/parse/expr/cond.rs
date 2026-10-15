@@ -10,7 +10,7 @@ impl Parser {
             return crate::err_at!(self.cond_keyword_not_found());
         }
         // match の対象式
-        let cond_expr = if self.peek_tkn().unwrap() == lex::Tkn::LBrace {
+        let cond_expr = if self.peek_tkn()? == lex::Tkn::LBrace {
             self.next_tkn(&[])?;
             None
         } else if self.is_variant_bind_ahead() {
@@ -24,10 +24,9 @@ impl Parser {
 
         // 真偽値(比較式)が与えられた場合は、単純なif/elseとして扱う
         // `cond a == 10 { .. } else { .. }`
-        if let Some(ref target_expr) = cond_expr {
-            if Self::is_bool_expr(target_expr) {
-                let cond = *cond_expr.unwrap();
-                return self.expr_match_bool(cond);
+        if cond_expr.as_ref().is_some_and(|e| Self::is_bool_expr(e)) {
+            if let Some(cond) = cond_expr {
+                return self.expr_match_bool(*cond);
             }
         }
 

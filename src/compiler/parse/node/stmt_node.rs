@@ -114,11 +114,12 @@ impl Group2Node {
         }
     }
 
-    pub fn change_group1(self) -> Group1Node {
+    /// `Group1Node`へ変換する。`Include`と`Line`以外は対応していないので`Err`を返す
+    pub fn change_group1(self) -> Result<Group1Node, crate::compiler::err::ErrKind> {
         match self {
-            Self::Include(v) => Group1Node::Include(v),
-            Self::Line(v) => Group1Node::Line(v),
-            t => panic!("{:?} <- これは対応していません", t),
+            Self::Include(v) => Ok(Group1Node::Include(v)),
+            Self::Line(v) => Ok(Group1Node::Line(v)),
+            _ => Err(crate::compiler::err::ErrKind::UnexpectedToken),
         }
     }
 }

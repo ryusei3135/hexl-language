@@ -26,8 +26,7 @@ impl Parser {
     pub(in crate::compiler::parse) 
     fn peek2_tkn(&self) -> Option<lex::Tkn> {
         self.tkns
-            .as_ref()
-            .unwrap()
+            .as_ref()?
             .get(self.idx + 2)
             .map(|v| v.tkn.clone())
     }
@@ -43,6 +42,17 @@ impl Parser {
             }
         }
         None
+    }
+
+    /// `advance_tkn`の、次のトークンが無い場合に`Err`(EOF)を返す版。
+    /// 直前の`peek_tkn`などで次のトークンの存在を確認済みの箇所で、
+    /// `advance_tkn().unwrap()`の代わりに使う
+    pub(in crate::compiler::parse) 
+    fn advance_tkn_checked(&mut self) -> Result<lex::Tkn, err::ErrKind> {
+        match self.advance_tkn() {
+            Some(tkn) => Ok(tkn),
+            None => crate::err_at!(self.tkn_is_eof(Vec::new())),
+        }
     }
 
     /// 位置を1つ戻す。
@@ -96,12 +106,19 @@ impl Parser {
     #[inline(always)]
     pub(in crate::compiler::parse) 
     fn current_line(&self, idx: usize) -> usize {
-        self.tkns.as_ref().unwrap()[idx].line
+        // 範囲外はエラーの位置を表示するための値なので`0`を返す
+        self.tkns
+            .as_ref()
+            .and_then(|tkns| tkns.get(idx))
+            .map_or(0, |t| t.line)
     }
 
     #[inline(always)]
     pub(in crate::compiler::parse) 
     fn tkn_chr_pos(&self) -> usize {
-        self.tkns.as_ref().unwrap()[self.idx.saturating_sub(1)].pos
+        self.tkns
+            .as_ref()
+            .and_then(|tkns| tkns.get(self.idx.saturating_sub(1)))
+            .map_or(0, |t| t.pos)
     }
 }

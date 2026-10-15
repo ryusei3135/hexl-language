@@ -63,13 +63,22 @@ impl Parser {
     /// 本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
     pub(in crate::compiler::parse)
     fn collect_generic_types(&mut self) -> Result<(), err::ErrKind> {
-        let len = self.tkns.as_ref().unwrap().len();
+        let Some(len) = self.tkns.as_ref().map(|tkns| tkns.len()) else {
+            return crate::err_at!(self.tkn_is_eof(Vec::new()));
+        };
         // `{`の深さ。トップレベル(0)にある`struct`/`variant`だけが定義
         let mut depth = 0usize;
         let mut i = 0usize;
 
         while i < len {
-            let tkn = self.tkns.as_ref().unwrap()[i].tkn.clone();
+            let Some(tkn) = self
+                .tkns
+                .as_ref()
+                .and_then(|tkns| tkns.get(i))
+                .map(|t| t.tkn.clone())
+            else {
+                return crate::err_at!(self.tkn_is_eof(Vec::new()));
+            };
             match tkn {
                 lex::Tkn::LBrace => depth += 1,
                 lex::Tkn::RBrace => depth = depth.saturating_sub(1),
@@ -111,7 +120,9 @@ impl Parser {
         &self,
         kw_idx: usize,
     ) -> Result<(String, GenericType, usize), err::ErrKind> {
-        let tkns = self.tkns.as_ref().unwrap();
+        let Some(tkns) = self.tkns.as_ref() else {
+            return crate::err_at!(self.tkn_is_eof(Vec::new()));
+        };
         // エラーは`generic_def_expected`/`generic_def_eof`が作る
         // (関数のジェネリクスと同じ。位置は指定位置のトークンの場所)
         let expected = |i: usize, expected: &'static str| {
@@ -119,11 +130,12 @@ impl Parser {
         };
         let eof = |expected: Vec<&'static str>| crate::err_at!(self.generic_def_eof(expected));
 
-        let name_idx = self
-            .generic_type_head(kw_idx)
-            .expect("extract_generic_type_def: ジェネリクスな型の定義ではありません");
-        let lex::Tkn::Name(name) = tkns[name_idx].tkn.clone() else {
-            unreachable!("extract_generic_type_def: 型名のトークンではありません");
+        // ジェネリクスな型の定義(`struct Name<`)でなければ、`kw_idx`の位置でエラー
+        let Some(name_idx) = self.generic_type_head(kw_idx) else {
+            return expected(kw_idx, "generic type definition");
+        };
+        let Some(lex::Tkn::Name(name)) = tkns.get(name_idx).map(|t| t.tkn.clone()) else {
+            return expected(name_idx, "name");
         };
 
         // `<T, U>`の型パラメータ
@@ -261,7 +273,9 @@ impl Parser {
         let Some(gt_idx) = self.generic_args_end(lt_idx) else {
             return false;
         };
-        let tkns = self.tkns.as_ref().unwrap();
+        let Some(tkns) = self.tkns.as_ref() else {
+            return false;
+        };
         matches!(
             tkns.get(gt_idx + 1).map(|t| &t.tkn),
             Some(lex::Tkn::LBrace | lex::Tkn::ModPathTkn)
@@ -272,17 +286,15 @@ impl Parser {
     /// (まだ無ければ)作って、その名前(`Pair$int$byte`)を返す。
     /// 呼び出し時の`current_tkn()`は`<`で、終了時は`>`を指す
     ///
-    /// ## Panics
+    /// ## Errors
     /// `name`が定義済みのジェネリクスな型でない場合
     /// (呼び出し元で`generic_types`を確認しておくこと)
     pub(in crate::compiler::parse)
     fn generic_type_ref(&mut self, name: &str) -> Result<String, err::ErrKind> {
-        let param_count = self
-            .generic_types
-            .get(name)
-            .expect("generic_type_ref: 定義されていないジェネリクスな型")
-            .params
-            .len();
+        let Some(generic) = self.generic_types.get(name) else {
+            return crate::err_at!(self.internal_state_err("defined generic type"));
+        };
+        let param_count = generic.params.len();
 
         // 型引数の読み込みは、ジェネリクス関数と共通(`func.rs`)
         let (ty_args, ty_tkns) = self.generic_type_args(param_count)?;
@@ -411,11 +423,9 @@ impl Parser {
             );
         }
 
-        let generic = self
-            .generic_types
-            .get(name)
-            .expect("instantiate_generic_type: 定義されていないジェネリクスな型")
-            .clone();
+        let Some(generic) = self.generic_types.get(name).cloned() else {
+            return crate::err_at!(self.internal_state_err("defined generic type"));
+        };
         // `next: Node<T>*`のように、定義の中で自分自身を使っていても、
         // 無限に作らないよう、解析を始める前に登録する
         self.generated_types
@@ -434,10 +444,9 @@ impl Parser {
             Some(
                 def @ (node::Group1Node::StructDefine(_) | node::Group1Node::VariantDefine(_)),
             ) => def,
-            t => unreachable!(
-                "instantiate_generic_type: 構造体/バリアントのノードが作られていません: {:?}",
-                t
-            ),
+            _ => {
+                return crate::err_at!(self.internal_state_err("generated struct/variant node"));
+            }
         };
         self.pending_types.push(def);
         Ok(mangled)

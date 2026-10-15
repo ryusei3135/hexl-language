@@ -115,7 +115,9 @@ impl Parser {
                     continue;
                 }
                 lex::Tkn::RBrace => break,
-                t => panic!("{:?}", t),
+                t => {
+                    return crate::err_at!(self.expected_tkn("name or `}`", t.clone()));
+                }
             }
         }
         Ok(node::Expr::InitStruct {
@@ -233,10 +235,9 @@ impl Parser {
                 // `Self`の次のトークンへ進める
                 self.next_tkn(&[])?;
 
-                let self_name = self
-                    .struct_self_name
-                    .as_ref()
-                    .expect("`Self`は構造体/列挙型のメソッド内でのみ使用できます");
+                let Some(self_name) = self.struct_self_name.clone() else {
+                    return crate::err_at!(self.self_outside_of_type());
+                };
 
                 let ty = match self.current_tkn() {
                     lex::Tkn::Mul => {
@@ -297,12 +298,13 @@ impl Parser {
             lex::Tkn::LBracket => self.define_mem_ty_node(false),
             // 静的領域: `static[ty]` / `static[ty 4]`
             lex::Tkn::KeyWordStatic => {
-                if self.next_tkn(&["["])? != lex::Tkn::LBracket {
-                    panic!("静的領域の定義には`[`が必要です");
+                let t = self.next_tkn(&["["])?;
+                if t != lex::Tkn::LBracket {
+                    return crate::err_at!(self.expected_tkn("[", t));
                 }
                 self.define_mem_ty_node(true)
             }
-            t => panic!("unexpect ty token: {:?}", t),
+            t => crate::err_at!(self.expected_tkn("name, `[` or `static`", t)),
         }
     }
 
@@ -317,17 +319,18 @@ impl Parser {
 
         let len = match self.next_tkn(&["number", "]"])? {
             lex::Tkn::Number(num) => {
-                let len = num
-                    .parse::<usize>()
-                    .expect("配列の長さは数値である必要があります");
+                let Ok(len) = num.parse::<usize>() else {
+                    return crate::err_at!(self.invalid_number(num));
+                };
 
-                if self.next_tkn(&["not `]`"])? != lex::Tkn::RBracket {
-                    panic!("`]`が必要です");
+                let t = self.next_tkn(&["not `]`"])?;
+                if t != lex::Tkn::RBracket {
+                    return crate::err_at!(self.expected_tkn("]", t));
                 }
                 len
             }
             lex::Tkn::RBracket => 1,
-            t => panic!("unexpect token in mem ty: {:?}", t),
+            t => return crate::err_at!(self.expected_tkn("number or `]`", t)),
         };
         // `]`の次のトークンに進める
         // (呼び出し元が`=`などを current_tkn() で判定できるように)

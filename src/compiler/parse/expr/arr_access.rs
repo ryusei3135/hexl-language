@@ -11,8 +11,9 @@ impl Parser {
     /// - `[arr a.a else 0]`
     pub(in crate::compiler::parse::expr) 
     fn get_var_addr_node(&mut self) -> Result<node::Expr, err::ErrKind> {
-        let lex::Tkn::Name(name) = self.next_tkn_ref(&["name"])? else {
-            panic!()
+        let next = self.next_tkn_ref(&["name"])?;
+        let lex::Tkn::Name(name) = next.clone() else {
+            return crate::err_at!(self.expected_tkn("name", next));
         };
         // nameの次に、添字の式が来た場合、それは配列にアクセスする
         // (`[`の次が`name`、その次が添字の先頭)

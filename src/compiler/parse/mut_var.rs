@@ -13,11 +13,15 @@ impl Parser {
     ) -> Result<VarMutAttr, Result<node::Expr, err::ErrKind>> {
         let attr = match &self.current_tkn() {
             lex::Tkn::KeyWordMut => {
-                self.advance_tkn().unwrap();
+                if let Err(e) = self.advance_tkn_checked() {
+                    return Err(Err(e));
+                }
                 VarMutAttr::Var
             }
             lex::Tkn::KeyWordConst => {
-                self.advance_tkn().unwrap();
+                if let Err(e) = self.advance_tkn_checked() {
+                    return Err(Err(e));
+                }
                 VarMutAttr::Const
             }
             // コロンが来た場合、それは型の定義なので、変数の定義
@@ -25,43 +29,47 @@ impl Parser {
             // `a += 1` のような複合代入は `a = a + 1` の形に展開して
             // 通常の代入ノード(`AssignVar`)にする。
             lex::Tkn::AddEq => {
-                return Err(Ok(node::AssignVar::new(
-                    name,
-                    node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(name, node::Expr::Add).unwrap(),
-                )));
+                return Err(self.compound_assign_node(name, node::Expr::Add));
             }
             lex::Tkn::SubEq => {
-                return Err(Ok(node::AssignVar::new(
-                    name,
-                    node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(name, node::Expr::Sub).unwrap(),
-                )));
+                return Err(self.compound_assign_node(name, node::Expr::Sub));
             }
             lex::Tkn::MulEq => {
-                return Err(Ok(node::AssignVar::new(
-                    name,
-                    node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(name, node::Expr::Mul).unwrap(),
-                )));
+                return Err(self.compound_assign_node(name, node::Expr::Mul));
             }
             lex::Tkn::DivEq => {
-                return Err(Ok(node::AssignVar::new(
-                    name,
-                    node::Expr::Var(name.to_string()),
-                    self.compound_assign_value(name, node::Expr::Div).unwrap(),
-                )));
+                return Err(self.compound_assign_node(name, node::Expr::Div));
             }
             _ => {
                 // define assign var node
-                return Err(Ok(node::AssignVar::new(
-                    name,
-                    node::Expr::Var(name.to_string()),
-                    self.expr_branch().unwrap(),
-                )));
+                return Err(self.plain_assign_node(name));
             }
         };
         Ok(attr)
+    }
+
+    /// 複合代入(`a += 1`など)を、`a = a + 1`の代入ノードにする
+    fn compound_assign_node(
+        &mut self,
+        name: &str,
+        op: fn((Box<node::Expr>, Box<node::Expr>)) -> node::Expr,
+    ) -> Result<node::Expr, err::ErrKind> {
+        let value = self.compound_assign_value(name, op)?;
+        Ok(node::AssignVar::new(
+            name,
+            node::Expr::Var(name.to_string()),
+            value,
+        ))
+    }
+
+    /// 通常の代入(`a = 1`)の代入ノードを作る
+    fn plain_assign_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+        let value = self.expr_branch()?;
+        Ok(node::AssignVar::new(
+            name,
+            node::Expr::Var(name.to_string()),
+            value,
+        ))
     }
 
     /// `a += 1` / `a -= 1` / `a *= 1` / `a /= 1` の右辺を

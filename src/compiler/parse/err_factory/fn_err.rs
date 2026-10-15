@@ -139,13 +139,19 @@ impl Parser {
         expected: &'static str,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        let tkns = self.tkns.as_ref().unwrap();
-        let t = &tkns[idx.min(tkns.len() - 1)];
+        // トークンが無い/`idx`が範囲外の場合は、最後のトークンの位置にする
+        let Some(t) = self
+            .tkns
+            .as_ref()
+            .and_then(|tkns| tkns.get(idx).or(tkns.last()))
+        else {
+            return self.tkn_is_eof(Vec::new());
+        };
         crate::syntax_err!(
             err::Span::new(t.line, t.pos),
             err::SyntaxErrKind::ExpectedKind {
                 expected,
-                found: tkns[idx].tkn.clone(),
+                found: t.tkn.clone(),
             }
         )
     }
@@ -157,8 +163,9 @@ impl Parser {
         expected: Vec<&'static str>,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        let tkns = self.tkns.as_ref().unwrap();
-        let t = &tkns[tkns.len() - 1];
+        let Some(t) = self.tkns.as_ref().and_then(|tkns| tkns.last()) else {
+            return self.tkn_is_eof(Vec::new());
+        };
         crate::syntax_err!(
             err::Span::new(t.line, t.pos),
             err::SyntaxErrKind::TknIsEof { expected }

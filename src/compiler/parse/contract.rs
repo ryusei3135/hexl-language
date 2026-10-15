@@ -9,7 +9,7 @@ impl Parser {
     #[inline(always)]
     fn ty_constract_must(&mut self, base_ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordMust {
-            panic!("{:?}", self.current_tkn());
+            return crate::err_at!(self.expected_at_current("must"));
         }
 
         // `must`の後ろは必ず`=`
@@ -26,7 +26,7 @@ impl Parser {
             }
             // `Name` 以外が来た、または EOF の場合（パニックさせずエラーを返す）
             Some(other_tkn) => {
-                panic!("{:?}", other_tkn);
+                crate::err_at!(self.expected_tkn("name", other_tkn))
             }
             None => {
                 crate::err_at!(self.must_name_is_eof())
@@ -41,7 +41,7 @@ impl Parser {
     #[inline(always)]
     fn ty_constract_of(&mut self, base_ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordOf {
-            panic!();
+            return crate::err_at!(self.expected_at_current("of"));
         }
 
         match self.next_tkn(&["name"])? {
@@ -61,11 +61,11 @@ impl Parser {
     ) -> Result<node::TyNode, err::ErrKind> {
         match self.next_tkn_ref(&[])? {
             lex::Tkn::KeyWordMust => {
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 self.ty_constract_must(base_ty)
             }
             lex::Tkn::KeyWordOf => {
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 self.ty_constract_of(base_ty)
             }
             _ => Ok(base_ty),

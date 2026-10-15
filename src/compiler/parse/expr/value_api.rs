@@ -23,7 +23,7 @@ impl Parser {
             }
             // 関数を呼びだすノードを作成
             lex::Tkn::LParen => {
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 self.call_func_expr(&name, true)?
             }
             // ジェネリクス関数を呼びだすノードを作成: `func<int>(..)`
@@ -31,14 +31,14 @@ impl Parser {
             // ジェネリクス関数で、`<..>(`の形のときだけ)
             lex::Tkn::LAngleBracket if self.is_generic_call(&name, self.idx + 1) => {
                 // `<`まで進める
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 self.generic_call_expr(&name, true)?
             }
             // ジェネリクスな構造体/バリアントの初期化・メゾットの呼び出し:
             // `Name<int> { .. }` / `Name<int>::Mem`
             lex::Tkn::LAngleBracket if self.is_generic_type_expr(&name, self.idx + 1) => {
                 // `<`まで進める
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 self.generic_type_expr::<T>(&name, init_struct)?
             }
             // 構造体の初期化ノードを作成する
@@ -64,8 +64,9 @@ impl Parser {
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         self.next_tkn(&["name"])?;
-        let lex::Tkn::Name(mem_name) = self.next_tkn(&["name"])?.clone() else {
-            panic!();
+        let found = self.next_tkn(&["name"])?;
+        let lex::Tkn::Name(mem_name) = found.clone() else {
+            return crate::err_at!(self.expected_tkn("name", found));
         };
         if self.is_variant_field(&name, &mem_name) {
             return self.variant_init_node::<false>(&name);
@@ -118,7 +119,7 @@ impl Parser {
                 match self.current_tkn() {
                     lex::Tkn::Comma => continue,
                     lex::Tkn::RBrace => break,
-                    t => panic!("{:?}", t),
+                    t => return crate::err_at!(self.expected_tkn(", or `}`", t.clone())),
                 }
             }
         }

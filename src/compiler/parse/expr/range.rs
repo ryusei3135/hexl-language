@@ -10,10 +10,13 @@ impl Parser {
         }
 
         let mut result = (true, 0usize);
-        let start_tkn = self.advance_tkn().unwrap();
+        let start_tkn = self.advance_tkn_checked()?;
         match start_tkn {
             lex::Tkn::Number(val) => {
-                result.1 = val.parse::<usize>().unwrap();
+                let Ok(start_num) = val.parse::<usize>() else {
+                    return crate::err_at!(self.invalid_number(val));
+                };
+                result.1 = start_num;
             }
             lex::Tkn::KeyWordConst => {
                 result.1 = self.get_range_start_num()?;
@@ -31,19 +34,22 @@ impl Parser {
             return crate::err_at!(self.range_ptr_range_tkn_not_found());
         }
 
-        let end_tkn = self.advance_tkn().unwrap();
+        let end_tkn = self.advance_tkn_checked()?;
         let end_num = match end_tkn {
-            lex::Tkn::Number(val) => val.parse::<usize>().unwrap(),
+            lex::Tkn::Number(val) => match val.parse::<usize>() {
+                Ok(num) => num,
+                Err(_) => return crate::err_at!(self.invalid_number(val)),
+            },
             found => {
                 return crate::err_at!(self.range_ptr_end_not_number(found));
             }
         };
 
-        if !matches!(self.advance_tkn().unwrap(), lex::Tkn::RBracket) {
+        if !matches!(self.advance_tkn_checked()?, lex::Tkn::RBracket) {
             return crate::err_at!(self.range_ptr_rbracket_not_found());
         }
 
-        self.advance_tkn().unwrap();
+        self.advance_tkn_checked()?;
         Ok(node::TyNode::Pointer {
             is_const: result.0,
             ty_name: Box::new(base_ty),
@@ -54,8 +60,11 @@ impl Parser {
     /// 範囲付きポインタのスタート地点の数字を取得
     #[inline(always)]
     fn get_range_start_num(&mut self) -> Result<usize, err::ErrKind> {
-        if let lex::Tkn::Number(val) = self.advance_tkn().unwrap() {
-            Ok(val.parse::<usize>().unwrap())
+        if let lex::Tkn::Number(val) = self.advance_tkn_checked()? {
+            match val.parse::<usize>() {
+                Ok(num) => Ok(num),
+                Err(_) => crate::err_at!(self.invalid_number(val)),
+            }
         } else {
             crate::err_at!(self.range_ptr_start_not_number())
         }

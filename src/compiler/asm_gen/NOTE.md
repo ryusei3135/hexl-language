@@ -72,3 +72,17 @@
 - `emit_callee_fn`は、呼んだ側の生成中の状態(`asm_text`/変数/レジスタ/`curr_inst`/スタック使用量など)を退避してから`build_fn_process`を呼び、終わったら戻す。
     呼ばれた側のアセンブリは`fn_asm_out`へ溜め、`to_asm_text`の最後に`_start`の後ろへ結合する(呼んだ側の関数の途中に挟まらないため)。
 - `AsmEmitter`に状態のフィールドを追加したら、`emit_callee_fn`の退避・復元にも加えること。
+
+## 使用回数が0回の変数は生成しない(2026-10-15)
+- `reg_mnger.rs`の`UsedRegManager::unused_var_nodes`が、生成しない変数を定義する`Inst::Mov`のノードidを集める
+    (`call_func.rs`の`begin_fn_state`)。`gen_node_asm`は、そのノードのアセンブリを生成しない。
+    `allocation_register`も、使用回数0回の変数にはレジスタを割り当てない。
+- 生成しない変数
+    1. `VarCounter`(`FnDefInfo.var_counter`)の使用回数が0回(出てこない場合も0回)の変数
+    2. 生成しない変数の初期値の式の中で使われている変数のうち、使用回数のすべてがその式の中にあるもの。
+        例: `a`が0回で`a: int = b + 1`のとき、`b`が1回(=この式の中の1回)だけなら`b`も生成しない。
+        生成しない変数が増えなくなるまで繰り返すので、`c`→`b`→`a`と使われていれば、`a`→`b`→`c`の順に全て消える
+        (`collect_pure_expr_vars`が式の中の変数を集める)。
+- 対象外: 初期値の式に関数の呼び出し/代入/inlineアセンブラがある変数(副作用が消えるため)、
+    再代入(`Inst::AssignVar`)がある変数。
+- `AsmEmitter::unused_var_nodes`は関数ごとの状態なので、`emit_callee_fn`で退避・復元する。

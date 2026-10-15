@@ -68,7 +68,7 @@ impl IR {
             self.extern_func_tree.extend(extern_fn_tree);
         } else {
             let func_name = path.last_segment();
-            let parent_path = path.gen_parent_path();
+            let parent_path = path.gen_parent_path()?;
 
             if !std::path::Path::new(&parent_path).exists() {
                 panic!(

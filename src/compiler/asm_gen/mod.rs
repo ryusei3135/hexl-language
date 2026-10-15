@@ -74,6 +74,10 @@ pub struct AsmEmitter {
     /// 生成済みの呼び出しの戻り値を、後続のノードが値として
     /// 参照する際(`a: int = func(10)`など)に使う
     pub(super) emitted_calls: Vec<usize>,
+    /// 使用回数が0回の変数を定義する`Inst::Mov`のノードid。
+    /// `gen_node_asm`はこのノードのアセンブリを生成しない。関数ごとに
+    /// `begin_fn_state`が作り直す([`reg_mnger::UsedRegManager::unused_var_nodes`])
+    pub(super) unused_var_nodes: std::collections::HashSet<usize>,
     /// まだ生成していない`_start`以外の関数(ラベル -> 関数の定義)。
     /// `emit_call_func`が呼び出しを生成するときに取り出して、
     /// `build_fn_process`で生成する(呼ばれない関数は残ったまま出力されない)

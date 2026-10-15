@@ -51,7 +51,7 @@ impl Parser {
     fn make_ty_variant_field(&mut self) -> Result<node::TyNode, err::ErrKind> {
         #[cfg(test)]
         if self.current_tkn() != &lex::Tkn::LParen {
-            panic!("`(`じゃない");
+            return crate::err_at!(self.expected_at_current("("));
         }
 
         // `ty_node_after_delim`は、区切り(`(`)の次から型を読み、
@@ -96,7 +96,7 @@ impl Parser {
     ) -> Result<node::Group1Node, err::ErrKind> {
         #[cfg(test)]
         if self.current_tkn() != &lex::Tkn::LParen {
-            panic!("`(`じゃない");
+            return crate::err_at!(self.expected_at_current("("));
         }
         // `(`の前まで戻す(`func_node`が`(`を読む)
         self.back_tkn();
@@ -109,7 +109,7 @@ impl Parser {
         self.make_field_method_node(&mut method)?;
         self.scope_counter -= 1;
         // モジュールの名前を登録
-        self.registration_mod_name(&mut method);
+        self.registration_mod_name(&mut method)?;
         // `make_field_method_node`は`}`の次のトークンまで進めるので、
         // 呼び出し元のループの`next_tkn`で次のメンバーを読めるように戻す
         self.back_tkn();

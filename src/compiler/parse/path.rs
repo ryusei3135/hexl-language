@@ -7,15 +7,16 @@ impl Parser {
     fn build_scope_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
         match self.peek_tkn()? {
             lex::Tkn::LBrace => {
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 let node = self.struct_init_node::<false>(name);
 
-                return if self.next_tkn_ref(&["}"])? == lex::Tkn::RBrace {
-                    self.advance_tkn().unwrap();
+                let next = self.next_tkn_ref(&["}"])?;
+                return if next == lex::Tkn::RBrace {
+                    self.advance_tkn_checked()?;
                     node
                 } else {
                     // }が来ていない
-                    panic!();
+                    crate::err_at!(self.expected_tkn("}", next))
                 };
             }
             lex::Tkn::Dot => {
@@ -23,10 +24,10 @@ impl Parser {
             }
             lex::Tkn::ModPathTkn => {
                 // バリアントか調べる
-                self.advance_tkn().unwrap();
+                self.advance_tkn_checked()?;
                 if let lex::Tkn::Name(next_name) = self.peek_tkn()? {
                     if self.is_variant_field(name, &next_name) {
-                        self.advance_tkn().unwrap();
+                        self.advance_tkn_checked()?;
                         return self.variant_init_node::<false>(name);
                     }
                 }

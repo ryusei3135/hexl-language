@@ -20,7 +20,10 @@ impl Parser {
     /// - src `${}`の中に書かれていた文字列(例: `"x.y"`, `"*p"`)
     pub(super) fn parse_asm_operand(src: &str) -> Result<node::Expr, err::ErrKind> {
         let mut lexer = lex::Lexer::new();
-        lexer.analy(&src.to_string()).unwrap();
+        // 字句解析のエラーは、`${}`の中の文字列が不正ということ
+        lexer
+            .analy(&src.to_string())
+            .map_err(|_| err::ErrKind::UnexpectedToken)?;
 
         if lexer.gen_tkns.is_empty() {
             return crate::err_at!(Parser::empty_asm_operand());
@@ -146,12 +149,12 @@ impl Parser {
     /// - `x.y` -> 構造体`x`のメンバー`y`への参照
     fn asm_operand_name_tail(&mut self, name: String) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.current_tkn(), lex::Tkn::Dot) {
-            self.advance_tkn().unwrap();
+            self.advance_tkn_checked()?;
 
             let lex::Tkn::Name(field) = self.current_tkn().clone() else {
                 return crate::err_at!(self.expected_member_name_in_asm_operand());
             };
-            self.advance_tkn().unwrap();
+            self.advance_tkn_checked()?;
 
             Ok(node::Expr::Member {
                 scope: vec![name],

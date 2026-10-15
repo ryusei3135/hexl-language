@@ -137,6 +137,7 @@ impl AsmEmitter {
             scope_outer_vars: Vec::new(),
             stk_use_counter: 0,
             emitted_calls: Vec::new(),
+            unused_var_nodes: std::collections::HashSet::new(),
             pending_funcs: HashMap::new(),
             fn_asm_out: String::new(),
             asm_fmt_name: None,

@@ -168,7 +168,7 @@ impl Parser {
                         }
                         lex::Tkn::CompleSyn => {
                             let node = self.comple_syntax()?;
-                            self.gen_nodes.push(node.change_group1());
+                            self.gen_nodes.push(node.change_group1()?);
                         }
                         lex::Tkn::KeyWordStruct => {
                             // ジェネリクス(`struct Name<T> {..}`)は、使われるまで
@@ -206,18 +206,16 @@ impl Parser {
                         .one_line_node()?
                         .gen_group_info(self.build_err_span().line);
 
-                    match self.gen_nodes.last_mut().unwrap() {
-                        node::Group1Node::FuncDefine(func) => {
-                            func.add(node);
-                        }
-                        // `Group2`のノードは常に直前に生成された関数定義に
-                        // 追加されるはずなので、ここに来るのはパーサー自体の
-                        // バグ(利用者の入力に起因するエラーではない)
-                        t => unreachable!(
-                            "one_line_nodeで生成されたノードの追加先が関数定義ではありません: {:?}",
-                            t
-                        ),
-                    }
+                    // `Group2`のノードは常に直前に生成された関数定義に
+                    // 追加されるはずなので、そうでない場合はパーサー自体の
+                    // バグ(利用者の入力に起因するエラーではない)
+                    let Some(node::Group1Node::FuncDefine(func)) = self.gen_nodes.last_mut()
+                    else {
+                        return crate::err_at!(
+                            self.internal_state_err("function definition to add the node to")
+                        );
+                    };
+                    func.add(node);
 
                     if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                         self.scope_counter -= 1;
@@ -281,7 +279,7 @@ impl Parser {
                 // 空のブロック(`{}`)は呼び出し元(`gen_block_node`や
                 // メゾットの本体を解析する処理など)が`one_line_node`を
                 // 呼ぶ前に判定するはずなので、ここに来るのは想定外
-                panic!("one_line_node: 空のブロックが処理されていません")
+                return crate::err_at!(self.unexpect_tkn_in_stmt(lex::Tkn::RBrace));
             }
             t => {
                 return crate::err_at!(self.unexpect_tkn_in_stmt(t));

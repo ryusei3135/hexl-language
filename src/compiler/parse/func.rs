@@ -82,7 +82,7 @@ impl Parser {
             // 通っているはず)なので、ここが`false`になるのはパーサー
             // 自体のバグ
             if can_create_param == false {
-                unreachable!("define_arg_node: 引数リストの内部状態が不正です");
+                return crate::err_at!(self.internal_state_err("valid argument list state"));
             }
             match self.next_tkn(&["name", ")"])? {
                 lex::Tkn::Name(name) => {
@@ -91,7 +91,7 @@ impl Parser {
                     // いるため、ここでは常に`true`(同上、パーサー自体の
                     // バグでない限り到達しない)
                     if can_create_param == false {
-                        unreachable!("define_arg_node: 引数リストの内部状態が不正です");
+                        return crate::err_at!(self.internal_state_err("valid argument list state"));
                     }
                     self.next_tkn(&[])?;
                     let ty = self.define_ty_node()?;
@@ -162,13 +162,17 @@ impl Parser {
     /// ように、本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
     pub(super) 
     fn collect_generic_funcs(&mut self) -> Result<(), err::ErrKind> {
-        let len = self.tkns.as_ref().unwrap().len();
+        let Some(len) = self.tkns.as_ref().map(|tkns| tkns.len()) else {
+            return crate::err_at!(self.tkn_is_eof(Vec::new()));
+        };
         // `{`の深さ。トップレベル(0)にある`name<`だけが関数の定義
         let mut depth = 0usize;
         let mut i = 0usize;
 
         while i < len {
-            let tkns = self.tkns.as_ref().unwrap();
+            let Some(tkns) = self.tkns.as_ref() else {
+                return crate::err_at!(self.tkn_is_eof(Vec::new()));
+            };
             // `struct Name<T>` / `variant Name<T>` / `variant "unsafe" Name<T>`の
             // `Name<`は、関数ではなく型の定義(関数の定義として読んではいけない)
             let is_type_def_name = i > 0
@@ -225,7 +229,9 @@ impl Parser {
         &self,
         name_idx: usize,
     ) -> Result<(String, GenericFunc, usize), err::ErrKind> {
-        let tkns = self.tkns.as_ref().unwrap();
+        let Some(tkns) = self.tkns.as_ref() else {
+            return crate::err_at!(self.tkn_is_eof(Vec::new()));
+        };
         // エラーは`generic_def_expected`/`generic_def_eof`が作る
         // (エラーの位置は、指定位置のトークンの場所。範囲外は最後のトークンの位置)
         let expected = |i: usize, expected: &'static str| {
@@ -233,8 +239,8 @@ impl Parser {
         };
         let eof = |expected: Vec<&'static str>| crate::err_at!(self.generic_def_eof(expected));
 
-        let lex::Tkn::Name(name) = tkns[name_idx].tkn.clone() else {
-            unreachable!("extract_generic_def: 関数名のトークンではありません");
+        let Some(lex::Tkn::Name(name)) = tkns.get(name_idx).map(|t| t.tkn.clone()) else {
+            return expected(name_idx, "name");
         };
 
         // `<T, U>`の型パラメータ
@@ -326,7 +332,9 @@ impl Parser {
         if !self.generic_funcs.contains_key(name) {
             return false;
         }
-        let tkns = self.tkns.as_ref().unwrap();
+        let Some(tkns) = self.tkns.as_ref() else {
+            return false;
+        };
 
         // 型の先頭になれるトークンでなければ、型引数ではない
         // (`f<>(..)`や`f<3>(..)`など)
@@ -388,7 +396,14 @@ impl Parser {
             let start = self.idx + 1;
             let ty = self.ty_node_after_delim()?;
             // 型を読み終えて、次のトークン(`,`か`>`)を指している
-            ty_tkns.push(self.tkns.as_ref().unwrap()[start..self.idx].to_vec());
+            let Some(ty_tkn_slice) = self
+                .tkns
+                .as_ref()
+                .and_then(|tkns| tkns.get(start..self.idx))
+            else {
+                return crate::err_at!(self.internal_state_err("type tokens"));
+            };
+            ty_tkns.push(ty_tkn_slice.to_vec());
             tys.push(ty);
 
             match self.current_tkn().clone() {
@@ -416,9 +431,9 @@ impl Parser {
     /// 呼び出し時の`current_tkn()`は`<`で、終了時は
     /// `call_func_expr`と同じく、呼び出しの`)`の次を指す
     ///
-    /// ## Panics
-    /// `name`が定義済みのジェネリクス関数でない、または現在のトークンが
-    /// `<`でない場合(呼び出し元で`is_generic_call`を確認しておくこと)
+    /// ## Errors
+    /// `name`が定義済みのジェネリクス関数でない場合
+    /// (呼び出し元で`is_generic_call`を確認しておくこと)
     pub(super) 
     fn generic_call_expr(
         &mut self,
@@ -428,12 +443,10 @@ impl Parser {
         if self.current_tkn() != &lex::Tkn::LAngleBracket {
             return crate::err_at!(self.fn_unexpect_tkn::<node::Expr>());
         }
-        let param_count = self
-            .generic_funcs
-            .get(name)
-            .expect("generic_call_expr: 定義されていないジェネリクス関数")
-            .params
-            .len();
+        let Some(generic) = self.generic_funcs.get(name) else {
+            return crate::err_at!(self.internal_state_err("defined generic function"));
+        };
+        let param_count = generic.params.len();
 
         let (ty_args, ty_tkns) = self.generic_type_args(param_count)?;
 
@@ -484,11 +497,9 @@ impl Parser {
             );
         }
 
-        let generic = self
-            .generic_funcs
-            .get(name)
-            .expect("instantiate_generic_func: 定義されていないジェネリクス関数")
-            .clone();
+        let Some(generic) = self.generic_funcs.get(name).cloned() else {
+            return crate::err_at!(self.internal_state_err("defined generic function"));
+        };
         // 本体の中で自分自身を呼び出していても、無限に作らないよう
         // 解析を始める前に登録する
         self.generated_funcs.push((name.to_string(), ty_args.to_vec()));
@@ -521,7 +532,7 @@ impl Parser {
 
         // 置き換え後のトークン列は関数1つ分なので、作られるノードも1つ
         let Some(node::Group1Node::FuncDefine(mut func)) = made.into_iter().next() else {
-            unreachable!("instantiate_generic_func: 関数のノードが作られていません");
+            return crate::err_at!(self.internal_state_err("generated function node"));
         };
         func.set_temp_ty(ty_args);
         func.public = generic.is_public;

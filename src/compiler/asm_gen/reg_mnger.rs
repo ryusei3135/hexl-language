@@ -110,7 +110,11 @@ impl UsedRegManager {
             .map(RegisterMode::Float)
             .filter(|reg| !unavailable.contains(reg));
 
-        for (name, _count) in var_counter.vars_by_priority() {
+        for (name, count) in var_counter.vars_by_priority() {
+            // 使用回数が0回の変数は生成しないので、レジスタも割り当てない
+            if Self::count_is_zero(count) {
+                continue;
+            }
             // スタックに置く変数(`s: Name = Name { .. }`など)は、
             // レジスタを持たない(`VarIndexInfo::new_stack`)ので割り当てない。
             // 割り当ててしまうと、変数が定義されても`bind_var`が呼ばれず、
@@ -141,6 +145,134 @@ impl UsedRegManager {
         }
     }
 
+    /// 使用回数(`vars_by_priority`が返す回数。値でも参照でもよい)を`usize`で返す
+    fn count_value<C: std::borrow::Borrow<usize>>(count: C) -> usize {
+        *count.borrow()
+    }
+
+    /// 使用回数が0回か
+    fn count_is_zero<C: std::borrow::Borrow<usize>>(count: C) -> bool {
+        Self::count_value(count) == 0
+    }
+
+    /// 生成しない変数を定義する`Inst::Mov`のノードid(`body`の添字)を集める
+    ///
+    /// ## 生成しない変数
+    /// 1. 使用回数が0回の変数
+    /// 2. 生成しない変数の初期値の中で参照される変数のうち、
+    ///    使用回数のすべてがその初期値の中にあるもの。
+    ///
+    /// ## 対象外
+    /// - 初期値の式に関数の呼び出し・代入・inlineアセンブラがある変数:
+    ///   生成しないと副作用が消えてしまうため
+    /// - 初期値に`Inst::Expr`がある変数: 式ノードは別途生成されるため、
+    ///   定義だけを除去すると未登録の変数を式が参照するため
+    /// - 同じ名前の変数への再代入(`Inst::AssignVar`)がある変数:
+    ///   再代入のために変数の情報が必要なため
+    ///
+    /// 使用回数は、`var_counter`に出てこない変数を0回として扱う
+    pub fn unused_var_nodes(
+        var_counter: &counter_mnger::VarCounter,
+        body: &[inst::Inst],
+    ) -> std::collections::HashSet<usize> {
+        use std::collections::{HashMap, HashSet};
+
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for (name, count) in var_counter.vars_by_priority() {
+            *counts.entry(name.to_string()).or_insert(0) += Self::count_value(count);
+        }
+        let assigned: HashSet<&str> = body
+            .iter()
+            .filter_map(|node| match node {
+                inst::Inst::AssignVar { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        let mut removed: HashSet<usize> = HashSet::new();
+        // 生成しない変数の式の中で使われている回数(変数の名前ごと)
+        let mut dead_uses: HashMap<String, usize> = HashMap::new();
+
+        loop {
+            let mut changed = false;
+            for (idx, node) in body.iter().enumerate() {
+                let inst::Inst::Mov {
+                    name: Some(name),
+                    src,
+                    ..
+                } = node
+                else {
+                    continue;
+                };
+                if removed.contains(&idx) || assigned.contains(name.as_str()) {
+                    continue;
+                }
+                // 生成する(生成しない式の外で使われている)変数が残っている
+                let uses = counts.get(name.as_str()).copied().unwrap_or(0);
+                if uses > dead_uses.get(name.as_str()).copied().unwrap_or(0) {
+                    continue;
+                }
+                let mut refs = Vec::new();
+                if !Self::collect_pure_expr_vars(body, *src, &mut HashSet::new(), &mut refs) {
+                    continue;
+                }
+                removed.insert(idx);
+                for var in refs {
+                    *dead_uses.entry(var).or_insert(0) += 1;
+                }
+                changed = true;
+            }
+            if !changed {
+                break;
+            }
+        }
+        removed
+    }
+
+    /// 式`id`が副作用の無い式(関数の呼び出し・代入・inlineアセンブラを
+    /// 含まない)なら`true`を返し、式の中で使われている変数(`Inst::Mov`のノード)
+    /// の名前を`vars`へ追加する
+    ///
+    /// 同じノードに複数回たどり着いても、1回だけ数える(`visited`)。
+    /// 数え漏らす分には、変数を生成する側(安全側)に倒れるだけなので、
+    /// 数え過ぎないことを優先している
+    fn collect_pure_expr_vars(
+        body: &[inst::Inst],
+        id: usize,
+        visited: &mut std::collections::HashSet<usize>,
+        vars: &mut Vec<String>,
+    ) -> bool {
+        if !visited.insert(id) {
+            return true;
+        }
+        let Some(node) = body.get(id) else {
+            return true;
+        };
+        match node {
+            // 変数の使用(中身の式はたどらない)
+            inst::Inst::Mov {
+                name: Some(name), ..
+            } => {
+                vars.push(name.clone());
+                true
+            }
+            // `gen_node_asm`は式ノードを個別に生成するため、初期化先だけを
+            // 除去すると式が残って未登録の変数を参照する。
+            inst::Inst::Expr(_) => false,
+            inst::Inst::GetAddress(inner) | inst::Inst::Pointer(inner) => {
+                Self::collect_pure_expr_vars(body, *inner, visited, vars)
+            }
+            inst::Inst::InitArr(ids) => ids
+                .iter()
+                .all(|item| Self::collect_pure_expr_vars(body, *item, visited, vars)),
+            // 副作用がある
+            inst::Inst::CallFunc(..)
+            | inst::Inst::AssignVar { .. }
+            | inst::Inst::Comple { .. } => false,
+            _ => true,
+        }
+    }
+
     /// 関数の本体のIRから、レジスタに置かずスタックに置く変数の名前を集める
     ///
     /// ポインタでない構造体の変数(`s: Name = Name { .. }`)は、`%rbp`からの
@@ -167,6 +299,14 @@ impl UsedRegManager {
     /// 変数`name`に割り当てたレジスタ(割り当てていなければ`None`)
     pub fn allocated_reg(&self, name: &str) -> Option<RegisterMode> {
         self.allocated.get(name).copied()
+    }
+
+    /// 変数`name`に割り当てたレジスタを取り消す(変数を生成しないことにした場合に、
+    /// 取り置いたレジスタを他の変数や式が使えるようにする)
+    pub fn release_allocation(&mut self, name: &str) {
+        if let Some(reg) = self.allocated.remove(name) {
+            self.pending.retain(|r| *r != reg);
+        }
     }
 
     /// `reg`が、まだ定義されていない変数のために取り置かれているか
@@ -292,6 +432,46 @@ impl UsedRegManager {
     /// (スコープ終了後も生きている変数のレジスタを残すために使う)
     pub fn restore(&mut self, regs: &[RegisterMode]) {
         regs.iter().for_each(|reg| {self.mark_used(reg);});
+    }
+}
+
+#[cfg(test)]
+mod unused_var_tests {
+    use super::*;
+
+    #[test]
+    fn keeps_variables_used_by_an_expression_initializing_an_unused_variable() {
+        let body = vec![
+            inst::Inst::Mov {
+                name: Some("fv".to_string()),
+                size: Size::F32,
+                dst: 0,
+                src: 4,
+            },
+            inst::Inst::Mov {
+                name: Some("f2".to_string()),
+                size: Size::F32,
+                dst: 1,
+                src: 5,
+            },
+            inst::Inst::Expr(inst::ExprInst {
+                dst: 2,
+                ls: 0,
+                rs: 1,
+                kind: inst::ExprKind::Add,
+            }),
+            inst::Inst::Mov {
+                name: Some("fv3".to_string()),
+                size: Size::F32,
+                dst: 3,
+                src: 2,
+            },
+        ];
+        let mut var_counter = counter_mnger::VarCounter::new();
+        var_counter.use_var("fv");
+        var_counter.use_var("f2");
+
+        assert!(UsedRegManager::unused_var_nodes(&var_counter, &body).is_empty());
     }
 }
 

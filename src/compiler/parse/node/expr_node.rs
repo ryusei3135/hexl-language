@@ -69,17 +69,15 @@ impl ModPath {
     }
 
     /// 従来の書き方(`Segments`)でのみ使う。
-    /// `Literal`に対して呼び出すとpanicする
+    /// `Literal`に対して呼び出すと`Err`を返す
     #[inline(always)]
-    pub fn add_path(&mut self, path_name: &str) {
+    pub fn add_path(&mut self, path_name: &str) -> Result<(), crate::compiler::err::ErrKind> {
         match &mut self.path {
             ImportPath::Segments(segments) => {
                 segments.push(path_name.to_string());
+                Ok(())
             }
-            ImportPath::Literal(_) => panic!(
-                "system err: ModPath::add_pathは`Segments`形式の\
-                パスにのみ使えます"
-            ),
+            ImportPath::Literal(_) => Err(crate::compiler::err::ErrKind::UnexpectedToken),
         }
     }
 
@@ -115,14 +113,12 @@ impl ModPath {
     /// 関数名とみなし、その手前までを
     /// ファイルパスとして探すのに使う。
     /// `Segments`形式(従来の書き方)でのみ使う
-    pub fn gen_parent_path(&self) -> String {
+    /// (`Literal`に対して呼び出すと`Err`を返す)
+    pub fn gen_parent_path(&self) -> Result<String, crate::compiler::err::ErrKind> {
         const PATH_START: usize = 0;
 
         let ImportPath::Segments(segments) = &self.path else {
-            panic!(
-                "system err: gen_parent_pathは`Segments`形式の\
-                パスにのみ使えます"
-            );
+            return Err(crate::compiler::err::ErrKind::UnexpectedToken);
         };
 
         let mut path = String::new();
@@ -134,7 +130,7 @@ impl ModPath {
             path.push_str(dir.as_str());
         }
         path.push_str(".hexl");
-        path
+        Ok(path)
     }
 
     /// パスの最後のセグメント(`Segments`の場合)や、
@@ -151,7 +147,8 @@ impl ModPath {
                     .to_string()
             }
             ImportPath::Segments(segments) => {
-                segments.last().expect("#includeのパスが空です").clone()
+                // パスが空の場合は空文字列
+                segments.last().cloned().unwrap_or_default()
             }
         }
     }

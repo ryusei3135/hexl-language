@@ -22,7 +22,7 @@ impl Parser {
             //     panic!();
             // }
             "asm" => self.build_asm_ast()?,
-            _ => panic!(),
+            _ => return crate::err_at!(self.preproc_unexpected_token()),
         };
 
         Ok(result)
@@ -63,7 +63,7 @@ impl Parser {
         }
 
         let lex::Tkn::Name(alias_name) = self.next_tkn(&["name"])? else {
-            unreachable!();
+            return crate::err_at!(self.expected_path_segment());
         };
         // `=`を読み飛ばす
         self.next_tkn(&["="])?;
@@ -88,7 +88,7 @@ impl Parser {
             ));
         }
         // `::`を読み飛ばす
-        self.advance_tkn().unwrap();
+        self.advance_tkn_checked()?;
 
         let kind = match self.next_tkn(&["name", "*"])? {
             lex::Tkn::Name(func_name) => node::ImportKind::Func(func_name),
@@ -108,15 +108,15 @@ impl Parser {
         first_seg: String,
     ) -> Result<node::ModPath, err::ErrKind> {
         let mut mod_path = node::ModPath::new_segments();
-        mod_path.add_path(&first_seg);
+        mod_path.add_path(&first_seg)?;
 
         while self.peek_tkn()? == lex::Tkn::ModPathTkn {
             // `::`を読み飛ばす
             // whileでトークンが存在することは確認済み
-            self.advance_tkn().unwrap();
+            self.advance_tkn_checked()?;
             match self.next_tkn(&["name"])? {
-                lex::Tkn::Name(name) => mod_path.add_path(&name),
-                lex::Tkn::Str(val) => mod_path.add_path(&val),
+                lex::Tkn::Name(name) => mod_path.add_path(&name)?,
+                lex::Tkn::Str(val) => mod_path.add_path(&val)?,
                 _ => {
                     return crate::err_at!(self.expected_path_segment());
                 }
@@ -168,7 +168,7 @@ impl Parser {
                         break;
                     }
                     t => {
-                        panic!("{:?}", t);
+                        return crate::err_at!(self.expected_tkn("string or `}`", t));
                     }
                 }
                 self.next_tkn(&[])?;
@@ -187,7 +187,9 @@ impl Parser {
     /// 同じ行に複数の`${...}`があっても、すべて取り込む
     /// (以前の実装は最後の1つしか保持できなかった)。
     fn gen_asm_line(&mut self, value: &str) -> Result<node::InlineAsm, err::ErrKind> {
-        let inline_var = Regex::new(r"\$\{([^}]+)\}").unwrap(); // 一度だけコンパイルして使い回してOK
+        // 正規表現は定数なので失敗しないが、失敗した場合も`Err`で返す
+        let inline_var = Regex::new(r"\$\{([^}]+)\}")
+            .map_err(|_| err::ErrKind::UnexpectedToken)?;
 
         let mut operands = Vec::<node::Expr>::new();
         let mut parse_err: Option<err::ErrKind> = None;

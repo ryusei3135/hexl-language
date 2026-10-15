@@ -16,3 +16,4 @@ library
 build.rs
 *.o
 a
+src/compiler/c_frontend

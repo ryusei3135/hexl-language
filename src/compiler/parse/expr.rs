@@ -82,11 +82,12 @@ impl Parser {
                 _ => {}
             }
 
-            let result = self.assign_expr_is_mut(&name);
-            if result.is_err() {
-                return result.err().unwrap();
-            }
-            let var_attr = result.unwrap();
+            // `Err`は、変数の定義ではなく代入(`a = 1`/`a += 1`)のノードが
+            // 作られた(または、その解析でエラーになった)場合
+            let var_attr = match self.assign_expr_is_mut(&name) {
+                Ok(attr) => attr,
+                Err(node) => return node,
+            };
             let ty_node = self.define_ty_node()?;
 
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
@@ -283,7 +284,7 @@ impl Parser {
                 }
                 // データ付きバリアントなど
                 lex::Tkn::ModPathTkn => {
-                    self.advance_tkn().unwrap();
+                    self.advance_tkn_checked()?;
                     return self.scope_member_node(name, init_struct);
                 }
                 // 関数を呼ぶノード
@@ -313,7 +314,9 @@ impl Parser {
             lex::Tkn::Number(value) => node::Expr::Number(value),
             lex::Tkn::Float(value) => node::Expr::Float(value),
             lex::Tkn::KeyWordSelf => {
-                let self_name = self.struct_self_name.as_ref().unwrap().to_string();
+                let Some(self_name) = self.struct_self_name.clone() else {
+                    return crate::err_at!(self.self_outside_of_type());
+                };
                 // `expr/value_api.rs`
                 self.gen_name_node::<true>(self_name, init_struct)?
             }
@@ -331,7 +334,12 @@ impl Parser {
             }
             // 配列リテラル: `{100, 100, 100, 100}`
             lex::Tkn::LBrace => self.make_array_node()?,
-            t => panic!("expr {:?} {:?}", t, self.peek_tkn()),
+            t => {
+                return crate::err_at!(self.expected_tkn(
+                    "value (`[`, `*`, number, float, string, name, `(` or `{`)",
+                    t
+                ));
+            }
         };
 
         // `call_func_expr`は、自身で`)`を読み飛ばして呼び出し式の
@@ -386,8 +394,8 @@ impl Parser {
     /// - ini_struct
     ///     これがtrueの場合のみ構造体を初期化するノードを作成可能
     ///
-    /// ## Panics
-    /// 現在のトークンが`lex::Tkn::LParen`でないならpanicする
+    /// ## Errors
+    /// 現在のトークンが`lex::Tkn::LParen`でないなら`Err`を返す
     ///
     /// ## Safety
     /// この関数が実行される場合、現在のトークンが`lex::Tkn::LParen`
@@ -399,7 +407,7 @@ impl Parser {
         ini_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LParen {
-            panic!("call_func_exprを呼び出す際にLParenではない");
+            return crate::err_at!(self.expected_at_current("("));
         }
         // 引数
         let mut args = Vec::<node::Expr>::new();
@@ -419,7 +427,7 @@ impl Parser {
                         break;
                     }
                     _ => {
-                        panic!("{:?}", self.next_tkn_ref(&[]));
+                        return crate::err_at!(self.expected_at_current(", or `)`"));
                     }
                 }
             }

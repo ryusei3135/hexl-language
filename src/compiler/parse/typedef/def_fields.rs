@@ -53,7 +53,7 @@ impl Parser {
 
                             self.scope_counter -= 1;
                             // モジュールの名前を登録
-                            self.registration_mod_name(&mut method);
+                            self.registration_mod_name(&mut method)?;
                             methods.push(method);
 
                             // メゾットの本体を閉じる`}`の次のトークンは、
@@ -64,13 +64,16 @@ impl Parser {
                             // 行わずここで直接分岐する
                             match self.current_tkn() {
                                 lex::Tkn::RBrace => {
-                                    //self.advance_tkn().unwrap();
                                     break;
                                 }
                                 lex::Tkn::Name(_) | lex::Tkn::KeyWordPub => {
                                     self.back_tkn();
                                 }
-                                t => panic!("{:?}", t),
+                                t => {
+                                    return crate::err_at!(
+                                        self.expected_tkn("name, `pub` or `}`", t.clone())
+                                    );
+                                }
                             }
                             pub_flag = false;
                             continue;
@@ -85,7 +88,7 @@ impl Parser {
                     pub_flag = true;
                 }
                 lex::Tkn::RBrace => break,
-                t => panic!("{:?}", t),
+                t => return crate::err_at!(self.expected_tkn("name, `pub` or `}`", t)),
             }
         }
 
@@ -188,17 +191,16 @@ impl Parser {
 
     /// 構造体などの中にメゾットを登録
     pub(in crate::compiler::parse::typedef)
-    fn registration_mod_name(&self, method: &mut Group1Node) {
+    fn registration_mod_name(&self, method: &mut Group1Node) -> Result<(), err::ErrKind> {
         // モジュールの名前を登録
-        if let node::Group1Node::FuncDefine(func) = method {
-            if let Some(mod_name) = &self.struct_self_name {
-                func.self_module_name(mod_name.to_owned());
-            } else {
-                panic!();
-            }
-        } else {
-            panic!();
-        }
+        let node::Group1Node::FuncDefine(func) = method else {
+            return crate::err_at!(self.internal_state_err("function definition"));
+        };
+        let Some(mod_name) = &self.struct_self_name else {
+            return crate::err_at!(self.self_outside_of_type());
+        };
+        func.self_module_name(mod_name.to_owned());
+        Ok(())
     }
 
     /// メゾットの中身を作成
@@ -214,12 +216,12 @@ impl Parser {
                 }
 
                 if self.current_tkn() == &lex::Tkn::RBrace {
-                    self.advance_tkn().unwrap();
+                    self.advance_tkn_checked()?;
                     break;
                 }
             }
         } else {
-            self.advance_tkn().unwrap();
+            self.advance_tkn_checked()?;
         }
         Ok(())
     }
