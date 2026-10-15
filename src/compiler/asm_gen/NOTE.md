@@ -63,3 +63,12 @@
 - アセンブリのフォーマット(`asm_fmts/gcc_x64.yaml` / `asm_fmt/x64.rs`)に、`cmp_b` / `cmp_a` / `movzbq` / `movzwq`を追加した。
     フォーマットに定義がない場合は、`cmp_l`/`cmp_g`の`jl`/`jg`を`jb`/`ja`に置き換えるか、AT&T形式の
     テンプレートを使うので、古いフォーマットファイルでも動く。
+
+## 呼ばれる関数のみ生成(2026-10-15)
+- `_start`以外の関数は、`call_func.rs`の`emit_call_func`が呼び出しを生成するときに`build_fn_process`で生成する(`emit_callee_fn`)。
+    呼ばれない関数は生成されない。
+- `to_asm_text`は、`_start`と`global_funcs`(他のファイルから呼ばれる)だけを直接生成し、残りは`pending_funcs`(ラベル -> 定義)へ登録する。
+- `emit_call_func`は、呼ぶ関数のラベルが`pending_funcs`にあれば取り出して`emit_callee_fn`で生成する。取り出してから生成するので、再帰呼び出しで二重に生成されない。
+- `emit_callee_fn`は、呼んだ側の生成中の状態(`asm_text`/変数/レジスタ/`curr_inst`/スタック使用量など)を退避してから`build_fn_process`を呼び、終わったら戻す。
+    呼ばれた側のアセンブリは`fn_asm_out`へ溜め、`to_asm_text`の最後に`_start`の後ろへ結合する(呼んだ側の関数の途中に挟まらないため)。
+- `AsmEmitter`に状態のフィールドを追加したら、`emit_callee_fn`の退避・復元にも加えること。

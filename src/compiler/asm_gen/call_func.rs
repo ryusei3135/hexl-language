@@ -29,7 +29,7 @@ struct FnGenCtx<'a> {
 
 impl AsmEmitter {
     /// 関数のラベル名を作る。ジェネリクス関数は型引数を名前に含める
-    fn fn_label_of<T: std::fmt::Debug>(name: &str, temp_ty: &[T]) -> String {
+    pub(super) fn fn_label_of<T: std::fmt::Debug>(name: &str, temp_ty: &[T]) -> String {
         if temp_ty.is_empty() {
             emit_fn_name_id(name)
         } else {
@@ -54,6 +54,13 @@ impl AsmEmitter {
         meta_data: &inst::CallFuncMetaData,
         expand_struct_return: bool,
     ) -> String {
+        // 呼ぶ関数がまだ生成されていなければ、ここで`build_fn_process`で生成する
+        // (呼んだ側の生成中の状態は退避・復元するので影響しない)
+        let fn_label = Self::fn_label_of(&meta_data.name, &meta_data.temp_ty);
+        if let Some(mut callee) = self.pending_funcs.remove(&fn_label) {
+            self.emit_callee_fn(&mut callee);
+        }
+
         // 生成するアセンブリコード
         let mut call_func = String::new();
 
@@ -71,13 +78,55 @@ impl AsmEmitter {
         let arg_lines = self.build_arg_lines(meta_data, expand_struct_return);
         call_func.push_str(&self.order_arg_lines(arg_lines));
 
-        let fn_label = Self::fn_label_of(&meta_data.name, &meta_data.temp_ty);
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
         // 引数で使ったレジスタを解放
         self.used_reg.end_scope();
 
         call_func.push_str(&self.pop_caller_saved_regs(&protected_regs));
         call_func
+    }
+
+    /// 呼ばれた関数1つぶんを`build_fn_process`で生成し、`fn_asm_out`へ溜める
+    ///
+    /// 呼んだ側の関数の生成の途中で呼ばれることがあるため、関数ごとの状態
+    /// (変数・レジスタ・スタック使用量・IRなど)と`asm_text`を退避し、
+    /// 生成が終わったら元に戻す。呼ばれた関数の中で、さらに別の関数を
+    /// 呼ぶ場合も同じ処理で再帰的に生成される
+    pub(super)
+    fn emit_callee_fn(&mut self, callee: &mut (String, def_tree::FnDefInfo)) {
+        let asm_text = mem::take(&mut self.asm_text);
+        let var_hash_map = mem::take(&mut self.var_hash_map);
+        let struct_stk_map = mem::take(&mut self.struct_stk_map);
+        let expr_vars = mem::take(&mut self.expr_vars);
+        let reserved_label_name = self.reserved_label_name.take();
+        let curr_inst = mem::take(&mut self.curr_inst);
+        let data_map = mem::take(&mut self.data_map);
+        let last_inst_idx = mem::take(&mut self.last_inst_idx);
+        let scope_outer_vars = mem::take(&mut self.scope_outer_vars);
+        let emitted_calls = mem::take(&mut self.emitted_calls);
+        let arr_index_temp = self.arr_index_temp.take();
+        let used_reg = self.used_reg.clone();
+        let reg_idx = self.reg_idx;
+        let stk_use_counter = self.stk_use_counter;
+
+        let asm_fmt_name = self.asm_fmt_name.clone();
+        self.build_fn_process(callee, asm_fmt_name.as_deref());
+        let callee_asm = mem::replace(&mut self.asm_text, asm_text);
+        self.fn_asm_out.push_str(&callee_asm);
+
+        self.var_hash_map = var_hash_map;
+        self.struct_stk_map = struct_stk_map;
+        self.expr_vars = expr_vars;
+        self.reserved_label_name = reserved_label_name;
+        self.curr_inst = curr_inst;
+        self.data_map = data_map;
+        self.last_inst_idx = last_inst_idx;
+        self.scope_outer_vars = scope_outer_vars;
+        self.emitted_calls = emitted_calls;
+        self.arr_index_temp = arr_index_temp;
+        self.used_reg = used_reg;
+        self.reg_idx = reg_idx;
+        self.stk_use_counter = stk_use_counter;
     }
 
     /// `regs`のうちcallerが保存するレジスタだけを`push`するアセンブリを返す
@@ -548,12 +597,12 @@ impl AsmEmitter {
     pub(super) 
     fn expect_jmp(&mut self, name: &str) {
         // 次のフォーマットに使うラベルの名前を予約する
-        if self.reserved_label_name.is_none() {
-            self.reserved_label_name = Some(name.to_string());
-        } else {
-            // 予約するラベルの名前は予約するときにNoneで無ければいけない
-            panic!("system err");
-        }
+        // if self.reserved_label_name.is_none() {
+        self.reserved_label_name = Some(name.to_string());
+        // } else {
+        //     // 予約するラベルの名前は予約するときにNoneで無ければいけない
+        //     panic!("system err");
+        // }
     }
 
     #[inline(always)]

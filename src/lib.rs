@@ -250,7 +250,9 @@ pub fn build(
         &ir_builder.public_func_tree,
         settings.fmt_name.as_deref(),
         os.as_str(),
-    );
+    )
+    // `AsmSettingError` は Display で日本語メッセージになる。`run` がそれを表示する
+    .map_err(|e| format!("アセンブリコードの生成に失敗しました: {}", e))?;
 
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");
@@ -314,7 +316,11 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
     // オプションなどの設定
     let settings = mng_opt_cmd(&args_refs);
 
-    asm_setting::load_setting();
+    // 設定ファイルが読めない場合は panic せず、メッセージを表示して終了する
+    if let Err(e) = asm_setting::load_setting() {
+        eprintln!("エラー: {}", e);
+        return process::ExitCode::FAILURE;
+    }
 
     // 前回の実行で記憶したものが残らないようにする
     take_generated_bin();

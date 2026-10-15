@@ -100,26 +100,88 @@ pub struct AsmSetting {
     pub entry: String,
 }
 
-impl AsmSetting {
-    pub fn get_asm_fmt(&self, inline_name: Option<&str>) -> AsmFormat {
-        // フォーマットするアセンブリコードの情報が入ったファイルの名前を取得
-        let file_name = || -> &str {
-            if let Some(name) = inline_name {
-                self.settings
-                    .iter()
-                    .find(|v| &v.name == name)
-                    .unwrap()
-                    .file
-                    .as_str()
-            } else {
-                self.settings[self.default].file.as_str()
+/// アセンブリ設定まわりで起きるエラー。
+/// panic / unwrap せず、呼び出し元 (`lib.rs`) まで伝搬して表示する。
+#[derive(Debug)]
+pub enum AsmSettingError {
+    /// 設定ファイル(`asm.yaml` / `asm_fmts/*.yaml`)を読み込めない
+    ReadFile { path: String, source: std::io::Error },
+    /// 設定ファイルのyamlが不正
+    ParseYaml { path: String, source: serde_yaml::Error },
+    /// 登録されていない inline アセンブラ名
+    UnknownInline { name: String, available: Vec<String> },
+    /// `default` が `settings` の範囲外
+    InvalidDefault { default: usize, len: usize },
+    /// アセンブリコードの生成に失敗
+    Emit(String),
+}
+
+impl std::fmt::Display for AsmSettingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ReadFile { path, source } => {
+                write!(f, "アセンブリ設定ファイル`{}`を読み込めません: {}", path, source)
             }
+            Self::ParseYaml { path, source } => {
+                write!(f, "アセンブリ設定ファイル`{}`のyamlが不正です: {}", path, source)
+            }
+            Self::UnknownInline { name, available } => write!(
+                f,
+                "登録されていない inline アセンブラ名です: `{}` (登録済み: {})",
+                name,
+                available.join(", ")
+            ),
+            Self::InvalidDefault { default, len } => write!(
+                f,
+                "asm.yaml の default={} が settings の範囲外です (settings は {} 個)",
+                default, len
+            ),
+            Self::Emit(msg) => write!(f, "アセンブリコードの生成に失敗しました: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for AsmSettingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ReadFile { source, .. } => Some(source),
+            Self::ParseYaml { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl AsmSetting {
+    pub fn get_asm_fmt(&self, inline_name: Option<&str>) -> Result<AsmFormat, AsmSettingError> {
+        // フォーマットするアセンブリコードの情報が入ったファイルの名前を取得
+        let file_name: &str = if let Some(name) = inline_name {
+            self.settings
+                .iter()
+                .find(|v| v.name == name)
+                .ok_or_else(|| AsmSettingError::UnknownInline {
+                    name: name.to_string(),
+                    available: self.get_inline_asm_list(),
+                })?
+                .file
+                .as_str()
+        } else {
+            self.settings
+                .get(self.default)
+                .ok_or(AsmSettingError::InvalidDefault {
+                    default: self.default,
+                    len: self.settings.len(),
+                })?
+                .file
+                .as_str()
         };
 
-        let asm_fmt_file_name = format!("asm_fmts/{}", file_name());
+        let path = format!("asm_fmts/{}", file_name);
 
-        serde_yaml::from_str(&fs::read_to_string(&asm_fmt_file_name).expect(&asm_fmt_file_name))
-            .unwrap()
+        let text = fs::read_to_string(&path).map_err(|source| AsmSettingError::ReadFile {
+            path: path.clone(),
+            source,
+        })?;
+        serde_yaml::from_str(&text).map_err(|source| AsmSettingError::ParseYaml { path, source })
     }
 
     pub fn get_inline_asm_list(&self) -> Vec<String> {
@@ -127,13 +189,16 @@ impl AsmSetting {
     }
 }
 
-pub fn load_setting() -> AsmSetting {
-    let setting = fs::read_to_string("asm.yaml").expect("not found asm setting file 'asm.yaml'");
-    serde_yaml::from_str(&setting).unwrap()
-
-    //let default_format = fs::read_to_string(data.get_default_asm_file()).unwrap();
-    //let x64data: AsmFormat = serde_yaml::from_str(&default_format).unwrap();
-    //x64data
+pub fn load_setting() -> Result<AsmSetting, AsmSettingError> {
+    let path = "asm.yaml";
+    let setting = fs::read_to_string(path).map_err(|source| AsmSettingError::ReadFile {
+        path: path.to_string(),
+        source,
+    })?;
+    serde_yaml::from_str(&setting).map_err(|source| AsmSettingError::ParseYaml {
+        path: path.to_string(),
+        source,
+    })
 }
 
 /// アセンブリ言語のフォーマットを取得し、生成する
@@ -143,17 +208,17 @@ pub fn gen_asm_text(
     global_funcs: &[String],
     inline_name: Option<&str>,
     os: &str,
-) -> String {
+) -> Result<String, AsmSettingError> {
     if inline_name.is_some() {
-        let asm_settings = load_setting();
+        let asm_settings = load_setting()?;
 
-        let asm_fmt = asm_settings.get_asm_fmt(inline_name);
+        let asm_fmt = asm_settings.get_asm_fmt(inline_name)?;
         let mut writer = asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt), os);
-        writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs)
+        Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     } else {
         println!("現在アセンブリコードのフォーマットをハードコード `asm_setting`");
-        let asm_settings = load_setting();
+        let asm_settings = load_setting()?;
         let mut writer = asm_gen::AsmEmitter::new(asm_settings, None, os);
-        writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs)
+        Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     }
 }

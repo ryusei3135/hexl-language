@@ -137,6 +137,9 @@ impl AsmEmitter {
             scope_outer_vars: Vec::new(),
             stk_use_counter: 0,
             emitted_calls: Vec::new(),
+            pending_funcs: HashMap::new(),
+            fn_asm_out: String::new(),
+            asm_fmt_name: None,
             arr_index_temp: None,
             struct_stk_map: HashMap::new(),
 
@@ -169,23 +172,43 @@ impl AsmEmitter {
             String::new()
         };
 
+        let mut start_func = func_tree.func.remove_entry("_start");
+
         self.gen_global_func_asm(&global_funcs);
         self.gen_extern_func_asm(&extern_funcs);
 
+        // `_start`以外の関数は、`call_func.rs`の`emit_call_func`が
+        // 呼び出しを生成するときに`build_fn_process`で生成する
+        // (呼ばれない関数は生成しない)。ここでは`pending_funcs`へ
+        // 登録するだけで、生成するのは次の関数のみ。
+        //  - `_start`(エントリーポイント)
+        //  - `global_funcs`(他のファイルから呼ばれるので、起点として生成する)
+        self.pending_funcs.clear();
+        self.fn_asm_out.clear();
+        self.asm_fmt_name = asm_fmt_name.map(str::to_string);
+        for (name, info) in func_tree.func.drain() {
+            if name == "_start" {
+                continue;
+            }
+            let label = Self::fn_label_of(&info.name, &info.temp_ty);
+            self.pending_funcs.insert(label, (name, info));
+        }
+
         // エントリーポイントを先頭に配置
-        if let Some(ref mut meta_data) = func_tree.func.remove_entry("_start") {
+        if let Some(ref mut meta_data) = start_func {
             self.build_fn_process(meta_data, asm_fmt_name);
         }
 
-        for mut func_meta_data in func_tree.func.drain() {
-            // == アセンブリ言語の生成 ==
-            self.build_fn_process(&mut func_meta_data, asm_fmt_name);
-            // == データの初期化 ==
-            self.var_hash_map = HashMap::new();
-            self.reg_idx = 0;
-            self.used_reg.clear();
-            self.scope_outer_vars.clear();
+        // 公開する関数(未生成のもの)
+        for fn_name in global_funcs {
+            let label = emit_fn_name_id(fn_name);
+            if let Some(mut meta_data) = self.pending_funcs.remove(&label) {
+                self.emit_callee_fn(&mut meta_data);
+            }
         }
+        // 呼ばれた側の関数のアセンブリを、`_start`の後ろへ続ける
+        let callee_asm = mem::take(&mut self.fn_asm_out);
+        self.asm_text.push_str(&callee_asm);
         format!(
             "{}\n{}\n{}",
             self.data_sec_text,
@@ -214,7 +237,7 @@ impl AsmEmitter {
                     self.asm_text
                         .push_str(self.asm_fmt.get_extern_func(&label).as_str());
                 } else {
-                    panic!();
+                    println!("warning");
                 }
             });
     }
@@ -690,6 +713,7 @@ impl AsmEmitter {
         let num = if reg_idx.is_none() {
             self.reg_idx
         } else {
+            // これは必ずSome
             reg_idx.unwrap()
         };
         if size.is_float() {

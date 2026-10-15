@@ -74,6 +74,16 @@ pub struct AsmEmitter {
     /// 生成済みの呼び出しの戻り値を、後続のノードが値として
     /// 参照する際(`a: int = func(10)`など)に使う
     pub(super) emitted_calls: Vec<usize>,
+    /// まだ生成していない`_start`以外の関数(ラベル -> 関数の定義)。
+    /// `emit_call_func`が呼び出しを生成するときに取り出して、
+    /// `build_fn_process`で生成する(呼ばれない関数は残ったまま出力されない)
+    pub(super) pending_funcs: HashMap<String, (String, def_tree::FnDefInfo)>,
+    /// `emit_call_func`が生成した、呼ばれた側の関数のアセンブリ。
+    /// 呼んだ側の関数の途中に挟まらないよう、別に溜めて最後に結合する
+    pub(super) fn_asm_out: String,
+    /// 出力するアセンブリ言語のフォーマットの名前
+    /// (呼ばれた関数を`build_fn_process`で生成するときに使う)
+    pub(super) asm_fmt_name: Option<String>,
     /// 配列の添字が構造体のメンバー(`[arr a.a else 0]`など)のとき、
     /// 添字を載せるために確保した一時レジスタ。
     /// 配列への書き込みが終わった時点で解放する
