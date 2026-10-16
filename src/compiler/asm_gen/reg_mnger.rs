@@ -165,12 +165,15 @@ impl UsedRegManager {
     /// ## 対象外
     /// - 初期値の式に関数の呼び出し・代入・inlineアセンブラがある変数:
     ///   生成しないと副作用が消えてしまうため
-    /// - 初期値に`Inst::Expr`がある変数: 式ノードは別途生成されるため、
-    ///   定義だけを除去すると未登録の変数を式が参照するため
     /// - 同じ名前の変数への再代入(`Inst::AssignVar`)がある変数:
     ///   再代入のために変数の情報が必要なため
     ///
     /// 使用回数は、`var_counter`に出てこない変数を0回として扱う
+    ///
+    /// 戻り値には、生成しない変数の`Inst::Mov`に加えて、その初期値の式だけを
+    /// 構成するノード(`Inst::Expr`・`Inst::Float`・`Inst::Str`)のidも含める
+    /// (`gen_node_asm`はこれらも生成しない。残すと、式が未登録の変数を参照したり、
+    /// 使われない式の命令・定数が出力されたりする)
     pub fn unused_var_nodes(
         var_counter: &counter_mnger::VarCounter,
         body: &[inst::Inst],
@@ -213,10 +216,18 @@ impl UsedRegManager {
                     continue;
                 }
                 let mut refs = Vec::new();
-                if !Self::collect_pure_expr_vars(body, *src, &mut HashSet::new(), &mut refs) {
+                let mut dead_nodes = Vec::new();
+                if !Self::collect_pure_expr_vars(
+                    body,
+                    *src,
+                    &mut HashSet::new(),
+                    &mut refs,
+                    &mut dead_nodes,
+                ) {
                     continue;
                 }
                 removed.insert(idx);
+                removed.extend(dead_nodes);
                 for var in refs {
                     *dead_uses.entry(var).or_insert(0) += 1;
                 }
@@ -233,6 +244,9 @@ impl UsedRegManager {
     /// 含まない)なら`true`を返し、式の中で使われている変数(`Inst::Mov`のノード)
     /// の名前を`vars`へ追加する
     ///
+    /// 式を構成するノード(`Inst::Expr`・`Inst::Float`・`Inst::Str`)のidは
+    /// `nodes`へ追加する(変数が生成されないとき、これらも生成しない)。
+    ///
     /// 同じノードに複数回たどり着いても、1回だけ数える(`visited`)。
     /// 数え漏らす分には、変数を生成する側(安全側)に倒れるだけなので、
     /// 数え過ぎないことを優先している
@@ -241,6 +255,7 @@ impl UsedRegManager {
         id: usize,
         visited: &mut std::collections::HashSet<usize>,
         vars: &mut Vec<String>,
+        nodes: &mut Vec<usize>,
     ) -> bool {
         if !visited.insert(id) {
             return true;
@@ -256,15 +271,28 @@ impl UsedRegManager {
                 vars.push(name.clone());
                 true
             }
-            // `gen_node_asm`は式ノードを個別に生成するため、初期化先だけを
-            // 除去すると式が残って未登録の変数を参照する。
-            inst::Inst::Expr(_) => false,
+            // 式(`fv + f2`など)。オペランドも副作用が無ければ、式のノードごと
+            // 生成しない(`nodes`に加える)
+            inst::Inst::Expr(expr) => {
+                if !Self::collect_pure_expr_vars(body, expr.ls, visited, vars, nodes)
+                    || !Self::collect_pure_expr_vars(body, expr.rs, visited, vars, nodes)
+                {
+                    return false;
+                }
+                nodes.push(id);
+                true
+            }
+            // 浮動小数点・文字列のリテラル(定数を`.data`へ出力するノード)
+            inst::Inst::Float { .. } | inst::Inst::Str { .. } => {
+                nodes.push(id);
+                true
+            }
             inst::Inst::GetAddress(inner) | inst::Inst::Pointer(inner) => {
-                Self::collect_pure_expr_vars(body, *inner, visited, vars)
+                Self::collect_pure_expr_vars(body, *inner, visited, vars, nodes)
             }
             inst::Inst::InitArr(ids) => ids
                 .iter()
-                .all(|item| Self::collect_pure_expr_vars(body, *item, visited, vars)),
+                .all(|item| Self::collect_pure_expr_vars(body, *item, visited, vars, nodes)),
             // 副作用がある
             inst::Inst::CallFunc(..)
             | inst::Inst::AssignVar { .. }
@@ -439,37 +467,75 @@ impl UsedRegManager {
 mod unused_var_tests {
     use super::*;
 
+    fn mov(name: &str, dst: usize, src: usize) -> inst::Inst {
+        inst::Inst::Mov {
+            name: Some(name.to_string()),
+            size: Size::F32,
+            dst,
+            src,
+        }
+    }
+
+    fn add(dst: usize, ls: usize, rs: usize) -> inst::Inst {
+        inst::Inst::Expr(inst::ExprInst {
+            dst,
+            ls,
+            rs,
+            kind: inst::ExprKind::Add,
+        })
+    }
+
+    /// `fv3: float = fv + f2`(`fv3`は未使用、`fv`/`f2`は`fv3`の式でのみ使用)
     #[test]
-    fn keeps_variables_used_by_an_expression_initializing_an_unused_variable() {
+    fn removes_variables_used_only_by_the_expression_of_an_unused_variable() {
         let body = vec![
-            inst::Inst::Mov {
-                name: Some("fv".to_string()),
-                size: Size::F32,
-                dst: 0,
-                src: 4,
-            },
-            inst::Inst::Mov {
-                name: Some("f2".to_string()),
-                size: Size::F32,
-                dst: 1,
-                src: 5,
-            },
-            inst::Inst::Expr(inst::ExprInst {
-                dst: 2,
-                ls: 0,
-                rs: 1,
-                kind: inst::ExprKind::Add,
-            }),
-            inst::Inst::Mov {
-                name: Some("fv3".to_string()),
-                size: Size::F32,
-                dst: 3,
-                src: 2,
-            },
+            mov("fv", 0, 4),
+            mov("f2", 1, 5),
+            add(2, 0, 1),
+            mov("fv3", 3, 2),
         ];
         let mut var_counter = counter_mnger::VarCounter::new();
         var_counter.use_var("fv");
         var_counter.use_var("f2");
+
+        let removed = UsedRegManager::unused_var_nodes(&var_counter, &body);
+        // fv, f2, 式, fv3 のすべてを生成しない
+        assert!(removed.contains(&0) && removed.contains(&1));
+        assert!(removed.contains(&2) && removed.contains(&3));
+    }
+
+    /// `fv`が式の外(`g: float = fv`など)でも使われているなら、`fv`は残す
+    #[test]
+    fn keeps_a_variable_that_is_also_used_outside_the_unused_expression() {
+        let body = vec![
+            mov("fv", 0, 4),
+            mov("f2", 1, 5),
+            add(2, 0, 1),
+            mov("fv3", 3, 2),
+        ];
+        let mut var_counter = counter_mnger::VarCounter::new();
+        var_counter.use_var("fv");
+        var_counter.use_var("fv");
+        var_counter.use_var("f2");
+
+        let removed = UsedRegManager::unused_var_nodes(&var_counter, &body);
+        assert!(!removed.contains(&0));
+        assert!(removed.contains(&1) && removed.contains(&3));
+    }
+
+    /// 生成する変数(`fv3`が使われている)の式や変数は残す
+    #[test]
+    fn keeps_everything_when_the_variable_is_used() {
+        let body = vec![
+            mov("fv", 0, 4),
+            mov("f2", 1, 5),
+            add(2, 0, 1),
+            mov("fv3", 3, 2),
+        ];
+        let mut var_counter = counter_mnger::VarCounter::new();
+        var_counter.use_var("fv");
+        var_counter.use_var("f2");
+        var_counter.use_var("fv3");
 
         assert!(UsedRegManager::unused_var_nodes(&var_counter, &body).is_empty());
     }

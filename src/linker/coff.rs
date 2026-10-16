@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 
 use super::elf::*;
-use super::error::{LinkError, Result};
+use super::error::{LinkError, LinkResult};
 
 pub const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 
@@ -117,7 +117,7 @@ struct ComdatInfo {
 }
 
 /// COFF オブジェクトをパースし、リンカ内部表現に変換して返す。
-pub fn parse(name: impl Into<String>, data: Vec<u8>) -> Result<ElfObject> {
+pub fn parse(name: impl Into<String>, data: Vec<u8>) -> LinkResult<ElfObject> {
     let name = name.into();
     let perr = |m: String| LinkError::Parse {
         object: name.clone(),

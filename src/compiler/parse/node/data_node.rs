@@ -16,7 +16,7 @@ trait Field {
 
 // === 構造体 =====
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructField {
     pub name: String,
     pub ty: TyNode,
@@ -38,7 +38,7 @@ impl Field for StructField {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructDefine {
     pub name: String,
     pub fields: Vec<StructField>,
@@ -62,20 +62,20 @@ impl StructDefine {
 
 // ===== バリアント型(旧共用体 + 旧列挙型) =====
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VariantMode {
     Normal,
     Unsafe,
 }
 
 /// バリアント型の中身(フィールドかメゾット)
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VariantFieldKind {
     Field(VariantField),
     Method(Group1Node),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantField {
     pub name: String,
     pub ty: Option<TyNode>,
@@ -131,7 +131,7 @@ impl VariantField {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantDefine {
     pub name: String,
     pub fields: Vec<VariantField>,
@@ -177,7 +177,7 @@ impl VariantDefine {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TyNode {
     Ty(String),
     /// メゾット内で使われる`Self`(自身の構造体を表す予約語)

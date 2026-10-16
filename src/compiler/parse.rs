@@ -20,7 +20,7 @@ use stmt::*;
 
 pub use stmt::Parser;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VarMutAttr {
     /// var const: t
     Const,

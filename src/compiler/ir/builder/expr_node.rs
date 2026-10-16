@@ -47,6 +47,126 @@ impl IR {
         }
     }
 
+    /// 配列の添字に渡す、期待する型
+    ///
+    /// 添字は配列の要素(`expect_byte`)とは別の型でよいので、添字が変数なら
+    /// その変数の型(`uint`など)にする。型が分からない(即値など)ときは、
+    /// 整数の`expect_byte`をそのまま使い、整数でなければ`DD`にする
+    pub(in crate::compiler::ir)
+    fn index_expect_ty(&self, index: &node::Expr, expect_byte: &types::Size) -> types::Size {
+        match self.infer_expr_ty(index) {
+            Some(ty) if !ty.is_float() => ty,
+            _ if expect_byte.is_float() => types::Size::DD,
+            _ => expect_byte.clone(),
+        }
+    }
+
+    /// 型が決まっていない即値(`10`や`1.5`、即値だけの式`1 + 2`)か
+    fn is_untyped_literal(expr: &node::Expr) -> bool {
+        match expr {
+            node::Expr::Number(_) | node::Expr::Float(_) => true,
+            node::Expr::Add(n)
+            | node::Expr::Sub(n)
+            | node::Expr::Mul(n)
+            | node::Expr::Div(n)
+            | node::Expr::Surplus(n)
+            | node::Expr::LShift(n)
+            | node::Expr::RShift(n)
+            | node::Expr::AndCalcul(n)
+            | node::Expr::XorCalcul(n)
+            | node::Expr::OrCalcul(n) => {
+                Self::is_untyped_literal(&n.0) && Self::is_untyped_literal(&n.1)
+            }
+            _ => false,
+        }
+    }
+
+    /// 即値の型を決める元になる、式の型(定義元の型)を調べる
+    ///
+    /// - 変数は、定義した型
+    /// - 二項演算は、型が分かるほうのオペランドの型
+    /// - 数値型(整数・浮動小数点)だけを返す。ポインタ・構造体などは
+    ///   即値の型にできないので`None`
+    ///
+    /// 副作用が無い(変数の使用回数も数えない)ので、`&self`で調べる
+    pub(super)
+    fn infer_expr_ty(&self, expr: &node::Expr) -> Option<types::Size> {
+        let ty = match expr {
+            node::Expr::Var(name) => {
+                let ty_node = self.var_tree.get_ty_node(name)?;
+                self.try_size_or_emit_struct(&ty_node).ok()?
+            }
+            node::Expr::Add(n)
+            | node::Expr::Sub(n)
+            | node::Expr::Mul(n)
+            | node::Expr::Div(n)
+            | node::Expr::Surplus(n)
+            | node::Expr::LShift(n)
+            | node::Expr::RShift(n)
+            | node::Expr::AndCalcul(n)
+            | node::Expr::XorCalcul(n)
+            | node::Expr::OrCalcul(n) => self
+                .infer_expr_ty(&n.0)
+                .or_else(|| self.infer_expr_ty(&n.1))?,
+            _ => return None,
+        };
+        use types::Size;
+        matches!(
+            ty,
+            Size::DB | Size::DW | Size::DD | Size::DQ
+                | Size::UDB | Size::UDW | Size::UDD | Size::UDQ
+                | Size::F32 | Size::F64
+        )
+        .then_some(ty)
+    }
+
+    /// 二項演算の左右のオペランドに渡す、期待する型を決める
+    ///
+    /// 片方が型の決まっていない即値で、もう片方の型が分かるなら、
+    /// 即値の側はもう片方の型(定義元の型)にする
+    /// (`a: uint64`に対する`a < 10`や`10 < a`の`10`は`uint64`になる)。
+    /// 整数の即値は整数型へ、小数の即値は浮動小数点型へだけ変換する。
+    /// それ以外は、渡された`expect_byte`をそのまま使う
+    pub(super)
+    fn operand_expect_tys(
+        &self,
+        ls: &node::Expr,
+        rs: &node::Expr,
+        expect_byte: &types::Size,
+    ) -> (types::Size, types::Size) {
+        let fit = |lit: &node::Expr, other: &node::Expr| -> Option<types::Size> {
+            if !Self::is_untyped_literal(lit) || Self::is_untyped_literal(other) {
+                return None;
+            }
+            let ty = self.infer_expr_ty(other)?;
+            let lit_is_float = Self::literal_has_float(lit);
+            (ty.is_float() == lit_is_float).then_some(ty)
+        };
+        let l = fit(ls, rs).unwrap_or_else(|| expect_byte.clone());
+        let r = fit(rs, ls).unwrap_or_else(|| expect_byte.clone());
+        (l, r)
+    }
+
+    /// 即値の式の中に小数(`Expr::Float`)があるか
+    fn literal_has_float(expr: &node::Expr) -> bool {
+        match expr {
+            node::Expr::Float(_) => true,
+            node::Expr::Add(n)
+            | node::Expr::Sub(n)
+            | node::Expr::Mul(n)
+            | node::Expr::Div(n)
+            | node::Expr::Surplus(n)
+            | node::Expr::LShift(n)
+            | node::Expr::RShift(n)
+            | node::Expr::AndCalcul(n)
+            | node::Expr::XorCalcul(n)
+            | node::Expr::OrCalcul(n) => {
+                Self::literal_has_float(&n.0) || Self::literal_has_float(&n.1)
+            }
+            _ => false,
+        }
+    }
+
     /// `gen_expr_ir`に渡された期待する型を確定させる
     ///
     /// - `Assign`ノードなら、代入先の型で確定させる
@@ -54,7 +174,8 @@ impl IR {
     ///     `var.[member idx]`)への代入なら、そのメンバーの型
     ///   - それ以外は、代入先の変数の型
     /// - それ以外は、渡された型をそのまま使う
-    /// - どちらも無い(`None`で`Assign`でもない)なら`DD`にする
+    /// - どちらも無い(`None`で`Assign`でもない)なら、二項演算は
+    ///   オペランドの変数の型(定義元の型)、それ以外は`DD`にする
     pub(super)
     fn resolve_expect_byte(
         &self,
@@ -70,7 +191,17 @@ impl IR {
                 return self.unwrap_or_report(result);
             }
         }
-        expect_byte.cloned().unwrap_or(types::Size::DD)
+        expect_byte
+            .cloned()
+            .or_else(|| {
+                // 型が決まっていない二項演算(`if a < 10`など)は、
+                // オペランドの型で決める
+                match expr {
+                    node::Expr::Number(_) | node::Expr::Float(_) => None,
+                    _ => self.infer_expr_ty(expr),
+                }
+            })
+            .unwrap_or(types::Size::DD)
     }
 
     /// 代入先が構造体のメンバーなら、そのメンバーの型を返す
@@ -174,10 +305,11 @@ impl IR {
         expect_byte: &types::Size,
     ) -> inst::Inst {
         // 添字の範囲チェックは`gen_expr_ir`の`check_mem_access`で行う
+        let index_ty = self.index_expect_ty(&index, expect_byte);
         inst::Inst::InsertArr {
             name: name.to_string(),
             dst: self.gen_expr_ir(dst, Some(&expect_byte)),
-            index: self.gen_expr_ir(index, Some(&expect_byte)),
+            index: self.gen_expr_ir(index, Some(&index_ty)),
         }
     }
 

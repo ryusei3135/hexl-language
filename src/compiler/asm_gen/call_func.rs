@@ -451,6 +451,10 @@ impl AsmEmitter {
     fn gen_node_asm(&mut self, node_idx: usize, node: &inst::Inst, ctx: &FnGenCtx) {
         match node {
             inst::Inst::ExpectJmp(name) => self.expect_jmp(name),
+            // 生成しない変数の初期値だけを構成する式・定数は生成しない
+            // (`unused_var_nodes`)
+            inst::Inst::Expr(_) | inst::Inst::Float { .. } | inst::Inst::Str { .. }
+                if self.unused_var_nodes.contains(&node_idx) => {}
             inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
             inst::Inst::Expr(expr) => self.gen_expr_asm(expr),
             inst::Inst::Num { .. } => {}

@@ -2,7 +2,7 @@ use super::*;
 
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallInfo {
     pub name: String,
     /// `func<int>(..)`の`<>`の中身。呼び出す関数を
@@ -14,7 +14,7 @@ pub struct CallInfo {
 
 
 /// `#include`で指定されたパスの実体
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImportPath {
     /// `#include mod::file`のように、`::`で区切られた
     /// セグメントをそのままディレクトリ・ファイル名として使う
@@ -27,7 +27,7 @@ pub enum ImportPath {
 
 /// `#include`で取り込んだ関数を、どういう名前で
 /// 使えるようにするかを表す
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImportKind {
     Auto,
     /// 公開されている関数をすべて、モジュール名を付けて取り込む。
@@ -43,7 +43,7 @@ pub enum ImportKind {
     Glob,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModPath {
     pub path: ImportPath,
     pub kind: ImportKind,
@@ -156,7 +156,7 @@ impl ModPath {
 
 /// 変数を定義する
 /// ノード
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DefineVar {
     pub name: String,
     pub value: Box<Expr>,
@@ -188,7 +188,7 @@ impl DefineVar {
 ///
 /// `value`が`M`であるときだけ真になり、その中身が`val`に束縛される
 /// (`val`は真のときの本体の中でだけ使える)
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantBind {
     /// `A::M(val)`の`A`(`M(val)`のように省略されたときは`None`)
     pub variant_ty: Option<String>,
@@ -234,7 +234,7 @@ impl VariantBind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AssignVar {
     pub name: String,
     // Expr::Varなど
@@ -253,7 +253,7 @@ impl AssignVar {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
     RangeNode((String, String)),
     /// ポインタ関係

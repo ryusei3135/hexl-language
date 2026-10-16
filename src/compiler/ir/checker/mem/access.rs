@@ -4,6 +4,8 @@
 //! `check_mem_access`を一度呼び出す。範囲の判定そのものは
 //! `tracking.rs`のチェッカー群と`var_tree`に記録された値を使う。
 
+use crate::compiler::ir::checker::mem::check_list::{IndexCheckList, IsImmOrConst, IsUnsigned};
+
 use super::*;
 
 
@@ -41,6 +43,7 @@ impl IR {
     fn check_mem_access(&mut self, expr: &node::Expr) -> Option<ArrIdxGuard> {
         match expr {
             node::Expr::RefArray { name, index, else_idx, .. } => {
+                self.check_arr_index::<IsUnsigned>(index).unwrap();
                 return self.check_ref_array(name, index, else_idx);
             }
             node::Expr::ConnectAddr(target) => {
@@ -69,7 +72,7 @@ impl IR {
         let (lo, hi) = self.access_bounds(name)?;
 
         // 添字が`const`/即値: 静的に検査するだけで、IRはそのまま
-        if self.is_const_or_immediate(index) {
+        if self.check_arr_index::<IsImmOrConst>(&index).is_ok() {
             self.arr_idx_checker(name, index);
             self.range_ptr_checker(name, index);
             return None;
@@ -82,11 +85,13 @@ impl IR {
                 name, index,
             );
         };
-        if self.is_const_or_immediate(else_expr) == false {
+        if self.check_arr_index::<IsImmOrConst>(else_expr).is_ok() {
             panic!(
                 "`{}` の`else`の添字は即値か`const`の変数である必要があります: {:?}",
                 name, else_expr,
             );
+        } else {
+            panic!();
         }
 
         // 有効な範囲が空だと、どの添字でもアクセスできない
@@ -132,21 +137,32 @@ impl IR {
         }
     }
 
-    /// 式が即値か`const`の変数、またはそれらの四則演算かどうか
-    fn is_const_or_immediate(&self, expr: &node::Expr) -> bool {
+    /// 配列のindexを調べresultで返す関数
+    /// Cで中の処理を変える
+    fn check_arr_index<C: IndexCheckList>(&self, expr: &node::Expr) -> Result<(), err::ErrKind> {
         match expr {
-            node::Expr::Number(_) => true,
-            node::Expr::Var(name) => matches!(
-                self.var_tree.is_mut(&name.to_string()),
-                crate::compiler::parse::VarMutAttr::Const
-            ),
+            node::Expr::Number(v) => {
+                C::num_check(v)
+            }
+            node::Expr::Var(name) => {
+                C::var_check(&self.var_tree, &name)
+            }
             node::Expr::Add((l, r))
             | node::Expr::Sub((l, r))
             | node::Expr::Mul((l, r))
             | node::Expr::Div((l, r)) => {
-                self.is_const_or_immediate(l) && self.is_const_or_immediate(r)
+                self.check_arr_index::<C>(l)?;
+                self.check_arr_index::<C>(r)?;
+                Ok(())
             }
-            _ => false,
+            // 条件分岐は使えない
+            node::Expr::GreaterThen(..)
+            | node::Expr::GreaterThenEq(..)
+            | node::Expr::LessThen(..)
+            | node::Expr::LessThenEq(..) => {
+                C::cond_is_invalid(&expr)
+            }
+            t => panic!("{:?}", t),
         }
     }
 

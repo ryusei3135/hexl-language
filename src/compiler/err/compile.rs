@@ -1,4 +1,5 @@
 use crate::compiler::err;
+use crate::parse::node;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileErr {
@@ -6,6 +7,11 @@ pub enum CompileErr {
     InvalidIndexType {
         val: String,
     },
+    /// 配列のindexの型が符号なし整数じゃない
+    InvalidIndexUnsigned(String),
+    /// 配列の中に使えない式がある
+    UnexpectArrIndexExprKind(node::Expr),
+    InvalidIndexIsNotConst(String),
     /// 不変の変数に値を代入しようとした
     AssignToImmutableVar(String),
     /// ポインタに指定された範囲と初期値の長さが一致しない
@@ -49,6 +55,16 @@ macro_rules! GenCompileErr {
     ($kind:ident, $msg:expr) => {
         Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
             $msg.to_string(),
+        ))))
+    };
+}
+
+/// もじれつじゃないエラーノードを生成する
+#[macro_export]
+macro_rules! GenCompileErrNode {
+    ($kind:ident, $msg:expr) => {
+        Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
+            $msg.clone()
         ))))
     };
 }

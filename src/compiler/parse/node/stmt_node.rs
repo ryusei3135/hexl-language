@@ -1,14 +1,14 @@
 use super::*;
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsNode {
     pub name: String,
     pub ty: TyNode,
     pub var_attr: VarMutAttr,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FuncDefine {
     pub public: bool,
     pub name: String,
@@ -51,7 +51,7 @@ impl FuncDefine {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StmtNode {
     Return(Expr),
     Continue,
@@ -65,14 +65,14 @@ impl StmtNode {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MatchArm {
     pub pattern: Box<Expr>,
     pub body: Body,
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InlineAsm {
     /// `${...}` の部分が `{0}`, `{1}`, ... のような
     /// プレースホルダーに置き換えられたアセンブリの文字列
@@ -81,7 +81,7 @@ pub struct InlineAsm {
     pub operands: Vec<Expr>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Group2Node {
     Stmt(StmtNode),
     Expr(Expr),
@@ -90,7 +90,7 @@ pub enum Group2Node {
     Line(String),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Group2Info {
     pub line: usize,
     pub node: Group2Node,
@@ -124,7 +124,7 @@ impl Group2Node {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Group1Node {
     FuncDefine(FuncDefine),
     StructDefine(StructDefine),

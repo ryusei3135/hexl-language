@@ -317,9 +317,11 @@ impl IR {
         node: (Box<node::Expr>, Box<node::Expr>),
         expect_byte: &types::Size,
     ) -> (usize, usize) {
+        // 型が決まっていない即値は、もう片方のオペランドの型(定義元の型)にする
+        let (ls_ty, rs_ty) = self.operand_expect_tys(&node.0, &node.1, expect_byte);
         (
-            self.gen_expr_ir(*node.0, Some(&expect_byte)),
-            self.gen_expr_ir(*node.1, Some(&expect_byte)),
+            self.gen_expr_ir(*node.0, Some(&ls_ty)),
+            self.gen_expr_ir(*node.1, Some(&rs_ty)),
         )
     }
 

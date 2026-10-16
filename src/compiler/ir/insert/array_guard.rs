@@ -45,7 +45,8 @@ impl IR {
 
         // 代入する値と添字は、分岐の前に一度だけ評価する
         let dst_idx = self.gen_expr_ir(dst, Some(expect_byte));
-        let index_idx = self.gen_expr_ir(guard.index.clone(), Some(expect_byte));
+        let index_ty = self.index_expect_ty(&guard.index, expect_byte);
+        let index_idx = self.gen_expr_ir(guard.index.clone(), Some(&index_ty));
 
         // 範囲外なら`else`のブロックへ飛ぶ
         self.insert_out_of_range_jmp(index_idx, guard.lo, guard.hi, else_label);
@@ -60,7 +61,8 @@ impl IR {
 
         // 範囲外: `arr[else_idx] = dst`
         crate::push_jmp_code!(self, Block, &else_label);
-        let else_idx = self.gen_expr_ir(guard.else_idx.clone(), Some(expect_byte));
+        let else_ty = self.index_expect_ty(&guard.else_idx, expect_byte);
+        let else_idx = self.gen_expr_ir(guard.else_idx.clone(), Some(&else_ty));
         self.push_inst(inst::Inst::InsertArr {
             name: guard.name,
             dst: dst_idx,

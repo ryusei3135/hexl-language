@@ -3,7 +3,7 @@
 use std::fmt;
 use std::io;
 
-pub type Result<T> = std::result::Result<T, LinkError>;
+pub type LinkResult<T> = std::result::Result<T, LinkError>;
 
 /// 未定義シンボルの参照 1 件分。
 #[derive(Debug, Clone, PartialEq, Eq)]

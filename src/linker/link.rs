@@ -16,7 +16,7 @@ use std::path::Path;
 
 use super::coff;
 use super::elf::*;
-use super::error::{LinkError, Result, UndefinedRef};
+use super::error::{LinkError, LinkResult, UndefinedRef};
 use super::pe::{self, DllImport, PeHeaderInfo, PeSection, PeSubsystem};
 
 /// 出力の既定ロードアドレス
@@ -116,7 +116,7 @@ pub struct LinkOutput {
 
 impl LinkOutput {
     /// ファイルに書き出す (ELF を Unix で書くときは実行権限 0755 を付ける)。
-    pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
+    pub fn write_to_file(&self, path: impl AsRef<Path>) -> LinkResult<()> {
         let path = path.as_ref();
         let io_err = |source| LinkError::Io {
             path: path.display().to_string(),
@@ -162,7 +162,7 @@ enum Fate {
     Keep(Kind),
 }
 
-fn classify(obj: &ElfObject, sec: &SectionHeader) -> Result<Fate> {
+fn classify(obj: &ElfObject, sec: &SectionHeader) -> LinkResult<Fate> {
     if sec.flags & SHF_ALLOC == 0 {
         return Ok(Fate::Drop);
     }
@@ -189,7 +189,7 @@ fn classify(obj: &ElfObject, sec: &SectionHeader) -> Result<Fate> {
     Ok(Fate::Keep(kind))
 }
 
-fn plan_sections(objects: &[ElfObject]) -> Result<Vec<Vec<Fate>>> {
+fn plan_sections(objects: &[ElfObject]) -> LinkResult<Vec<Vec<Fate>>> {
     let mut seen_groups: HashSet<&str> = HashSet::new();
     let mut plan = Vec::with_capacity(objects.len());
     for obj in objects {
@@ -257,7 +257,7 @@ impl SymTable {
         i
     }
 
-    fn merge(&mut self, gi: usize, new: Def, objects: &[ElfObject]) -> Result<()> {
+    fn merge(&mut self, gi: usize, new: Def, objects: &[ElfObject]) -> LinkResult<()> {
         let slot = &mut self.syms[gi];
         slot.def = match (slot.def, new) {
             (Def::Undefined, n) => n,
@@ -307,7 +307,7 @@ impl SymTable {
     }
 }
 
-fn build_symbol_table(objects: &[ElfObject], plan: &[Vec<Fate>]) -> Result<SymTable> {
+fn build_symbol_table(objects: &[ElfObject], plan: &[Vec<Fate>]) -> LinkResult<SymTable> {
     let mut table = SymTable::default();
     for (oi, obj) in objects.iter().enumerate() {
         for sym in obj.symbols.iter().skip(1) {
@@ -650,7 +650,7 @@ impl Layout {
         base: u64,
         n_thunks: usize,
         idata_size: u64,
-    ) -> Result<Layout> {
+    ) -> LinkResult<Layout> {
         let Merged {
             size,
             align,
@@ -982,7 +982,7 @@ impl Linker {
     ///
     /// ELF64 か COFF (x86-64) かは内容から自動で判定する。出力形式とは独立なので、
     /// たとえば COFF の入力から ELF を出力することもできる。
-    pub fn add_object(&mut self, name: impl Into<String>, data: Vec<u8>) -> Result<()> {
+    pub fn add_object(&mut self, name: impl Into<String>, data: Vec<u8>) -> LinkResult<()> {
         let obj = if !data.starts_with(b"\x7fELF") && coff::looks_like_coff(&data) {
             coff::parse(name, data)?
         } else {
@@ -994,7 +994,7 @@ impl Linker {
     }
 
     /// ファイルからオブジェクトファイルを読み込んで追加する。
-    pub fn add_object_file(&mut self, path: impl AsRef<Path>) -> Result<()> {
+    pub fn add_object_file(&mut self, path: impl AsRef<Path>) -> LinkResult<()> {
         let path = path.as_ref();
         let data = std::fs::read(path).map_err(|source| LinkError::Io {
             path: path.display().to_string(),
@@ -1004,7 +1004,7 @@ impl Linker {
     }
 
     /// リンクを実行する。
-    pub fn link(self) -> Result<LinkOutput> {
+    pub fn link(self) -> LinkResult<LinkOutput> {
         let Linker { options, objects } = self;
         let is_pe = options.format == OutputFormat::Pe;
         let base_unit = if is_pe { 0x1_0000 } else { PAGE_SIZE };

@@ -6,7 +6,7 @@
 //! 入力は信頼できない前提で、範囲外アクセスや巨大なサイズはすべて
 //! パニックではなくエラーとして返す。
 
-use super::error::{LinkError, Result};
+use super::error::{LinkError, LinkResult};
 
 pub const SHT_NULL: u32 = 0;
 pub const SHT_PROGBITS: u32 = 1;
@@ -167,7 +167,7 @@ impl ElfObject {
         }
     }
 
-    pub fn parse(name: impl Into<String>, data: Vec<u8>) -> Result<Self> {
+    pub fn parse(name: impl Into<String>, data: Vec<u8>) -> LinkResult<Self> {
         let name = name.into();
         let perr = |m: String| LinkError::Parse {
             object: name.clone(),

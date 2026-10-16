@@ -20,7 +20,7 @@ mod pe;
 
 use std::path::Path;
 
-pub use error::{LinkError, Result, UndefinedRef};
+pub use error::{LinkError, LinkResult, UndefinedRef};
 pub use link::{
     LinkOptions, LinkOutput, Linker, OutputFormat, OutputSection, OutputSymbol,
     DEFAULT_BASE_ADDRESS,
@@ -46,7 +46,7 @@ pub use pe::{DllImport, PeSubsystem};
 /// 読み込めないファイル、ELF / COFF として不正な入力、未対応の構造、シンボル解決の失敗、
 /// リロケーションのオーバーフローなど、リンクに失敗したときは [`LinkError`] を返す。
 
-pub fn linker<I, P>(paths: I) -> Result<LinkOutput>
+pub fn linker<I, P>(paths: I) -> LinkResult<LinkOutput>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
@@ -70,7 +70,7 @@ where
 /// # Ok(())
 /// # }
 /// ```
-pub fn linker_with_options<I, P>(paths: I, options: LinkOptions) -> Result<LinkOutput>
+pub fn linker_with_options<I, P>(paths: I, options: LinkOptions) -> LinkResult<LinkOutput>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,

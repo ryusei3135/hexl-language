@@ -18,7 +18,7 @@ use crate::compiler::{models::Body, parse::VarMutAttr};
 pub const IS_MUST: usize = 0;
 pub const IS_OF: usize = 1;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstractTy {
     must: Option<String>,
     of: Option<String>,

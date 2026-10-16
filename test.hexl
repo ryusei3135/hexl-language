@@ -87,6 +87,11 @@ add(a mut: int, b: int): Option<int> {
     ret Option::None
 }
 
+test_arr(idx: uint): int {
+    arr: [int 5] = {0}
+    ret [arr idx else 0]
+}
+
 _start(): int {
     fv: float = 1.1
     f2: float = 2.1
@@ -107,6 +112,7 @@ _start(): int {
     func6(h, 2.3)
     add(s.name, a)
     add(a, 0)
+    test_arr(1)
     #asm(gcc_x64) {
         "{space}movl $60, %eax"
         "{space}movl $0, %edi"
