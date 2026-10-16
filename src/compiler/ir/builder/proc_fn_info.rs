@@ -75,7 +75,7 @@ impl IR {
     /// もし戻り値が契約ならフラグを立てる
     pub(super) fn gen_call_fn_ir<M: ResultMod>(
         &mut self,
-        module_name: Option<&String>,
+        module_name: Option<&str>,
         meta_data: &node::CallInfo,
         return_var_name: Option<&String>,
     ) -> Result<inst::Inst, err::ErrKind> {

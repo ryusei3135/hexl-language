@@ -77,7 +77,7 @@ impl IR {
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
         if let node::Expr::CallFunc(mut call_func_node) = *target {
-            let struct_name = scope.last().unwrap();
+            let struct_name: &str = scope.last().unwrap();
 
             let needs_self_area = self
                 .func_tree
@@ -87,7 +87,7 @@ impl IR {
                         .iter()
                         .find(|v| {
                             v.name.as_str() == call_func_node.name.as_str()
-                                && v.module() == Some(struct_name)
+                                && v.module() == Some(&struct_name.to_string())
                         })
                         .map(|def| def.gen_fn_def(self.stk_counter))
                 })
@@ -143,7 +143,7 @@ impl IR {
                     );
                 }
             }
-            self.gen_call_fn_ir::<M>(scope.last(), &call_func_node, None)
+            self.gen_call_fn_ir::<M>(scope.last().map(|x| x.as_str()), &call_func_node, None)
         } else {
             panic!();
         }

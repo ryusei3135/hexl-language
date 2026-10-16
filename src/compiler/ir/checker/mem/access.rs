@@ -5,7 +5,7 @@
 //! `tracking.rs`のチェッカー群と`var_tree`に記録された値を使う。
 
 use crate::compiler::ir::checker::mem::check_list::{IndexCheckList, IsImmOrConst, IsUnsigned};
-
+use crate::compiler::err::compile::CompileErr;
 use super::*;
 
 /// (廃止) 添字が可変な配列アクセスに挿入する実行時ガード
@@ -36,7 +36,7 @@ impl IR {
     /// 配列の長さ(範囲付きポインタなら範囲)を測り、
     /// - 添字が`const`/即値: 静的に範囲検査してそのまま(`Ok(None)`)
     /// - 添字が`const`以外(可変な変数・引数、関数の呼び出しなど): `Err`
-    pub(in crate::compiler::ir) fn check_mem_access(
+    pub(in crate::compiler::ir) fn check_mem_access<M: ResultMod>(
         &mut self,
         expr: &node::Expr,
     ) -> Result<Option<ArrIdxGuard>, err::ErrKind> {
@@ -48,15 +48,15 @@ impl IR {
                 ..
             } => {
                 self.check_arr_index::<IsUnsigned>(index)?;
-                return self.check_ref_array(name, index, else_idx);
+                return self.check_ref_array::<M>(name, index, else_idx);
             }
             node::Expr::ConnectAddr(target) => {
                 if let node::Expr::Var(name) = &**target {
-                    self.check_ptr_deref(name);
+                    self.check_ptr_deref::<M>(name)?;
                 }
             }
-            node::Expr::PtrMember { name, .. } => self.check_ptr_deref(name),
-            node::Expr::Add((l, r)) => self.check_ptr_add(expr, l, r),
+            node::Expr::PtrMember { name, .. } => self.check_ptr_deref::<M>(name)?,
+            node::Expr::Add((l, r)) => self.check_ptr_add::<M>(expr, l, r)?,
             _ => {}
         }
         Ok(None)
@@ -66,7 +66,7 @@ impl IR {
     ///
     /// ## Args
     /// - else_idx: `[arr idx else 0]`配列のidxが範囲外のときのidx
-    fn check_ref_array(
+    fn check_ref_array<M: ResultMod>(
         &mut self,
         name: &str,
         index: &node::Expr,
@@ -77,7 +77,7 @@ impl IR {
         self.check_arr_index::<IsImmOrConst>(index)?;
 
         // 配列の長さ(範囲付きポインタなら範囲)を測る。どちらでもなければ対象外
-        if self.access_bounds(name).is_none() {
+        if self.access_bounds::<M>(name).is_none() {
             return Ok(None);
         }
 
@@ -89,7 +89,7 @@ impl IR {
 
     /// 配列の長さ(`0..len`)、または範囲付きポインタの範囲を返す
     /// (どちらでもない変数は`None`)
-    fn access_bounds(&self, name: &str) -> Option<(usize, usize)> {
+    fn access_bounds<M: ResultMod>(&self, name: &str) -> Option<(usize, usize)> {
         let ty = self.var_tree.get_ty_node(name)?;
         let size: Result<types::Size, _> = ty.try_into();
         match size {
@@ -140,38 +140,42 @@ impl IR {
 
     /// ポインタの参照(`[name]`/`[name].member`)で、ポインタの現在値が
     /// 範囲内かを確認する
-    fn check_ptr_deref(&self, name: &str) {
+    fn check_ptr_deref<M: ResultMod>(&self, name: &str) -> Result<(), err::ErrKind> {
         let (Some(range), Some(value)) = (self.ptr_range(name), self.var_tree.get_value(name))
         else {
-            return;
+            return Ok(());
         };
         if value < range.0 || value >= range.1 {
-            panic!(
-                "範囲付きポインタ `{}` の参照が範囲外です: 値 {} (有効範囲 {}..{})",
-                name, value, range.0, range.1,
-            );
+            M::handle(crate::GenCompileErr2!(CompileErr::PointerRangeLengthMismatch {
+                range: range,
+                value_len: value,
+            }))
+        } else {
+            Ok(())
         }
     }
 
     /// ポインタ変数を含む加算の結果が、範囲内かを確認する
-    fn check_ptr_add<'a>(&self, whole: &node::Expr, l: &'a node::Expr, r: &'a node::Expr) {
+    fn check_ptr_add<'a, M: ResultMod>(&self, whole: &node::Expr, l: &'a node::Expr, r: &'a node::Expr) -> Result<(), err::ErrKind> {
         let ptr_range_of = |e: &'a node::Expr| match e {
             node::Expr::Var(name) => self.ptr_range(name).map(|range| (name, range)),
             _ => None,
         };
         let Some((name, range)) = ptr_range_of(l).or_else(|| ptr_range_of(r)) else {
-            return;
+            return Ok(());
         };
         if self.is_const_index(whole) == false {
-            return;
+            return Ok(());
         }
 
         let value = self.eval_expr(whole);
         if value < range.0 || value >= range.1 {
-            panic!(
-                "範囲付きポインタ `{}` の加算結果が範囲外です: 値 {} (有効範囲 {}..{})",
-                name, value, range.0, range.1,
-            );
+            M::handle(crate::GenCompileErr2!(CompileErr::PointerRangeLengthMismatch {
+                range: range,
+                value_len: value,
+            }))
+        } else {
+            Ok(())
         }
     }
 }

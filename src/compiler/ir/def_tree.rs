@@ -486,7 +486,7 @@ impl FuncTree {
     /// ように同名のメゾットが別の構造体にあっても衝突しないようにする)。
     /// モジュール名を持たない、通常の(トップレベルの)関数は
     /// そのまま関数名だけをキーにする
-    fn make_key(name: &str, module_name: Option<&String>, temp_ty: &[node::TyNode]) -> String {
+    fn make_key(name: &str, module_name: Option<&str>, temp_ty: &[node::TyNode]) -> String {
         let base = match module_name {
             Some(module) => format!("{}::{}", module, name),
             None => name.to_owned(),
@@ -501,7 +501,7 @@ impl FuncTree {
     pub(in crate::compiler::ir) fn get(
         &self,
         name: &str,
-        mod_name: Option<&String>,
+        mod_name: Option<&str>,
     ) -> Option<FnDefInfo> {
         let no_temp_ty: &[node::TyNode] = &[];
         self.get_with_temp(name, mod_name, no_temp_ty)
@@ -510,7 +510,7 @@ impl FuncTree {
     pub(in crate::compiler::ir) fn get_with_temp(
         &self,
         name: &str,
-        module_name: Option<&String>,
+        module_name: Option<&str>,
         temp_ty: &[node::TyNode],
     ) -> Option<FnDefInfo> {
         self.func
@@ -532,7 +532,7 @@ impl FuncTree {
         let fn_mod = &meta_data.module;
         //  関数がジェネリクスの場合
         let fn_tmp_ty = &meta_data.temp_ty;
-        let key = Self::make_key(&fn_name, fn_mod.as_ref(), &fn_tmp_ty);
+        let key = Self::make_key(&fn_name, fn_mod.as_ref().map(|x| x.as_str()), &fn_tmp_ty);
         self.func.insert(
             key,
             FnDefInfo::new(
@@ -554,7 +554,7 @@ impl FuncTree {
     pub(in crate::compiler::ir) fn declare(&mut self, meta_data: &node::FuncDefine) {
         let key = Self::make_key(
             &meta_data.name,
-            meta_data.module.as_ref(),
+            meta_data.module.as_ref().map(|x| x.as_str()),
             &meta_data.temp_ty,
         );
         self.func.entry(key).or_insert_with(|| {
@@ -605,8 +605,8 @@ impl FnDefMetaData {
 
     /// この関数がどのモジュール名で登録されているかを返す
     /// (`#include`でモジュール名を指定せず取り込んだ関数は`None`)
-    pub(in crate::compiler::ir) fn module(&self) -> Option<&String> {
-        self.module.as_ref()
+    pub(in crate::compiler::ir) fn module(&self) -> Option<&str> {
+        self.module.as_ref().map(|x| x.as_str())
     }
 
     pub(in crate::compiler::ir) fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {

@@ -390,7 +390,7 @@ impl IR {
         // (`src/ir/checker/access_mem.rs`)
         // 添字が可変な配列アクセスのときは、範囲外のときの分岐を
         // IRに差し込むためのガードが返る
-        let arr_guard = M::handle(self.check_mem_access(&expr))?;
+        let arr_guard = M::handle(self.check_mem_access::<M>(&expr))?;
         let inst = match expr {
             // ポインタ関係
             node::Expr::GetAddress(target) => {
