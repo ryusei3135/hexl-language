@@ -30,7 +30,12 @@ pub enum SectionKind {
 impl SectionKind {
     /// `"text"` / `"data"`（先頭の `.` と大文字小文字は無視）から変換する
     pub fn parse(section: &str) -> Result<Self, DumpError> {
-        match section.trim().trim_start_matches('.').to_ascii_lowercase().as_str() {
+        match section
+            .trim()
+            .trim_start_matches('.')
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "text" => Ok(SectionKind::Text),
             "data" => Ok(SectionKind::Data),
             _ => Err(DumpError::InvalidArgument(format!(
@@ -169,7 +174,11 @@ pub fn format_hexdump(s: &SectionData) -> String {
 
         out.push_str(" |");
         for &b in chunk {
-            out.push(if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' });
+            out.push(if b.is_ascii_graphic() || b == b' ' {
+                b as char
+            } else {
+                '.'
+            });
         }
         out.push_str("|\n");
     }
@@ -185,10 +194,13 @@ fn malformed(msg: &str) -> DumpError {
 }
 
 fn slice(b: &[u8], off: u64, len: u64) -> Result<&[u8], DumpError> {
-    let end = off.checked_add(len).ok_or_else(|| malformed("オフセットがオーバーフロー"))?;
+    let end = off
+        .checked_add(len)
+        .ok_or_else(|| malformed("オフセットがオーバーフロー"))?;
     let o = usize::try_from(off).map_err(|_| malformed("オフセットが大きすぎます"))?;
     let e = usize::try_from(end).map_err(|_| malformed("オフセットが大きすぎます"))?;
-    b.get(o..e).ok_or_else(|| malformed("ファイル範囲外を参照しています"))
+    b.get(o..e)
+        .ok_or_else(|| malformed("ファイル範囲外を参照しています"))
 }
 
 fn u16_at(b: &[u8], off: u64) -> Result<u16, DumpError> {
@@ -203,7 +215,9 @@ fn u64_at(b: &[u8], off: u64) -> Result<u64, DumpError> {
 
 fn cstr_at(b: &[u8], off: u64) -> Result<&[u8], DumpError> {
     let o = usize::try_from(off).map_err(|_| malformed("文字列オフセットが大きすぎます"))?;
-    let rest = b.get(o..).ok_or_else(|| malformed("文字列オフセットが範囲外"))?;
+    let rest = b
+        .get(o..)
+        .ok_or_else(|| malformed("文字列オフセットが範囲外"))?;
     let end = rest.iter().position(|&c| c == 0).unwrap_or(rest.len());
     Ok(&rest[..end])
 }
@@ -220,10 +234,14 @@ fn parse_elf64(b: &[u8], kind: SectionKind) -> Result<SectionData, DumpError> {
     // e_ident: [4]=EI_CLASS(2=64bit), [5]=EI_DATA(1=little endian)
     let ident = slice(b, 0, 16)?;
     if ident[4] != 2 {
-        return Err(DumpError::UnsupportedFormat("ELF64 ではありません（32bit ELF）".into()));
+        return Err(DumpError::UnsupportedFormat(
+            "ELF64 ではありません（32bit ELF）".into(),
+        ));
     }
     if ident[5] != 1 {
-        return Err(DumpError::UnsupportedFormat("リトルエンディアンの ELF のみ対応です".into()));
+        return Err(DumpError::UnsupportedFormat(
+            "リトルエンディアンの ELF のみ対応です".into(),
+        ));
     }
     let machine = u16_at(b, 18)?;
     if machine != EM_X86_64 {
@@ -239,7 +257,9 @@ fn parse_elf64(b: &[u8], kind: SectionKind) -> Result<SectionData, DumpError> {
     let shstrndx = u64::from(u16_at(b, 62)?);
 
     if shoff == 0 || shnum == 0 {
-        return Err(malformed("セクションヘッダテーブルがありません（strip / sstrip 済みの可能性）"));
+        return Err(malformed(
+            "セクションヘッダテーブルがありません（strip / sstrip 済みの可能性）",
+        ));
     }
     if shentsize < ELF_SHDR_SIZE {
         return Err(malformed("e_shentsize が小さすぎます"));
@@ -251,7 +271,10 @@ fn parse_elf64(b: &[u8], kind: SectionKind) -> Result<SectionData, DumpError> {
     // セクション名文字列テーブル
     let shdr = |i: u64| -> Result<u64, DumpError> {
         shoff
-            .checked_add(i.checked_mul(shentsize).ok_or_else(|| malformed("overflow"))?)
+            .checked_add(
+                i.checked_mul(shentsize)
+                    .ok_or_else(|| malformed("overflow"))?,
+            )
             .ok_or_else(|| malformed("overflow"))
     };
     let str_hdr = shdr(shstrndx)?;
@@ -300,7 +323,9 @@ const PE_SECTION_HDR_SIZE: u64 = 40;
 fn parse_pe64(b: &[u8], kind: SectionKind) -> Result<SectionData, DumpError> {
     let pe_off = u64::from(u32_at(b, 0x3C)?); // e_lfanew
     if slice(b, pe_off, 4)? != b"PE\0\0" {
-        return Err(DumpError::UnsupportedFormat("PE シグネチャが見つかりません".into()));
+        return Err(DumpError::UnsupportedFormat(
+            "PE シグネチャが見つかりません".into(),
+        ));
     }
 
     // COFF File Header (20 bytes)
@@ -344,8 +369,16 @@ fn parse_pe64(b: &[u8], kind: SectionKind) -> Result<SectionData, DumpError> {
 
         // raw_size はファイルアライメントで切り上げられているため、
         // VirtualSize があればそちらを上限にしてパディングを除く
-        let size = if virtual_size != 0 { virtual_size.min(raw_size) } else { raw_size };
-        let bytes = if raw_ptr == 0 { Vec::new() } else { slice(b, raw_ptr, size)?.to_vec() };
+        let size = if virtual_size != 0 {
+            virtual_size.min(raw_size)
+        } else {
+            raw_size
+        };
+        let bytes = if raw_ptr == 0 {
+            Vec::new()
+        } else {
+            slice(b, raw_ptr, size)?.to_vec()
+        };
 
         return Ok(SectionData {
             format: Format::Pe64,

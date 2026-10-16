@@ -6,8 +6,7 @@ use super::*;
 impl Parser {
     /// variantキーワードが見つからなかった場合の例外
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn variant_keyword_not_found(
+    pub(in crate::compiler::parse) fn variant_keyword_not_found(
         &self,
     ) -> Result<node::Group1Node, err::ErrKind> {
         crate::err_generated_by!();
@@ -23,9 +22,8 @@ impl Parser {
 
     /// 共用体の名前がなかった
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn variant_name_is_not_found(
-        &self
+    pub(in crate::compiler::parse) fn variant_name_is_not_found(
+        &self,
     ) -> Result<node::Group1Node, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
@@ -42,8 +40,7 @@ impl Parser {
     /// variant a { // <- ここがない場合のエラー
     /// ```
     #[inline(always)]
-    pub(in crate::compiler::parse) 
-    fn variant_lbrace_not_found(
+    pub(in crate::compiler::parse) fn variant_lbrace_not_found(
         &self,
         tkn: lex::Tkn,
     ) -> Result<(), err::ErrKind> {
@@ -64,8 +61,7 @@ impl Parser {
     /// U { a: 1 : }   // <- 値の後ろに`:`がある
     /// ```
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn variant_in_unexpect_tkn(
+    pub(in crate::compiler::parse) fn variant_in_unexpect_tkn(
         &self,
         expect: lex::Tkn,
     ) -> Result<(), err::ErrKind> {
@@ -89,24 +85,22 @@ impl Parser {
     /// - option_name
     ///     - 所有権を渡す
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn variant_option_unregister<T>(
+    pub(in crate::compiler::parse) fn variant_option_unregister<T>(
         &self,
         option_name: String,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::OptionIsNotFound { 
-                found: option_name, 
-                context: lex::Tkn::KeyWordVariant 
+            err::SyntaxErrKind::OptionIsNotFound {
+                found: option_name,
+                context: lex::Tkn::KeyWordVariant
             }
         )
     }
 
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn variant_option_next_name_not_found<T>(
+    pub(in crate::compiler::parse) fn variant_option_next_name_not_found<T>(
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
@@ -120,10 +114,11 @@ impl Parser {
         )
     }
 
-
     /// 共用体の初期化式(`Variant::`の次)に、メンバーの名前ではないトークンがあった
-    pub(in crate::compiler::parse)
-    fn variant_init_member_not_found<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn variant_init_member_not_found<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -136,8 +131,10 @@ impl Parser {
     }
 
     /// 共用体の定義の中に、メンバーの名前ではないトークンがあった
-    pub(in crate::compiler::parse)
-    fn variant_member_not_found<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn variant_member_not_found<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -150,8 +147,10 @@ impl Parser {
     }
 
     /// 共用体のメンバーの名前の次に、予期しないトークンがあった
-    pub(in crate::compiler::parse)
-    fn variant_member_unexpected_tkn<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn variant_member_unexpected_tkn<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

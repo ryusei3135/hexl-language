@@ -5,26 +5,26 @@
 mod access;
 use access::FRAME_BASE_REG;
 mod asm_emitter;
+mod asm_fmt;
 mod call_func;
 mod emit_fn_name;
 mod inline_asm;
-mod asm_fmt;
+mod lazy_spill;
 mod reg_mnger;
 mod sign;
 
 use crate::compiler::asm_gen::asm_emitter::VarIndexInfo;
 use crate::compiler::ir::{def_tree, inst, types::Size};
+use crate::compiler::models::AsmFmtData;
 use sign::SizeSign;
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
-use crate::compiler::models::AsmFmtData;
 
 pub type SelfPtrInfo<'a> = Option<&'a Size>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub(in crate::compiler::asm_gen)
-enum RegisterMode {
+pub(in crate::compiler::asm_gen) enum RegisterMode {
     Normal(usize),
     Float(usize),
 }
@@ -98,6 +98,19 @@ pub struct AsmEmitter {
     /// スタック領域と重なることがあるため、構造体の実体は
     /// `stk_use_counter`から確保し直す。関数ごとにクリアする
     pub(super) struct_stk_map: HashMap<usize, usize>,
+
+    /// 退避したままの変数のレジスタ -> 退避先の`%rbp`からのオフセット
+    /// (レジスタの中身は壊れている。その変数を参照するノードの生成前に復元する。
+    /// 詳細は`lazy_spill.rs`)。関数ごとの状態
+    pub(super) spilled_regs: std::collections::BTreeMap<RegisterMode, usize>,
+    /// レジスタ -> 退避先のオフセット(関数ごとに、レジスタ1つにつき1回だけ確保する)
+    pub(super) spill_slots: std::collections::BTreeMap<RegisterMode, usize>,
+    /// 今生成しているノードが参照する変数の名前
+    pub(super) node_vars: std::collections::HashSet<String>,
+    /// 今のノードが参照する変数を調べられない(関数呼び出しで退避したままにしない)
+    pub(super) node_vars_all: bool,
+    /// スコープが終わった変数の名前(`var_hash_map`には残っている)
+    pub(super) dead_vars: std::collections::HashSet<String>,
 
     callee_saved: Rc<Vec<usize>>,
     caller_saved: Rc<Vec<usize>>,

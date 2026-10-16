@@ -22,8 +22,8 @@ use std::path::Path;
 
 pub use error::{LinkError, LinkResult, UndefinedRef};
 pub use link::{
-    LinkOptions, LinkOutput, Linker, OutputFormat, OutputSection, OutputSymbol,
-    DEFAULT_BASE_ADDRESS,
+    DEFAULT_BASE_ADDRESS, LinkOptions, LinkOutput, Linker, OutputFormat, OutputSection,
+    OutputSymbol,
 };
 pub use pe::{DllImport, PeSubsystem};
 

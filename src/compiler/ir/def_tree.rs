@@ -1,6 +1,4 @@
-use crate::compiler::{
-    err::compile::CompileErr, parse,
-};
+use crate::compiler::{err::compile::CompileErr, parse};
 
 use super::types::*;
 use super::*;
@@ -26,8 +24,11 @@ pub struct VarMetaData {
 }
 
 impl VarMetaData {
-    pub(in crate::compiler::ir) 
-    fn new(attribute: &VarType, size: &node::TyNode, var_attr: &parse::VarMutAttr) -> Self {
+    pub(in crate::compiler::ir) fn new(
+        attribute: &VarType,
+        size: &node::TyNode,
+        var_attr: &parse::VarMutAttr,
+    ) -> Self {
         Self {
             attribute: attribute.clone(),
             size: size.clone(),
@@ -52,8 +53,7 @@ pub struct VarTree {
 
 /// `must`かどうかは、型に情報がある
 impl VarTree {
-    pub(in crate::compiler::ir) 
-    fn new() -> Self {
+    pub(in crate::compiler::ir) fn new() -> Self {
         Self {
             hash: HashMap::new(),
             values: HashMap::new(),
@@ -64,8 +64,7 @@ impl VarTree {
     /// - `usize`の場合 local変数
     /// - 'l' = local
     /// - 'p' = param
-    pub(in crate::compiler::ir) 
-    fn push<const K: char>(
+    pub(in crate::compiler::ir) fn push<const K: char>(
         &mut self,
         var_name: &str,
         var_index: usize,
@@ -102,8 +101,10 @@ impl VarTree {
         Ok(())
     }
 
-    pub(in crate::compiler::ir) 
-    fn get_ty_name(&self, var_name: &str) -> Result<String, err::ErrKind> {
+    pub(in crate::compiler::ir) fn get_ty_name(
+        &self,
+        var_name: &str,
+    ) -> Result<String, err::ErrKind> {
         if let Some(ref var) = self.hash.get(var_name) {
             let r = match &var.size {
                 node::TyNode::Ty(name) => name.to_string(),
@@ -135,8 +136,7 @@ impl VarTree {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn is_mut(&self, name: &String) -> parse::VarMutAttr {
+    pub(in crate::compiler::ir) fn is_mut(&self, name: &String) -> parse::VarMutAttr {
         self.hash.get(name).unwrap().var_attr.clone()
     }
 
@@ -145,7 +145,7 @@ impl VarTree {
     // /// 契約(`must`/`of`)が付いた変数は、値の生成自体は
     // /// 内側の型として行うため、登録後に契約付きの型へ戻すのに使う
     // /// (`src/ir/builder/expr_node.rs`の`def_var_node`)
-    // pub(in crate::compiler::ir) 
+    // pub(in crate::compiler::ir)
     // fn overwrite_ty(&mut self, var_name: &str, ty: &node::TyNode) {
     //     if let Some(var) = self.hash.get_mut(var_name) {
     //         var.size = ty.clone();
@@ -153,8 +153,7 @@ impl VarTree {
     // }
 
     /// 契約を終わらせる
-    pub(in crate::compiler::ir) 
-    fn finish_constract_var(
+    pub(in crate::compiler::ir) fn finish_constract_var(
         &mut self,
         var_name: &str,
     ) -> Result<(), err::ErrKind> {
@@ -182,23 +181,20 @@ impl VarTree {
 
     /// 指定された変数が`must`の契約を持つかどうか
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn is_constract_must(&self, var_name: &str) -> bool {
+    pub(in crate::compiler::ir) fn is_constract_must(&self, var_name: &str) -> bool {
         self.hash
             .get(var_name)
             .is_some_and(|var| var.size.is_constract_must())
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn get_ty_node(&self, var_name: &str) -> Option<node::TyNode> {
+    pub(in crate::compiler::ir) fn get_ty_node(&self, var_name: &str) -> Option<node::TyNode> {
         self.hash.get(var_name).map(|var| var.size.clone())
     }
 
     /// 指定された変数が`Self`型、または`Self`を指すポインタ型
     /// (`Self*` / `Self*mut`)かどうかを判定する
-    pub(in crate::compiler::ir) 
-    fn is_self_ty(&self, var_name: &str) -> bool {
+    pub(in crate::compiler::ir) fn is_self_ty(&self, var_name: &str) -> bool {
         let mut b = move |v: &VarMetaData| match &v.size {
             node::TyNode::SelfTy(_) => true,
             node::TyNode::Pointer { ty_name, .. } => {
@@ -210,8 +206,10 @@ impl VarTree {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn all_var_is_end_constract(&self, state: &VarTree) -> Result<(), err::ErrKind> {
+    pub(in crate::compiler::ir) fn all_var_is_end_constract(
+        &self,
+        state: &VarTree,
+    ) -> Result<(), err::ErrKind> {
         for (name, var) in &self.hash {
             if state.hash.contains_key(name)
                 || !var.size.is_constract_must()
@@ -225,20 +223,17 @@ impl VarTree {
         Ok(())
     }
 
-    pub(in crate::compiler::ir) 
-    fn contains_key(&mut self, state: &VarTree) {
+    pub(in crate::compiler::ir) fn contains_key(&mut self, state: &VarTree) {
         self.hash.retain(|name, _| state.hash.contains_key(name));
     }
 
     /// `get`と同じだが、登録されていない変数でもpanicせず`None`を返す
-    pub(in crate::compiler::ir) 
-    fn find(&self, name: &str) -> Option<&VarType> {
+    pub(in crate::compiler::ir) fn find(&self, name: &str) -> Option<&VarType> {
         self.hash.get(name).map(|var| &var.attribute)
     }
 
     /// 指定された変数が引数か、ローカル変数かなどを返す
-    pub(in crate::compiler::ir) 
-    fn get(&self, name: &str) -> &VarType {
+    pub(in crate::compiler::ir) fn get(&self, name: &str) -> &VarType {
         &self.hash.get(name).expect(name).attribute
     }
 
@@ -246,8 +241,7 @@ impl VarTree {
     ///
     /// 範囲付きポインタへの再代入(`a += 10`など)を静的にチェックする際、
     /// 右辺の式が変数自身を参照していても値を評価できるようにするために使う
-    pub(in crate::compiler::ir) 
-    fn record_value(&mut self, name: &str, value: usize) {
+    pub(in crate::compiler::ir) fn record_value(&mut self, name: &str, value: usize) {
         self.values.insert(name.to_owned(), value);
     }
 
@@ -255,8 +249,7 @@ impl VarTree {
     ///
     /// まだ一度も定数値として記録されていない変数や、実行時にしか
     /// 値が分からない式で更新された変数は`None`を返す
-    pub(in crate::compiler::ir) 
-    fn get_value(&self, name: &str) -> Option<usize> {
+    pub(in crate::compiler::ir) fn get_value(&self, name: &str) -> Option<usize> {
         self.values.get(name).copied()
     }
 
@@ -264,8 +257,7 @@ impl VarTree {
     ///
     /// 変数が実行時にしか値の分からない式で更新された場合、古い記録が
     /// 残ったまま以降の静的チェックに誤って使われないようにするために呼ぶ
-    pub(in crate::compiler::ir) 
-    fn forget_value(&mut self, name: &str) {
+    pub(in crate::compiler::ir) fn forget_value(&mut self, name: &str) {
         self.values.remove(name);
     }
 }
@@ -276,27 +268,23 @@ pub struct StructTree {
 }
 
 impl StructTree {
-    pub(in crate::compiler::ir) 
-    fn new() -> Self {
+    pub(in crate::compiler::ir) fn new() -> Self {
         Self {
             tree: HashMap::new(),
         }
     }
 
-    pub(in crate::compiler::ir) 
-    fn add(&mut self, info: &node::StructDefine) {
+    pub(in crate::compiler::ir) fn add(&mut self, info: &node::StructDefine) {
         self.tree.insert(info.name.to_string(), info.clone());
     }
 
-    pub(in crate::compiler::ir) 
-    fn get(&self, name: &str) -> Option<&node::StructDefine> {
+    pub(in crate::compiler::ir) fn get(&self, name: &str) -> Option<&node::StructDefine> {
         self.tree.get(name)
     }
 
     /// 任意の構造体を指定し、その構造体にあるメンバー
     /// のバイトの位置を取得し返す関数
-    pub(in crate::compiler::ir) 
-    fn get_pos(
+    pub(in crate::compiler::ir) fn get_pos(
         &self,
         // 構造体の名前
         name: &str,
@@ -318,8 +306,11 @@ impl StructTree {
         panic!();
     }
 
-    pub(in crate::compiler::ir) 
-    fn get_mem_size(&self, name: &str, field_name: &str) -> types::Size {
+    pub(in crate::compiler::ir) fn get_mem_size(
+        &self,
+        name: &str,
+        field_name: &str,
+    ) -> types::Size {
         let ty = self
             .tree
             .get(name)
@@ -333,8 +324,10 @@ impl StructTree {
         types::Size::try_from_or_emit_struct(&mut |name| self.get_struct_size(name), &ty).unwrap()
     }
 
-    pub(in crate::compiler::ir) 
-    fn get_struct_size(&self, name: &str) -> Result<node::StructDefine, err::ErrKind> {
+    pub(in crate::compiler::ir) fn get_struct_size(
+        &self,
+        name: &str,
+    ) -> Result<node::StructDefine, err::ErrKind> {
         if let Some(target) = self.tree.get(name) {
             Ok(target.clone())
         } else {
@@ -354,33 +347,31 @@ pub struct VariantTree {
 }
 
 impl VariantTree {
-    pub(in crate::compiler::ir) 
-    fn new() -> Self {
+    pub(in crate::compiler::ir) fn new() -> Self {
         Self {
             tree: HashMap::new(),
         }
     }
 
-    pub(in crate::compiler::ir) 
-    fn add(&mut self, info: &node::VariantDefine) {
+    pub(in crate::compiler::ir) fn add(&mut self, info: &node::VariantDefine) {
         self.tree.insert(info.name.to_string(), info.clone());
     }
 
-    pub(in crate::compiler::ir) 
-    fn get(&self, name: &str) -> Option<&node::VariantDefine> {
+    pub(in crate::compiler::ir) fn get(&self, name: &str) -> Option<&node::VariantDefine> {
         self.tree.get(name)
     }
 
-    pub(in crate::compiler::ir) 
-    fn contains_key(&self, name: &str) -> bool {
+    pub(in crate::compiler::ir) fn contains_key(&self, name: &str) -> bool {
         self.tree.contains_key(name)
     }
 
     /// 名前から、バリアント型の定義を探す。
     /// ジェネリクスなバリアント型(`Option`)は、型引数ごとに`Option$int`のような
     /// 名前で登録されているので、完全一致が無ければ`名前$`で始まるものを探す
-    pub(in crate::compiler::ir) 
-    fn find_by_base_name(&self, name: &str) -> Option<&node::VariantDefine> {
+    pub(in crate::compiler::ir) fn find_by_base_name(
+        &self,
+        name: &str,
+    ) -> Option<&node::VariantDefine> {
         self.tree.get(name).or_else(|| {
             self.tree
                 .iter()
@@ -394,13 +385,15 @@ impl VariantTree {
     }
 
     // /// メンバーの定義順のインデックス(タグの値)を取得する
-    // pub(in crate::compiler::ir) 
+    // pub(in crate::compiler::ir)
     // fn get_tag(&self, name: &str, field_name: &str) -> Option<usize> {
     //     self.tree.get(name)?.tag_of(field_name)
     // }
 
-    pub(in crate::compiler::ir) 
-    fn get_variant(&self, name: &str) -> Result<node::VariantDefine, err::ErrKind> {
+    pub(in crate::compiler::ir) fn get_variant(
+        &self,
+        name: &str,
+    ) -> Result<node::VariantDefine, err::ErrKind> {
         if let Some(target) = self.tree.get(name) {
             Ok(target.clone())
         } else {
@@ -480,8 +473,7 @@ pub struct FuncTree {
 }
 
 impl FuncTree {
-    pub(in crate::compiler::ir) 
-    fn new() -> Self {
+    pub(in crate::compiler::ir) fn new() -> Self {
         Self {
             func: HashMap::new(),
         }
@@ -506,14 +498,16 @@ impl FuncTree {
         }
     }
 
-    pub(in crate::compiler::ir) 
-    fn get(&self, name: &str, mod_name: Option<&String>) -> Option<FnDefInfo> {
+    pub(in crate::compiler::ir) fn get(
+        &self,
+        name: &str,
+        mod_name: Option<&String>,
+    ) -> Option<FnDefInfo> {
         let no_temp_ty: &[node::TyNode] = &[];
         self.get_with_temp(name, mod_name, no_temp_ty)
     }
 
-    pub(in crate::compiler::ir) 
-    fn get_with_temp(
+    pub(in crate::compiler::ir) fn get_with_temp(
         &self,
         name: &str,
         module_name: Option<&String>,
@@ -524,8 +518,7 @@ impl FuncTree {
             .cloned()
     }
 
-    pub(in crate::compiler::ir) 
-    fn add(
+    pub(in crate::compiler::ir) fn add(
         &mut self,
         body: &[inst::Inst],
         meta_data: &node::FuncDefine,
@@ -558,8 +551,7 @@ impl FuncTree {
         );
     }
 
-    pub(in crate::compiler::ir) 
-    fn declare(&mut self, meta_data: &node::FuncDefine) {
+    pub(in crate::compiler::ir) fn declare(&mut self, meta_data: &node::FuncDefine) {
         let key = Self::make_key(
             &meta_data.name,
             meta_data.module.as_ref(),
@@ -575,7 +567,7 @@ impl FuncTree {
                 meta_data.temp_ty.clone(),
                 meta_data.public,
                 0,
-                counter_mnger::VarCounter::new()
+                counter_mnger::VarCounter::new(),
             )
         });
     }
@@ -596,8 +588,7 @@ impl FnDefMetaData {
     /// moduleは自分自身がどのモジュールに属しているか
     /// Noneの場合は、#includeで関数の名前ごと指定しているか
     /// 自分のファイルの中にあるかのどちらか
-    pub(in crate::compiler::ir) 
-    fn new(info: &node::FuncDefine, module: Option<&String>) -> Self {
+    pub(in crate::compiler::ir) fn new(info: &node::FuncDefine, module: Option<&String>) -> Self {
         Self {
             module: module.map(|v| v.clone()),
             name: info.name.clone(),
@@ -608,20 +599,17 @@ impl FnDefMetaData {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn add_self_module_name(&mut self, self_name: &str) {
+    pub(in crate::compiler::ir) fn add_self_module_name(&mut self, self_name: &str) {
         self.module = Some(self_name.to_string());
     }
 
     /// この関数がどのモジュール名で登録されているかを返す
     /// (`#include`でモジュール名を指定せず取り込んだ関数は`None`)
-    pub(in crate::compiler::ir) 
-    fn module(&self) -> Option<&String> {
+    pub(in crate::compiler::ir) fn module(&self) -> Option<&String> {
         self.module.as_ref()
     }
 
-    pub(in crate::compiler::ir) 
-    fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
+    pub(in crate::compiler::ir) fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
         FnDefInfo::new(
             self.name.clone(),
             None,

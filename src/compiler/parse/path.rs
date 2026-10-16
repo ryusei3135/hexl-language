@@ -3,8 +3,10 @@ use super::*;
 impl Parser {
     /// モジュールのノードを作成
     /// name::mod
-    pub(in crate::compiler::parse) 
-    fn build_scope_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn build_scope_node(
+        &mut self,
+        name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
         match self.peek_tkn()? {
             lex::Tkn::LBrace => {
                 self.advance_tkn_checked()?;
@@ -39,12 +41,13 @@ impl Parser {
         crate::scope_node!(self, ModPathTkn, Scope, &name);
     }
 
-
     /// メゾットなどのノードを作成
     /// name.method
     #[inline(always)]
-    pub(in crate::compiler::parse) 
-    fn build_member_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn build_member_node(
+        &mut self,
+        name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
         // "."がないので、何も返さない
         if self.next_tkn_ref(&["not `.`"])? != lex::Tkn::Dot {
             return Ok(self.expr_define_var(name.to_string())?);
@@ -82,8 +85,10 @@ impl Parser {
     ///   指した状態のまま返す(呼び出し元で`=`の有無を確認できるように)
     /// - メゾット呼び出しの場合、`call_func_expr`の仕様通り
     ///   `current_tkn()`は呼び出し式の次のトークンを指した状態で返る
-    pub(in crate::compiler::parse) 
-    fn ptr_member_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn ptr_member_node(
+        &mut self,
+        name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::err_at!(self.ptr_member_name_not_found(member_tkn));

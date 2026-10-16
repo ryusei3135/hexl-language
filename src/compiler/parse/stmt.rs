@@ -209,8 +209,7 @@ impl Parser {
                     // `Group2`のノードは常に直前に生成された関数定義に
                     // 追加されるはずなので、そうでない場合はパーサー自体の
                     // バグ(利用者の入力に起因するエラーではない)
-                    let Some(node::Group1Node::FuncDefine(func)) = self.gen_nodes.last_mut()
-                    else {
+                    let Some(node::Group1Node::FuncDefine(func)) = self.gen_nodes.last_mut() else {
                         return crate::err_at!(
                             self.internal_state_err("function definition to add the node to")
                         );

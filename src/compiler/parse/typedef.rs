@@ -1,6 +1,6 @@
 mod def_fields;
-mod variant_field;
 mod generic;
+mod variant_field;
 
 use super::{Parser, *};
 use std::collections::HashMap;
@@ -9,8 +9,9 @@ use std::collections::HashMap;
 impl Parser {
     /// `struct name { mem: ty, mem2: ty2 }` を解析する
     /// 呼び出し時は current_tkn() が KeyWordStruct
-    pub(in crate::compiler::parse) 
-    fn struct_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(in crate::compiler::parse) fn struct_node(
+        &mut self,
+    ) -> Result<node::Group1Node, err::ErrKind> {
         let lex::Tkn::Name(name) = self.next_tkn(&["name"])? else {
             return crate::err_at!(self.struct_name_is_not_found());
         };
@@ -39,8 +40,9 @@ impl Parser {
     /// variant "unsafe" Name { mem: int  mem2: i64 }        // タグなし(旧unsafe union)
     /// ```
     /// 呼び出し時は current_tkn() が KeyWordVariant
-    pub(in crate::compiler::parse)
-    fn variant_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(in crate::compiler::parse) fn variant_node(
+        &mut self,
+    ) -> Result<node::Group1Node, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordVariant {
             return crate::err_at!(self.variant_keyword_not_found());
         }
@@ -78,8 +80,7 @@ impl Parser {
     }
 
     /// 構造体を初期化する式を生成
-    pub(in crate::compiler::parse) 
-    fn struct_init_node<const T: bool>(
+    pub(in crate::compiler::parse) fn struct_init_node<const T: bool>(
         &mut self,
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
@@ -135,8 +136,7 @@ impl Parser {
     /// 呼び出し時は current_tkn() が `Variant::`の次の`Name`(メンバー名)
     /// 終了時は、式の最後のトークン(`)`、または`(`がない場合はメンバー名)を指す
     /// (`struct_init_node`が最後の`}`を指して終わるのと同じ)
-    pub(in crate::compiler::parse)
-    fn variant_init_node<const T: bool>(
+    pub(in crate::compiler::parse) fn variant_init_node<const T: bool>(
         &mut self,
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
@@ -215,8 +215,9 @@ impl Parser {
     /// これにより、型として予約語`Self`が使われたとき、
     /// `node::TyNode::SelfTy(self_name)`へ解決できる。
     /// メゾットの外(トップレベルの関数など)では`None`を渡す。
-    pub(in crate::compiler::parse) 
-    fn define_ty_node(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    pub(in crate::compiler::parse) fn define_ty_node(
+        &mut self,
+    ) -> Result<node::TyNode, err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::Colon {
             return crate::err_at!(self.ty_colon_not_found());
         }
@@ -227,8 +228,9 @@ impl Parser {
     /// トークンが`:`である必要はなく、`current_tkn()`は型の直前の
     /// 区切り(`:`、ジェネリクスの型引数の`<`や`,`)を指していればよい。
     /// 終了時は、型の次のトークンを指す
-    pub(in crate::compiler::parse) 
-    fn ty_node_after_delim(&mut self) -> Result<node::TyNode, err::ErrKind> {
+    pub(in crate::compiler::parse) fn ty_node_after_delim(
+        &mut self,
+    ) -> Result<node::TyNode, err::ErrKind> {
         match self.next_tkn(&["name", "[", "string", "Self"])?.clone() {
             // 予約語`Self`: 自身の構造体を指す型
             lex::Tkn::KeyWordSelf => {
@@ -253,45 +255,46 @@ impl Parser {
             lex::Tkn::Name(name) => {
                 // 契約型かを調べる
                 let base_ty = self.is_constract_ty(node::TyNode::Ty(name.clone()))?;
-                let ty =
-                    match self.next_tkn(&["<", "*", "["])? {
-                        // ジェネリクスな構造体/バリアント: `Name<int>`
-                        lex::Tkn::LAngleBracket => {
-                            if !self.generic_types.contains_key(&name) {
-                                return crate::err_at!(self.generics_not_supported_yet());
-                            }
-                            // その型引数の構造体/バリアントを(まだ無ければ)作り、
-                            // 作った型の名前の型にする。終了時は`>`を指す
-                            let generic_name = self.generic_type_ref(&name)?;
-                            let generic_ty = self.is_constract_ty(node::TyNode::Ty(generic_name))?;
-                            match self.next_tkn(&["*", "["])? {
-                                lex::Tkn::LBracket => {
-                                    self.next_tkn(&["["])?;
-                                    self.make_range_ptr_node(generic_ty)?
-                                }
-                                lex::Tkn::Mul => self.ptr_ty_node(generic_ty)?,
-                                _ => generic_ty,
-                            }
+                let ty = match self.next_tkn(&["<", "*", "["])? {
+                    // ジェネリクスな構造体/バリアント: `Name<int>`
+                    lex::Tkn::LAngleBracket => {
+                        if !self.generic_types.contains_key(&name) {
+                            return crate::err_at!(self.generics_not_supported_yet());
                         }
-                        // 境界付きポインタ
-                        lex::Tkn::LBracket => {
-                            self.next_tkn(&["["])?;
-                            self.make_range_ptr_node(base_ty)?
-                        }
-                        // ポインタの型
-                        // var: *.. の `*`
-                        lex::Tkn::Mul => self.ptr_ty_node(base_ty)?,
-                        _ => {
-                            // ジェネリクスに定義ずみの型がある
-                            if self.other_stk.iter().any(|(stk_name, info)| {
-                                stk_name == &name && info == &StkInfo::Generics
-                            }) {
-                                node::TyNode::make_ref_ty(&name)
-                            } else {
-                                base_ty
+                        // その型引数の構造体/バリアントを(まだ無ければ)作り、
+                        // 作った型の名前の型にする。終了時は`>`を指す
+                        let generic_name = self.generic_type_ref(&name)?;
+                        let generic_ty = self.is_constract_ty(node::TyNode::Ty(generic_name))?;
+                        match self.next_tkn(&["*", "["])? {
+                            lex::Tkn::LBracket => {
+                                self.next_tkn(&["["])?;
+                                self.make_range_ptr_node(generic_ty)?
                             }
+                            lex::Tkn::Mul => self.ptr_ty_node(generic_ty)?,
+                            _ => generic_ty,
                         }
-                    };
+                    }
+                    // 境界付きポインタ
+                    lex::Tkn::LBracket => {
+                        self.next_tkn(&["["])?;
+                        self.make_range_ptr_node(base_ty)?
+                    }
+                    // ポインタの型
+                    // var: *.. の `*`
+                    lex::Tkn::Mul => self.ptr_ty_node(base_ty)?,
+                    _ => {
+                        // ジェネリクスに定義ずみの型がある
+                        if self
+                            .other_stk
+                            .iter()
+                            .any(|(stk_name, info)| stk_name == &name && info == &StkInfo::Generics)
+                        {
+                            node::TyNode::make_ref_ty(&name)
+                        } else {
+                            base_ty
+                        }
+                    }
+                };
                 Ok(ty)
             }
             // スタック領域: `[ty]` / `[ty 4]`
@@ -594,10 +597,7 @@ mod ty_tests {
     #[test]
     fn enum_like_variant_with_comma() {
         // 旧`enum`の`,`区切りも使える
-        assert_eq!(
-            &build("variant Name {A, B,}"),
-            &build("variant Name {A B}")
-        );
+        assert_eq!(&build("variant Name {A, B,}"), &build("variant Name {A B}"));
     }
 
     #[test]

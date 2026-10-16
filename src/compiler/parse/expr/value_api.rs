@@ -6,8 +6,7 @@ impl Parser {
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が
     /// あった場合呼び出される、関数やモジュールの指定メンバー
     /// にアクセスするノードを作成する
-    pub(super) 
-    fn gen_name_node<const T: bool>(
+    pub(super) fn gen_name_node<const T: bool>(
         &mut self,
         name: String,
         init_struct: bool,
@@ -57,8 +56,7 @@ impl Parser {
     /// `Name::Mem` / `Name::func(..)`のノードを作成する。
     /// 呼び出し時の`current_tkn()`は、`::`の1つ前のトークン
     /// (型の名前。ジェネリクスな型の場合は`>`)
-    pub(in crate::compiler::parse)
-    fn scope_member_node(
+    pub(in crate::compiler::parse) fn scope_member_node(
         &mut self,
         name: String,
         init_struct: bool,
@@ -87,8 +85,11 @@ impl Parser {
 
     /// 渡されたモジュールの名前とフィールドの名前がすでに出現している場合、
     /// これはバリアントなのでtrueを返す
-    pub(in crate::compiler::parse)
-    fn is_variant_field(&self, type_name: &str, field_name: &str) -> bool {
+    pub(in crate::compiler::parse) fn is_variant_field(
+        &self,
+        type_name: &str,
+        field_name: &str,
+    ) -> bool {
         self.gen_nodes
             .iter()
             .chain(self.pending_types.iter())
@@ -107,8 +108,7 @@ impl Parser {
 
     /// 配列リテラルのノードを作成する
     /// これは配列を初期化するノード
-    pub(super)
-    fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
         let mut items = Vec::<node::Expr>::new();
 
         if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {

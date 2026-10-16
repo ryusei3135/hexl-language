@@ -35,8 +35,7 @@ impl AsmEmitter {
     /// 結果は`self.reg_idx`のレジスタに置く。
     /// (`gen_expr_asm`が、`%rax`/`%rdx`以外の空きレジスタを
     /// `self.reg_idx`へ設定してから呼ぶ)
-    pub(super) 
-    fn format_div_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
+    pub(super) fn format_div_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
         let dst = self.reg_idx;
         let ty = self.get_expr_ty(expr.ls);
         let wrap_size = ty.wrap_dst_size();
@@ -65,11 +64,12 @@ impl AsmEmitter {
         // === 書き換えられる`%rax`/`%rdx`のうち、使用中の物を退避 ===
         let saved = self.live_reserved_regs(dst);
         let mut asm = saved
-                .iter()
-                .map(|reg| {
-                    let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
-                    self.asm_fmt.get_push(&name)
-                }).collect::<String>();
+            .iter()
+            .map(|reg| {
+                let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                self.asm_fmt.get_push(&name)
+            })
+            .collect::<String>();
 
         // === 割る数を空きレジスタへ ===
         // (`idiv`は即値を直接取れないのと、`%rdx`を書き換える前に
@@ -118,7 +118,7 @@ impl AsmEmitter {
                     self.asm_fmt.get_pop(&name)
                 })
                 .collect::<String>()
-                .as_str()
+                .as_str(),
         );
         asm
     }

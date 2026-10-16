@@ -9,8 +9,7 @@ impl AsmEmitter {
     /// 2. 構造体の変数(`mov_struct_var`)
     /// 3. 静的領域の値を、ポインタでない変数へ束縛する(`mov_static_var`)
     /// 4. それ以外はレジスタに置く変数(`mov_reg_var`)
-    pub(super) 
-    fn mov_value_ir(
+    pub(super) fn mov_value_ir(
         &mut self,
         size: &types::Size,
         dst: usize,
@@ -38,13 +37,7 @@ impl AsmEmitter {
     ) -> Option<&'a types::Size> {
         if let types::Size::Pointer { ty, .. } = size {
             if matches!(ty.as_ref(), types::Size::Struct(_))
-                && matches!(
-                    self.inst_at(src),
-                    inst::Inst::Struct {
-                        is_self: false,
-                        ..
-                    }
-                )
+                && matches!(self.inst_at(src), inst::Inst::Struct { is_self: false, .. })
             {
                 return Some(ty.as_ref());
             }
@@ -102,10 +95,7 @@ impl AsmEmitter {
         );
         self.asm_text.push_str(&text);
         if let Some(var_name) = name {
-            self.insert_var_info(
-                var_name,
-                asm_emitter::VarIndexInfo::new(reg, size, dst),
-            );
+            self.insert_var_info(var_name, asm_emitter::VarIndexInfo::new(reg, size, dst));
         }
     }
 
@@ -205,10 +195,7 @@ impl AsmEmitter {
         self.release_expr_temp(src);
 
         if let Some(var_name) = name {
-            self.insert_var_info(
-                var_name,
-                asm_emitter::VarIndexInfo::new(reg, size, dst),
-            );
+            self.insert_var_info(var_name, asm_emitter::VarIndexInfo::new(reg, size, dst));
             let current_reg = reg;
 
             if self
@@ -309,9 +296,9 @@ impl AsmEmitter {
     fn stack_arr_ir(&mut self, name: &str, size: &types::Size, src: &[usize], dst: usize) {
         let dst_size = size.wrap_dst_size();
         let base = match &self.curr_inst[dst] {
-            inst::Inst::Pointer(..)
-            | inst::Inst::Param(..)
-            | inst::Inst::GetPtr { .. } => self.extract_operand_text(dst, dst_size.as_ref()),
+            inst::Inst::Pointer(..) | inst::Inst::Param(..) | inst::Inst::GetPtr { .. } => {
+                self.extract_operand_text(dst, dst_size.as_ref())
+            }
             _ => FRAME_BASE_REG.to_string(),
         };
 
@@ -343,13 +330,7 @@ impl AsmEmitter {
         self.asm_text.push_str(txt.as_str());
     }
 
-    fn is_static_var(
-        &mut self,
-        src: &[usize],
-        dst: usize,
-        name: &str,
-        this_is_self: SelfPtrInfo,
-    ) {
+    fn is_static_var(&mut self, src: &[usize], dst: usize, name: &str, this_is_self: SelfPtrInfo) {
         println!("src/gen/call_func/MemoryValue");
         let val = self.extract_operand_text(*src.last().unwrap(), this_is_self);
         let label_name = format!("M{}", self.data_idx.to_string());
@@ -394,7 +375,9 @@ impl AsmEmitter {
             };
             let ini_asm = self.emit_struct_init_asm(mem, is_self);
             if !is_self {
-                self.stk_use_counter = self.stk_use_counter.max(struct_stk_offset + size.to_bytes());
+                self.stk_use_counter = self
+                    .stk_use_counter
+                    .max(struct_stk_offset + size.to_bytes());
             }
             self.asm_text.push_str(ini_asm.as_str());
             if let Some(var_name) = name {

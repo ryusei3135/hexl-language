@@ -9,15 +9,19 @@ impl Parser {
     /// - `[arr 0]`
     /// - `[arr i else 0]`
     /// - `[arr a.a else 0]`
-    pub(in crate::compiler::parse::expr) 
-    fn get_var_addr_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse::expr) fn get_var_addr_node(
+        &mut self,
+    ) -> Result<node::Expr, err::ErrKind> {
         let next = self.next_tkn_ref(&["name"])?;
         let lex::Tkn::Name(name) = next.clone() else {
             return crate::err_at!(self.expected_tkn("name", next));
         };
         // nameの次に、添字の式が来た場合、それは配列にアクセスする
         // (`[`の次が`name`、その次が添字の先頭)
-        if self.peek2_tkn().map_or(false, |t| Self::is_arr_index_start(&t)) {
+        if self
+            .peek2_tkn()
+            .map_or(false, |t| Self::is_arr_index_start(&t))
+        {
             return self.ref_array_expr(name);
         }
 
@@ -46,8 +50,7 @@ impl Parser {
     /// 区別できないため、添字の先頭には使えない。
     /// そのような式を添字にしたい場合は、先に変数へ代入してから使う
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn is_arr_index_start(tkn: &lex::Tkn) -> bool {
+    pub(in crate::compiler::parse) fn is_arr_index_start(tkn: &lex::Tkn) -> bool {
         matches!(
             tkn,
             lex::Tkn::Number(_) | lex::Tkn::Name(_) | lex::Tkn::KeyWordSelf
@@ -89,8 +92,10 @@ impl Parser {
     /// ## Errors
     /// `member`の次のトークンが名前(`lex::Tkn::Name`)、または
     /// その次が数字(`lex::Tkn::Number`)ではない場合エラー
-    pub(in crate::compiler::parse)
-    fn build_member_array_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn build_member_array_node(
+        &mut self,
+        name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::err_at!(self.arr_member_name_not_found(member_tkn));
@@ -145,8 +150,10 @@ impl Parser {
     ///
     /// ## Errors
     /// 添字の式の次が`else`/`]`ではない場合、`]`の次が`=`ではない場合エラー
-    pub(in crate::compiler::parse)
-    fn make_array_assign_node(&mut self, name: &str) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn make_array_assign_node(
+        &mut self,
+        name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
         let index = self.arr_access_index()?;
         let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
 
@@ -222,7 +229,8 @@ mod test_access_arr_node {
     fn first_stmt(stmt: &str) -> node::Group2Node {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes(&format!("main(): int {{ {} }}", stmt));
-        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        else {
             panic!("not func");
         };
         node.body[0].get_node().clone()

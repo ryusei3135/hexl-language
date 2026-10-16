@@ -7,8 +7,10 @@ impl Parser {
     ///
     /// ## Args
     /// - expected 期待していたトークンの説明(不明なら空)
-    pub(in crate::compiler::parse)
-    fn tkn_is_eof<T>(&self, expected: Vec<&'static str>) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn tkn_is_eof<T>(
+        &self,
+        expected: Vec<&'static str>,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

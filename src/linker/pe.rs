@@ -192,7 +192,10 @@ pub struct DllImport {
 }
 
 impl DllImport {
-    pub fn new<S: Into<String>>(dll: impl Into<String>, symbols: impl IntoIterator<Item = S>) -> Self {
+    pub fn new<S: Into<String>>(
+        dll: impl Into<String>,
+        symbols: impl IntoIterator<Item = S>,
+    ) -> Self {
         DllImport {
             dll: dll.into(),
             symbols: symbols.into_iter().map(Into::into).collect(),

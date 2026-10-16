@@ -1,8 +1,5 @@
 use super::*;
-use crate::compiler::{
-    err,
-    lex::preprocessor::Preprocessor,
-};
+use crate::compiler::{err, lex::preprocessor::Preprocessor};
 
 mod local {
     /// asciiに対応したテーブルを作成する
@@ -120,7 +117,8 @@ impl Lexer {
     /// これから解析するソースファイルのパスを教える。
     /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
     pub fn set_source_file(&mut self, file: &str) {
-        self.preproc_table.set_source_file(std::path::Path::new(file));
+        self.preproc_table
+            .set_source_file(std::path::Path::new(file));
     }
 
     fn with_preproc(preproc_table: Preprocessor) -> Self {
@@ -143,7 +141,10 @@ impl Lexer {
         let char_table: [CharKind; 256] = make_char_table();
 
         // `#define ...` を登録し、`#NAME` をその値に展開したソースを作る。
-        let content = self.preproc_table.preprocess(content).unwrap_or(content.to_string());
+        let content = self
+            .preproc_table
+            .preprocess(content)
+            .unwrap_or(content.to_string());
 
         // 現在の行の何文字目か
         let mut chr_counter: usize = 1;
@@ -955,12 +956,20 @@ mod tests {
     fn check_member_access_is_not_float() {
         assert_eq!(
             lex_tkns("a.b"),
-            vec![Tkn::Name("a".to_string()), Tkn::Dot, Tkn::Name("b".to_string())]
+            vec![
+                Tkn::Name("a".to_string()),
+                Tkn::Dot,
+                Tkn::Name("b".to_string())
+            ]
         );
         // 数字の後ろの `.` が数字で続かないなら小数にしない
         assert_eq!(
             lex_tkns("3.foo"),
-            vec![Tkn::Number("3".to_string()), Tkn::Dot, Tkn::Name("foo".to_string())]
+            vec![
+                Tkn::Number("3".to_string()),
+                Tkn::Dot,
+                Tkn::Name("foo".to_string())
+            ]
         );
         // `.` の直後の数字列は、その手前の `.` と合わせて小数にしない
         assert_eq!(
@@ -1034,7 +1043,10 @@ mod tests {
 
     #[test]
     fn check_preprocessor_os_symbol_expands() {
-        assert_eq!(ret_nums("linux", "#define A 5\n#if #linux\nret #A\n#endif"), vec!["5"]);
+        assert_eq!(
+            ret_nums("linux", "#define A 5\n#if #linux\nret #A\n#endif"),
+            vec!["5"]
+        );
     }
 
     #[test]
@@ -1059,7 +1071,8 @@ mod tests {
     #[test]
     fn check_preprocessor_elif_nested_in_inactive_parent() {
         // 外側が無効なら、内側の `#elif` / `#else` が当てはまっても有効にならない
-        let src = "#if #windows\n#if #X\nret 1\n#elif #linux\nret 2\n#else\nret 3\n#endif\n#endif\nret 9";
+        let src =
+            "#if #windows\n#if #X\nret 1\n#elif #linux\nret 2\n#else\nret 3\n#endif\n#endif\nret 9";
         assert_eq!(ret_nums("linux", src), vec!["9"]);
     }
 
@@ -1098,7 +1111,10 @@ mod tests {
     fn check_include_plain_is_inlined() {
         let nums = include_nums(
             "plain",
-            &[("a.hexl", "ret 1\n"), ("m.hexl", "ret 0\n#include \"a.hexl\"\nret 2")],
+            &[
+                ("a.hexl", "ret 1\n"),
+                ("m.hexl", "ret 0\n#include \"a.hexl\"\nret 2"),
+            ],
             "m.hexl",
         );
         assert_eq!(nums, vec!["0", "1", "2"]);
@@ -1108,7 +1124,10 @@ mod tests {
     fn check_include_with_comment_is_inlined() {
         let nums = include_nums(
             "cmt",
-            &[("a.hexl", "ret 1"), ("m.hexl", "#include \"a.hexl\" // 説明")],
+            &[
+                ("a.hexl", "ret 1"),
+                ("m.hexl", "#include \"a.hexl\" // 説明"),
+            ],
             "m.hexl",
         );
         assert_eq!(nums, vec!["1"]);
@@ -1133,7 +1152,10 @@ mod tests {
         // 無効な枝の `#include` は、ファイルが無くても読まない
         let nums = include_nums(
             "inactive",
-            &[("m.hexl", "#if #windows\n#include \"none.hexl\"\n#endif\nret 5")],
+            &[(
+                "m.hexl",
+                "#if #windows\n#include \"none.hexl\"\n#endif\nret 5",
+            )],
             "m.hexl",
         );
         assert_eq!(nums, vec!["5"]);
@@ -1158,7 +1180,10 @@ mod tests {
     fn check_include_circular_panics() {
         let _ = include_nums(
             "cycle",
-            &[("a.hexl", "#include \"m.hexl\""), ("m.hexl", "#include \"a.hexl\"")],
+            &[
+                ("a.hexl", "#include \"m.hexl\""),
+                ("m.hexl", "#include \"a.hexl\""),
+            ],
             "m.hexl",
         );
     }

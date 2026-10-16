@@ -5,8 +5,7 @@ use super::*;
 impl AsmEmitter {
     /// 引数を参照するアセンブリコードの一部
     /// を生成する
-    pub(super) 
-    fn param_ref(&mut self, param_name: &str) -> String {
+    pub(super) fn param_ref(&mut self, param_name: &str) -> String {
         let var_info = self.var_info(param_name);
 
         if let Some(ty) = var_info.size.is_pointer() {
@@ -16,18 +15,13 @@ impl AsmEmitter {
             self.asm_fmt.fmt_ref_operand(&reg, ty.to_bytes())
         } else {
             match var_info.reg {
-                RegisterMode::Float(idx) => {
-                    self.asm_fmt.get_fmt_float_reg(idx, &var_info.size)
-                }
-                RegisterMode::Normal(idx) => {
-                    self.asm_fmt.get_fmt_reg(idx, &var_info.size)
-                }
+                RegisterMode::Float(idx) => self.asm_fmt.get_fmt_float_reg(idx, &var_info.size),
+                RegisterMode::Normal(idx) => self.asm_fmt.get_fmt_reg(idx, &var_info.size),
             }
         }
     }
     /// 文字列のメモリ参照を生成する
-    pub(super) 
-    fn string_mem_ref(&mut self, parent_id: usize) -> String {
+    pub(super) fn string_mem_ref(&mut self, parent_id: usize) -> String {
         let label = self
             .static_label(parent_id)
             .expect("string label not found");
@@ -35,8 +29,7 @@ impl AsmEmitter {
     }
 
     /// 配列に値を代入するコードを生成
-    pub(super) 
-    fn insert_arr_txt(
+    pub(super) fn insert_arr_txt(
         &mut self,
         name: &str,
         dst: usize,
@@ -99,8 +92,7 @@ impl AsmEmitter {
     /// - pos = IRの、そのメンバーの終端までの累積サイズ
     /// - member_size = そのメンバー自身のサイズ
     ///   (`pos - member_size`が、ポインタからのオフセットになる)
-    pub(super) 
-    fn ref_struct_txt(&mut self, src: &str, pos: usize, member_size: usize) -> String {
+    pub(super) fn ref_struct_txt(&mut self, src: &str, pos: usize, member_size: usize) -> String {
         let size = Self::struct_member_offset(pos, member_size);
         let var_info = self.var_info(src);
 
@@ -121,8 +113,7 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) 
-    fn gen_mov_code(&mut self, name: Option<&str>, src: usize) -> String {
+    pub(super) fn gen_mov_code(&mut self, name: Option<&str>, src: usize) -> String {
         let var_name = name.unwrap();
         let var = self.var_info(var_name);
 
@@ -141,8 +132,7 @@ impl AsmEmitter {
     }
 
     /// メモリを参照するコードを生成する
-    pub(super) 
-    fn ref_mem_value_txt(
+    pub(super) fn ref_mem_value_txt(
         &mut self,
         kind: &inst::MemoryKind,
         size: &Size,
@@ -166,8 +156,7 @@ impl AsmEmitter {
     ///
     /// ## 引数
     /// - ids: 配列の各要素の値を持つノード(`Inst::Num`など)のid
-    pub(super) 
-    fn init_arr_txt<const RET_IS_ASM: bool>(
+    pub(super) fn init_arr_txt<const RET_IS_ASM: bool>(
         &mut self,
         ids: &[usize],
         this_is_self: SelfPtrInfo,
@@ -215,8 +204,7 @@ impl AsmEmitter {
         if this_is_self.is_some() {
             self.asm_text.push_str(txt.as_str());
         }
-        self.asm_fmt
-            .fmt_ref_operand(&assign_reg, head_offset)
+        self.asm_fmt.fmt_ref_operand(&assign_reg, head_offset)
     }
 
     /// 二行のアセンブリコードのニーモニックを、式のサイズに応じて調整する

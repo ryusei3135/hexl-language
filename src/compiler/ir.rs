@@ -8,11 +8,11 @@ pub mod types;
 
 pub mod builder;
 mod checker;
-pub mod def_tree;
-pub mod inst;
 pub mod counter_mnger;
-mod param;
+pub mod def_tree;
 mod insert;
+pub mod inst;
+mod param;
 
 use crate::compiler::err::{self, undef::UndefKind::*};
 
@@ -45,11 +45,9 @@ pub struct IR {
     // 定義済みの列挙型の情報
     // pub enum_tree: HashMap<String, node::EnumDefine>,
     stk_counter: usize,
-    pub(in crate::compiler::ir) 
-    current_span: err::Span,
+    pub(in crate::compiler::ir) current_span: err::Span,
 
-    pub(in crate::compiler::ir) 
-    constract_flag: checker::ConstractFlags,
+    pub(in crate::compiler::ir) constract_flag: checker::ConstractFlags,
 
     var_counter: counter_mnger::VarCounter,
 

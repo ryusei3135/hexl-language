@@ -13,8 +13,7 @@ impl Parser {
     /// 呼び出し時は current_tkn() がメンバーの名前。
     /// 終了時は、そのメンバーの最後のトークン(型なしなら名前、
     /// `Mem(ty)`なら`)`、メゾットなら本体を閉じる`}`)を指す
-    pub(in crate::compiler::parse::typedef)
-    fn make_variant_field(
+    pub(in crate::compiler::parse::typedef) fn make_variant_field(
         &mut self,
         field_name: String,
         pub_flag: bool,
@@ -34,10 +33,9 @@ impl Parser {
                 }
             }
             // 型なしのメンバー: 次に続くのは別のメンバー・`,`・`}`
-            lex::Tkn::Name(..)
-            | lex::Tkn::KeyWordPub
-            | lex::Tkn::Comma
-            | lex::Tkn::RBrace => Ok(VariantField::typeless_new(field_name).wrap_variant_field_kind()),
+            lex::Tkn::Name(..) | lex::Tkn::KeyWordPub | lex::Tkn::Comma | lex::Tkn::RBrace => {
+                Ok(VariantField::typeless_new(field_name).wrap_variant_field_kind())
+            }
             t => crate::err_at!(self.variant_member_unexpected_tkn(t)),
         }
     }

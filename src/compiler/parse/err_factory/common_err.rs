@@ -11,8 +11,11 @@ impl Parser {
     /// ## Args
     /// - expected 期待していたトークンの説明
     /// - found 実際にあったトークン
-    pub(in crate::compiler::parse)
-    fn expected_tkn<T>(&self, expected: &'static str, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn expected_tkn<T>(
+        &self,
+        expected: &'static str,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -21,8 +24,10 @@ impl Parser {
     }
 
     /// `expected`のトークンが来るはずの位置に、現在のトークンがあった
-    pub(in crate::compiler::parse)
-    fn expected_at_current<T>(&self, expected: &'static str) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn expected_at_current<T>(
+        &self,
+        expected: &'static str,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -34,8 +39,10 @@ impl Parser {
     }
 
     /// 数値のトークンが、数値として読み取れなかった(桁あふれなど)
-    pub(in crate::compiler::parse)
-    fn invalid_number<T>(&self, num: String) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn invalid_number<T>(
+        &self,
+        num: String,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -47,8 +54,7 @@ impl Parser {
     }
 
     /// 構造体/バリアントの外で`Self`が使われた
-    pub(in crate::compiler::parse)
-    fn self_outside_of_type<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn self_outside_of_type<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -62,8 +68,10 @@ impl Parser {
     ///
     /// ## Args
     /// - what 何が想定外だったか(エラーの`expected`に入る)
-    pub(in crate::compiler::parse)
-    fn internal_state_err<T>(&self, what: &'static str) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn internal_state_err<T>(
+        &self,
+        what: &'static str,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

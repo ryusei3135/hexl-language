@@ -8,7 +8,6 @@ use crate::compiler::ir::checker::mem::check_list::{IndexCheckList, IsImmOrConst
 
 use super::*;
 
-
 /// `check_mem_access`が返す、配列アクセスに挿入すべき実行時ガード
 ///
 /// 添字が`const`/即値のときは静的検査だけで済むため`None`が返り、
@@ -19,8 +18,7 @@ use super::*;
 /// if lo <= index && index < hi { arr[index] } else { arr[else_idx] }
 /// ```
 #[derive(Clone, Debug)]
-pub(in crate::compiler::ir) 
-struct ArrIdxGuard {
+pub(in crate::compiler::ir) struct ArrIdxGuard {
     /// 配列/ポインタの名前
     pub name: String,
     /// 有効な添字の範囲 `lo..hi`(配列は`0..len`、範囲付きポインタは`range`)
@@ -39,10 +37,17 @@ impl IR {
     /// - 添字が`const`/即値: 静的に範囲検査してそのまま(`None`)
     /// - 添字が可変: 範囲内のときだけ通る条件分岐を差し込むための
     ///   `ArrIdxGuard`を返す。条件がfalseなら`else_idx`が使われる
-    pub(in crate::compiler::ir)
-    fn check_mem_access(&mut self, expr: &node::Expr) -> Option<ArrIdxGuard> {
+    pub(in crate::compiler::ir) fn check_mem_access(
+        &mut self,
+        expr: &node::Expr,
+    ) -> Option<ArrIdxGuard> {
         match expr {
-            node::Expr::RefArray { name, index, else_idx, .. } => {
+            node::Expr::RefArray {
+                name,
+                index,
+                else_idx,
+                ..
+            } => {
                 self.check_arr_index::<IsUnsigned>(index).unwrap();
                 return self.check_ref_array(name, index, else_idx);
             }
@@ -141,12 +146,8 @@ impl IR {
     /// Cで中の処理を変える
     fn check_arr_index<C: IndexCheckList>(&self, expr: &node::Expr) -> Result<(), err::ErrKind> {
         match expr {
-            node::Expr::Number(v) => {
-                C::num_check(v)
-            }
-            node::Expr::Var(name) => {
-                C::var_check(&self.var_tree, &name)
-            }
+            node::Expr::Number(v) => C::num_check(v),
+            node::Expr::Var(name) => C::var_check(&self.var_tree, &name),
             node::Expr::Add((l, r))
             | node::Expr::Sub((l, r))
             | node::Expr::Mul((l, r))
@@ -159,9 +160,7 @@ impl IR {
             node::Expr::GreaterThen(..)
             | node::Expr::GreaterThenEq(..)
             | node::Expr::LessThen(..)
-            | node::Expr::LessThenEq(..) => {
-                C::cond_is_invalid(&expr)
-            }
+            | node::Expr::LessThenEq(..) => C::cond_is_invalid(&expr),
             t => panic!("{:?}", t),
         }
     }

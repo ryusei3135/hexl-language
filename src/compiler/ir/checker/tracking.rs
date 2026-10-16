@@ -11,8 +11,7 @@ impl IR {
     /// `var_tree`に記録されている現在値に置き換えて評価する。
     /// 呼び出し前に`is_const_index`で評価可能かどうかを確認しておくこと
     /// (記録の無い変数を評価しようとした場合はここで`panic`する)
-    pub(in crate::compiler::ir)
-    fn eval_expr(&self, n: &node::Expr) -> usize {
+    pub(in crate::compiler::ir) fn eval_expr(&self, n: &node::Expr) -> usize {
         match n {
             node::Expr::Number(val) => val.parse::<usize>().unwrap(),
             node::Expr::Var(name) => self.var_tree.get_value(name).unwrap_or_else(|| {
@@ -37,8 +36,7 @@ impl IR {
     /// 扱う。記録が無い変数(実行時にしか値の分からない式で更新された
     /// 変数や、一度も記録されていない変数)を含む場合は、実行時にしか
     /// 値が分からないため、ここでの静的な範囲チェックの対象外として扱う
-    pub(in crate::compiler::ir)
-    fn is_const_index(&self, n: &node::Expr) -> bool {
+    pub(in crate::compiler::ir) fn is_const_index(&self, n: &node::Expr) -> bool {
         match n {
             node::Expr::Number(_) => true,
             node::Expr::Var(name) => self.var_tree.get_value(name).is_some(),
@@ -56,8 +54,11 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や`name`が配列型でない場合は判定できない
     /// ため`true`を返す(配列型でない場合は`range_ptr_checker`に任せる)
-    pub(in crate::compiler::ir) 
-    fn arr_idx_checker(&mut self, name: &str, index: &node::Expr) -> bool {
+    pub(in crate::compiler::ir) fn arr_idx_checker(
+        &mut self,
+        name: &str,
+        index: &node::Expr,
+    ) -> bool {
         if self.is_const_index(index) == false {
             return true;
         }
@@ -85,8 +86,11 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や、`name`が範囲指定付きのポインタ型
     /// でない場合は判定できないため`true`を返す
-    pub(in crate::compiler::ir) 
-    fn range_ptr_checker(&mut self, name: &str, index: &node::Expr) -> bool {
+    pub(in crate::compiler::ir) fn range_ptr_checker(
+        &mut self,
+        name: &str,
+        index: &node::Expr,
+    ) -> bool {
         if self.is_const_index(index) == false {
             return true;
         }
@@ -120,8 +124,7 @@ impl IR {
     /// 値を同じ`Size::Pointer.range`と照らし合わせてチェックする。
     /// 値が定数式として評価できない場合や、`name`が範囲指定付きの
     /// ポインタ型でない場合は判定できないため`true`を返す
-    pub(in crate::compiler::ir) 
-    fn range_ptr_reassign_checker(
+    pub(in crate::compiler::ir) fn range_ptr_reassign_checker(
         &mut self,
         name: &str,
         value: &node::Expr,
@@ -157,23 +160,22 @@ impl IR {
     /// 配列の長さ)から長さを求めるために使う
     /// (`src/ir/builder/expr_node.rs`の`def_var_node_with_register_ty`)。
     /// `name`が範囲指定付きのポインタ型でも配列型でもない場合はpanicする
-    pub(in crate::compiler::ir) 
-    fn range_len_from_var_tree(&self, name: &str) -> usize {
+    pub(in crate::compiler::ir) fn range_len_from_var_tree(&self, name: &str) -> usize {
         let ty = self.var_tree.get_ty_node(name).unwrap();
         match &ty.try_into() {
             Ok(types::Size::Pointer {
                 range: Some(range), ..
             }) => range.1 - range.0,
             // 長さの指定がないので、1
-            Ok(types::Size::Pointer { ..}) => 1,
+            Ok(types::Size::Pointer { .. }) => 1,
             Ok(types::Size::Array { len, .. }) => *len,
             _ => {
                 // panic!(
                 //     "変数 `{}` の長さを決定できません: 配列/文字列リテラルでの初期化か、範囲の指定が必要です {:?}",
                 //     name,
                 //     t
-                // ); 
-                1       
+                // );
+                1
             }
         }
     }
@@ -187,8 +189,7 @@ impl IR {
     /// `value`が定数式として評価できる場合はその結果を記録し、
     /// 評価できない(実行時にしか値が分からない)場合は、古い記録が
     /// 残って以降の静的チェックに誤って使われないよう記録を消す
-    pub(in crate::compiler::ir) 
-    fn record_var_value(&mut self, name: &str, value: &node::Expr) {
+    pub(in crate::compiler::ir) fn record_var_value(&mut self, name: &str, value: &node::Expr) {
         if self.is_const_index(value) {
             let v = self.eval_expr(value);
             self.var_tree.record_value(name, v);

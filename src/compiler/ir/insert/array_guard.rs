@@ -33,8 +33,7 @@ impl IR {
     ///
     /// ## Returns
     /// 最後に積んだ命令(`end`のブロック)のid
-    pub(in crate::compiler::ir)
-    fn insert_arr_guard(
+    pub(in crate::compiler::ir) fn insert_arr_guard(
         &mut self,
         guard: checker::ArrIdxGuard,
         dst: node::Expr,
@@ -77,7 +76,13 @@ impl IR {
     ///
     /// `idx < lo`と`idx > hi - 1`(= `idx >= hi`)の2つのどちらかが真なら範囲外。
     /// `hi > lo`は`check_ref_array`で確認済みなので、`hi - 1`はunderflowしない
-    fn insert_out_of_range_jmp(&mut self, index_idx: usize, lo: usize, hi: usize, else_label: usize) {
+    fn insert_out_of_range_jmp(
+        &mut self,
+        index_idx: usize,
+        lo: usize,
+        hi: usize,
+        else_label: usize,
+    ) {
         crate::push_jmp_code!(self, ExpectJmp, &else_label);
         self.push_cmp_with_num(index_idx, lo, inst::ExprKind::LessThen);
 

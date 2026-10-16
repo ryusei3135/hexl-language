@@ -105,11 +105,20 @@ pub struct AsmSetting {
 #[derive(Debug)]
 pub enum AsmSettingError {
     /// 設定ファイル(`asm.yaml` / `asm_fmts/*.yaml`)を読み込めない
-    ReadFile { path: String, source: std::io::Error },
+    ReadFile {
+        path: String,
+        source: std::io::Error,
+    },
     /// 設定ファイルのyamlが不正
-    ParseYaml { path: String, source: serde_yaml::Error },
+    ParseYaml {
+        path: String,
+        source: serde_yaml::Error,
+    },
     /// 登録されていない inline アセンブラ名
-    UnknownInline { name: String, available: Vec<String> },
+    UnknownInline {
+        name: String,
+        available: Vec<String>,
+    },
     /// `default` が `settings` の範囲外
     InvalidDefault { default: usize, len: usize },
     /// アセンブリコードの生成に失敗
@@ -120,10 +129,18 @@ impl std::fmt::Display for AsmSettingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ReadFile { path, source } => {
-                write!(f, "アセンブリ設定ファイル`{}`を読み込めません: {}", path, source)
+                write!(
+                    f,
+                    "アセンブリ設定ファイル`{}`を読み込めません: {}",
+                    path, source
+                )
             }
             Self::ParseYaml { path, source } => {
-                write!(f, "アセンブリ設定ファイル`{}`のyamlが不正です: {}", path, source)
+                write!(
+                    f,
+                    "アセンブリ設定ファイル`{}`のyamlが不正です: {}",
+                    path, source
+                )
             }
             Self::UnknownInline { name, available } => write!(
                 f,

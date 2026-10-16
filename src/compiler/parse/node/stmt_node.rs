@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsNode {
     pub name: String,
@@ -50,7 +49,6 @@ impl FuncDefine {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StmtNode {
     Return(Expr),
@@ -64,13 +62,11 @@ impl StmtNode {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MatchArm {
     pub pattern: Box<Expr>,
     pub body: Body,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InlineAsm {

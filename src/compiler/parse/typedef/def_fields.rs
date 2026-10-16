@@ -1,18 +1,17 @@
 //! 構造体や共用体などのフィールドを生成するAPIを提供
 
-use crate::compiler::node::{Field, Group1Node, StructField, VariantField, VariantFieldKind, VariantMode};
+use crate::compiler::node::{
+    Field, Group1Node, StructField, VariantField, VariantFieldKind, VariantMode,
+};
 
 use super::*;
 
-
 const LOOP_BRAEK: bool = true;
-
 
 impl Parser {
     /// 構造体のメンバ定義を解析する関数
     /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace`
-    pub(in crate::compiler::parse::typedef)
-    fn define_struct_fields(
+    pub(in crate::compiler::parse::typedef) fn define_struct_fields(
         &mut self,
     ) -> Result<(Vec<node::StructField>, Vec<node::Group1Node>), err::ErrKind> {
         self.define_colon_fields::<StructField>()
@@ -95,13 +94,11 @@ impl Parser {
         Ok((fields, methods))
     }
 
-
     /// 共用体のメンバーのノードを作成
     /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace`
     /// - `Normal`: `Mem` / `Mem(ty)` / メゾット(タグ付き共用体)
     /// - `Unsafe`: `mem: ty`(構造体と同じ書き方。タグを持たない)
-    pub(in crate::compiler::parse::typedef)
-    fn define_variant_fields(
+    pub(in crate::compiler::parse::typedef) fn define_variant_fields(
         &mut self,
         variant_flag: VariantMode,
     ) -> Result<(Vec<node::VariantField>, Vec<node::Group1Node>), err::ErrKind> {
@@ -165,14 +162,15 @@ impl Parser {
     /// ## Args
     /// - fields
     /// - name // 所有権で渡す
-    fn make_field_member_ty<T: Field>(&mut self, fields: &mut Vec<T>, name: String) -> Result<bool, err::ErrKind> {
+    fn make_field_member_ty<T: Field>(
+        &mut self,
+        fields: &mut Vec<T>,
+        name: String,
+    ) -> Result<bool, err::ErrKind> {
         self.next_tkn(&[])?;
         let ty = self.define_ty_node()?;
 
-        fields.push(T::new(
-            name,
-            ty,
-        ));
+        fields.push(T::new(name, ty));
 
         match self.current_tkn() {
             lex::Tkn::Comma => {}
@@ -190,8 +188,10 @@ impl Parser {
     }
 
     /// 構造体などの中にメゾットを登録
-    pub(in crate::compiler::parse::typedef)
-    fn registration_mod_name(&self, method: &mut Group1Node) -> Result<(), err::ErrKind> {
+    pub(in crate::compiler::parse::typedef) fn registration_mod_name(
+        &self,
+        method: &mut Group1Node,
+    ) -> Result<(), err::ErrKind> {
         // モジュールの名前を登録
         let node::Group1Node::FuncDefine(func) = method else {
             return crate::err_at!(self.internal_state_err("function definition"));
@@ -204,15 +204,19 @@ impl Parser {
     }
 
     /// メゾットの中身を作成
-    pub(in crate::compiler::parse::typedef) 
-    fn make_field_method_node(&mut self, method: &mut Group1Node) -> Result<(), err::ErrKind> {
+    pub(in crate::compiler::parse::typedef) fn make_field_method_node(
+        &mut self,
+        method: &mut Group1Node,
+    ) -> Result<(), err::ErrKind> {
         // メゾットの本体が空(`{}`)の場合、`one_line_node`を
         // 呼ばずにそのまま本体無しとして扱う
         if self.current_tkn() != &lex::Tkn::RBrace {
             loop {
                 if let node::Group1Node::FuncDefine(func) = method {
-                    func.body
-                        .push(self.one_line_node()?.gen_group_info(self.build_err_span().line));
+                    func.body.push(
+                        self.one_line_node()?
+                            .gen_group_info(self.build_err_span().line),
+                    );
                 }
 
                 if self.current_tkn() == &lex::Tkn::RBrace {

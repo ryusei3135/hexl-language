@@ -192,7 +192,11 @@ impl ElfObject {
         }
         match le16(&data, 16) {
             ET_REL => {}
-            _ => return Err(perr("not a relocatable object file (e_type != ET_REL)".into())),
+            _ => {
+                return Err(perr(
+                    "not a relocatable object file (e_type != ET_REL)".into(),
+                ));
+            }
         }
         if le16(&data, 18) != EM_X86_64 {
             return Err(uerr("only x86-64 objects are supported".into()));
@@ -245,15 +249,25 @@ impl ElfObject {
                 align: le64(h, 48),
                 entsize: le64(h, 56),
             };
-            if sh.sh_type != SHT_NOBITS && sh.sh_type != SHT_NULL && get(&data, sh.offset, sh.size).is_none()
+            if sh.sh_type != SHT_NOBITS
+                && sh.sh_type != SHT_NULL
+                && get(&data, sh.offset, sh.size).is_none()
             {
-                return Err(perr(format!("section {i} extends beyond the end of the file")));
+                return Err(perr(format!(
+                    "section {i} extends beyond the end of the file"
+                )));
             }
             if sh.size > MAX_SECTION_SIZE {
-                return Err(uerr(format!("section {i} is too large ({:#x} bytes)", sh.size)));
+                return Err(uerr(format!(
+                    "section {i} is too large ({:#x} bytes)",
+                    sh.size
+                )));
             }
             if sh.align > MAX_ALIGN || (sh.align > 1 && !sh.align.is_power_of_two()) {
-                return Err(perr(format!("section {i} has invalid alignment {}", sh.align)));
+                return Err(perr(format!(
+                    "section {i} has invalid alignment {}",
+                    sh.align
+                )));
             }
             name_offs.push(le32(h, 0) as usize);
             sections.push(sh);
@@ -277,7 +291,9 @@ impl ElfObject {
                     }
                 }
                 SHT_SYMTAB_SHNDX => {
-                    return Err(uerr("extended section index table (SHT_SYMTAB_SHNDX)".into()))
+                    return Err(uerr(
+                        "extended section index table (SHT_SYMTAB_SHNDX)".into(),
+                    ));
                 }
                 _ => {}
             }
@@ -293,8 +309,12 @@ impl ElfObject {
             if st.size % SYM_SIZE as u64 != 0 {
                 return Err(perr("symbol table size is not a multiple of 24".into()));
             }
-            let strtab = get(&data, sections[strtab_idx].offset, sections[strtab_idx].size)
-                .ok_or_else(|| perr("string table is outside the file".into()))?;
+            let strtab = get(
+                &data,
+                sections[strtab_idx].offset,
+                sections[strtab_idx].size,
+            )
+            .ok_or_else(|| perr("string table is outside the file".into()))?;
             let raw = get(&data, st.offset, st.size).unwrap();
             let count = raw.len() / SYM_SIZE;
             symbols = Vec::with_capacity(count.max(1));
@@ -320,10 +340,14 @@ impl ElfObject {
                     }
                 } else if shndx >= SHN_LORESERVE {
                     if shndx != SHN_ABS {
-                        return Err(uerr(format!("symbol {i} has reserved section index {shndx:#x}")));
+                        return Err(uerr(format!(
+                            "symbol {i} has reserved section index {shndx:#x}"
+                        )));
                     }
                 } else if shndx as usize >= shnum {
-                    return Err(perr(format!("symbol {i} has invalid section index {shndx}")));
+                    return Err(perr(format!(
+                        "symbol {i} has invalid section index {shndx}"
+                    )));
                 }
                 symbols.push(sym);
             }
@@ -340,7 +364,9 @@ impl ElfObject {
             }
             let target = s.info as usize;
             if target >= shnum {
-                return Err(perr(format!("relocation section {i} has invalid target {target}")));
+                return Err(perr(format!(
+                    "relocation section {i} has invalid target {target}"
+                )));
             }
             // デバッグ情報など、出力に載らないセクションへのリロケーションは無視する
             if sections[target].flags & SHF_ALLOC == 0 {
@@ -388,7 +414,9 @@ impl ElfObject {
             }
             let sig_idx = s.info as usize;
             if sig_idx >= symbols.len() {
-                return Err(perr(format!("group section {i} has an invalid signature symbol")));
+                return Err(perr(format!(
+                    "group section {i} has an invalid signature symbol"
+                )));
             }
             let sig = &symbols[sig_idx];
             let signature = if !sig.name.is_empty() {
@@ -452,7 +480,14 @@ mod tests {
     fn rejects_empty_and_garbage() {
         assert!(ElfObject::parse("empty.o", Vec::new()).is_err());
         assert!(ElfObject::parse("junk.o", vec![0u8; 200]).is_err());
-        assert!(ElfObject::parse("text.o", b"hello, this is not an object file at all......................................".to_vec()).is_err());
+        assert!(
+            ElfObject::parse(
+                "text.o",
+                b"hello, this is not an object file at all......................................"
+                    .to_vec()
+            )
+            .is_err()
+        );
     }
 
     fn header() -> Vec<u8> {

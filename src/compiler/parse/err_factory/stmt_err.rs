@@ -4,8 +4,10 @@ use super::*;
 
 impl Parser {
     /// 文の先頭に、予期しないトークンがあった
-    pub(in crate::compiler::parse)
-    fn unexpect_tkn_in_stmt<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn unexpect_tkn_in_stmt<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -14,8 +16,10 @@ impl Parser {
     }
 
     /// `[`の次が名前ではなかった
-    pub(in crate::compiler::parse)
-    fn stmt_name_not_found_after_lbracket<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn stmt_name_not_found_after_lbracket<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -27,8 +31,9 @@ impl Parser {
     }
 
     /// 反復処理の外で、`continue`/`break`が使われた
-    pub(in crate::compiler::parse)
-    fn loop_control_outside_loop<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn loop_control_outside_loop<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(err::ErrKind::Syntax(Box::new(err::SyntaxErr {
             kind: err::SyntaxErrKind::UnexpectTknInStmt {
@@ -42,8 +47,10 @@ impl Parser {
     }
 
     /// `pub`の次が、関数の名前ではなかった
-    pub(in crate::compiler::parse)
-    fn unexpect_tkn_after_pub<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn unexpect_tkn_after_pub<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -56,8 +63,7 @@ impl Parser {
     }
 
     /// 反復処理の条件の後に`{`が無かった
-    pub(in crate::compiler::parse)
-    fn loop_lbrace_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn loop_lbrace_not_found<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -69,8 +75,10 @@ impl Parser {
     }
 
     /// `#`の次が名前ではなかった
-    pub(in crate::compiler::parse)
-    fn preproc_name_not_found<T>(&self, found: lex::Tkn) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn preproc_name_not_found<T>(
+        &self,
+        found: lex::Tkn,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

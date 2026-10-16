@@ -4,8 +4,7 @@ use super::*;
 
 impl AsmEmitter {
     /// 構造体のメモリをスタック領域に配置するコードを生成
-    pub(in crate::compiler::asm_gen) 
-    fn emit_struct_init_asm(
+    pub(in crate::compiler::asm_gen) fn emit_struct_init_asm(
         &mut self,
         struct_node: Vec<inst::MemoryInst>,
         this_is_self: bool,
@@ -54,7 +53,7 @@ impl AsmEmitter {
         if this_is_self {
             self.stk_use_counter += add_size;
         }
-        
+
         struct_txt
     }
 
@@ -72,14 +71,13 @@ impl AsmEmitter {
     ///
     /// 返すのは命令列のみ。呼び出し側(`format_line`)が、この後に
     /// アドレスをレジスタへ渡す命令(`lea`)を続ける。
-    pub(in crate::compiler::asm_gen) 
-    fn emit_data_variant_init_asm(
-        &mut self, 
+    pub(in crate::compiler::asm_gen) fn emit_data_variant_init_asm(
+        &mut self,
         parent_id: usize,
-        member: Option<&inst::MemoryInst>, 
-        tag: usize, 
-        this_is_self: bool, 
-        variant_size: &Size
+        member: Option<&inst::MemoryInst>,
+        tag: usize,
+        this_is_self: bool,
+        variant_size: &Size,
     ) -> String {
         let payload_bytes = variant_size.extract_variant_largest_size().to_bytes();
         let (tag_off, data_off) = if this_is_self {
@@ -94,7 +92,8 @@ impl AsmEmitter {
         if let Some(mem_val) = member {
             let inst::MemoryInst::Member {
                 value_idx, size, ..
-            } = mem_val else {
+            } = mem_val
+            else {
                 panic!("{:?}", member);
             };
 
@@ -125,7 +124,11 @@ impl AsmEmitter {
     }
 
     fn emit_variant_tag_field(&mut self, offset: usize, tag_num: usize) -> String {
-        self.asm_fmt.get_fmt_struct_member(self.asm_fmt.get_fmt_num(&tag_num.to_string()), &types::Size::DD, offset)
+        self.asm_fmt.get_fmt_struct_member(
+            self.asm_fmt.get_fmt_num(&tag_num.to_string()),
+            &types::Size::DD,
+            offset,
+        )
     }
 
     /// 構造体やバリアントのoffsetを計算

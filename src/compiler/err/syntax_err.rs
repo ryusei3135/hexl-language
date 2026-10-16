@@ -316,7 +316,10 @@ macro_rules! preproc_err {
         return Err($crate::compiler::err::ErrKind::Preproc(Box::new(
             $crate::compiler::err::PreprocErrDetail {
                 kind: $crate::compiler::err::PreprocErrs::$kind,
-                loc: $crate::compiler::err::ErrLoc::new($parser.build_err_span(), $crate::func_name!()),
+                loc: $crate::compiler::err::ErrLoc::new(
+                    $parser.build_err_span(),
+                    $crate::func_name!(),
+                ),
             },
         )))
     };

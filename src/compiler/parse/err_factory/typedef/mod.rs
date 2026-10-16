@@ -1,4 +1,3 @@
-
 /// 構造体の例外
 pub mod struct_syn;
 

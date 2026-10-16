@@ -15,8 +15,7 @@ impl IR {
     /// - 引数の型が`of`なのに、渡された値が`must`でない -> エラー
     /// - 渡された値が`must`なのに、引数の型が`of`でない -> エラー
     /// - `must`の渡し先が呼び出し先と一致しない -> エラー
-    pub(in crate::compiler::ir) 
-    fn check_constract_arg(
+    pub(in crate::compiler::ir) fn check_constract_arg(
         &mut self,
         fn_name: &str,
         param: &node::ArgsNode,
@@ -138,8 +137,7 @@ impl IR {
     /// 渡した先の引数が本当に`of`かどうか(名前が一致するか)は、
     /// IRを生成する時点で`check_constract_arg`が確認するので、
     /// ここでは「そもそも関数に渡されているか」だけを見る
-    pub(crate) 
-    fn check_must_var_used(&self, func: &node::FuncDefine) {
+    pub(crate) fn check_must_var_used(&self, func: &node::FuncDefine) {
         let mut must_vars: Vec<MustVar> = Vec::new();
 
         // 引数として受け取った`must`の値も、この関数の中で
@@ -157,11 +155,7 @@ impl IR {
         Self::walk_group2_nodes(&func.body, &mut must_vars);
 
         for var in must_vars.iter().filter(|var| !var.used) {
-            CompileErr::constract_must_not_used(
-                &func.name,
-                &var.name,
-            )
-            .unwrap();
+            CompileErr::constract_must_not_used(&func.name, &var.name).unwrap();
         }
     }
 
@@ -268,10 +262,14 @@ impl IR {
                 must_vars.truncate(scope_start);
             }
             node::Expr::InitStruct { fields, .. } => {
-                fields.values().for_each(|val| Self::walk_expr(val, must_vars));
+                fields
+                    .values()
+                    .for_each(|val| Self::walk_expr(val, must_vars));
             }
             node::Expr::Array(values) => {
-                values.iter().for_each(|val| Self::walk_expr(val, must_vars));
+                values
+                    .iter()
+                    .for_each(|val| Self::walk_expr(val, must_vars));
             }
             node::Expr::RefArray { dst, index, .. } => {
                 Self::walk_expr(dst, must_vars);
@@ -299,7 +297,6 @@ impl IR {
         }
     }
 }
-
 
 // ===== テスト =====
 #[cfg(test)]
@@ -457,7 +454,9 @@ g(v: int must=d) { d(v) }
 
     #[test]
     fn ending_must_param_twice_is_error() {
-        assert_err("a(): int must=c { ret 1 }\nc(v: int of a) { }\nh(v: int must=c) { c(v)\nc(v) }");
+        assert_err(
+            "a(): int must=c { ret 1 }\nc(v: int of a) { }\nh(v: int must=c) { c(v)\nc(v) }",
+        );
     }
 
     // ------------------------------------------------------------------
@@ -470,7 +469,9 @@ g(v: int must=d) { d(v) }
     fn ending_contract_in_only_one_branch_is_error() {
         // 片方の分岐でしか終了しない(両方で終了する場合は、
         // 下の`each_branch_may_end_the_contract_once`を参照)
-        assert_err(&main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {}"));
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {}",
+        ));
     }
 
     #[test]

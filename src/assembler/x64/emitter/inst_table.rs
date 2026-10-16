@@ -288,34 +288,46 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
             e.emit_cmp(&inst.operands, cmp_size_bits(name))
         }
 
-        "and" | "andq" | "andl" | "andw" | "andb" => {
-            e.emit_alu(AluOp::And, &inst.operands, mnemonic_suffix_bits(name, "and"))
-        }
+        "and" | "andq" | "andl" | "andw" | "andb" => e.emit_alu(
+            AluOp::And,
+            &inst.operands,
+            mnemonic_suffix_bits(name, "and"),
+        ),
 
         "or" | "orq" | "orl" | "orw" | "orb" => {
             e.emit_alu(AluOp::Or, &inst.operands, mnemonic_suffix_bits(name, "or"))
         }
 
-        "xor" | "xorq" | "xorl" | "xorw" | "xorb" => {
-            e.emit_alu(AluOp::Xor, &inst.operands, mnemonic_suffix_bits(name, "xor"))
-        }
+        "xor" | "xorq" | "xorl" | "xorw" | "xorb" => e.emit_alu(
+            AluOp::Xor,
+            &inst.operands,
+            mnemonic_suffix_bits(name, "xor"),
+        ),
 
         // `sal` は `shl` と同じ命令 (左シフトは算術/論理で同じ)
-        "shl" | "shlq" | "shll" | "shlw" | "shlb" => {
-            e.emit_shift(ShiftOp::Shl, &inst.operands, mnemonic_suffix_bits(name, "shl"))
-        }
+        "shl" | "shlq" | "shll" | "shlw" | "shlb" => e.emit_shift(
+            ShiftOp::Shl,
+            &inst.operands,
+            mnemonic_suffix_bits(name, "shl"),
+        ),
 
-        "sal" | "salq" | "sall" | "salw" | "salb" => {
-            e.emit_shift(ShiftOp::Shl, &inst.operands, mnemonic_suffix_bits(name, "sal"))
-        }
+        "sal" | "salq" | "sall" | "salw" | "salb" => e.emit_shift(
+            ShiftOp::Shl,
+            &inst.operands,
+            mnemonic_suffix_bits(name, "sal"),
+        ),
 
-        "shr" | "shrq" | "shrl" | "shrw" | "shrb" => {
-            e.emit_shift(ShiftOp::Shr, &inst.operands, mnemonic_suffix_bits(name, "shr"))
-        }
+        "shr" | "shrq" | "shrl" | "shrw" | "shrb" => e.emit_shift(
+            ShiftOp::Shr,
+            &inst.operands,
+            mnemonic_suffix_bits(name, "shr"),
+        ),
 
-        "sar" | "sarq" | "sarl" | "sarw" | "sarb" => {
-            e.emit_shift(ShiftOp::Sar, &inst.operands, mnemonic_suffix_bits(name, "sar"))
-        }
+        "sar" | "sarq" | "sarl" | "sarw" | "sarb" => e.emit_shift(
+            ShiftOp::Sar,
+            &inst.operands,
+            mnemonic_suffix_bits(name, "sar"),
+        ),
 
         "lea" | "leaq" | "leal" => e.emit_lea(&inst.operands),
 
@@ -420,7 +432,11 @@ impl Emitter {
             return Err(format!(
                 "{} requires {} operands",
                 name,
-                if matches!(spec.form, SseForm::CmpPs) { 3 } else { 2 }
+                if matches!(spec.form, SseForm::CmpPs) {
+                    3
+                } else {
+                    2
+                }
             ));
         }
 
@@ -439,9 +455,11 @@ impl Emitter {
 
         // (opcode, ModRM.reg に入れる xmm, rm 側のオペランド)
         let (opcode, reg, rm) = match (&operands[0], &operands[1]) {
-            (Operand::Register(src), Operand::Register(dst)) => {
-                (spec.opcode, xmm_operand(name, *dst)?, SseRm::Reg(xmm_operand(name, *src)?))
-            }
+            (Operand::Register(src), Operand::Register(dst)) => (
+                spec.opcode,
+                xmm_operand(name, *dst)?,
+                SseRm::Reg(xmm_operand(name, *src)?),
+            ),
             (Operand::Memory(mem), Operand::Register(dst)) => {
                 (spec.opcode, xmm_operand(name, *dst)?, SseRm::Mem(mem))
             }
@@ -756,11 +774,8 @@ impl Emitter {
         if bits == 16 {
             self.emit_u8(0x66);
         }
-        let rex = 0x40
-            | (((bits == 64) as u8) << 3)
-            | ((r as u8) << 2)
-            | ((x as u8) << 1)
-            | (b as u8);
+        let rex =
+            0x40 | (((bits == 64) as u8) << 3) | ((r as u8) << 2) | ((x as u8) << 1) | (b as u8);
         if rex != 0x40 || empty_rex {
             self.emit_u8(rex);
         }
@@ -821,7 +836,13 @@ impl Emitter {
                         self.emit_u8(value as u8);
                         return Ok(());
                     }
-                    self.emit_sized_prefix(bits, false, false, dst.id() >= 8, needs_empty_rex(*dst));
+                    self.emit_sized_prefix(
+                        bits,
+                        false,
+                        false,
+                        dst.id() >= 8,
+                        needs_empty_rex(*dst),
+                    );
                     self.emit_u8(0x80);
                     self.emit_u8(0b11_000_000 | (op.group() << 3) | (dst.id() & 7));
                     self.emit_u8(value as u8);
@@ -998,7 +1019,7 @@ impl Emitter {
 
 #[cfg(test)]
 mod sse_tests {
-    use crate::assembler::x64::{convert, Lexer, Parser};
+    use crate::assembler::x64::{Lexer, Parser, convert};
 
     use super::*;
 
@@ -1019,53 +1040,53 @@ mod sse_tests {
     #[test]
     fn sse_matches_gnu_as() {
         let cases: &[(&str, &str)] = &[
-        ("movss %xmm1, %xmm0", "f30f10c1"),
-        ("movss -4(%rbp), %xmm0", "f30f1045fc"),
-        ("movss %xmm0, -4(%rbp)", "f30f1145fc"),
-        ("movss %xmm9, %xmm2", "f3410f10d1"),
-        ("movss %xmm2, %xmm9", "f3440f10ca"),
-        ("movss 8(%r12,%r13,4), %xmm10", "f3470f1054ac08"),
-        ("movss %xmm15, (%rsp)", "f3440f113c24"),
-        ("movsd %xmm1, %xmm0", "f20f10c1"),
-        ("movsd 16(%rax), %xmm3", "f20f105810"),
-        ("movsd %xmm3, 16(%rax)", "f20f115810"),
-        ("movups %xmm1, %xmm0", "0f10c1"),
-        ("movups (%rdi), %xmm8", "440f1007"),
-        ("movups %xmm8, 32(%rdi)", "440f114720"),
-        ("movaps %xmm1, %xmm0", "0f28c1"),
-        ("movaps (%rsi), %xmm1", "0f280e"),
-        ("movaps %xmm1, 256(%rsi)", "0f298e00010000"),
-        ("addss %xmm1, %xmm0", "f30f58c1"),
-        ("addsd %xmm1, %xmm0", "f20f58c1"),
-        ("addps %xmm1, %xmm0", "0f58c1"),
-        ("subss -8(%rbp), %xmm0", "f30f5c45f8"),
-        ("subsd %xmm9, %xmm1", "f2410f5cc9"),
-        ("subps %xmm1, %xmm12", "440f5ce1"),
-        ("mulss %xmm1, %xmm0", "f30f59c1"),
-        ("mulsd (%rax,%rcx,8), %xmm0", "f20f5904c8"),
-        ("mulps %xmm1, %xmm0", "0f59c1"),
-        ("divss %xmm1, %xmm0", "f30f5ec1"),
-        ("divsd %xmm10, %xmm11", "f2450f5eda"),
-        ("divps (%rax), %xmm0", "0f5e00"),
-        ("sqrtss %xmm1, %xmm0", "f30f51c1"),
-        ("sqrtsd -16(%rbp), %xmm0", "f20f5145f0"),
-        ("sqrtps %xmm14, %xmm15", "450f51fe"),
-        ("comiss %xmm1, %xmm0", "0f2fc1"),
-        ("ucomiss -4(%rbp), %xmm0", "0f2e45fc"),
-        ("comisd %xmm1, %xmm0", "660f2fc1"),
-        ("ucomisd %xmm9, %xmm8", "66450f2ec1"),
-        ("cmpps $0, %xmm1, %xmm0", "0fc2c100"),
-        ("cmpps $7, (%rax), %xmm9", "440fc20807"),
-        ("cmpps $1, -32(%rbp), %xmm0", "0fc245e001"),
-        ("cmpeqps %xmm1, %xmm0", "0fc2c100"),
-        ("cmpltps %xmm1, %xmm0", "0fc2c101"),
-        ("cmpleps %xmm1, %xmm0", "0fc2c102"),
-        ("cmpunordps %xmm1, %xmm0", "0fc2c103"),
-        ("cmpneqps %xmm1, %xmm0", "0fc2c104"),
-        ("cmpnltps %xmm1, %xmm0", "0fc2c105"),
-        ("cmpnleps %xmm1, %xmm0", "0fc2c106"),
-        ("cmpordps %xmm1, %xmm0", "0fc2c107"),
-        ("movss 4(%rip), %xmm0", "f30f100504000000"),
+            ("movss %xmm1, %xmm0", "f30f10c1"),
+            ("movss -4(%rbp), %xmm0", "f30f1045fc"),
+            ("movss %xmm0, -4(%rbp)", "f30f1145fc"),
+            ("movss %xmm9, %xmm2", "f3410f10d1"),
+            ("movss %xmm2, %xmm9", "f3440f10ca"),
+            ("movss 8(%r12,%r13,4), %xmm10", "f3470f1054ac08"),
+            ("movss %xmm15, (%rsp)", "f3440f113c24"),
+            ("movsd %xmm1, %xmm0", "f20f10c1"),
+            ("movsd 16(%rax), %xmm3", "f20f105810"),
+            ("movsd %xmm3, 16(%rax)", "f20f115810"),
+            ("movups %xmm1, %xmm0", "0f10c1"),
+            ("movups (%rdi), %xmm8", "440f1007"),
+            ("movups %xmm8, 32(%rdi)", "440f114720"),
+            ("movaps %xmm1, %xmm0", "0f28c1"),
+            ("movaps (%rsi), %xmm1", "0f280e"),
+            ("movaps %xmm1, 256(%rsi)", "0f298e00010000"),
+            ("addss %xmm1, %xmm0", "f30f58c1"),
+            ("addsd %xmm1, %xmm0", "f20f58c1"),
+            ("addps %xmm1, %xmm0", "0f58c1"),
+            ("subss -8(%rbp), %xmm0", "f30f5c45f8"),
+            ("subsd %xmm9, %xmm1", "f2410f5cc9"),
+            ("subps %xmm1, %xmm12", "440f5ce1"),
+            ("mulss %xmm1, %xmm0", "f30f59c1"),
+            ("mulsd (%rax,%rcx,8), %xmm0", "f20f5904c8"),
+            ("mulps %xmm1, %xmm0", "0f59c1"),
+            ("divss %xmm1, %xmm0", "f30f5ec1"),
+            ("divsd %xmm10, %xmm11", "f2450f5eda"),
+            ("divps (%rax), %xmm0", "0f5e00"),
+            ("sqrtss %xmm1, %xmm0", "f30f51c1"),
+            ("sqrtsd -16(%rbp), %xmm0", "f20f5145f0"),
+            ("sqrtps %xmm14, %xmm15", "450f51fe"),
+            ("comiss %xmm1, %xmm0", "0f2fc1"),
+            ("ucomiss -4(%rbp), %xmm0", "0f2e45fc"),
+            ("comisd %xmm1, %xmm0", "660f2fc1"),
+            ("ucomisd %xmm9, %xmm8", "66450f2ec1"),
+            ("cmpps $0, %xmm1, %xmm0", "0fc2c100"),
+            ("cmpps $7, (%rax), %xmm9", "440fc20807"),
+            ("cmpps $1, -32(%rbp), %xmm0", "0fc245e001"),
+            ("cmpeqps %xmm1, %xmm0", "0fc2c100"),
+            ("cmpltps %xmm1, %xmm0", "0fc2c101"),
+            ("cmpleps %xmm1, %xmm0", "0fc2c102"),
+            ("cmpunordps %xmm1, %xmm0", "0fc2c103"),
+            ("cmpneqps %xmm1, %xmm0", "0fc2c104"),
+            ("cmpnltps %xmm1, %xmm0", "0fc2c105"),
+            ("cmpnleps %xmm1, %xmm0", "0fc2c106"),
+            ("cmpordps %xmm1, %xmm0", "0fc2c107"),
+            ("movss 4(%rip), %xmm0", "f30f100504000000"),
         ];
 
         for (asm, expected) in cases {
@@ -1077,15 +1098,15 @@ mod sse_tests {
     #[test]
     fn sse_rejects_invalid_operands() {
         let cases = [
-            "addss %ymm1, %ymm0",        // VEX が必要
-            "addps %zmm1, %zmm0",        // EVEX が必要
-            "addss %eax, %xmm0",         // 汎用レジスタ
-            "addss %xmm0, -4(%rbp)",     // addss にストア形式はない
-            "cmpps $8, %xmm1, %xmm0",    // 述語は 0..=7
-            "cmpps %xmm1, %xmm0",        // imm8 がない
+            "addss %ymm1, %ymm0",         // VEX が必要
+            "addps %zmm1, %zmm0",         // EVEX が必要
+            "addss %eax, %xmm0",          // 汎用レジスタ
+            "addss %xmm0, -4(%rbp)",      // addss にストア形式はない
+            "cmpps $8, %xmm1, %xmm0",     // 述語は 0..=7
+            "cmpps %xmm1, %xmm0",         // imm8 がない
             "cmpps $1, foo(%rip), %xmm0", // imm8 付き RIP 相対シンボルは未対応
-            "movss %xmm0",               // オペランド不足
-            "add %xmm0, %xmm1",          // SSE 以外の命令はベクトルレジスタ不可
+            "movss %xmm0",                // オペランド不足
+            "add %xmm0, %xmm1",           // SSE 以外の命令はベクトルレジスタ不可
             "mov %xmm0, %rax",
         ];
 
@@ -1097,7 +1118,7 @@ mod sse_tests {
 
 #[cfg(test)]
 mod alu_shift_tests {
-    use crate::assembler::x64::{convert, Lexer, Parser};
+    use crate::assembler::x64::{Lexer, Parser, convert};
 
     use super::*;
 
@@ -1267,22 +1288,22 @@ mod alu_shift_tests {
     #[test]
     fn and_or_xor_shift_reject_invalid_operands() {
         let cases = [
-            "and %eax, %rbx",             // レジスタのサイズ不一致
-            "andq %eax, %ebx",            // 接尾辞とレジスタ幅が不一致
-            "or $0x100000000, %eax",      // 即値が32bitに収まらない
-            "or $0x100, %al",             // 即値が8bitに収まらない
-            "xor $0x80000000, %rax",      // 64bit の即値は符号付き32bitまで
-            "and $1, foo(%rip)",          // 即値付きの RIP 相対シンボルは未対応
-            "and %xmm0, %xmm1",           // ベクトルレジスタ
-            "and %eax",                   // オペランド不足
-            "shl %al, %eax",              // シフト量のレジスタは %cl のみ
-            "shl %ecx, %eax",             // %cl 以外
-            "shl $256, %eax",             // シフト量は 0..=255
+            "and %eax, %rbx",        // レジスタのサイズ不一致
+            "andq %eax, %ebx",       // 接尾辞とレジスタ幅が不一致
+            "or $0x100000000, %eax", // 即値が32bitに収まらない
+            "or $0x100, %al",        // 即値が8bitに収まらない
+            "xor $0x80000000, %rax", // 64bit の即値は符号付き32bitまで
+            "and $1, foo(%rip)",     // 即値付きの RIP 相対シンボルは未対応
+            "and %xmm0, %xmm1",      // ベクトルレジスタ
+            "and %eax",              // オペランド不足
+            "shl %al, %eax",         // シフト量のレジスタは %cl のみ
+            "shl %ecx, %eax",        // %cl 以外
+            "shl $256, %eax",        // シフト量は 0..=255
             "shl $-1, %eax",
-            "shlq $1, %eax",              // 接尾辞とレジスタ幅が不一致
-            "shl $1, $2",                 // 宛先が即値
-            "shl $1, %eax, %ebx",         // オペランド過多
-            "shl $2, foo(%rip)",          // 即値付きの RIP 相対シンボルは未対応
+            "shlq $1, %eax",      // 接尾辞とレジスタ幅が不一致
+            "shl $1, $2",         // 宛先が即値
+            "shl $1, %eax, %ebx", // オペランド過多
+            "shl $2, foo(%rip)",  // 即値付きの RIP 相対シンボルは未対応
         ];
 
         for asm in cases {

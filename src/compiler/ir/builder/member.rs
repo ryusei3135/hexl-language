@@ -4,8 +4,7 @@ use super::*;
 use err_factory::member;
 
 impl IR {
-    pub(super) 
-    fn member_is_var(
+    pub(super) fn member_is_var(
         &mut self,
         scope: &[&str],
         name: &str,
@@ -44,8 +43,7 @@ impl IR {
         Ok(r)
     }
 
-    pub(super) 
-    fn member_is_fn(
+    pub(super) fn member_is_fn(
         &mut self,
         scope: &[&str],
         call_func_info: &node::CallInfo,
@@ -81,8 +79,7 @@ impl IR {
     ///
     /// `member_is_var`と違い、`ptr`自身の場所に構造体があるのではなく、
     /// `ptr`の値(アドレス)が指す先に構造体があるので`RefStructPtr`を使う
-    pub(super) 
-    fn member_is_var_via_ptr(
+    pub(super) fn member_is_var_via_ptr(
         &mut self,
         ptr_name: &str,
         name: &str,
@@ -109,8 +106,7 @@ impl IR {
     /// `member_is_fn`と違い、`ptr`はすでに構造体へのアドレスそのものを
     /// 持っているので、暗黙のself引数には`ptr`自身のアドレスではなく
     /// `ptr`の値をそのまま渡す
-    pub(super) 
-    fn member_is_fn_via_ptr(
+    pub(super) fn member_is_fn_via_ptr(
         &mut self,
         ptr_name: &str,
         call_func_info: &node::CallInfo,
@@ -126,8 +122,7 @@ impl IR {
         Ok(r)
     }
 
-    pub(super) 
-    fn member_is_arr_ref(
+    pub(super) fn member_is_arr_ref(
         &mut self,
         scope: &[&str],
         name: &str,

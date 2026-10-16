@@ -10,8 +10,7 @@ use regex::{Captures, Regex};
 // }
 
 impl Parser {
-    pub(super) 
-    fn make_preproc(
+    pub(super) fn make_preproc(
         &mut self,
         proc_name: &str,
     ) -> Result<node::Group2Node, err::ErrKind> {
@@ -188,8 +187,7 @@ impl Parser {
     /// (以前の実装は最後の1つしか保持できなかった)。
     fn gen_asm_line(&mut self, value: &str) -> Result<node::InlineAsm, err::ErrKind> {
         // 正規表現は定数なので失敗しないが、失敗した場合も`Err`で返す
-        let inline_var = Regex::new(r"\$\{([^}]+)\}")
-            .map_err(|_| err::ErrKind::UnexpectedToken)?;
+        let inline_var = Regex::new(r"\$\{([^}]+)\}").map_err(|_| err::ErrKind::UnexpectedToken)?;
 
         let mut operands = Vec::<node::Expr>::new();
         let mut parse_err: Option<err::ErrKind> = None;

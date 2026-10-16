@@ -207,7 +207,8 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
     // DOS header (MZ) — スタブは省略し、直後に PE ヘッダを置く
     // --------------------------------------------------------
 
-    let mut file: Vec<u8> = Vec::with_capacity(size_of_headers as usize + size_of_raw_data as usize);
+    let mut file: Vec<u8> =
+        Vec::with_capacity(size_of_headers as usize + size_of_raw_data as usize);
 
     file.extend_from_slice(&IMAGE_DOS_SIGNATURE.to_le_bytes()); // e_magic
     file.extend(std::iter::repeat(0u8).take(58)); // e_cblp 〜 e_res2 (未使用フィールドは0埋め)

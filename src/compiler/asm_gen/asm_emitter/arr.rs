@@ -21,8 +21,7 @@ impl AsmEmitter {
     ///
     /// 添字を載せた一時レジスタは`self.arr_index_temp`に記録し、
     /// 書き込み後に`write_mem`が解放する
-    pub(in crate::compiler::asm_gen::asm_emitter)
-    fn ref_arr_for_struct_member(
+    pub(in crate::compiler::asm_gen::asm_emitter) fn ref_arr_for_struct_member(
         &mut self,
         name: &str,
         src: &str,
@@ -48,8 +47,7 @@ impl AsmEmitter {
     /// 変数のオペランド(レジスタ/静的領域のラベル)は`extract_operand_text`が
     /// 返すので、レジスタに置かれた変数も、メモリに置かれた変数も同じ
     /// 流れで`ref_arr_indexed`に渡せる。
-    pub(in crate::compiler::asm_gen::asm_emitter)
-    fn ref_arr_for_var(
+    pub(in crate::compiler::asm_gen::asm_emitter) fn ref_arr_for_var(
         &mut self,
         name: &str,
         index: usize,
@@ -138,7 +136,11 @@ impl AsmEmitter {
         match idx_size {
             // 8/16bitの添字は、メモリから直接拡張して読み込む
             Size::DB | Size::DW => {
-                let kind = if matches!(idx_size, Size::DB) { 'b' } else { 'w' };
+                let kind = if matches!(idx_size, Size::DB) {
+                    'b'
+                } else {
+                    'w'
+                };
                 let load = if unsigned {
                     self.asm_fmt.get_zero_extend(kind, member, reg64)
                 } else {

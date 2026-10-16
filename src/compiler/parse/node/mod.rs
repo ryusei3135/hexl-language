@@ -1,9 +1,9 @@
 /// 構造体や列挙型などのノードの定義
 pub mod data_node;
-/// テスト時のみ使う関数など
-pub mod test_utils;
 pub mod expr_node;
 pub mod stmt_node;
+/// テスト時のみ使う関数など
+pub mod test_utils;
 
 use std::collections::HashMap;
 

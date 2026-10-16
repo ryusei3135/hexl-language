@@ -27,8 +27,7 @@ impl Parser {
     ///
     /// `cond f(a) == 1 { .. }`のような通常の関数呼び出しは、
     /// `)`の次が`:`にならないので、区別できる
-    pub(in crate::compiler::parse)
-    fn is_variant_bind_at(&self, start: usize) -> bool {
+    pub(in crate::compiler::parse) fn is_variant_bind_at(&self, start: usize) -> bool {
         let Some(tkns) = self.tkns.as_ref() else {
             return false;
         };
@@ -55,8 +54,7 @@ impl Parser {
 
     /// 次のトークン(`current_tkn()`の1つ先)から、パターン束縛が始まるか
     #[inline(always)]
-    pub(in crate::compiler::parse)
-    fn is_variant_bind_ahead(&self) -> bool {
+    pub(in crate::compiler::parse) fn is_variant_bind_ahead(&self) -> bool {
         self.is_variant_bind_at(self.idx + 1)
     }
 
@@ -66,8 +64,9 @@ impl Parser {
     /// (`cond`や、アームの1つ前の`{`/`}`)。
     /// `is_variant_bind_ahead()`が`true`のときだけ呼び出す。
     /// 終了時は、`value`の次のトークン(`{`や`=>`)を指す
-    pub(in crate::compiler::parse)
-    fn expr_variant_bind(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn expr_variant_bind(
+        &mut self,
+    ) -> Result<node::Expr, err::ErrKind> {
         // 条件式の中なので、構造体を初期化する式は使えない
         const STRUCT_NOT_INIT: bool = false;
 
@@ -229,13 +228,15 @@ mod variant_bind_tests {
         let (_, patterns, _) = first_arm_patterns(&body);
         assert_eq!(
             patterns,
-            vec![VariantBind::new(
-                "M",
-                "val",
-                Some(TyNode::Ty("int".to_string())),
-                Expr::Var("a".to_string())
-            )
-            .wrap()]
+            vec![
+                VariantBind::new(
+                    "M",
+                    "val",
+                    Some(TyNode::Ty("int".to_string())),
+                    Expr::Var("a".to_string())
+                )
+                .wrap()
+            ]
         );
     }
 
@@ -296,8 +297,9 @@ mod variant_bind_tests {
     #[test]
     fn check_bind_in_arm_with_target_is_err() {
         // `cond a { .. }`のアームは値の比較なので使えない
-        assert!(gen_main_body(
-            "
+        assert!(
+            gen_main_body(
+                "
             main(): int {
               cond a {
                 M(val) := b => {
@@ -309,8 +311,9 @@ mod variant_bind_tests {
               }
             }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -332,9 +335,11 @@ mod variant_bind_tests {
         let (_, patterns, _) = first_arm_patterns(&body);
         assert_eq!(
             patterns,
-            vec![VariantBind::new("M", "val", None, Expr::Var("a".to_string()))
-                .with_variant_ty(Some("A".to_string()))
-                .wrap()]
+            vec![
+                VariantBind::new("M", "val", None, Expr::Var("a".to_string()))
+                    .with_variant_ty(Some("A".to_string()))
+                    .wrap()
+            ]
         );
     }
 

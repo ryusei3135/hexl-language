@@ -37,7 +37,6 @@ pub struct MemoryOperand {
     pub symbol: Option<String>,
 }
 
-
 // `Reg` の定義は `reg.rs` (レジスタを追加する場合はそちらを編集)
 pub use super::reg::Reg;
 
@@ -156,7 +155,6 @@ impl Emitter {
         }
     }
 
-
     pub fn emit_program(&mut self, program: &Program) -> Result<(), String> {
         for statement in &program.statements {
             self.emit_statement(statement)?;
@@ -179,7 +177,6 @@ impl Emitter {
         }
     }
 
-
     fn emit_label(&mut self, name: &str) -> Result<(), String> {
         let offset = self.current_offset();
 
@@ -197,7 +194,6 @@ impl Emitter {
 
         Ok(())
     }
-
 
     fn emit_directive(&mut self, directive: &Directive) -> Result<(), String> {
         match directive {
@@ -1280,7 +1276,6 @@ impl Emitter {
         Ok(())
     }
 
-
     fn emit_memory_modrm(&mut self, reg_field: u8, mem: &MemoryOperand) -> Result<(), String> {
         // RIP-relative
         if mem.base == Some(Reg::Rip) {
@@ -1391,7 +1386,6 @@ impl Emitter {
         }
     }
 
-
     fn memory_base_extended(&self, mem: &MemoryOperand) -> bool {
         match mem.base {
             Some(Reg::Rip) | None => false,
@@ -1405,7 +1399,6 @@ impl Emitter {
             None => false,
         }
     }
-
 
     fn resolve_fixups(&mut self) -> Result<(), String> {
         let fixups = self.fixups.clone();
@@ -1445,7 +1438,6 @@ impl Emitter {
         Ok(())
     }
 
-
     fn resolve_rel32(
         &mut self,
         fixup: &Fixup,
@@ -1466,7 +1458,6 @@ impl Emitter {
 
         self.patch_i32(fixup.section, fixup.offset, relative as i32)
     }
-
 
     fn resolve_rip32(
         &mut self,
@@ -1502,7 +1493,6 @@ impl Emitter {
         self.patch_u32(fixup.section, fixup.offset, target_offset as u32)
     }
 
-
     fn resolve_abs64(
         &mut self,
         fixup: &Fixup,
@@ -1511,7 +1501,6 @@ impl Emitter {
     ) -> Result<(), String> {
         self.patch_u64(fixup.section, fixup.offset, target_offset as u64)
     }
-
 
     fn find_symbol(&self, symbol: &str) -> Option<(Section, usize)> {
         if let Some(offset) = self.text_labels.get(symbol) {

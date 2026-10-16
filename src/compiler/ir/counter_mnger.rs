@@ -92,8 +92,7 @@ impl IR {
     /// 変数が引数なら`args`に、ローカル変数なら`list`に数える。
     /// 登録されていない名前は数えない(未定義エラーは、各所の
     /// 型の取得で報告されるのでここでは扱わない)。
-    pub(in crate::compiler::ir) 
-    fn count_var_use(&mut self, var_name: &str) {
+    pub(in crate::compiler::ir) fn count_var_use(&mut self, var_name: &str) {
         match self.var_tree.find(var_name) {
             Some(def_tree::VarType::Param(index)) => {
                 let index = *index;

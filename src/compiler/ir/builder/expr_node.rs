@@ -52,8 +52,11 @@ impl IR {
     /// 添字は配列の要素(`expect_byte`)とは別の型でよいので、添字が変数なら
     /// その変数の型(`uint`など)にする。型が分からない(即値など)ときは、
     /// 整数の`expect_byte`をそのまま使い、整数でなければ`DD`にする
-    pub(in crate::compiler::ir)
-    fn index_expect_ty(&self, index: &node::Expr, expect_byte: &types::Size) -> types::Size {
+    pub(in crate::compiler::ir) fn index_expect_ty(
+        &self,
+        index: &node::Expr,
+        expect_byte: &types::Size,
+    ) -> types::Size {
         match self.infer_expr_ty(index) {
             Some(ty) if !ty.is_float() => ty,
             _ if expect_byte.is_float() => types::Size::DD,
@@ -89,8 +92,7 @@ impl IR {
     ///   即値の型にできないので`None`
     ///
     /// 副作用が無い(変数の使用回数も数えない)ので、`&self`で調べる
-    pub(super)
-    fn infer_expr_ty(&self, expr: &node::Expr) -> Option<types::Size> {
+    pub(super) fn infer_expr_ty(&self, expr: &node::Expr) -> Option<types::Size> {
         let ty = match expr {
             node::Expr::Var(name) => {
                 let ty_node = self.var_tree.get_ty_node(name)?;
@@ -113,9 +115,16 @@ impl IR {
         use types::Size;
         matches!(
             ty,
-            Size::DB | Size::DW | Size::DD | Size::DQ
-                | Size::UDB | Size::UDW | Size::UDD | Size::UDQ
-                | Size::F32 | Size::F64
+            Size::DB
+                | Size::DW
+                | Size::DD
+                | Size::DQ
+                | Size::UDB
+                | Size::UDW
+                | Size::UDD
+                | Size::UDQ
+                | Size::F32
+                | Size::F64
         )
         .then_some(ty)
     }
@@ -127,8 +136,7 @@ impl IR {
     /// (`a: uint64`に対する`a < 10`や`10 < a`の`10`は`uint64`になる)。
     /// 整数の即値は整数型へ、小数の即値は浮動小数点型へだけ変換する。
     /// それ以外は、渡された`expect_byte`をそのまま使う
-    pub(super)
-    fn operand_expect_tys(
+    pub(super) fn operand_expect_tys(
         &self,
         ls: &node::Expr,
         rs: &node::Expr,
@@ -176,8 +184,7 @@ impl IR {
     /// - それ以外は、渡された型をそのまま使う
     /// - どちらも無い(`None`で`Assign`でもない)なら、二項演算は
     ///   オペランドの変数の型(定義元の型)、それ以外は`DD`にする
-    pub(super)
-    fn resolve_expect_byte(
+    pub(super) fn resolve_expect_byte(
         &self,
         expr: &node::Expr,
         expect_byte: Option<&types::Size>,
@@ -242,8 +249,7 @@ impl IR {
         }
     }
 
-    pub(super) 
-    fn assign_expr_node(
+    pub(super) fn assign_expr_node(
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
@@ -296,8 +302,7 @@ impl IR {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn ref_array_node(
+    pub(super) fn ref_array_node(
         &mut self,
         dst: node::Expr,
         index: node::Expr,
@@ -313,8 +318,7 @@ impl IR {
         }
     }
 
-    pub(super) 
-    fn def_var_node(
+    pub(super) fn def_var_node(
         &mut self,
         var: node::DefineVar,
         expect_byte: &types::Size,
@@ -467,8 +471,7 @@ impl IR {
     /// `Name::Mem`: バリアント型のメンバーへのアクセス
     /// - 全メンバーが型なし(旧列挙型相当)なら、タグを整数値として返す
     /// - それ以外は、型なしメンバーを選んだタグ付きの値を返す
-    pub(super) 
-    fn enum_variant_node(
+    pub(super) fn enum_variant_node(
         &mut self,
         name: &str,
         variant: &str,
@@ -516,8 +519,7 @@ impl IR {
         name.to_string()
     }
 
-    pub(super) 
-    fn init_struct_node(
+    pub(super) fn init_struct_node(
         &mut self,
         name: &str,
         fields: &mut HashMap<String, Box<node::Expr>>,
@@ -593,8 +595,7 @@ impl IR {
 
     /// バリアント型の初期化: `Name { field: value }`
     /// バリアント型は同時に1つのメンバーしか持てないので、指定できるのは1つだけ
-    pub(super)
-    fn init_variant_node(
+    pub(super) fn init_variant_node(
         &mut self,
         is_self: bool,
         name: &str,

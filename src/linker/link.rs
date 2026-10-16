@@ -167,8 +167,9 @@ fn classify(obj: &ElfObject, sec: &SectionHeader) -> LinkResult<Fate> {
         return Ok(Fate::Drop);
     }
     match sec.sh_type {
-        SHT_NULL | SHT_SYMTAB | SHT_STRTAB | SHT_RELA | SHT_REL | SHT_GROUP
-        | SHT_SYMTAB_SHNDX => return Ok(Fate::Drop),
+        SHT_NULL | SHT_SYMTAB | SHT_STRTAB | SHT_RELA | SHT_REL | SHT_GROUP | SHT_SYMTAB_SHNDX => {
+            return Ok(Fate::Drop);
+        }
         _ => {}
     }
     if sec.flags & SHF_TLS != 0 {
@@ -261,12 +262,19 @@ impl SymTable {
         let slot = &mut self.syms[gi];
         slot.def = match (slot.def, new) {
             (Def::Undefined, n) => n,
-            (Def::Common { size: s1, align: a1 }, Def::Common { size: s2, align: a2 }) => {
+            (
                 Def::Common {
-                    size: s1.max(s2),
-                    align: a1.max(a2),
-                }
-            }
+                    size: s1,
+                    align: a1,
+                },
+                Def::Common {
+                    size: s2,
+                    align: a2,
+                },
+            ) => Def::Common {
+                size: s1.max(s2),
+                align: a1.max(a2),
+            },
             // 定義は COMMON に勝つ
             (Def::Common { .. }, n @ Def::Defined { .. }) => n,
             (old @ Def::Defined { .. }, Def::Common { .. }) => old,
@@ -290,7 +298,7 @@ impl SymTable {
                     name: slot.name.clone(),
                     first: objects[o1].name.clone(),
                     second: objects[o2].name.clone(),
-                })
+                });
             }
             (old, _) => old,
         };
@@ -446,7 +454,11 @@ fn merge_kinds(objects: &[ElfObject], plan: &[Vec<Fate>], table: &SymTable) -> M
     // COMMON シンボルは .bss の末尾に割り当てる
     let mut common_off: HashMap<usize, u64> = HashMap::new();
     for (gi, g) in table.syms.iter().enumerate() {
-        if let Def::Common { size: csz, align: cal } = g.def {
+        if let Def::Common {
+            size: csz,
+            align: cal,
+        } = g.def
+        {
             size[BSS] = align_up(size[BSS], cal);
             common_off.insert(gi, size[BSS]);
             size[BSS] += csz;
@@ -471,7 +483,13 @@ struct PeBuilder {
 
 impl PeBuilder {
     /// 末尾にセクションを追加し、(RVA, ファイルオフセット) を返す。
-    fn place(&mut self, name: &'static str, vsize: u64, rawsize: u64, characteristics: u32) -> (u64, u64) {
+    fn place(
+        &mut self,
+        name: &'static str,
+        vsize: u64,
+        rawsize: u64,
+        characteristics: u32,
+    ) -> (u64, u64) {
         let rva = self.rva;
         let foff = self.foff;
         let raw = align_up(rawsize, pe::FILE_ALIGN);
@@ -719,7 +737,8 @@ impl Layout {
         if has_idata {
             idata = b.place(".idata", idata_size, idata_size, pe::SCN_DATA);
         }
-        if b.rva > u32::MAX as u64 || b.foff > u32::MAX as u64 || base.checked_add(b.rva).is_none() {
+        if b.rva > u32::MAX as u64 || b.foff > u32::MAX as u64 || base.checked_add(b.rva).is_none()
+        {
             return Err(too_big("output image is too large for PE"));
         }
 
@@ -1178,10 +1197,7 @@ impl Linker {
                     let Some(width) = reloc_width(r.typ) else {
                         return Err(LinkError::Unsupported {
                             object: obj.name.clone(),
-                            message: format!(
-                                "relocation type {} in section `{}'",
-                                r.typ, sec.name
-                            ),
+                            message: format!("relocation type {} in section `{}'", r.typ, sec.name),
                         });
                     };
                     if r.offset.checked_add(width).is_none_or(|e| e > sec.size) {
@@ -1419,7 +1435,8 @@ mod tests {
     #[test]
     fn pe_without_import_leaves_symbol_undefined() {
         let mut l = Linker::with_options(LinkOptions::pe());
-        l.add_object("tiny.obj", coff::tests::tiny_object()).unwrap();
+        l.add_object("tiny.obj", coff::tests::tiny_object())
+            .unwrap();
         let err = l.link().unwrap_err();
         assert!(matches!(err, LinkError::UndefinedSymbols(_)));
     }
@@ -1427,7 +1444,8 @@ mod tests {
     #[test]
     fn pe_links_coff_object_through_import_thunk() {
         let mut l = Linker::with_options(pe_options_with_import());
-        l.add_object("tiny.obj", coff::tests::tiny_object()).unwrap();
+        l.add_object("tiny.obj", coff::tests::tiny_object())
+            .unwrap();
         let out = l.link().unwrap();
         let img = &out.image;
         assert_eq!(out.format, OutputFormat::Pe);
@@ -1436,7 +1454,10 @@ mod tests {
         assert_eq!(&img[0..2], b"MZ");
         let lfanew = u32::from_le_bytes(img[0x3c..0x40].try_into().unwrap()) as usize;
         assert_eq!(&img[lfanew..lfanew + 4], b"PE\0\0");
-        assert_eq!(u16::from_le_bytes(img[lfanew + 4..lfanew + 6].try_into().unwrap()), 0x8664);
+        assert_eq!(
+            u16::from_le_bytes(img[lfanew + 4..lfanew + 6].try_into().unwrap()),
+            0x8664
+        );
         // 全セクションの RVA / ファイルオフセットが境界に揃っている
         let nsec = u16::from_le_bytes(img[lfanew + 6..lfanew + 8].try_into().unwrap()) as usize;
         assert_eq!(nsec, 2); // .text + .idata

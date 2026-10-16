@@ -139,10 +139,7 @@ fn symbol_args(directive: &str, operands: &[parse::Operand]) -> Result<Vec<Strin
         .collect()
 }
 
-fn integer_values(
-    directive: &str,
-    operands: &[parse::Operand],
-) -> Result<Vec<DataValue>, String> {
+fn integer_values(directive: &str, operands: &[parse::Operand]) -> Result<Vec<DataValue>, String> {
     if operands.is_empty() {
         return Err(format!("`{}` requires at least one value", directive));
     }
@@ -233,7 +230,7 @@ fn directive(directive: Directive) -> emitter::Statement {
 #[cfg(test)]
 mod float_tests {
     use crate::assembler::x64::emitter::Emitter;
-    use crate::assembler::x64::{convert, Lexer, Parser};
+    use crate::assembler::x64::{Lexer, Parser, convert};
 
     fn assemble_data(source: &str) -> Result<(Vec<u8>, Emitter), String> {
         let tokens = Lexer::new(source).tokenize();

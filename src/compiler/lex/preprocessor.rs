@@ -9,11 +9,9 @@ use std::{
 /// 素の `String` ではなく列挙体として持たせている。
 /// (※ `crate::compiler::models` に既に同名の型がある場合はそちらに合わせて削除してください)
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::compiler::lex) 
-enum ReplaceVal {
+pub(in crate::compiler::lex) enum ReplaceVal {
     Str(String),
 }
-
 
 #[cfg(target_os = "windows")]
 const DEFAULT: &str = "windows";
@@ -28,8 +26,7 @@ const OS_NAMES: [&str; 2] = ["linux", "windows"];
 /// 関数形式マクロの展開の入れ子の上限(`#define F(a) #F(a)`のような自己再帰の防止)
 const MAX_EXPAND_DEPTH: usize = 64;
 
-pub(in crate::compiler::lex) 
-enum PreprocKind {
+pub(in crate::compiler::lex) enum PreprocKind {
     /// `#define NAME VALUE`
     Define(ReplaceVal),
     /// `#define NAME(arg, arg2, ..) BODY`
@@ -39,8 +36,7 @@ enum PreprocKind {
     DefineFn { params: Vec<String>, body: String },
 }
 
-pub(in crate::compiler::lex) 
-struct Preprocessor {
+pub(in crate::compiler::lex) struct Preprocessor {
     tables: HashMap<String, PreprocKind>,
     /// `#include "file"` の相対パスの基準になるディレクトリ
     /// (読み込み中のファイルがあるディレクトリ。未設定なら実行時のカレント)
@@ -50,8 +46,7 @@ struct Preprocessor {
 }
 
 impl Preprocessor {
-    pub(in crate::compiler::lex) 
-    fn new() -> Self {
+    pub(in crate::compiler::lex) fn new() -> Self {
         Self {
             tables: HashMap::new(),
             base_dir: PathBuf::new(),
@@ -61,8 +56,7 @@ impl Preprocessor {
 
     /// これから処理するソースファイルの場所を教える。
     /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
-    pub(in crate::compiler::lex)
-    fn set_source_file(&mut self, file: &Path) {
+    pub(in crate::compiler::lex) fn set_source_file(&mut self, file: &Path) {
         self.base_dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
         self.include_stack.clear();
         if let Ok(canon) = fs::canonicalize(file) {
@@ -77,13 +71,29 @@ impl Preprocessor {
     /// ファイルが読めない場合と、`#include` が循環している場合は panic する。
     fn include_inline(&mut self, rel: &str) -> String {
         let path = self.base_dir.join(rel);
-        let canon = fs::canonicalize(&path)
-            .unwrap_or_else(|e| panic!("`#include \"{}\"`: cannot open `{}`: {}", rel, path.display(), e));
+        let canon = fs::canonicalize(&path).unwrap_or_else(|e| {
+            panic!(
+                "`#include \"{}\"`: cannot open `{}`: {}",
+                rel,
+                path.display(),
+                e
+            )
+        });
         if self.include_stack.contains(&canon) {
-            panic!("`#include \"{}\"`: circular include of `{}`", rel, canon.display());
+            panic!(
+                "`#include \"{}\"`: circular include of `{}`",
+                rel,
+                canon.display()
+            );
         }
-        let text = fs::read_to_string(&canon)
-            .unwrap_or_else(|e| panic!("`#include \"{}\"`: cannot read `{}`: {}", rel, canon.display(), e));
+        let text = fs::read_to_string(&canon).unwrap_or_else(|e| {
+            panic!(
+                "`#include \"{}\"`: cannot read `{}`: {}",
+                rel,
+                canon.display(),
+                e
+            )
+        });
 
         // 取り込んだファイルの中の `#include` は、そのファイルの場所が基準
         let saved_base = std::mem::replace(
@@ -118,8 +128,7 @@ impl Preprocessor {
     /// 名前がまだ登録されていなければ追加する。
     /// 仕様には書かれていないが、同名の再定義は無視する
     /// (元の `add` の `is_none()` チェックを踏襲)。
-    pub(in crate::compiler::lex) 
-    fn add(&mut self, name: &str, preproc: PreprocKind) {
+    pub(in crate::compiler::lex) fn add(&mut self, name: &str, preproc: PreprocKind) {
         if self.tables.get(name).is_none() {
             self.tables.insert(name.to_string(), preproc);
         }
@@ -127,8 +136,7 @@ impl Preprocessor {
 
     /// `#NAME` に登録されている内容を返す。
     /// 仕様どおり、登録されていない名前が来たら panic する。
-    pub(in crate::compiler::lex) 
-    fn resolve(&self, name: &str) -> &PreprocKind {
+    pub(in crate::compiler::lex) fn resolve(&self, name: &str) -> &PreprocKind {
         match self.tables.get(name) {
             Some(kind) => kind,
             None => panic!("undefined preprocessor symbol: `{}`", name),
@@ -152,7 +160,10 @@ impl Preprocessor {
         depth: usize,
     ) -> String {
         if depth > MAX_EXPAND_DEPTH {
-            panic!("preprocessor macro `{}` is expanded too deeply (recursive?)", name);
+            panic!(
+                "preprocessor macro `{}` is expanded too deeply (recursive?)",
+                name
+            );
         }
         // `#F()`は、実引数が空の1つではなく0個として扱う
         let args: &[String] = if params.is_empty() && args.len() == 1 && args[0].is_empty() {
@@ -224,8 +235,7 @@ impl Preprocessor {
     }
 
     /// `#if #NAME` 用: panicせずに「定義済みかどうか」だけを調べる。
-    pub(in crate::compiler::lex) 
-    fn is_defined(&self, name: &str) -> bool {
+    pub(in crate::compiler::lex) fn is_defined(&self, name: &str) -> bool {
         self.tables.get(name).is_some()
     }
 
@@ -242,8 +252,7 @@ impl Preprocessor {
     ///   最初に `NAME` が定義済みだった枝だけを有効にする(どれも当てはまらなければ
     ///   `#else` の枝)。`#elif`は何個でも、`#else`は省略可、入れ子可。
     ///   `#windows` / `#linux` は `--windows` / `--linux` で選んだOSだけが定義済みになる
-    pub(in crate::compiler::lex) 
-    fn preprocess(&mut self, content: &str) -> Option<String> {
+    pub(in crate::compiler::lex) fn preprocess(&mut self, content: &str) -> Option<String> {
         Some(self.preprocess_text(content))
     }
 
@@ -369,8 +378,7 @@ impl Preprocessor {
                             }
                             _ => {
                                 if active_here {
-                                    if let Some((target, kind)) =
-                                        sort_preproc(&name, &rest_of_line)
+                                    if let Some((target, kind)) = sort_preproc(&name, &rest_of_line)
                                     {
                                         // `#define ...` 行: テーブルに登録
                                         self.add(target, kind);
@@ -451,7 +459,6 @@ impl Preprocessor {
 
         output
     }
-
 }
 
 /// `#` の直後に来た `Name` トークン(例: "define")を見て、
@@ -465,8 +472,7 @@ impl Preprocessor {
 /// 6. 3の値と一緒にテーブルに置く
 ///
 /// `name` が未知の命令なら `None` を返す。
-pub(in crate::compiler::lex) 
-fn sort_preproc<'a>(
+pub(in crate::compiler::lex) fn sort_preproc<'a>(
     name: &str,
     rest_of_line: &'a str,
 ) -> Option<(&'a str, PreprocKind)> {
@@ -550,7 +556,10 @@ fn parse_define_fn(text: &str) -> Option<(&str, PreprocKind)> {
 /// `(`が無い/`)`で閉じていない場合は panic する。
 fn parse_macro_args(chars: &[char], open: usize, name: &str) -> (Vec<String>, usize) {
     if chars.get(open) != Some(&'(') {
-        panic!("preprocessor macro `{}` requires arguments: `#{}(..)`", name, name);
+        panic!(
+            "preprocessor macro `{}` requires arguments: `#{}(..)`",
+            name, name
+        );
     }
     let mut args: Vec<String> = Vec::new();
     let mut cur = String::new();
@@ -596,7 +605,10 @@ fn parse_macro_args(chars: &[char], open: usize, name: &str) -> (Vec<String>, us
         }
         k += 1;
     }
-    panic!("preprocessor macro `{}`: arguments are not closed with `)`", name);
+    panic!(
+        "preprocessor macro `{}`: arguments are not closed with `)`",
+        name
+    );
 }
 
 /// マクロの本体`body`の中の仮引数(識別子)を、実引数のテキストに置き換える。

@@ -43,8 +43,10 @@ impl Parser {
     fn generic_type_head(&self, kw_idx: usize) -> Option<usize> {
         let tkns = self.tkns.as_ref()?;
         let mut name_idx = kw_idx + 1;
-        if matches!(tkns.get(kw_idx).map(|t| &t.tkn), Some(lex::Tkn::KeyWordVariant))
-            && matches!(tkns.get(name_idx).map(|t| &t.tkn), Some(lex::Tkn::Str(_)))
+        if matches!(
+            tkns.get(kw_idx).map(|t| &t.tkn),
+            Some(lex::Tkn::KeyWordVariant)
+        ) && matches!(tkns.get(name_idx).map(|t| &t.tkn), Some(lex::Tkn::Str(_)))
         {
             name_idx += 1;
         }
@@ -61,8 +63,7 @@ impl Parser {
     ///
     /// 使用が定義より前に書かれていても、その型を作れるように、
     /// 本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
-    pub(in crate::compiler::parse)
-    fn collect_generic_types(&mut self) -> Result<(), err::ErrKind> {
+    pub(in crate::compiler::parse) fn collect_generic_types(&mut self) -> Result<(), err::ErrKind> {
         let Some(len) = self.tkns.as_ref().map(|tkns| tkns.len()) else {
             return crate::err_at!(self.tkn_is_eof(Vec::new()));
         };
@@ -100,8 +101,9 @@ impl Parser {
     /// 現在のトークン(`struct`/`variant`)が、ジェネリクスな型の定義なら、
     /// 本体を閉じる`}`まで読み飛ばして`true`を返す(終了時は`}`を指す)。
     /// ジェネリクスでなければ、何もせず`false`を返す
-    pub(in crate::compiler::parse)
-    fn skip_generic_type_def(&mut self) -> Result<bool, err::ErrKind> {
+    pub(in crate::compiler::parse) fn skip_generic_type_def(
+        &mut self,
+    ) -> Result<bool, err::ErrKind> {
         if self.generic_type_head(self.idx).is_none() {
             return Ok(false);
         }
@@ -265,8 +267,11 @@ impl Parser {
     ///
     /// ## Args
     /// - lt_idx `<`のトークンのインデックス
-    pub(in crate::compiler::parse)
-    fn is_generic_type_expr(&self, name: &str, lt_idx: usize) -> bool {
+    pub(in crate::compiler::parse) fn is_generic_type_expr(
+        &self,
+        name: &str,
+        lt_idx: usize,
+    ) -> bool {
         if !self.generic_types.contains_key(name) {
             return false;
         }
@@ -289,8 +294,10 @@ impl Parser {
     /// ## Errors
     /// `name`が定義済みのジェネリクスな型でない場合
     /// (呼び出し元で`generic_types`を確認しておくこと)
-    pub(in crate::compiler::parse)
-    fn generic_type_ref(&mut self, name: &str) -> Result<String, err::ErrKind> {
+    pub(in crate::compiler::parse) fn generic_type_ref(
+        &mut self,
+        name: &str,
+    ) -> Result<String, err::ErrKind> {
         let Some(generic) = self.generic_types.get(name) else {
             return crate::err_at!(self.internal_state_err("defined generic type"));
         };
@@ -306,8 +313,7 @@ impl Parser {
     /// 呼び出し時の`current_tkn()`は`<`。呼び出し元で`is_generic_type_expr`を
     /// 確認しておくこと。終了時の位置は、通常の構造体の初期化
     /// (`struct_init_node`)や`Name::Mem`(`scope_member_node`)と同じ
-    pub(in crate::compiler::parse)
-    fn generic_type_expr<const T: bool>(
+    pub(in crate::compiler::parse) fn generic_type_expr<const T: bool>(
         &mut self,
         name: &str,
         init_struct: bool,
@@ -333,8 +339,10 @@ impl Parser {
 
     /// 型引数を含んだ、作った構造体/バリアントの名前を作る。
     /// `Pair<int, byte>` -> `Pair$int$byte`
-    pub(in crate::compiler::parse)
-    fn mangle_generic_name(name: &str, ty_args: &[node::TyNode]) -> String {
+    pub(in crate::compiler::parse) fn mangle_generic_name(
+        name: &str,
+        ty_args: &[node::TyNode],
+    ) -> String {
         let mut mangled = name.to_string();
         for ty in ty_args {
             mangled.push('$');
@@ -347,7 +355,9 @@ impl Parser {
     fn mangle_ty(ty: &node::TyNode) -> String {
         match ty {
             node::TyNode::Ty(name) | node::TyNode::SelfTy(name) => name.clone(),
-            node::TyNode::Pointer { is_const, ty_name, .. } => {
+            node::TyNode::Pointer {
+                is_const, ty_name, ..
+            } => {
                 let suffix = if *is_const { "cptr" } else { "ptr" };
                 format!("{}_{}", Self::mangle_ty(ty_name), suffix)
             }
@@ -364,8 +374,7 @@ impl Parser {
     /// ジェネリクス関数と、ジェネリクスな構造体/バリアントで共通。
     ///
     /// `x.T`や`mod::T`の`T`は、型ではなくメンバー/パスの名前なので置き換えない
-    pub(in crate::compiler::parse)
-    fn substitute_params(
+    pub(in crate::compiler::parse) fn substitute_params(
         tkns: &[lex::LocatedTkn],
         params: &[String],
         ty_tkns: &[Vec<lex::LocatedTkn>],
@@ -374,11 +383,8 @@ impl Parser {
 
         for (i, t) in tkns.iter().enumerate() {
             // 先頭は関数名/`struct`/`variant`なので置き換えない
-            let replaceable = i > 0
-                && !matches!(
-                    tkns[i - 1].tkn,
-                    lex::Tkn::Dot | lex::Tkn::ModPathTkn
-                );
+            let replaceable =
+                i > 0 && !matches!(tkns[i - 1].tkn, lex::Tkn::Dot | lex::Tkn::ModPathTkn);
             if let (true, lex::Tkn::Name(n)) = (replaceable, &t.tkn) {
                 if let Some(p) = params.iter().position(|p| p == n) {
                     for ty_tkn in &ty_tkns[p] {
@@ -660,7 +666,10 @@ mod generic_type_tests {
         let node::Group1Node::FuncDefine(method) = &s.methods[1] else {
             panic!();
         };
-        assert_eq!(method.params[0].ty, node::TyNode::SelfTy("Box$int".to_string()));
+        assert_eq!(
+            method.params[0].ty,
+            node::TyNode::SelfTy("Box$int".to_string())
+        );
         assert_eq!(method.params[1].ty, ty("int"));
         assert_eq!(method.ret_ty, ty("int"));
     }
@@ -695,7 +704,10 @@ mod generic_type_tests {
         );
         let ss = structs(&nodes);
         assert!(ss.iter().any(|s| s.name == "Box$int"));
-        let pair = ss.iter().find(|s| s.name == "Pair$Box$int").expect("型が無い");
+        let pair = ss
+            .iter()
+            .find(|s| s.name == "Pair$Box$int")
+            .expect("型が無い");
         assert_eq!(pair.fields[0].ty, ty("Box$int"));
     }
 
@@ -832,24 +844,28 @@ mod generic_type_tests {
 
     #[test]
     fn too_many_type_args_is_err() {
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             struct Pair<T> { a: T }
             f(p: Pair<int, int>): int { ret 0 }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn too_few_type_args_is_err() {
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             struct Pair<T, U> { a: T b: U }
             f(p: Pair<int>): int { ret 0 }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -859,25 +875,29 @@ mod generic_type_tests {
 
     #[test]
     fn non_generic_type_with_type_args_is_err() {
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             struct Plain { a: int }
             f(p: Plain<int>): int { ret 0 }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn infinitely_growing_type_is_err() {
         // `Node<T>`の中で`Node<T*>`を使うと、型が増え続ける
-        assert!(try_build(
-            "
+        assert!(
+            try_build(
+                "
             struct Node<T> { next: Node<T*> }
             f(n: Node<int>): int { ret 0 }
             "
-        )
-        .is_err());
+            )
+            .is_err()
+        );
     }
 
     // ---- 型名 ----

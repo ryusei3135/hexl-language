@@ -1,8 +1,11 @@
 use super::*;
 
 impl Lexer {
-    pub(in crate::compiler::lex) 
-    fn join_sym_tkn(&mut self, curr_tkn: &LocatedTkn, adjacent: bool) -> Option<Tkn> {
+    pub(in crate::compiler::lex) fn join_sym_tkn(
+        &mut self,
+        curr_tkn: &LocatedTkn,
+        adjacent: bool,
+    ) -> Option<Tkn> {
         if !adjacent {
             return None;
         }

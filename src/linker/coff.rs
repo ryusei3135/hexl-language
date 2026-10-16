@@ -210,8 +210,12 @@ pub fn parse(name: impl Into<String>, data: Vec<u8>) -> LinkResult<ElfObject> {
             let off: usize = digits
                 .parse()
                 .map_err(|_| perr(format!("section {} has a malformed long name", i + 1)))?;
-            read_cstr(&strtab, off)
-                .ok_or_else(|| perr(format!("section {} name is outside the string table", i + 1)))?
+            read_cstr(&strtab, off).ok_or_else(|| {
+                perr(format!(
+                    "section {} name is outside the string table",
+                    i + 1
+                ))
+            })?
         } else {
             short_name(raw_name)
         };
@@ -295,7 +299,9 @@ pub fn parse(name: impl Into<String>, data: Vec<u8>) -> LinkResult<ElfObject> {
         let class = e[16];
         let naux = e[17] as usize;
         if i + 1 + naux > nsym {
-            return Err(perr(format!("symbol {i} has auxiliary records past the end")));
+            return Err(perr(format!(
+                "symbol {i} has auxiliary records past the end"
+            )));
         }
         if scn > 0 && scn as usize > nsec {
             return Err(perr(format!("symbol {i} has invalid section number {scn}")));
@@ -392,7 +398,9 @@ pub fn parse(name: impl Into<String>, data: Vec<u8>) -> LinkResult<ElfObject> {
             nrel = le32(first, 0) as u64;
             rel_start = relptr + RELOC_SIZE as u64;
             if nrel == 0 {
-                return Err(perr(format!("section {si} has an invalid relocation count")));
+                return Err(perr(format!(
+                    "section {si} has an invalid relocation count"
+                )));
             }
             nrel -= 1; // 先頭レコード自身を数えている
         }
@@ -512,7 +520,12 @@ fn convert_reloc(
             _ => i32::from_le_bytes(b.try_into().unwrap()) as i64,
         })
     };
-    if width > 0 && off.checked_add(width).is_none_or(|e| e > sec_data.len() as u64) && !nobits {
+    if width > 0
+        && off
+            .checked_add(width)
+            .is_none_or(|e| e > sec_data.len() as u64)
+        && !nobits
+    {
         return Err(RelocErr::OutOfRange);
     }
     Ok(match ty {
@@ -606,7 +619,9 @@ pub(super) mod tests {
     #[test]
     fn detects_coff() {
         assert!(looks_like_coff(&tiny_object()));
-        assert!(!looks_like_coff(b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0\x01\0>\0"));
+        assert!(!looks_like_coff(
+            b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0\x01\0>\0"
+        ));
         assert!(!looks_like_coff(&[0u8; 200]));
     }
 }

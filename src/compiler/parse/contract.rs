@@ -54,8 +54,7 @@ impl Parser {
         }
     }
 
-    pub(in crate::compiler::parse) 
-    fn is_constract_ty(
+    pub(in crate::compiler::parse) fn is_constract_ty(
         &mut self,
         base_ty: node::TyNode,
     ) -> Result<node::TyNode, err::ErrKind> {
@@ -88,7 +87,8 @@ mod test {
     fn check_constract_must() {
         let mut p = parse::Parser::new();
         let tkns = gen_nodes("main(): b1 { a: int must=a = 10 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0] else {
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        else {
             panic!("not func");
         };
         assert_eq!(

@@ -6,16 +6,14 @@ impl IR {
     /// スコープをスタート
     /// irに`StartScope`を挿入する
     #[inline(always)]
-    pub(in crate::compiler::ir::builder) 
-    fn begin_scope(&mut self) {
+    pub(in crate::compiler::ir::builder) fn begin_scope(&mut self) {
         self.scope_states.push(self.var_tree.clone());
         self.push_scope_inst(inst::Inst::StartScope);
     }
 
     /// ブロックの終わりで、スコープを終了する
     /// 契約の検査をしたあと、irに`EndScope`を挿入する
-    pub(in crate::compiler::ir::builder) 
-    fn end_block_scope(&mut self) {
+    pub(in crate::compiler::ir::builder) fn end_block_scope(&mut self) {
         let result = self.end_scope(true);
         self.unwrap_or_report(result);
         self.push_scope_inst(inst::Inst::EndScope);
@@ -31,8 +29,7 @@ impl IR {
 
     /// スコープが終了したときの処理
     /// 契約が終了しているかも検査
-    pub(in crate::compiler::ir::builder) 
-    fn end_scope(
+    pub(in crate::compiler::ir::builder) fn end_scope(
         &mut self,
         from_break: bool,
     ) -> Result<(), err::ErrKind> {
@@ -72,8 +69,7 @@ impl IR {
     ///   (関数の引数や構造体フィールドの初期化式として直接
     ///   使われた場合など)から呼ばれているので、内部的な
     ///   仮の名前を使う
-    pub(super) 
-    fn scope_node(
+    pub(super) fn scope_node(
         &mut self,
         scope: &[String],
         target: Box<node::Expr>,

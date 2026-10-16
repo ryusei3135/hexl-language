@@ -4,9 +4,9 @@ mod format_table;
 mod parse;
 mod reg;
 
+pub use super::*;
 use emitter::Emitter;
 use parse::{Lexer, Parser};
-pub use super::*;
 
 /// アセンブリソースをアセンブルしてファイルに書き出す。
 ///

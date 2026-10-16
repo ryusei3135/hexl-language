@@ -101,9 +101,9 @@ impl IR {
             );
         }
 
-        let tag = variant_def
-            .tag_of(&bind.variant)
-            .ok_or_else(|| expr_node::this_variant_field_is_undefined(&bind.variant).unwrap_err())?;
+        let tag = variant_def.tag_of(&bind.variant).ok_or_else(|| {
+            expr_node::this_variant_field_is_undefined(&bind.variant).unwrap_err()
+        })?;
         let Some(field_ty) = variant_def.fields[tag].ty.clone() else {
             panic!(
                 "バリアント型 `{}` のメンバー `{}` は型がないので、`{}({}) := ..`のように中身を取り出せません",
@@ -153,8 +153,7 @@ impl IR {
     ///
     /// 呼び出し元が、この前に`ExpectJmp(arm)`を積んでおく
     /// (他の条件式と同じ。最後に積まれた比較が真なら`arm`へジャンプする)
-    pub(super)
-    fn variant_bind_cond(
+    pub(super) fn variant_bind_cond(
         &mut self,
         bind: &node::VariantBind,
     ) -> Result<VariantBindInfo, err::ErrKind> {
@@ -170,8 +169,10 @@ impl IR {
     ///
     /// アームのスコープ(`begin_scope`)の中で呼び出す
     /// (`end_block_scope`で`val`の定義が消える)
-    pub(super)
-    fn variant_bind_define_var(&mut self, info: &VariantBindInfo) -> Result<(), err::ErrKind> {
+    pub(super) fn variant_bind_define_var(
+        &mut self,
+        info: &VariantBindInfo,
+    ) -> Result<(), err::ErrKind> {
         // `value.value`
         let value_idx = self.push_inst(Self::variant_ref_inst(
             info,
@@ -206,8 +207,7 @@ impl IR {
     /// 渡されてくる。IRはバリアント型の定義を全て集めてから処理するので、ここで直す。
     ///
     /// `Type`がバリアント型で、`Mem`がそのメンバー、かつ引数が1つのときだけ直す
-    pub(super)
-    fn scope_call_to_variant_init(&self, expr: node::Expr) -> node::Expr {
+    pub(super) fn scope_call_to_variant_init(&self, expr: node::Expr) -> node::Expr {
         let node::Expr::Scope { scope, target } = &expr else {
             return expr;
         };

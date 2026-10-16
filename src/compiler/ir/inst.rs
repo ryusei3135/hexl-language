@@ -41,7 +41,7 @@ impl ExprInst {
     pub fn is_float(&self, insts: &[Inst]) -> bool {
         insts[self.ls].is_float(insts)
     }
-    
+
     /// この式の結果が符号なし整数。
     pub fn is_unsigned(&self, insts: &[Inst]) -> bool {
         insts[self.ls].is_unsigned(insts)
@@ -317,8 +317,7 @@ impl Inst {
         }
     }
 
-    pub(in crate::compiler::ir) 
-    fn gen_float(value: &str, size: &types::Size, dst: usize) -> Self {
+    pub(in crate::compiler::ir) fn gen_float(value: &str, size: &types::Size, dst: usize) -> Self {
         match size {
             types::Size::F32 => {
                 value.parse::<f32>().unwrap();
@@ -326,7 +325,7 @@ impl Inst {
             types::Size::F64 => {
                 value.parse::<f64>().unwrap();
             }
-            _ => {},
+            _ => {}
         }
         Self::Float {
             dst,

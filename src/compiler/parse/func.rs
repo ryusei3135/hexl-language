@@ -10,8 +10,7 @@ impl Parser {
     /// 構造体/列挙型自身の名前を渡す。引数や戻り値の型に予約語
     /// `Self`が使われたとき、この名前へ解決するために使われる。
     /// トップレベルの関数を解析している場合は`None`を渡す。
-    pub(in crate::compiler::parse) 
-    fn func_node(
+    pub(in crate::compiler::parse) fn func_node(
         &mut self,
         func_name: String,
         is_public: bool,
@@ -34,7 +33,12 @@ impl Parser {
                 let ret_ty = self.define_ty_node()?;
 
                 if self.current_tkn() == &lex::Tkn::LBrace {
-                    Ok(node::FuncDefine::new(func_name.clone(), arg, ret_ty, is_public))
+                    Ok(node::FuncDefine::new(
+                        func_name.clone(),
+                        arg,
+                        ret_ty,
+                        is_public,
+                    ))
                 } else {
                     crate::err_at!(self.fn_lbrace_not_found())
                 }
@@ -91,7 +95,9 @@ impl Parser {
                     // いるため、ここでは常に`true`(同上、パーサー自体の
                     // バグでない限り到達しない)
                     if can_create_param == false {
-                        return crate::err_at!(self.internal_state_err("valid argument list state"));
+                        return crate::err_at!(
+                            self.internal_state_err("valid argument list state")
+                        );
                     }
                     self.next_tkn(&[])?;
                     let ty = self.define_ty_node()?;
@@ -160,8 +166,7 @@ impl Parser {
     ///
     /// 呼び出しが定義より前に書かれていても、その型の関数を作れる
     /// ように、本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
-    pub(super) 
-    fn collect_generic_funcs(&mut self) -> Result<(), err::ErrKind> {
+    pub(super) fn collect_generic_funcs(&mut self) -> Result<(), err::ErrKind> {
         let Some(len) = self.tkns.as_ref().map(|tkns| tkns.len()) else {
             return crate::err_at!(self.tkn_is_eof(Vec::new()));
         };
@@ -213,8 +218,7 @@ impl Parser {
 
     /// 現在のトークン(関数名)から始まるジェネリクス関数の定義を、
     /// 本体を閉じる`}`まで読み飛ばす。終了時は`}`を指す
-    pub(super) 
-    fn skip_generic_func_def(&mut self) -> Result<(), err::ErrKind> {
+    pub(super) fn skip_generic_func_def(&mut self) -> Result<(), err::ErrKind> {
         let (_, _, end) = self.extract_generic_def(self.idx)?;
         self.idx = end;
         Ok(())
@@ -327,8 +331,7 @@ impl Parser {
     ///
     /// ## Args
     /// - lt_idx `<`のトークンのインデックス
-    pub(super) 
-    fn is_generic_call(&self, name: &str, lt_idx: usize) -> bool {
+    pub(super) fn is_generic_call(&self, name: &str, lt_idx: usize) -> bool {
         if !self.generic_funcs.contains_key(name) {
             return false;
         }
@@ -383,8 +386,7 @@ impl Parser {
     /// ## 戻り値
     /// `(型のノード, 各型のトークン列)`。トークン列は、型パラメータを
     /// 置き換えるために使う
-    pub(in crate::compiler::parse)
-    fn generic_type_args(
+    pub(in crate::compiler::parse) fn generic_type_args(
         &mut self,
         param_count: usize,
     ) -> Result<(Vec<node::TyNode>, Vec<Vec<lex::LocatedTkn>>), err::ErrKind> {
@@ -434,8 +436,7 @@ impl Parser {
     /// ## Errors
     /// `name`が定義済みのジェネリクス関数でない場合
     /// (呼び出し元で`is_generic_call`を確認しておくこと)
-    pub(super) 
-    fn generic_call_expr(
+    pub(super) fn generic_call_expr(
         &mut self,
         name: &str,
         ini_struct: bool,
@@ -502,7 +503,8 @@ impl Parser {
         };
         // 本体の中で自分自身を呼び出していても、無限に作らないよう
         // 解析を始める前に登録する
-        self.generated_funcs.push((name.to_string(), ty_args.to_vec()));
+        self.generated_funcs
+            .push((name.to_string(), ty_args.to_vec()));
 
         let tkns = Self::substitute_ty_params(&generic, ty_tkns);
 

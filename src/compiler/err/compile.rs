@@ -64,7 +64,7 @@ macro_rules! GenCompileErr {
 macro_rules! GenCompileErrNode {
     ($kind:ident, $msg:expr) => {
         Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
-            $msg.clone()
+            $msg.clone(),
         ))))
     };
 }
@@ -141,10 +141,7 @@ impl CompileErr {
     }
 
     /// `must`の値が、一度も関数へ渡されていない
-    pub fn constract_must_not_used(
-        fn_name: &str,
-        var_name: &str,
-    ) -> Result<(), err::ErrKind> {
+    pub fn constract_must_not_used(fn_name: &str, var_name: &str) -> Result<(), err::ErrKind> {
         Err(err::ErrKind::CompileErr(Box::new(
             Self::ContractMustNotUsed {
                 fn_name: fn_name.to_string(),

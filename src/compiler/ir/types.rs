@@ -108,8 +108,7 @@ pub const VARIANT_TAG_BYTES: usize = 4;
 impl Size {
     /// バリアント型のペイロード(タグを除いた領域)のバイト数。
     /// 型なしメンバー(`Void`)は0バイトとして扱う
-    pub(crate)
-    fn payload_bytes(&self) -> usize {
+    pub(crate) fn payload_bytes(&self) -> usize {
         match self {
             Self::Void => 0,
             t => t.to_bytes(),
@@ -117,18 +116,19 @@ impl Size {
     }
 
     /// バリアント型のタグを除いた、メンバーの値を置く位置のオフセット
-    pub(crate)
-    fn variant_payload_offset(&self) -> usize {
+    pub(crate) fn variant_payload_offset(&self) -> usize {
         match self {
             Self::Variant { tagged: true, .. } => VARIANT_TAG_BYTES,
             Self::Variant { tagged: false, .. } => 0,
-            t => panic!("variant_payload_offset: バリアント型ではありません: {:?}", t),
+            t => panic!(
+                "variant_payload_offset: バリアント型ではありません: {:?}",
+                t
+            ),
         }
     }
 
     /// 構造体の型を作成する
-    pub(in crate::compiler::ir) 
-    fn emit_struct_ty_node(
+    pub(in crate::compiler::ir) fn emit_struct_ty_node(
         f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
         ty: &node::TyNode,
     ) -> Result<Self, err::ErrKind> {
@@ -150,8 +150,7 @@ impl Size {
     /// `try_into`は組み込み型しか解決できないため、構造体などの
     /// ユーザー定義の型では`Err`が返ってくる。その場合に`f`
     /// (構造体の定義を名前から取得する関数)を使って構造体の型を作成する
-    pub(in super) 
-    fn try_from_or_emit_struct(
+    pub(super) fn try_from_or_emit_struct(
         f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
         ty: &node::TyNode,
     ) -> Result<Self, err::ErrKind> {
@@ -161,8 +160,7 @@ impl Size {
         }
     }
 
-    pub(in crate::compiler)
-    fn is_pointer(&self) -> Option<Size> {
+    pub(in crate::compiler) fn is_pointer(&self) -> Option<Size> {
         if let Self::Pointer { ty, .. } = self {
             Some(*ty.clone())
         } else {
@@ -171,8 +169,7 @@ impl Size {
     }
 
     /// ポインタ型を作成する
-    pub(in crate::compiler::ir) 
-    fn build_ptr_ty(size: Self, range: Option<(usize, usize)>) -> Self {
+    pub(in crate::compiler::ir) fn build_ptr_ty(size: Self, range: Option<(usize, usize)>) -> Self {
         Self::Pointer {
             ty: Box::new(size),
             is_const: false,
@@ -181,9 +178,11 @@ impl Size {
     }
 
     /// 組み込み型かどうかを判定する
-    pub(in crate::compiler::ir) 
-    fn is_builtin_ty_name(name: &str) -> bool {
-        matches!(name, "byte" | "i16" | "int" | "i64" | "ubyte" | "u16" | "uint" | "u64" | "float" | "f64")
+    pub(in crate::compiler::ir) fn is_builtin_ty_name(name: &str) -> bool {
+        matches!(
+            name,
+            "byte" | "i16" | "int" | "i64" | "ubyte" | "u16" | "uint" | "u64" | "float" | "f64"
+        )
     }
 
     pub(crate) fn is_float(&self) -> bool {
@@ -201,11 +200,10 @@ impl Size {
     }
 
     /// このサイズがバイト単位で何バイトかを返す
-    pub(crate) 
-    fn to_bytes(&self) -> usize {
+    pub(crate) fn to_bytes(&self) -> usize {
         match self {
             Self::DB | Self::UDB => 1,
-            Self::DW | Self::UDW=> 2,
+            Self::DW | Self::UDW => 2,
             Self::DD | Self::UDD | Self::F32 => 4,
             Self::DQ | Self::UDQ | Self::F64 => 8,
             Self::Array { size, len } => size.to_bytes() * len,
@@ -235,32 +233,26 @@ impl Size {
     }
 
     #[inline(always)]
-    pub(crate) 
-    fn wrap_dst_size(&self) -> Option<Size> {
+    pub(crate) fn wrap_dst_size(&self) -> Option<Size> {
         Some(self.clone())
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn wrap_ok<E>(self) -> Result<Self, E> {
+    pub(in crate::compiler::ir) fn wrap_ok<E>(self) -> Result<Self, E> {
         Ok(self)
     }
 
     /// 型をポインタを取得する型でwrap
-    pub(in crate::compiler::ir)
-    fn wrap_get_addr(&self) -> Self {
+    pub(in crate::compiler::ir) fn wrap_get_addr(&self) -> Self {
         Self::GetAddr(Box::new(self.clone()))
     }
 
-    pub(in crate::compiler)
-    fn extract_variant_largest_size(&self) -> &Size {
+    pub(in crate::compiler) fn extract_variant_largest_size(&self) -> &Size {
         if let Self::Variant { fields, .. } = self {
             let idx = fields
                 .iter()
                 .enumerate()
-                .max_by_key(|(idx, val)| {
-                    (*val).1.to_bytes()
-                });
+                .max_by_key(|(idx, val)| (*val).1.to_bytes());
             &(*fields[idx.unwrap().0]).1
         } else {
             panic!();
@@ -297,8 +289,7 @@ impl IR {
     ///
     /// `try_into`が`Err`を返した場合(構造体などのユーザー定義の型)は、
     /// `struct_tree`を参照して`Size::emit_struct_ty_node`で構造体の型を作成する
-    pub(in crate::compiler::ir) 
-    fn try_size_or_emit_struct(
+    pub(in crate::compiler::ir) fn try_size_or_emit_struct(
         &self,
         ty: &node::TyNode,
     ) -> Result<types::Size, err::ErrKind> {
@@ -312,8 +303,10 @@ impl IR {
     }
 
     /// バリアント型の定義から`types::Size::Variant`を作る
-    pub(in crate::compiler::ir) 
-    fn size_of_variant(&self, variant_def: &node::VariantDefine) -> types::Size {
+    pub(in crate::compiler::ir) fn size_of_variant(
+        &self,
+        variant_def: &node::VariantDefine,
+    ) -> types::Size {
         let fields = variant_def
             .fields
             .iter()
@@ -338,8 +331,7 @@ impl IR {
     /// 組み込み型(`byte`/`u16`/`int`/`u64`)は`types::Size::new`と
     /// 同じ結果を返すが、構造体・バリアント型などのユーザー定義の型名が渡された
     /// 場合は`struct_tree`/`variant_tree`を参照して解決する
-    pub(in crate::compiler::ir) 
-    fn size_of(&self, ty: &node::TyNode) -> types::Size {
+    pub(in crate::compiler::ir) fn size_of(&self, ty: &node::TyNode) -> types::Size {
         match ty {
             node::TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {

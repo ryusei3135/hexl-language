@@ -2,8 +2,7 @@ use super::*;
 
 impl AsmEmitter {
     /// メモリに値を書き込むアセンブリ言語を生成
-    pub(super) 
-    fn write_mem(
+    pub(super) fn write_mem(
         &mut self,
         name: &str,
         dst: usize,
@@ -55,8 +54,7 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) 
-    fn assign_val_ty_is_ptr(
+    pub(super) fn assign_val_ty_is_ptr(
         &mut self,
         current_reg: RegisterMode,
         value: usize,
@@ -96,8 +94,7 @@ impl AsmEmitter {
         self.tmpl_line(opcode, &dst_reg, &ptr_operand, &Size::DQ, false)
     }
 
-    pub(super) 
-    fn assign_val_is_not_ptr(
+    pub(super) fn assign_val_is_not_ptr(
         &mut self,
         current_reg: RegisterMode,
         value: usize,
@@ -114,8 +111,7 @@ impl AsmEmitter {
         self.format_line(mnemonic, Some(current_reg), value, None, this_is_self)
     }
 
-    pub(super)
-    fn assign_val_is_float(
+    pub(super) fn assign_val_is_float(
         &mut self,
         current_reg: RegisterMode,
         value_idx: usize,
@@ -128,7 +124,10 @@ impl AsmEmitter {
         let opcode = match size {
             types::Size::F32 => "float_mov",
             types::Size::F64 => "f64_mov",
-            _ => panic!("floating-point variable has non-floating-point type: {:?}", size),
+            _ => panic!(
+                "floating-point variable has non-floating-point type: {:?}",
+                size
+            ),
         };
         let dst = self.asm_fmt.get_fmt_float_reg(index, size);
         let src = self.extract_operand_text(value_idx, this_is_self);

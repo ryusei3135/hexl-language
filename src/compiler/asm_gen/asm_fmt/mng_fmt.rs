@@ -4,10 +4,10 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::{asm_setting, compiler::asm_gen::RegisterMode};
 use crate::compiler::ir::types;
-use std::any::{Any, TypeId};
 use crate::compiler::models::AsmFmtData;
+use crate::{asm_setting, compiler::asm_gen::RegisterMode};
+use std::any::{Any, TypeId};
 
 /// アセンブリ言語のフォーマットをするAPIを提供
 pub struct MngAsmFmt {
@@ -19,8 +19,11 @@ pub struct MngAsmFmt {
 }
 
 impl MngAsmFmt {
-    pub(in crate::compiler::asm_gen)
-    fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData, os: &str) -> Self {
+    pub(in crate::compiler::asm_gen) fn new(
+        asm_setting: asm_setting::AsmSetting,
+        asm_fmt: AsmFmtData,
+        os: &str,
+    ) -> Self {
         // === アセンブラのフォーマットの設定 ===
         if let Some(s) = asm_fmt {
             Self {
@@ -43,8 +46,7 @@ impl MngAsmFmt {
     }
 
     /// 外部に定義されている物のフォーマット
-    pub(in crate::compiler::asm_gen) 
-    fn get_extern_func(&self, name: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_extern_func(&self, name: &str) -> String {
         self.fmt.func.extern_def.replace("{name}", name)
     }
 
@@ -54,8 +56,11 @@ impl MngAsmFmt {
     /// - usizeの場合はレジスタの番号が返される
     /// ## 引数
     /// - param_idx = 引数の場所
-    pub(in crate::compiler::asm_gen) 
-    fn get_fmt_param<R: 'static>(&self, param_idx: usize, size: &Size) -> R {
+    pub(in crate::compiler::asm_gen) fn get_fmt_param<R: 'static>(
+        &self,
+        param_idx: usize,
+        size: &Size,
+    ) -> R {
         if TypeId::of::<R>() != TypeId::of::<usize>() && TypeId::of::<R>() != TypeId::of::<String>()
         {
             panic!("この型は無効です,")
@@ -77,8 +82,7 @@ impl MngAsmFmt {
         }
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn fmt_ref_operand(&self, reg: &str, size: usize) -> String {
+    pub(in crate::compiler::asm_gen) fn fmt_ref_operand(&self, reg: &str, size: usize) -> String {
         self.fmt
             .fmt
             .ref_stack
@@ -94,8 +98,7 @@ impl MngAsmFmt {
     /// `{src}`を`base, index, scale`に置き換え、それ以外
     /// (`[{src}-{size}]`など)は`{src}`を`base+index*scale`に置き換える。
     /// `offset`が`0`のときはオフセット部分を付けない
-    pub(in crate::compiler::asm_gen) 
-    fn fmt_ref_operand_indexed(
+    pub(in crate::compiler::asm_gen) fn fmt_ref_operand_indexed(
         &self,
         base: &str,
         index: &str,
@@ -115,7 +118,10 @@ impl MngAsmFmt {
         };
         let mut s = tmpl.replace("{src}", &addr);
         if offset == 0 {
-            s = s.replace("-{size}", "").replace("+{size}", "").replace("{size}", "");
+            s = s
+                .replace("-{size}", "")
+                .replace("+{size}", "")
+                .replace("{size}", "");
         } else {
             s = s.replace("{size}", &offset.to_string());
         }
@@ -124,8 +130,7 @@ impl MngAsmFmt {
 
     /// 符号反転(`neg`)の命令を返す。
     /// フォーマットに`neg`が定義されていなければ`neg {dst}`を使う
-    pub(in crate::compiler::asm_gen) 
-    fn get_neg(&self, reg: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_neg(&self, reg: &str) -> String {
         self.opcode_fmt
             .get("neg")
             .map(|o| o.template.clone())
@@ -135,8 +140,7 @@ impl MngAsmFmt {
 
     /// レジスタに即値を足す命令を返す(AT&Tなら`add $4, %rcx`)。
     /// フォーマットに`add_imm`が定義されていればそのテンプレートを使う
-    pub(in crate::compiler::asm_gen) 
-    fn get_add_imm(&self, imm: &str, reg: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_add_imm(&self, imm: &str, reg: &str) -> String {
         self.opcode_fmt
             .get("add_imm")
             .map(|o| o.template.clone())
@@ -153,8 +157,12 @@ impl MngAsmFmt {
     ///
     /// フォーマットに`movsbq`/`movswq`/`movslq`が定義されていればその
     /// テンプレートを、なければAT&T形式のテンプレートを使う
-    pub(in crate::compiler::asm_gen) 
-    fn get_sign_extend(&self, kind: char, src: &str, dst: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_sign_extend(
+        &self,
+        kind: char,
+        src: &str,
+        dst: &str,
+    ) -> String {
         let key = format!("movs{}q", kind);
         self.opcode_fmt
             .get(&key)
@@ -173,8 +181,12 @@ impl MngAsmFmt {
     ///
     /// フォーマットに`movzbq`/`movzwq`が定義されていればそのテンプレートを、
     /// なければAT&T形式のテンプレートを使う
-    pub(in crate::compiler::asm_gen) 
-    fn get_zero_extend(&self, kind: char, src: &str, dst: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_zero_extend(
+        &self,
+        kind: char,
+        src: &str,
+        dst: &str,
+    ) -> String {
         let key = format!("movz{}q", kind);
         self.opcode_fmt
             .get(&key)
@@ -191,8 +203,7 @@ impl MngAsmFmt {
     /// それを使う。なければ符号付きのテンプレートの`jl`/`jg`を
     /// `jb`/`ja`に置き換えて使う。
     /// `==`/`!=`は符号に関係ないので、他のキーはそのまま返す
-    pub(in crate::compiler::asm_gen) 
-    fn get_unsigned_cmp_tmpl(&self, key: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_unsigned_cmp_tmpl(&self, key: &str) -> String {
         let (unsigned_key, from, to) = match key {
             "cmp_l" => ("cmp_b", "jl", "jb"),
             "cmp_g" => ("cmp_a", "jg", "ja"),
@@ -209,8 +220,7 @@ impl MngAsmFmt {
     /// `ref_stack`のテンプレート(`-{size}({src})`など)から、オフセット部分
     /// (`-{size}`/`+{size}`/`{size}`)だけを取り除いて使うため、
     /// フォーマットごとの書き方(`[{src}-{size}]`など)にもそのまま対応できる
-    pub(in crate::compiler::asm_gen) 
-    fn fmt_ref_operand_no_offset(&self, reg: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn fmt_ref_operand_no_offset(&self, reg: &str) -> String {
         self.fmt
             .fmt
             .ref_stack
@@ -222,24 +232,20 @@ impl MngAsmFmt {
 
     /// ニーモニックにサイズ接尾辞を付けるフォーマット(AT&T構文)かどうか
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn mnemonic_size(&self) -> bool {
+    pub(in crate::compiler::asm_gen) fn mnemonic_size(&self) -> bool {
         self.fmt.fmt.mnemonic_size
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn func_frame_fmt(&self) -> String {
+    pub(in crate::compiler::asm_gen) fn func_frame_fmt(&self) -> String {
         self.fmt.fmt.frame.to_string()
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn func_frame_end(&self) -> String {
+    pub(in crate::compiler::asm_gen) fn func_frame_end(&self) -> String {
         self.fmt.fmt.frame_end.to_string()
     }
 
     /// 予約されていた、スタックのサイズ分
-    pub(in crate::compiler::asm_gen) 
-    fn gen_stack_frame(&self, size: usize) -> String {
+    pub(in crate::compiler::asm_gen) fn gen_stack_frame(&self, size: usize) -> String {
         // 16バイト境界に切り上げてアライメントする
         // (例: size=1..16 -> 16, size=17..32 -> 32)
         // `push %rbp`の後の`%rsp`は16バイト境界にあるので、確保するサイズも
@@ -263,8 +269,7 @@ impl MngAsmFmt {
     ///   (呼び出し側で、これまでの`stk_use_counter`とこのメンバー分の
     ///   サイズを合計した値を渡す。ここで更にサイズを足してはいけない)
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn get_fmt_struct_member(
+    pub(in crate::compiler::asm_gen) fn get_fmt_struct_member(
         &self,
         value: String,
         size: &types::Size,
@@ -291,8 +296,7 @@ impl MngAsmFmt {
     }
 
     /// ニーモニックのサイズを調整
-    pub(in crate::compiler::asm_gen) 
-    fn fmt_mnemonic_resize(
+    pub(in crate::compiler::asm_gen) fn fmt_mnemonic_resize(
         &self,
         mnemonic: &str,
         value: &str,
@@ -303,8 +307,7 @@ impl MngAsmFmt {
 
     /// メモリを読み書きする命令は、フォーマット設定に関係なく
     /// オペランドのサイズをニーモニックへ付ける。
-    pub(in crate::compiler::asm_gen) 
-    fn fmt_memory_mnemonic_resize(
+    pub(in crate::compiler::asm_gen) fn fmt_memory_mnemonic_resize(
         &self,
         mnemonic: &str,
         value: &str,
@@ -351,20 +354,17 @@ impl MngAsmFmt {
         value.replace(mnemonic, &format!("{}{}", mnemonic, s_fmt))
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn get_push(&self, reg: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_push(&self, reg: &str) -> String {
         self.get_opcode_tmpl(&"push".to_string())
             .replace("{dst}", reg)
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn get_pop(&self, reg: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_pop(&self, reg: &str) -> String {
         self.get_opcode_tmpl(&"pop".to_string())
             .replace("{dst}", reg)
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn get_str_fmt(&self, value: &str, label: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_str_fmt(&self, value: &str, label: &str) -> String {
         self.fmt
             .fmt
             .string
@@ -372,8 +372,7 @@ impl MngAsmFmt {
             .replace("{name}", &label)
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn get_static_num_fmt(
+    pub(in crate::compiler::asm_gen) fn get_static_num_fmt(
         &self,
         value: &str,
         label: &str,
@@ -382,8 +381,12 @@ impl MngAsmFmt {
         format!(".align 4\n{}: .long {}\n", label, value.replace("$", ""))
     }
 
-    pub(in crate::compiler::asm_gen)
-    fn get_float_fmt(&self, value: &str, label: &str, size: &types::Size) -> String {
+    pub(in crate::compiler::asm_gen) fn get_float_fmt(
+        &self,
+        value: &str,
+        label: &str,
+        size: &types::Size,
+    ) -> String {
         let (alignment, directive) = match size {
             types::Size::F32 => (4, ".float"),
             types::Size::F64 => (8, ".double"),
@@ -393,21 +396,18 @@ impl MngAsmFmt {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn get_global_fmt(&self, name: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_global_fmt(&self, name: &str) -> String {
         self.fmt.fmt.global.replace("{name}", name)
     }
 
     /// 静的領域の変数に%ripをつけて返す
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn fmt_static_var_rip(&self, name: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn fmt_static_var_rip(&self, name: &str) -> String {
         self.fmt.fmt.static_var.replace("{name}", name)
     }
 
     /// エントリーポイントを作成
-    pub(in crate::compiler::asm_gen) 
-    fn get_entry_point(&self) -> String {
+    pub(in crate::compiler::asm_gen) fn get_entry_point(&self) -> String {
         self.fmt
             .fmt
             .global
@@ -415,14 +415,12 @@ impl MngAsmFmt {
     }
 
     /// アセンブリ言語のセクションを定義するフォーマット
-    pub(in crate::compiler::asm_gen) 
-    fn get_section_fmt(&self, section: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_section_fmt(&self, section: &str) -> String {
         self.fmt.section.replace("{name}", section)
     }
 
     /// オペコードのフォーマット
-    pub(in crate::compiler::asm_gen) 
-    fn get_opcode_tmpl(&self, key: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_opcode_tmpl(&self, key: &str) -> String {
         self.opcode_fmt
             .get(key)
             // 渡されたキーがない
@@ -433,19 +431,16 @@ impl MngAsmFmt {
 
     /// 数字のフォーマット
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn get_fmt_num(&self, value: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_fmt_num(&self, value: &str) -> String {
         self.fmt.fmt.num.replace("{}", value).to_string()
     }
 
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn get_call_func_fmt(&self, func_name: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_call_func_fmt(&self, func_name: &str) -> String {
         self.fmt.func.call.replace("{name}", func_name)
     }
 
-    pub(in crate::compiler::asm_gen) 
-    fn get_fmt_reg(&self, reg_num: usize, size: &Size) -> String {
+    pub(in crate::compiler::asm_gen) fn get_fmt_reg(&self, reg_num: usize, size: &Size) -> String {
         let reg = match &size {
             Size::DB | Size::UDB => &self.reg_fmt.db,
             Size::DW | Size::UDW => &self.reg_fmt.dw,
@@ -461,8 +456,11 @@ impl MngAsmFmt {
             .to_string()
     }
 
-    pub(in crate::compiler::asm_gen)
-    fn get_fmt_float_reg(&self, reg_num: usize, size: &Size) -> String {
+    pub(in crate::compiler::asm_gen) fn get_fmt_float_reg(
+        &self,
+        reg_num: usize,
+        size: &Size,
+    ) -> String {
         let reg = match &size {
             Size::F32 => &self.reg_fmt.xmm,
             Size::F64 => &self.reg_fmt.xmm,
@@ -477,7 +475,7 @@ impl MngAsmFmt {
     }
 
     // /// レジスタ文字列からレジスタのサイズを取得する
-    // pub(in crate::compiler::asm_gen) 
+    // pub(in crate::compiler::asm_gen)
     // fn get_reg_size(
     //     &self,
     //     reg_name: &str
@@ -504,8 +502,11 @@ impl MngAsmFmt {
     ///
     /// `operand`がレジスタでない場合(即値やメモリ参照`-8(%rbp)`など)
     /// は、`get_reg_size`が`None`を返すのでそのまま変更せず返す。
-    pub(in crate::compiler::asm_gen) 
-    fn resize_reg_operand(&self, operand: &str, size: &Size) -> String {
+    pub(in crate::compiler::asm_gen) fn resize_reg_operand(
+        &self,
+        operand: &str,
+        size: &Size,
+    ) -> String {
         for (_, registers) in [
             (Size::DB, &self.reg_fmt.db),
             (Size::DW, &self.reg_fmt.dw),
@@ -524,43 +525,44 @@ impl MngAsmFmt {
 
     /// 確保されているレジスタの本数
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn reg_count(&self) -> usize {
+    pub(in crate::compiler::asm_gen) fn reg_count(&self) -> usize {
         self.reg_fmt.dq.len()
     }
 
-    pub(in crate::compiler::asm_gen)
-    fn float_reg_count(&self) -> usize {
+    pub(in crate::compiler::asm_gen) fn float_reg_count(&self) -> usize {
         self.reg_fmt.xmm.len()
     }
 
     /// `(レジスタ番号, レジスタ名)`のペアを、確保されている
     /// 全レジスタ・全サイズ分列挙する。
-    pub(in crate::compiler::asm_gen) 
-    fn all_reg_names(&self) -> Vec<(RegisterMode, String)> {
+    pub(in crate::compiler::asm_gen) fn all_reg_names(&self) -> Vec<(RegisterMode, String)> {
         let mut result = Vec::new();
         for reg_idx in 0..self.reg_count() {
             for size in [Size::DQ, Size::DD, Size::DW, Size::DB] {
-                result.push((RegisterMode::Normal(reg_idx), self.get_fmt_reg(reg_idx, &size)));
+                result.push((
+                    RegisterMode::Normal(reg_idx),
+                    self.get_fmt_reg(reg_idx, &size),
+                ));
             }
         }
         for reg_idx in 0..self.float_reg_count() {
             for size in [Size::F32, Size::F64] {
-                result.push((RegisterMode::Float(reg_idx), self.get_fmt_float_reg(reg_idx, &size)));
+                result.push((
+                    RegisterMode::Float(reg_idx),
+                    self.get_fmt_float_reg(reg_idx, &size),
+                ));
             }
         }
         result
     }
 
     /// 先頭から`count`個の引数が渡されるレジスタの番号
-    pub(in crate::compiler::asm_gen) 
-    fn param_regs(&self, count: usize) -> Vec<usize> {
+    pub(in crate::compiler::asm_gen) fn param_regs(&self, count: usize) -> Vec<usize> {
         self.param_fmt.iter().take(count).copied().collect()
     }
 
     #[inline(always)]
-    pub(in crate::compiler::asm_gen) 
-    fn inline_asm_list(&self) -> Vec<String> {
+    pub(in crate::compiler::asm_gen) fn inline_asm_list(&self) -> Vec<String> {
         self.asm_setting.as_ref().unwrap().get_inline_asm_list()
     }
 }

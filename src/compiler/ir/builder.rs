@@ -367,8 +367,11 @@ impl IR {
     /// `expect_byte`は期待する型。`None`の場合は未確定で、
     /// `Assign`ノードが来たら代入先の変数の型で確定させる
     /// (それ以外のノードでは`DD`にフォールバックする)
-    pub(in crate::compiler::ir)
-    fn gen_expr_ir(&mut self, expr: node::Expr, expect_byte: Option<&types::Size>) -> usize {
+    pub(in crate::compiler::ir) fn gen_expr_ir(
+        &mut self,
+        expr: node::Expr,
+        expect_byte: Option<&types::Size>,
+    ) -> usize {
         // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
         // (`src/ir/builder/variant_bind.rs`)
         let expr = self.scope_call_to_variant_init(expr);
@@ -434,7 +437,9 @@ impl IR {
                 self.build_expr_inst(node, &expect_byte, inst::ExprKind::RShift)
             }
             node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
-            node::Expr::Float(value) => inst::Inst::gen_float(&value, &expect_byte, self.id_counter),
+            node::Expr::Float(value) => {
+                inst::Inst::gen_float(&value, &expect_byte, self.id_counter)
+            }
             node::Expr::Assign(assign_node) => {
                 let var_attr = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
@@ -452,7 +457,9 @@ impl IR {
             }
             // 配列にアクセスする
             // else_idxはchecker/access_mem.rsでチェック済み
-            node::Expr::RefArray { name, dst, index, .. } => {
+            node::Expr::RefArray {
+                name, dst, index, ..
+            } => {
                 // 配列変数を使ったことを記録(`src/ir/counter_mnger.rs`)
                 self.count_var_use(&name);
                 // 添字が可変: `if lo <= idx < hi { arr[idx] } else { arr[else_idx] }`
@@ -481,7 +488,7 @@ impl IR {
                 // (`src/ir/counter_mnger.rs`)
                 self.count_var_use(&var_name);
 
-                let binding: node::TyNode = self.var_tree.get_ty_node(&var_name).unwrap();  
+                let binding: node::TyNode = self.var_tree.get_ty_node(&var_name).unwrap();
                 // 組み込み型ならそのまま、そうでなければ(構造体/バリアント型)
                 // `struct_tree`/`variant_tree`から探して型を決める
                 let mut ty: Size = match Size::try_from(binding.clone()) {
@@ -799,8 +806,7 @@ impl IR {
     }
 
     /// `ir/insert/*`からも使う
-    pub(in crate::compiler::ir)
-    fn next_pattern_label(&mut self) -> usize {
+    pub(in crate::compiler::ir) fn next_pattern_label(&mut self) -> usize {
         loop {
             let label = self.pattern_labels;
             self.pattern_labels += 1;
@@ -817,17 +823,16 @@ impl IR {
     }
 
     #[cfg(test)]
-    pub(crate) 
-    fn test_only_get_func_body(&self, name: &str) -> &[inst::Inst] {
+    pub(crate) fn test_only_get_func_body(&self, name: &str) -> &[inst::Inst] {
         &self.func_tree.func.get(name).unwrap().body
     }
 
     /// 構造体のメゾットとして展開された関数の処理内容を取得する
     /// (テスト用)
     #[cfg(test)]
-    pub(crate) 
-    fn test_only_get_method_body(&self, module: &str, name: &str) -> &[inst::Inst] {
-        &self.func_tree
+    pub(crate) fn test_only_get_method_body(&self, module: &str, name: &str) -> &[inst::Inst] {
+        &self
+            .func_tree
             .func
             .get(&format!("{}::{}", module, name))
             .unwrap()
@@ -1052,8 +1057,9 @@ mod mem_var_tests {
     #[test]
     fn check_variant_enum_like_forward_reference() {
         // `variant`が使われる場所より後に定義されていても解決できる
-        let body =
-            build_func_body("main(): int { a: Color = Color::Blue } variant Color { Red Green Blue }");
+        let body = build_func_body(
+            "main(): int { a: Color = Color::Blue } variant Color { Red Green Blue }",
+        );
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
@@ -1083,13 +1089,16 @@ mod mem_var_tests {
     #[test]
     fn check_variant_with_data_init() {
         // データ付きメンバーの初期化は、タグ付きの`Inst::Variant`になる
-        let body = build_func_body(
-            "variant V { A B(int) } main(): int { v: V = V { B: 5 } }",
-        );
+        let body = build_func_body("variant V { A B(int) } main(): int { v: V = V { B: 5 } }");
         assert!(
             body.iter().any(|i| matches!(
                 i,
-                inst::Inst::Variant { tag: 1, value: Some(_), tagged: true, .. }
+                inst::Inst::Variant {
+                    tag: 1,
+                    value: Some(_),
+                    tagged: true,
+                    ..
+                }
             )),
             "{:?}",
             body
@@ -1099,13 +1108,16 @@ mod mem_var_tests {
     #[test]
     fn check_variant_typeless_member_in_data_variant() {
         // データ付きメンバーを持つ`variant`の型なしメンバーは`Inst::Variant`(値なし)
-        let body = build_func_body(
-            "variant V { A B(int) } main(): int { v: V = V::A }",
-        );
+        let body = build_func_body("variant V { A B(int) } main(): int { v: V = V::A }");
         assert!(
             body.iter().any(|i| matches!(
                 i,
-                inst::Inst::Variant { tag: 0, value: None, tagged: true, .. }
+                inst::Inst::Variant {
+                    tag: 0,
+                    value: None,
+                    tagged: true,
+                    ..
+                }
             )),
             "{:?}",
             body
@@ -1138,7 +1150,11 @@ mod mem_var_tests {
         assert!(
             body.iter().any(|i| matches!(
                 i,
-                inst::Inst::Variant { tagged: false, value: Some(_), .. }
+                inst::Inst::Variant {
+                    tagged: false,
+                    value: Some(_),
+                    ..
+                }
             )),
             "{:?}",
             body
@@ -1317,9 +1333,7 @@ mod match_expr_ir_tests {
             .expect("`v.value`(ペイロードの読み出し)が生成される必要がある");
         let val_pos = body
             .iter()
-            .position(|inst| {
-                matches!(inst, inst::Inst::Mov { name: Some(n), .. } if n == "val")
-            })
+            .position(|inst| matches!(inst, inst::Inst::Mov { name: Some(n), .. } if n == "val"))
             .expect("`val`の定義(Mov)が生成される必要がある");
         assert!(payload_pos < val_pos, "{:?}", body);
         // `val`の定義は、`ExpectJmp`の先(アームのラベルの後ろ)にある
@@ -1336,9 +1350,7 @@ mod match_expr_ir_tests {
         // `E::b(10)`は関数呼び出しではなく、バリアント型の初期化になる
         let mut lexer = lex::Lexer::new();
         lexer
-            .analy(
-                &"main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }".to_string(),
-            )
+            .analy(&"main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }".to_string())
             .unwrap();
         let mut parser = parse::Parser::new();
         let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
@@ -1348,7 +1360,11 @@ mod match_expr_ir_tests {
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
-                inst::Inst::Variant { tag: 1, value: Some(_), .. }
+                inst::Inst::Variant {
+                    tag: 1,
+                    value: Some(_),
+                    ..
+                }
             )),
             "{:?}",
             body

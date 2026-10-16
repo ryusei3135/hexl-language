@@ -90,3 +90,18 @@
 - 対象外: 初期値の式に関数の呼び出し/代入/inlineアセンブラがある変数(副作用が消えるため)、
     再代入(`Inst::AssignVar`)がある変数。
 - `AsmEmitter::unused_var_nodes`は関数ごとの状態なので、`emit_callee_fn`で退避・復元する。
+
+## 退避した変数は参照されるまで復元しない(2026-10-16)
+- 関数呼び出し(`emit_call_func`)で、`caller_saved`のレジスタに置かれた**生きている変数**は、`push`/`pop`ではなく
+    スタックフレームの専用の領域(`%rbp`相対、レジスタごとに1つ。`stk_use_counter`から確保)へ`mov`で退避し、
+    呼び出しの後は復元しない(`lazy_spill.rs`)。式の一時的な結果のレジスタは従来どおり`push`/`pop`。
+- 退避中のレジスタは`spilled_regs`に持ち、使用中のまま(他の値に使わない)にする。中身は壊れているので、次の呼び出しでも保存しない。
+- ノードの生成前(`gen_node_asm`の`prepare_node_spills`)に、そのノードの引数のIRをたどって参照する変数を集め
+    (`collect_node_refs`)、退避中なら復元する。たどれないノード(構造体・バリアント・`MemoryValue`など)は全部復元し、
+    そのノードの中の呼び出しは退避したままにしない(`node_vars_all`)。
+- 同じノードの中の呼び出しは、そのノードが参照する変数(`node_vars`)だけ、呼び出しの直後に復元する(後続のオペランドで使うため)。
+- 制御フローで状態が食い違わないよう、`Block`/`Jmp`/`ExpectJmp`/インラインアセンブラの前に全て復元する。
+    `ExpectJmp`の後(条件ジャンプの条件式の中)の呼び出しは退避したままにしない。
+- `Ret`の後と、`EndScope`で解放されたレジスタ(スコープが終わった変数、`dead_vars`)の退避は、復元せず捨てる。
+- 関数ごとの状態(`spilled_regs`/`spill_slots`/`node_vars`/`node_vars_all`/`dead_vars`)は、`reset_fn_state`で初期化し、
+    `emit_callee_fn`で退避・復元する。

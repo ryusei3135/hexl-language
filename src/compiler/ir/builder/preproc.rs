@@ -3,8 +3,7 @@ use crate::compiler::node::Expr;
 use super::*;
 
 impl IR {
-    pub(super) 
-    fn include_proc(
+    pub(super) fn include_proc(
         &mut self,
         path: &node::ModPath,
         settings: &crate::OptSettings,
@@ -189,8 +188,7 @@ impl IR {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn inline_proc(&mut self, lines: &[node::InlineAsm], name: &str) {
+    pub(super) fn inline_proc(&mut self, lines: &[node::InlineAsm], name: &str) {
         let mut gen_ir = |expr: Expr| {
             let ty: Option<types::Size> =
             // 変数のノードを取得

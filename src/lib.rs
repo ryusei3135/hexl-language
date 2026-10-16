@@ -6,10 +6,9 @@
 mod asm_setting;
 mod assembler;
 mod compiler;
-mod macros;
 mod dump;
 mod linker;
-
+mod macros;
 
 #[cfg(target_os = "windows")]
 const DEFAULT: &str = "windows";
@@ -21,11 +20,8 @@ const DEFAULT: &str = "linux";
 // 参照している可能性があるため、元の `use` はそのまま残している。
 #[allow(unused_imports)]
 use compiler::{
+    asm_gen, err, ir, lex,
     parse::{self, node},
-    ir,
-    lex,
-    asm_gen,
-    err,
 };
 
 use std::{error::Error, fs, process, sync::Mutex};
@@ -137,13 +133,12 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
                 } else {
                     panic!();
                 }
-            }
-            // // フラグ以外の文字
-            // _ => {
-            //     if let Err(e) = settings.set_value(opt.to_string()) {
-            //         eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
-            //     }
-            // }
+            } // // フラグ以外の文字
+              // _ => {
+              //     if let Err(e) = settings.set_value(opt.to_string()) {
+              //         eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
+              //     }
+              // }
         }
     }
     settings
@@ -202,9 +197,7 @@ fn print_binaries() {
 /// - ソースファイルの読み込みに失敗した場合
 /// - 字句解析・構文解析・IR生成のいずれかに失敗した場合
 /// - アセンブリ言語ファイルの書き込みに失敗した場合
-pub fn build(
-    settings: &OptSettings,
-) -> Result<Vec<ir::def_tree::FnDefMetaData>, Box<dyn Error>> {
+pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>, Box<dyn Error>> {
     // 初期化
     let file_name = settings
         .file_name
@@ -264,8 +257,13 @@ pub fn build(
     // `<ファイル名>.o` が作られる (出力名を分けないと互いに上書きしてしまう)。
     // `.s` は先に書き出してあるので、失敗しても内容は確認できる。
     let obj_file = format!("{}.o", asm_file);
-    let obj_path = assembler::x64::emitter_x64_to("-o", &asm_text, &os, Some(&obj_file))
-        .map_err(|e| format!("オブジェクトファイル`{}`の生成に失敗しました: {}", obj_file, e))?;
+    let obj_path =
+        assembler::x64::emitter_x64_to("-o", &asm_text, &os, Some(&obj_file)).map_err(|e| {
+            format!(
+                "オブジェクトファイル`{}`の生成に失敗しました: {}",
+                obj_file, e
+            )
+        })?;
 
     // `#include` したファイルの分も含め、生成したオブジェクトファイルのパスを記憶する
     remember_binary(obj_path);

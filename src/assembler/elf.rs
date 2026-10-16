@@ -937,15 +937,47 @@ pub fn write_executable(emitter: &Emitter) -> Result<Vec<u8>, String> {
 
         let mut headers = vec![
             mk(0, SHT_NULL, 0, 0, 0, 0, 0),
-            mk(n_text, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, BASE + text_off, text_off, text.len() as u64, 16),
-            mk(n_data, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, BASE + data_off, data_off, data.len() as u64, 8),
+            mk(
+                n_text,
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                BASE + text_off,
+                text_off,
+                text.len() as u64,
+                16,
+            ),
+            mk(
+                n_data,
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE,
+                BASE + data_off,
+                data_off,
+                data.len() as u64,
+                8,
+            ),
         ];
 
         if let Some(n_test) = n_test {
-            headers.push(mk(n_test, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, BASE + test_off, test_off, test.len() as u64, 8));
+            headers.push(mk(
+                n_test,
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE,
+                BASE + test_off,
+                test_off,
+                test.len() as u64,
+                8,
+            ));
         }
 
-        headers.push(mk(n_shstr, SHT_STRTAB, 0, 0, shstr_off, shstrtab.len() as u64, 1));
+        headers.push(mk(
+            n_shstr,
+            SHT_STRTAB,
+            0,
+            0,
+            shstr_off,
+            shstrtab.len() as u64,
+            1,
+        ));
 
         for h in &headers {
             shdr_bytes.extend_from_slice(&h.to_bytes());

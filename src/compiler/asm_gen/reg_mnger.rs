@@ -13,16 +13,14 @@
 //! - スコープ(反復処理・関数内のブロック)が終わったら、その中で使用中に
 //!   なったレジスタを全て解放する([`UsedRegManager::end_scope`])。
 //!   解放したレジスタは、他の変数や式が使える。
-//! 
+//!
 use std::collections::HashMap;
 
 use crate::compiler::asm_gen::asm_emitter::RESERVED_REGS;
 use crate::compiler::ir::counter_mnger;
 
-pub(in crate::compiler::asm_gen) 
-const MARKED_REG: bool = true;
-pub(in crate::compiler::asm_gen) 
-const UNMARKED_REG: bool = false;
+pub(in crate::compiler::asm_gen) const MARKED_REG: bool = true;
+pub(in crate::compiler::asm_gen) const UNMARKED_REG: bool = false;
 
 use super::*;
 
@@ -96,14 +94,16 @@ impl UsedRegManager {
         self.allocated.clear();
         self.pending.clear();
 
-        let mut normal_candidates = self.callee_saved
+        let mut normal_candidates = self
+            .callee_saved
             .iter()
             .chain(self.caller_saved.iter())
             .copied()
             .filter(|reg| !RESERVED_REGS.contains(reg))
             .map(RegisterMode::Normal)
             .filter(|reg| !unavailable.contains(reg));
-        let mut float_candidates = self.float_callee_saved
+        let mut float_candidates = self
+            .float_callee_saved
             .iter()
             .chain(self.float_caller_saved.iter())
             .copied()
@@ -294,9 +294,9 @@ impl UsedRegManager {
                 .iter()
                 .all(|item| Self::collect_pure_expr_vars(body, *item, visited, vars, nodes)),
             // 副作用がある
-            inst::Inst::CallFunc(..)
-            | inst::Inst::AssignVar { .. }
-            | inst::Inst::Comple { .. } => false,
+            inst::Inst::CallFunc(..) | inst::Inst::AssignVar { .. } | inst::Inst::Comple { .. } => {
+                false
+            }
             _ => true,
         }
     }
@@ -380,15 +380,9 @@ impl UsedRegManager {
             .touched
             .iter()
             .copied()
-            .filter(|reg| {
-                match reg {
-                    RegisterMode::Float(r) => {
-                        self.float_callee_saved.contains(r)
-                    }
-                    RegisterMode::Normal(r) => {
-                        self.callee_saved.contains(r)
-                    }
-                }
+            .filter(|reg| match reg {
+                RegisterMode::Float(r) => self.float_callee_saved.contains(r),
+                RegisterMode::Normal(r) => self.callee_saved.contains(r),
             })
             .collect();
         regs.sort();
@@ -459,7 +453,9 @@ impl UsedRegManager {
     /// 指定したレジスタを使用中として登録し直す
     /// (スコープ終了後も生きている変数のレジスタを残すために使う)
     pub fn restore(&mut self, regs: &[RegisterMode]) {
-        regs.iter().for_each(|reg| {self.mark_used(reg);});
+        regs.iter().for_each(|reg| {
+            self.mark_used(reg);
+        });
     }
 }
 
@@ -590,8 +586,7 @@ mod stack_var_tests {
         assert_eq!(regs.allocated_reg("a"), Some(RegisterMode::Normal(3)));
         assert_eq!(regs.allocated_reg("b"), Some(RegisterMode::Normal(12)));
         assert!(
-            regs.is_reserved(RegisterMode::Normal(3))
-                && regs.is_reserved(RegisterMode::Normal(12))
+            regs.is_reserved(RegisterMode::Normal(3)) && regs.is_reserved(RegisterMode::Normal(12))
         );
     }
 
@@ -663,6 +658,9 @@ mod stack_var_tests {
                 src: 5,
             },
         ];
-        assert_eq!(UsedRegManager::stack_var_names(&body), vec!["s".to_string()]);
+        assert_eq!(
+            UsedRegManager::stack_var_names(&body),
+            vec!["s".to_string()]
+        );
     }
 }

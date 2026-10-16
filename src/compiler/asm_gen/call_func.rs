@@ -48,8 +48,7 @@ impl AsmEmitter {
     /// 使われるため`pub(super)`にしている
     ///
     /// 流れ: callerレジスタの退避 → 引数の設定 → `call` → 退避したレジスタの復元
-    pub(super) 
-    fn emit_call_func(
+    pub(super) fn emit_call_func(
         &mut self,
         meta_data: &inst::CallFuncMetaData,
         expand_struct_return: bool,
@@ -71,7 +70,23 @@ impl AsmEmitter {
             .into_iter()
             .filter(|reg| *reg != RegisterMode::Normal(0))
             .collect();
-        call_func.push_str(&self.push_caller_saved_regs(&protected_regs));
+        // 変数のレジスタは領域へ`mov`で退避し、その変数が参照されるまで復元しない
+        // (`lazy_spill.rs`)。退避中のレジスタは中身が壊れているので保存しない。
+        // それ以外(式の一時的な結果など)は、従来どおり`push`/`pop`
+        let mut lazy_regs: Vec<RegisterMode> = Vec::new();
+        let mut eager_regs: Vec<RegisterMode> = Vec::new();
+        for reg in protected_regs {
+            if self.spilled_regs.contains_key(&reg) || self.is_callee_saved(reg) {
+                continue;
+            }
+            if self.can_spill_lazily(reg) {
+                lazy_regs.push(reg);
+            } else {
+                eager_regs.push(reg);
+            }
+        }
+        call_func.push_str(&self.spill_store_regs(&lazy_regs));
+        call_func.push_str(&self.push_caller_saved_regs(&eager_regs));
 
         // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
         self.used_reg.start_scope();
@@ -82,7 +97,8 @@ impl AsmEmitter {
         // 引数で使ったレジスタを解放
         self.used_reg.end_scope();
 
-        call_func.push_str(&self.pop_caller_saved_regs(&protected_regs));
+        // call_func.push_str(&self.pop_caller_saved_regs(&eager_regs));
+        call_func.push_str(&self.after_call_spills(&lazy_regs));
         call_func
     }
 
@@ -92,8 +108,7 @@ impl AsmEmitter {
     /// (変数・レジスタ・スタック使用量・IRなど)と`asm_text`を退避し、
     /// 生成が終わったら元に戻す。呼ばれた関数の中で、さらに別の関数を
     /// 呼ぶ場合も同じ処理で再帰的に生成される
-    pub(super)
-    fn emit_callee_fn(&mut self, callee: &mut (String, def_tree::FnDefInfo)) {
+    pub(super) fn emit_callee_fn(&mut self, callee: &mut (String, def_tree::FnDefInfo)) {
         let asm_text = mem::take(&mut self.asm_text);
         let var_hash_map = mem::take(&mut self.var_hash_map);
         let struct_stk_map = mem::take(&mut self.struct_stk_map);
@@ -106,6 +121,11 @@ impl AsmEmitter {
         let emitted_calls = mem::take(&mut self.emitted_calls);
         let unused_var_nodes = mem::take(&mut self.unused_var_nodes);
         let arr_index_temp = self.arr_index_temp.take();
+        let spilled_regs = mem::take(&mut self.spilled_regs);
+        let spill_slots = mem::take(&mut self.spill_slots);
+        let node_vars = mem::take(&mut self.node_vars);
+        let node_vars_all = self.node_vars_all;
+        let dead_vars = mem::take(&mut self.dead_vars);
         let used_reg = self.used_reg.clone();
         let reg_idx = self.reg_idx;
         let stk_use_counter = self.stk_use_counter;
@@ -126,6 +146,11 @@ impl AsmEmitter {
         self.emitted_calls = emitted_calls;
         self.unused_var_nodes = unused_var_nodes;
         self.arr_index_temp = arr_index_temp;
+        self.spilled_regs = spilled_regs;
+        self.spill_slots = spill_slots;
+        self.node_vars = node_vars;
+        self.node_vars_all = node_vars_all;
+        self.dead_vars = dead_vars;
         self.used_reg = used_reg;
         self.reg_idx = reg_idx;
         self.stk_use_counter = stk_use_counter;
@@ -143,55 +168,53 @@ impl AsmEmitter {
     fn push_caller_saved_regs(&self, regs: &[RegisterMode]) -> String {
         regs.iter()
             .filter(|reg| !self.is_callee_saved(**reg))
-            .map(|reg| {
-                match reg {
-                    RegisterMode::Normal(index) => {
-                        let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ);
-                        self.asm_fmt.get_push(&reg_name)
-                    }
-                    RegisterMode::Float(_) => {
-                        let size = self.float_reg_size(*reg);
-                        let opcode = Self::float_move_opcode(&size);
-                        let operand = self.reg_mode_operand(*reg, &size);
-                        format!(
-                            "sub $16, %rsp\n{}",
-                            self.asm_fmt
-                                .get_opcode_tmpl(opcode)
-                                .replace("{src1}", &operand)
-                                .replace("{dst}", "(%rsp)")
-                        )
-                    }
+            .map(|reg| match reg {
+                RegisterMode::Normal(index) => {
+                    let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ);
+                    self.asm_fmt.get_push(&reg_name)
+                }
+                RegisterMode::Float(_) => {
+                    let size = self.float_reg_size(*reg);
+                    let opcode = Self::float_move_opcode(&size);
+                    let operand = self.reg_mode_operand(*reg, &size);
+                    format!(
+                        "sub $16, %rsp\n{}",
+                        self.asm_fmt
+                            .get_opcode_tmpl(opcode)
+                            .replace("{src1}", &operand)
+                            .replace("{dst}", "(%rsp)")
+                    )
                 }
             })
             .collect::<String>()
     }
 
-    /// `push_caller_saved_regs`で退避したレジスタを、退避した時とは逆順に復元する
-    fn pop_caller_saved_regs(&self, regs: &[RegisterMode]) -> String {
-        regs.iter()
-            .rev()
-            .filter(|reg| !self.is_callee_saved(**reg))
-            .map(|reg| {
-                match reg {
-                    RegisterMode::Normal(index) => {
-                        let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ);
-                        self.asm_fmt.get_pop(&reg_name)
-                    }
-                    RegisterMode::Float(_) => {
-                        let size = self.float_reg_size(*reg);
-                        let opcode = Self::float_move_opcode(&size);
-                        let operand = self.reg_mode_operand(*reg, &size);
-                        let restore = self
-                            .asm_fmt
-                            .get_opcode_tmpl(opcode)
-                            .replace("{src1}", "(%rsp)")
-                            .replace("{dst}", &operand);
-                        format!("{restore}add $16, %rsp\n")
-                    }
-                }
-            })
-            .collect::<String>()
-    }
+    // /// `push_caller_saved_regs`で退避したレジスタを、退避した時とは逆順に復元する
+    // fn pop_caller_saved_regs(&self, regs: &[RegisterMode]) -> String {
+    //     regs.iter()
+    //         .rev()
+    //         .filter(|reg| !self.is_callee_saved(**reg))
+    //         .map(|reg| {
+    //             match reg {
+    //                 RegisterMode::Normal(index) => {
+    //                     let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ);
+    //                     self.asm_fmt.get_pop(&reg_name)
+    //                 }
+    //                 RegisterMode::Float(_) => {
+    //                     let size = self.float_reg_size(*reg);
+    //                     let opcode = Self::float_move_opcode(&size);
+    //                     let operand = self.reg_mode_operand(*reg, &size);
+    //                     let restore = self
+    //                         .asm_fmt
+    //                         .get_opcode_tmpl(opcode)
+    //                         .replace("{src1}", "(%rsp)")
+    //                         .replace("{dst}", &operand);
+    //                     format!("{restore}add $16, %rsp\n")
+    //                 }
+    //             }
+    //         })
+    //         .collect::<String>()
+    // }
 
     /// 引数`param`を引数レジスタへ渡す命令の種類を決める
     ///
@@ -236,9 +259,7 @@ impl AsmEmitter {
             //  サイズ決定にも同じサイズを使う必要がある)
             let param_ty = self.curr_inst[*param].get_param_ty().unwrap();
             // 引数のレジスタを取得
-            let param_reg = self
-                .asm_fmt
-                .get_fmt_param::<String>(index, &param_ty);
+            let param_reg = self.asm_fmt.get_fmt_param::<String>(index, &param_ty);
             // 引数のレジスタと値のidを挿入
             let src1_idx = if let Some(struct_idx) = self.resolve_struct_idx(*param) {
                 struct_idx
@@ -289,7 +310,7 @@ impl AsmEmitter {
                 .iter()
                 .position(|i| {
                     (0..arg_lines.len())
-                        .all(|j| j == *i || !self.text_reads_reg(&arg_lines[j].1, arg_lines[*i].0)) 
+                        .all(|j| j == *i || !self.text_reads_reg(&arg_lines[j].1, arg_lines[*i].0))
                 })
                 .unwrap_or(0);
             let i = pending.remove(pos);
@@ -313,8 +334,7 @@ impl AsmEmitter {
     /// 4. `ret`が無ければ付ける(`gen_implicit_ret`)
     /// 5. `callee_saved`の退避/復元を確定する(`fix_callee_saved`)
     /// 6. スタックフレームを実際の使用量で作り直す
-    pub(super) 
-    fn build_fn_process(
+    pub(super) fn build_fn_process(
         &mut self,
         fn_meta_data: &mut (String, def_tree::FnDefInfo),
         asm_fmt_name: Option<&str>,
@@ -350,9 +370,13 @@ impl AsmEmitter {
             returned_struct_idx,
             asm_fmt_name: &asm_fmt_name,
         };
-        self.curr_inst.clone().iter().enumerate().for_each(|(node_idx, node)| {
-            self.gen_node_asm(node_idx, node, &ctx);
-        });
+        self.curr_inst
+            .clone()
+            .iter()
+            .enumerate()
+            .for_each(|(node_idx, node)| {
+                self.gen_node_asm(node_idx, node, &ctx);
+            });
         self.gen_implicit_ret(ctx.fn_name);
         self.fix_callee_saved(prologue_end);
 
@@ -378,13 +402,19 @@ impl AsmEmitter {
             .args
             .iter()
             .enumerate()
-            .map(|(idx, arg)| self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ)))
+            .map(|(idx, arg)| {
+                self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ))
+            })
             .collect();
         // 構造体の変数(`s: Name = Name { .. }`)はスタックに置くので、
         // レジスタの割り当てから外し、次の変数に割り当てる
         let stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_def.body);
-        self.used_reg
-            .allocation_register(&fn_def.var_counter, &param_regs, &stack_vars, &fn_def.body);
+        self.used_reg.allocation_register(
+            &fn_def.var_counter,
+            &param_regs,
+            &stack_vars,
+            &fn_def.body,
+        );
         // 使用回数が0回の変数は、アセンブリを生成しない
         self.unused_var_nodes =
             reg_mnger::UsedRegManager::unused_var_nodes(&fn_def.var_counter, &fn_def.body);
@@ -395,13 +425,17 @@ impl AsmEmitter {
                 name: Some(name), ..
             } = node
             {
-                let all_removed = fn_def.body.iter().enumerate().all(|(i, other)| match other {
-                    inst::Inst::Mov {
-                        name: Some(other_name),
-                        ..
-                    } if other_name == name => self.unused_var_nodes.contains(&i),
-                    _ => true,
-                });
+                let all_removed = fn_def
+                    .body
+                    .iter()
+                    .enumerate()
+                    .all(|(i, other)| match other {
+                        inst::Inst::Mov {
+                            name: Some(other_name),
+                            ..
+                        } if other_name == name => self.unused_var_nodes.contains(&i),
+                        _ => true,
+                    });
                 if self.unused_var_nodes.contains(&idx) && all_removed {
                     self.used_reg.release_allocation(name);
                 }
@@ -449,6 +483,8 @@ impl AsmEmitter {
 
     /// IRのノード1つぶんのアセンブリを生成する
     fn gen_node_asm(&mut self, node_idx: usize, node: &inst::Inst, ctx: &FnGenCtx) {
+        // 退避した変数のうち、このノードが参照するものを復元する(`lazy_spill.rs`)
+        self.prepare_node_spills(node);
         match node {
             inst::Inst::ExpectJmp(name) => self.expect_jmp(name),
             // 生成しない変数の初期値だけを構成する式・定数は生成しない
@@ -458,9 +494,7 @@ impl AsmEmitter {
             inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
             inst::Inst::Expr(expr) => self.gen_expr_asm(expr),
             inst::Inst::Num { .. } => {}
-            inst::Inst::Float { dst, value, size } => {
-                self.gen_float_asm(*dst, value, size)
-            }
+            inst::Inst::Float { dst, value, size } => self.gen_float_asm(*dst, value, size),
             inst::Inst::InitArr(_) => {}
             inst::Inst::Block(name) => {
                 self.asm_text.push_str(&format!("{}:\n", name));
@@ -487,7 +521,11 @@ impl AsmEmitter {
             inst::Inst::AssignVar { name, dst, value } => {
                 self.gen_assign_var_asm(name, *dst, *value, ctx.this_is_self)
             }
-            inst::Inst::Ret(idx) => self.gen_ret_asm(ctx.fn_ret_ty, *idx, ctx.fn_name),
+            inst::Inst::Ret(idx) => {
+                self.gen_ret_asm(ctx.fn_ret_ty, *idx, ctx.fn_name);
+                // `ret`の後は次のラベルまで到達しない。退避は捨てる
+                self.spilled_regs.clear();
+            }
             inst::Inst::Mov {
                 name,
                 size,
@@ -496,7 +534,13 @@ impl AsmEmitter {
             } => {
                 // 使用回数が0回の変数(`unused_var_nodes`)は生成しない
                 if !self.unused_var_nodes.contains(&node_idx) {
-                    self.gen_mov_node_asm(name.as_deref(), size, *dst, *src, ctx.returned_struct_idx)
+                    self.gen_mov_node_asm(
+                        name.as_deref(),
+                        size,
+                        *dst,
+                        *src,
+                        ctx.returned_struct_idx,
+                    )
                 }
             }
             // メモリに配置されている値の生成
@@ -532,6 +576,10 @@ impl AsmEmitter {
             && returned_struct_idx == self.resolve_struct_idx(dst);
         if !is_returned_struct {
             self.mov_value_ir(size, dst, src, name, Some(size));
+            // 定義した変数のレジスタは新しい値になる
+            if let Some(reg) = name.and_then(|n| self.var_reg(n)) {
+                self.spilled_regs.remove(&reg);
+            }
         }
     }
 
@@ -581,15 +629,18 @@ impl AsmEmitter {
         let callee_regs = self.used_reg.callee_regs_to_save();
         let mut save_asm = String::new();
         let mut restore_asm = String::new();
-        
-        let save_asm = callee_regs.iter()
-                .map(|reg| self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ))
-                .map(|name| self.asm_fmt.get_push(&name))
-                .collect::<String>();
-        let restore_asm = callee_regs.iter().rev()
-                .map(|reg| self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ))
-                .map(|name| self.asm_fmt.get_pop(&name))
-                .collect::<String>();
+
+        let save_asm = callee_regs
+            .iter()
+            .map(|reg| self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ))
+            .map(|name| self.asm_fmt.get_push(&name))
+            .collect::<String>();
+        let restore_asm = callee_regs
+            .iter()
+            .rev()
+            .map(|reg| self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ))
+            .map(|name| self.asm_fmt.get_pop(&name))
+            .collect::<String>();
 
         // スタックフレームの作り直し(`build_fn_process`の`replace_range`)は
         // `prologue_end`より前の範囲だけを書き換えるので、先に本体側の目印を置き換えておく
@@ -618,8 +669,7 @@ impl AsmEmitter {
 impl AsmEmitter {
     /// オペランドのテキストが、レジスタ`reg`(どのサイズの名前でも)を
     /// 読み出しに使っているか(`(%rbx)`のようなメモリ参照も含む)
-    pub(super) 
-    fn text_reads_reg(&self, text: &str, reg: RegisterMode) -> bool {
+    pub(super) fn text_reads_reg(&self, text: &str, reg: RegisterMode) -> bool {
         self.asm_fmt
             .all_reg_names()
             .iter()
@@ -627,8 +677,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn expect_jmp(&mut self, name: &str) {
+    pub(super) fn expect_jmp(&mut self, name: &str) {
         // 次のフォーマットに使うラベルの名前を予約する
         // if self.reserved_label_name.is_none() {
         self.reserved_label_name = Some(name.to_string());
@@ -639,8 +688,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn gen_str_asm(&mut self, dst: usize, value: &str) {
+    pub(super) fn gen_str_asm(&mut self, dst: usize, value: &str) {
         let label_name = format!("M{}", self.data_idx.to_string());
         let fmt_data = self.asm_fmt.get_str_fmt(&value, &label_name);
         self.data_sec_text.push_str(&fmt_data);
@@ -658,8 +706,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
+    pub(super) fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
         // (以前は`reg_idx`を進めるだけだったため、引数の`%rdi`などまで
@@ -682,8 +729,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn gen_complie_asm(
+    pub(super) fn gen_complie_asm(
         &mut self,
         name: &str,
         lines: &[(String, Vec<usize>)],
@@ -701,8 +747,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn gen_assign_var_asm(
+    pub(super) fn gen_assign_var_asm(
         &mut self,
         name: &str,
         dst: usize,
@@ -764,8 +809,7 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    pub(super) 
-    fn gen_ret_asm(&mut self, fn_ret_ty: SelfPtrInfo, idx: usize, fn_name: &str) {
+    pub(super) fn gen_ret_asm(&mut self, fn_ret_ty: SelfPtrInfo, idx: usize, fn_name: &str) {
         // `_start`はOSから直接呼ばれるエントリーポイントであり、
         // `call`で呼ばれたわけではないため`ret`で戻ることができない。
         // `_start`の中に明示的な`return`(`Inst::Ret`)が書かれていた

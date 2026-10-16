@@ -4,15 +4,12 @@
 
 use super::*;
 
-
-pub(in crate::compiler)
-trait Field {
+pub(in crate::compiler) trait Field {
     /// 所有権で渡す
     fn new(name: String, ty: TyNode) -> Self;
 
     fn make_field(name: &str, ty: &str) -> Self;
 }
-
 
 // === 構造体 =====
 
@@ -24,10 +21,7 @@ pub struct StructField {
 
 impl Field for StructField {
     fn new(name: String, ty: TyNode) -> Self {
-        Self {
-            name,
-            ty,
-        }
+        Self { name, ty }
     }
 
     fn make_field(name: &str, ty: &str) -> Self {
@@ -130,7 +124,6 @@ impl VariantField {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantDefine {
     pub name: String,
@@ -175,7 +168,6 @@ impl VariantDefine {
         self.fields.iter().position(|f| f.name == name)
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TyNode {

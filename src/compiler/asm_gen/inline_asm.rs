@@ -1,4 +1,7 @@
-use crate::{asm_setting::Reg, compiler::asm_gen::asm_emitter::{RESERVED_REGS, VarIndexInfo}};
+use crate::{
+    asm_setting::Reg,
+    compiler::asm_gen::asm_emitter::{RESERVED_REGS, VarIndexInfo},
+};
 //use crate::ir::def_tree::{VarMetaData, VarTree};
 
 use super::*;
@@ -52,11 +55,7 @@ impl AsmEmitter {
     ///
     /// `%rax`/`%rdx`(`RESERVED_REGS`)と、まだ定義されていない変数のために
     /// 取り置かれているレジスタは選ばない。
-    fn find_free_reg(
-        &self,
-        mode: RegisterMode,
-        exclude: &[RegisterMode],
-    ) -> Option<RegisterMode> {
+    fn find_free_reg(&self, mode: RegisterMode, exclude: &[RegisterMode]) -> Option<RegisterMode> {
         (0..self.asm_fmt.reg_count())
             .map(|index| match mode {
                 RegisterMode::Normal(_) => RegisterMode::Normal(index),
@@ -73,13 +72,13 @@ impl AsmEmitter {
     /// インラインアセンブラが暗黙に書き換えるレジスタ
     /// (`syscall`は`%rcx`と`%r11`を書き換える)
     fn implicit_clobbered_regs(&self, lines: &[(String, Vec<usize>)]) -> Vec<RegisterMode> {
-        if !lines.iter().any(|(template, _)| template.contains("syscall")) {
+        if !lines
+            .iter()
+            .any(|(template, _)| template.contains("syscall"))
+        {
             return Vec::new();
         }
-        [1, 11]
-            .into_iter()
-            .map(RegisterMode::Normal)
-            .collect()
+        [1, 11].into_iter().map(RegisterMode::Normal).collect()
     }
 
     fn resolve_operand_var_size(&self, node_idx: usize) -> Option<Size> {
@@ -135,12 +134,7 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) 
-    fn deploy_inline_asm(
-        &mut self, 
-        name: &str, 
-        lines: &[(String, Vec<usize>)]
-    ) {
+    pub(super) fn deploy_inline_asm(&mut self, name: &str, lines: &[(String, Vec<usize>)]) {
         if self
             .asm_fmt
             .inline_asm_list()
@@ -237,7 +231,9 @@ impl AsmEmitter {
             .filter(|(_, var)| !var.is_stack && var.reg == from)
             .map(|(name, _)| name.clone())
             .collect();
-        names.iter().for_each(|name| self.update_value_reg(name, &to));
+        names
+            .iter()
+            .for_each(|name| self.update_value_reg(name, &to));
         self.last_inst_idx
             .iter_mut()
             .filter(|(_, reg)| *reg == from)
@@ -331,7 +327,10 @@ impl AsmEmitter {
         match size {
             Size::F32 => "float_mov",
             Size::F64 => "f64_mov",
-            _ => panic!("floating-point register has non-floating-point type: {:?}", size),
+            _ => panic!(
+                "floating-point register has non-floating-point type: {:?}",
+                size
+            ),
         }
     }
 

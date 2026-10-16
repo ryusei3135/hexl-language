@@ -1,12 +1,14 @@
-
 use super::*;
 
 impl IR {
     /// 一回しか呼ばれないのでinline
     /// 代入先の型と代入する型が同じか比較する。
     #[inline(always)]
-    pub(in crate::compiler::ir) 
-    fn check_var_ty(&self, var_ty: &types::Size, expect_ty: &types::Size) {
+    pub(in crate::compiler::ir) fn check_var_ty(
+        &self,
+        var_ty: &types::Size,
+        expect_ty: &types::Size,
+    ) {
         // let ty = self.var_tree.get_ty_node(var_name).unwrap();
         println!("{:?} fond var_ty {:?}", expect_ty, var_ty);
 

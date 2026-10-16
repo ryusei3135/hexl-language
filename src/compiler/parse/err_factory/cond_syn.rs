@@ -49,7 +49,9 @@ impl Parser {
         MatchErr::new(self.build_err_span(), self.current_tkn().clone())
     }
 
-    pub(in crate::compiler::parse) fn cond_keyword_not_found(&self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn cond_keyword_not_found(
+        &self,
+    ) -> Result<node::Expr, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -62,13 +64,17 @@ impl Parser {
     }
 
     /// `match`の`{`が無かった
-    pub(in crate::compiler::parse) fn cond_expr_scope_start_lbrace<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn cond_expr_scope_start_lbrace<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::cond_err!(self.build_err_span(), CondExprScopeStartLBrace)
     }
 
     /// アームの`=>`の次に`{`が無かった
-    pub(in crate::compiler::parse) fn cond_expr_pattern_lbrace<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn cond_expr_pattern_lbrace<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::cond_err!(self.build_err_span(), CondExprPatternLBrace)
     }

@@ -73,8 +73,7 @@ pub struct StaticAsmFormat {
     pub func: StaticFunc,
 }
 
-pub(in crate::compiler::asm_gen::asm_fmt) 
-static GCC_X64: StaticAsmFormat = StaticAsmFormat {
+pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = StaticAsmFormat {
     reg: StaticReg {
         db: &[
             "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b",
@@ -85,19 +84,25 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "r14w", "r15w",
         ],
         dd: &[
-            "eax", "ecx", "edx", "ebx", "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d",
-            "r13d", "r14d", "r15d",
+            "eax", "ecx", "edx", "ebx", "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d",
+            "r14d", "r15d",
         ],
         dq: &[
             "rax", "rcx", "rdx", "rbx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13",
             "r14", "r15",
         ],
-        xmm: &["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9",
-            "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15"],
-        ymm: &["ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7", "ymm8", "ymm9",
-            "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15"],
-        zmm: &["zmm0", "zmm1", "zmm2", "zmm3", "zmm4", "zmm5", "zmm6", "zmm7", "zmm8", "zmm9",
-            "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15"]
+        xmm: &[
+            "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9",
+            "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
+        ],
+        ymm: &[
+            "ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7", "ymm8", "ymm9",
+            "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15",
+        ],
+        zmm: &[
+            "zmm0", "zmm1", "zmm2", "zmm3", "zmm4", "zmm5", "zmm6", "zmm7", "zmm8", "zmm9",
+            "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15",
+        ],
     },
 
     args: StaticFuncArgsReg {
@@ -179,7 +184,6 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
                 template: "{space}mov {src1}, {dst}\n{space}shr {src2}, {dst}\n",
             },
         ),
-
         (
             "add",
             StaticOperandInfo {
@@ -348,15 +352,15 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "float_cmp",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}comiss {src1}, {src2}\n"
-            }
+                template: "{space}comiss {src1}, {src2}\n",
+            },
         ),
         (
             "float_ucmp",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}ucomiss {src1}, {src2}\n"
-            }
+                template: "{space}ucomiss {src1}, {src2}\n",
+            },
         ),
         // ===== 倍制度浮動小数点 =====
         (
@@ -398,15 +402,15 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "f64_cmp",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}comisd {src1}, {src2}\n"
-            }
+                template: "{space}comisd {src1}, {src2}\n",
+            },
         ),
         (
             "f64_ucmp",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}ucomisd {src1}, {src2}\n"
-            }
+                template: "{space}ucomisd {src1}, {src2}\n",
+            },
         ),
         // ===== 倍制度パック浮動小数点 =====
         (
@@ -448,8 +452,8 @@ static GCC_X64: StaticAsmFormat = StaticAsmFormat {
             "float_p_cmp",
             StaticOperandInfo {
                 len: 1,
-                template: "{space}cmpps {src1}, {src2}\n"
-            }
+                template: "{space}cmpps {src1}, {src2}\n",
+            },
         ),
     ],
 

@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallInfo {
     pub name: String,
@@ -11,7 +9,6 @@ pub struct CallInfo {
     pub temp_ty: Vec<TyNode>,
     pub args: Vec<Expr>,
 }
-
 
 /// `#include`で指定されたパスの実体
 #[derive(Clone, Debug, PartialEq, Eq)]

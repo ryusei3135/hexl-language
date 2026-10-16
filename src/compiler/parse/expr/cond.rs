@@ -2,8 +2,7 @@ use super::*;
 
 impl Parser {
     /// 最初にキーワードのcondが来る必要がある
-    pub(in crate::compiler::parse) 
-    fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
+    pub(in crate::compiler::parse) fn expr_match(&mut self) -> Result<node::Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
         if self.current_tkn() != &lex::Tkn::KeyWordCond {
@@ -114,8 +113,7 @@ impl Parser {
         self.next_tkn(&[])?;
         crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
         // 条件分岐を閉じる`}`
-        crate::err_at!(self.tkn_checker())
-            .close_scope_to_rbrace(Some(lex::Tkn::KeyWordCond))?;
+        crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(Some(lex::Tkn::KeyWordCond))?;
         //}
         self.next_tkn(&[])?;
         let node = node::Expr::Match {

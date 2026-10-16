@@ -2,9 +2,7 @@ use super::*;
 use crate::compiler::err::CompileErr;
 use crate::parse::node;
 
-
-pub(in crate::compiler::ir::checker::mem) 
-trait IndexCheckList {
+pub(in crate::compiler::ir::checker::mem) trait IndexCheckList {
     fn num_check(val: &str) -> Result<(), err::ErrKind>;
     fn var_check(var_tree: &def_tree::VarTree, name: &str) -> Result<(), err::ErrKind>;
     /// 式で無効なもの
@@ -12,8 +10,7 @@ trait IndexCheckList {
 }
 
 /// 配列のindexが符号なし整数か調べる
-pub(in crate::compiler::ir::checker::mem)
-struct IsUnsigned {}
+pub(in crate::compiler::ir::checker::mem) struct IsUnsigned {}
 
 impl IndexCheckList for IsUnsigned {
     fn num_check(val: &str) -> Result<(), err::ErrKind> {
@@ -40,8 +37,7 @@ impl IndexCheckList for IsUnsigned {
 }
 
 /// 配列のindexが定数か不変定数か調べる
-pub(in crate::compiler::ir::checker::mem)
-struct IsImmOrConst {}
+pub(in crate::compiler::ir::checker::mem) struct IsImmOrConst {}
 
 impl IndexCheckList for IsImmOrConst {
     fn num_check(val: &str) -> Result<(), err::ErrKind> {
