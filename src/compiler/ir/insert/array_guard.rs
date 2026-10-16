@@ -33,19 +33,19 @@ impl IR {
     ///
     /// ## Returns
     /// 最後に積んだ命令(`end`のブロック)のid
-    pub(in crate::compiler::ir) fn insert_arr_guard(
+    pub(in crate::compiler::ir) fn insert_arr_guard<M: ResultMod>(
         &mut self,
         guard: checker::ArrIdxGuard,
         dst: node::Expr,
         expect_byte: &types::Size,
-    ) -> usize {
+    ) -> Result<usize, err::ErrKind> {
         let else_label = self.next_pattern_label();
         let end_label = self.next_pattern_label();
 
         // 代入する値と添字は、分岐の前に一度だけ評価する
-        let dst_idx = self.gen_expr_ir(dst, Some(expect_byte));
+        let dst_idx = self.gen_expr_ir::<M>(dst, Some(expect_byte))?;
         let index_ty = self.index_expect_ty(&guard.index, expect_byte);
-        let index_idx = self.gen_expr_ir(guard.index.clone(), Some(&index_ty));
+        let index_idx = self.gen_expr_ir::<M>(guard.index.clone(), Some(&index_ty))?;
 
         // 範囲外なら`else`のブロックへ飛ぶ
         self.insert_out_of_range_jmp(index_idx, guard.lo, guard.hi, else_label);
@@ -61,7 +61,8 @@ impl IR {
         // 範囲外: `arr[else_idx] = dst`
         crate::push_jmp_code!(self, Block, &else_label);
         let else_ty = self.index_expect_ty(&guard.else_idx, expect_byte);
-        let else_idx = self.gen_expr_ir(guard.else_idx.clone(), Some(&else_ty));
+        let else_idx =
+            M::handle::<usize>(self.gen_expr_ir::<M>(guard.else_idx.clone(), Some(&else_ty)))?;
         self.push_inst(inst::Inst::InsertArr {
             name: guard.name,
             dst: dst_idx,
@@ -69,7 +70,7 @@ impl IR {
         });
 
         crate::push_jmp_code!(self, Block, &end_label);
-        self.id_counter - 1
+        Ok(self.id_counter - 1)
     }
 
     /// `index_idx`が`lo..hi`の範囲外なら`else_label`へ飛ぶ条件式を差し込む

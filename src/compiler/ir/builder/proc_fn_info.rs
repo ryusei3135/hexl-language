@@ -9,7 +9,10 @@ impl IR {
     /// 処理のIRを生成する
     /// 一回しか呼ばれないのでinlineにしてもOk
     #[inline(always)]
-    pub(super) fn ini_def_fn_info(&mut self, info: &node::FuncDefine) -> Result<(), err::ErrKind> {
+    pub(super) fn ini_def_fn_info<M: ResultMod>(
+        &mut self,
+        info: &node::FuncDefine,
+    ) -> Result<(), err::ErrKind> {
         // 関数のスコープごとに使用回数を数え直す(`FnDefInfo.var_counter`に保存される)
         self.var_counter = counter_mnger::VarCounter::with_arg_count(info.params.len());
         // 関数の情報を登録
@@ -18,7 +21,7 @@ impl IR {
         self.scope_states.clear();
         // `ir/param.rs`
         self.push_param_meta_data(&info.params)?;
-        self.gen_inst(&info.body.clone());
+        self.gen_inst::<M>(&info.body.clone())?;
         // 関数の処理内容をpush
         self.push_fn_ir_tree(&info);
         // 使うデータを初期化
@@ -70,7 +73,7 @@ impl IR {
     }
 
     /// もし戻り値が契約ならフラグを立てる
-    pub(super) fn gen_call_fn_ir(
+    pub(super) fn gen_call_fn_ir<M: ResultMod>(
         &mut self,
         module_name: Option<&String>,
         meta_data: &node::CallInfo,
@@ -149,7 +152,7 @@ impl IR {
             self.check_constract_arg(meta_data.name.as_str(), &def_args[index], &expr_arg)?;
 
             let ty = self.size_of(&def_args[index].ty).clone();
-            let idx = self.gen_expr_ir(expr_arg, Some(&ty));
+            let idx = self.gen_expr_ir::<M>(expr_arg, Some(&ty))?;
             func_meta_data.insert_param_parent_id(idx);
         }
         Ok(inst::Inst::CallFunc(func_meta_data))

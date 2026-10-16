@@ -69,7 +69,7 @@ impl IR {
     ///   (関数の引数や構造体フィールドの初期化式として直接
     ///   使われた場合など)から呼ばれているので、内部的な
     ///   仮の名前を使う
-    pub(super) fn scope_node(
+    pub(super) fn scope_node<M: ResultMod>(
         &mut self,
         scope: &[String],
         target: Box<node::Expr>,
@@ -143,7 +143,7 @@ impl IR {
                     );
                 }
             }
-            Ok(self.gen_call_fn_ir(scope.last(), &call_func_node, None)?)
+            self.gen_call_fn_ir::<M>(scope.last(), &call_func_node, None)
         } else {
             panic!();
         }

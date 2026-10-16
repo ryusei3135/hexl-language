@@ -7,6 +7,11 @@ pub(in crate::compiler::ir::checker::mem) trait IndexCheckList {
     fn var_check(var_tree: &def_tree::VarTree, name: &str) -> Result<(), err::ErrKind>;
     /// 式で無効なもの
     fn cond_is_invalid(expr: &node::Expr) -> Result<(), err::ErrKind>;
+    /// indexに使えない種類の式(関数の呼び出し・メンバーアクセスなど)。
+    /// 値を静的に決められないので、必ず`Err`を返す
+    fn unsupported_expr(expr: &node::Expr) -> Result<(), err::ErrKind> {
+        crate::GenCompileErrNode!(UnexpectArrIndexExprKind, expr)
+    }
 }
 
 /// 配列のindexが符号なし整数か調べる
@@ -36,7 +41,9 @@ impl IndexCheckList for IsUnsigned {
     }
 }
 
-/// 配列のindexが定数か不変定数か調べる
+/// 配列のindexが`const`か即値か調べる
+///
+/// `const`以外の変数(`mut`/不変の変数・引数)や、値を静的に決められない式は`Err`を返す
 pub(in crate::compiler::ir::checker::mem) struct IsImmOrConst {}
 
 impl IndexCheckList for IsImmOrConst {
@@ -45,7 +52,10 @@ impl IndexCheckList for IsImmOrConst {
     }
 
     fn var_check(var_tree: &def_tree::VarTree, name: &str) -> Result<(), err::ErrKind> {
-        if var_tree.is_mut(&name.to_string()) != crate::compiler::parse::VarMutAttr::Const {
+        // 引数など、`const`でない変数は`Err`
+        if var_tree.get_ty_node(name).is_none()
+            || var_tree.is_mut(&name.to_string()) != crate::compiler::parse::VarMutAttr::Const
+        {
             crate::GenCompileErr!(InvalidIndexIsNotConst, name)
         } else {
             Ok(())

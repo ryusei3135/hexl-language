@@ -1,6 +1,7 @@
 use crate::compiler::parse::{self, VarMutAttr};
 
 use super::*;
+use crate::compiler::ir::result_mod::*;
 use err_factory::expr_node;
 
 impl IR {
@@ -19,31 +20,31 @@ impl IR {
     /// 一時的なスタック領域が、コンパイラ内部の合成名(`__self_N`)
     /// ではなく、`var_name`(元の変数名)で`var_tree`に登録される
     /// (詳細は`src/ir/builder/scope.rs`の`scope_node`を参照)。
-    fn gen_named_expr_ir(
+    fn gen_named_expr_ir<M: ResultMod>(
         &mut self,
         var_name: &str,
         expr: node::Expr,
         expect_byte: &types::Size,
         attr: &VarMutAttr,
-    ) -> usize {
+    ) -> Result<usize, err::ErrKind> {
         // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
         // (`src/ir/builder/variant_bind.rs`)
         let expr = self.scope_call_to_variant_init(expr);
         if let node::Expr::Scope { scope, target } = expr {
             self.expr_counter += 1;
-            let result = self.scope_node(&scope, target, Some(&var_name.to_string()), &attr);
+            let result = self.scope_node::<M>(&scope, target, Some(&var_name.to_string()), &attr);
             let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
-            self.id_counter - 1
+            Ok(self.id_counter - 1)
         } else if let node::Expr::CallFunc(call) = expr {
-            let result = self.gen_call_fn_ir(None, &call, Some(&var_name.to_owned()));
+            let result = self.gen_call_fn_ir::<M>(None, &call, Some(&var_name.to_owned()));
             let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
-            self.id_counter - 1
+            Ok(self.id_counter - 1)
         } else {
-            self.gen_expr_ir(expr, Some(expect_byte))
+            self.gen_expr_ir::<M>(expr, Some(expect_byte))
         }
     }
 
@@ -249,7 +250,7 @@ impl IR {
         }
     }
 
-    pub(super) fn assign_expr_node(
+    pub(super) fn assign_expr_node<M: ResultMod>(
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
@@ -273,9 +274,13 @@ impl IR {
         // 静的に分かる値であれば、以降の範囲チェックで使えるよう記録しておく
         self.record_var_value(&assign_node.name, &assign_node.value);
 
-        let right_expr_idx: usize =
-            self.gen_named_expr_ir(&assign_node.name, *assign_node.value, &expect_byte, &attr);
-        let dst_idx = self.gen_expr_ir(*assign_node.dst, Some(&expect_byte));
+        let right_expr_idx: usize = self.gen_named_expr_ir::<M>(
+            &assign_node.name,
+            *assign_node.value,
+            &expect_byte,
+            &attr,
+        )?;
+        let dst_idx = self.gen_expr_ir::<M>(*assign_node.dst, Some(&expect_byte))?;
 
         Ok(inst::Inst::AssignVar {
             name: assign_node.name.to_string(),
@@ -284,48 +289,48 @@ impl IR {
         })
     }
 
-    pub(super) fn init_array_node(
+    pub(super) fn init_array_node<M: ResultMod>(
         &mut self,
         init_nodes: Vec<node::Expr>,
         expect_byte: &types::Size,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         let size = match expect_byte {
             types::Size::Array { size, .. } => size,
             _ => panic!("配列の初期化には配列型が必要です"),
         };
         let mut dsts = Vec::new();
         for node in init_nodes.iter() {
-            let dst = self.gen_expr_ir(node.clone(), Some(&size));
+            let dst = self.gen_expr_ir::<M>(node.clone(), Some(&size))?;
             dsts.push(dst);
         }
-        inst::Inst::InitArr(dsts)
+        Ok(inst::Inst::InitArr(dsts))
     }
 
     #[inline(always)]
-    pub(super) fn ref_array_node(
+    pub(super) fn ref_array_node<M: ResultMod>(
         &mut self,
         dst: node::Expr,
         index: node::Expr,
         name: &str,
         expect_byte: &types::Size,
-    ) -> inst::Inst {
+    ) -> Result<inst::Inst, err::ErrKind> {
         // 添字の範囲チェックは`gen_expr_ir`の`check_mem_access`で行う
         let index_ty = self.index_expect_ty(&index, expect_byte);
-        inst::Inst::InsertArr {
+        Ok(inst::Inst::InsertArr {
             name: name.to_string(),
-            dst: self.gen_expr_ir(dst, Some(&expect_byte)),
-            index: self.gen_expr_ir(index, Some(&index_ty)),
-        }
+            dst: self.gen_expr_ir::<M>(dst, Some(&expect_byte))?,
+            index: self.gen_expr_ir::<M>(index, Some(&index_ty))?,
+        })
     }
 
-    pub(super) fn def_var_node(
+    pub(super) fn def_var_node<M: ResultMod>(
         &mut self,
         var: node::DefineVar,
         expect_byte: &types::Size,
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
         // `register_ty`を指定しない = `var.ty`をそのまま登録する
-        self.def_var_node_with_register_ty(var, expect_byte, var_attr, None)
+        self.def_var_node_with_register_ty::<M>(var, expect_byte, var_attr, None)
     }
 
     /// `def_var_node`の本体
@@ -338,7 +343,7 @@ impl IR {
     /// 中身の型で再帰呼び出しする際に、ここへ元の型(`constract_ty`)を渡し、
     /// 「値の生成には中身の型を使いつつ、登録は元の型のまま行う」を実現する。
     /// `None`の場合は`var.ty`がそのまま登録される
-    fn def_var_node_with_register_ty(
+    fn def_var_node_with_register_ty<M: ResultMod>(
         &mut self,
         mut var: node::DefineVar,
         _expect_byte: &types::Size,
@@ -351,12 +356,12 @@ impl IR {
                 let mut inner_var = var.clone();
                 inner_var.ty = constract.unwrap_ty();
 
-                let value_idx = self.gen_named_expr_ir(
+                let value_idx = self.gen_named_expr_ir::<M>(
                     &var.name,
                     *var.value,
                     &self.size_of(&var.ty),
                     &var.var_attr,
-                );
+                )?;
                 // 登録する型: `register_ty`が指定されていればそちらを、
                 // 無ければ`var.ty`をそのまま使う(加工しない)
                 let ty_to_register = register_ty.as_ref().unwrap_or(&var.ty);
@@ -378,20 +383,20 @@ impl IR {
             node::TyNode::Stack { .. } => {
                 // 確保するスタックを増やす
                 self.stack_counter(&var.ty);
-                self.gen_mem_def_var(var)
+                self.gen_mem_def_var::<M>(var)
             }
-            node::TyNode::Static { .. } => self.gen_mem_def_var(var),
+            node::TyNode::Static { .. } => self.gen_mem_def_var::<M>(var),
             node::TyNode::Ty(ty_name) => {
                 // 静的に分かる初期値であれば、以降の範囲チェックで
                 // 使えるよう記録しておく(`src/ir/checker/tracking.rs`)
                 self.record_var_value(&var.name, &var.value);
 
-                let value_idx = self.gen_named_expr_ir(
+                let value_idx = self.gen_named_expr_ir::<M>(
                     &var.name,
                     *var.value,
                     &self.size_of(&var.ty),
                     &var.var_attr,
-                );
+                )?;
                 // 登録する型: `register_ty`が指定されていればそちらを、
                 // 無ければ`var.ty`をそのまま使う(加工しない)
                 let ty_to_register = register_ty.as_ref().unwrap_or(&var.ty);
@@ -426,7 +431,7 @@ impl IR {
                 self.record_var_value(&var.name, &val);
 
                 let value_idx =
-                    self.gen_named_expr_ir(&var.name, val, &self.size_of(&var.ty), &var_attr);
+                    self.gen_named_expr_ir::<M>(&var.name, val, &self.size_of(&var.ty), &var_attr)?;
                 // 登録する型: `register_ty`が指定されていればそちらを、
                 // 無ければ`var.ty`をそのまま使う(加工しない)
                 let ty_to_register = register_ty.as_ref().unwrap_or(&var.ty);
@@ -519,7 +524,7 @@ impl IR {
         name.to_string()
     }
 
-    pub(super) fn init_struct_node(
+    pub(super) fn init_struct_node<M: ResultMod>(
         &mut self,
         name: &str,
         fields: &mut HashMap<String, Box<node::Expr>>,
@@ -550,7 +555,7 @@ impl IR {
                 )
             });
 
-            let value_idx = self.gen_expr_ir(*field_expr, Some(&field_size));
+            let value_idx = self.gen_expr_ir::<M>(*field_expr, Some(&field_size))?;
             mem_insts.push(inst::MemoryInst::Member {
                 parent: field.name.clone(),
                 value_idx: value_idx,
@@ -595,7 +600,7 @@ impl IR {
 
     /// バリアント型の初期化: `Name { field: value }`
     /// バリアント型は同時に1つのメンバーしか持てないので、指定できるのは1つだけ
-    pub(super) fn init_variant_node(
+    pub(super) fn init_variant_node<M: ResultMod>(
         &mut self,
         is_self: bool,
         name: &str,
@@ -631,7 +636,7 @@ impl IR {
         let value = match field_ty {
             Some(ty) => {
                 let field_size = self.size_of(&ty);
-                let value_idx = self.gen_expr_ir(*field_expr, Some(&field_size));
+                let value_idx = self.gen_expr_ir::<M>(*field_expr, Some(&field_size))?;
                 Some(inst::MemoryInst::Member {
                     parent: field_name,
                     value_idx,

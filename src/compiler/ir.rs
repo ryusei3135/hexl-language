@@ -13,8 +13,10 @@ pub mod def_tree;
 mod insert;
 pub mod inst;
 mod param;
+mod result_mod;
 
 use crate::compiler::err::{self, undef::UndefKind::*};
+pub use result_mod::*;
 
 #[derive(Debug)]
 pub struct IR {

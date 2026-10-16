@@ -188,7 +188,11 @@ impl IR {
     }
 
     #[inline(always)]
-    pub(super) fn inline_proc(&mut self, lines: &[node::InlineAsm], name: &str) {
+    pub(super) fn inline_proc<M: ResultMod>(
+        &mut self,
+        lines: &[node::InlineAsm],
+        name: &str,
+    ) -> Result<(), err::ErrKind> {
         let mut gen_ir = |expr: Expr| {
             let ty: Option<types::Size> =
             // 変数のノードを取得
@@ -205,7 +209,7 @@ impl IR {
             } else {
                 None
             };
-            self.gen_expr_ir(expr, ty.as_ref())
+            self.gen_expr_ir::<M>(expr, ty.as_ref())
         };
         let asm_lines = lines
             .into_iter()
@@ -215,7 +219,8 @@ impl IR {
                     .clone()
                     .into_iter()
                     .map(&mut gen_ir)
-                    .collect::<Vec<usize>>();
+                    .collect::<Result<Vec<usize>, err::ErrKind>>()
+                    .unwrap();
                 (line.asm.clone(), operand_ids)
             })
             .collect::<Vec<(String, Vec<usize>)>>();
@@ -225,5 +230,6 @@ impl IR {
             lines: asm_lines,
         });
         self.id_counter += 1;
+        Ok(())
     }
 }

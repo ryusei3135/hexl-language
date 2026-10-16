@@ -43,7 +43,7 @@ impl IR {
         Ok(r)
     }
 
-    pub(super) fn member_is_fn(
+    pub(super) fn member_is_fn<M: ResultMod>(
         &mut self,
         scope: &[&str],
         call_func_info: &node::CallInfo,
@@ -70,7 +70,7 @@ impl IR {
             node::Expr::GetAddress(Box::new(node::Expr::Var(var_name.to_owned()))),
         );
 
-        let r = self.gen_call_fn_ir(Some(&struct_name.to_owned()), &call_info, None)?;
+        let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;
         Ok(r)
     }
 
@@ -106,7 +106,7 @@ impl IR {
     /// `member_is_fn`と違い、`ptr`はすでに構造体へのアドレスそのものを
     /// 持っているので、暗黙のself引数には`ptr`自身のアドレスではなく
     /// `ptr`の値をそのまま渡す
-    pub(super) fn member_is_fn_via_ptr(
+    pub(super) fn member_is_fn_via_ptr<M: ResultMod>(
         &mut self,
         ptr_name: &str,
         call_func_info: &node::CallInfo,
@@ -118,7 +118,7 @@ impl IR {
             .args
             .insert(0, node::Expr::Var(ptr_name.to_owned()));
 
-        let r = self.gen_call_fn_ir(Some(&struct_name.to_owned()), &call_info, None)?;
+        let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;
         Ok(r)
     }
 

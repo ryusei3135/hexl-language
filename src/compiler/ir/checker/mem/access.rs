@@ -8,10 +8,10 @@ use crate::compiler::ir::checker::mem::check_list::{IndexCheckList, IsImmOrConst
 
 use super::*;
 
-/// `check_mem_access`が返す、配列アクセスに挿入すべき実行時ガード
+/// (廃止) 添字が可変な配列アクセスに挿入する実行時ガード
 ///
-/// 添字が`const`/即値のときは静的検査だけで済むため`None`が返り、
-/// IRはそのまま生成される。添字が可変のときだけこれが返る。
+/// 添字は`const`/即値だけになり(それ以外は`check_mem_access`が`Err`を返す)、
+/// `check_mem_access`は常に`None`を返す。`insert/array_guard.rs`が使う型として残している。
 ///
 /// IR側では次の形になるように条件分岐のノードを差し込む:
 /// ```text
@@ -34,13 +34,12 @@ impl IR {
     /// 配列/ポインタに関わる式を処理するときに呼び出す検査
     ///
     /// 配列の長さ(範囲付きポインタなら範囲)を測り、
-    /// - 添字が`const`/即値: 静的に範囲検査してそのまま(`None`)
-    /// - 添字が可変: 範囲内のときだけ通る条件分岐を差し込むための
-    ///   `ArrIdxGuard`を返す。条件がfalseなら`else_idx`が使われる
+    /// - 添字が`const`/即値: 静的に範囲検査してそのまま(`Ok(None)`)
+    /// - 添字が`const`以外(可変な変数・引数、関数の呼び出しなど): `Err`
     pub(in crate::compiler::ir) fn check_mem_access(
         &mut self,
         expr: &node::Expr,
-    ) -> Option<ArrIdxGuard> {
+    ) -> Result<Option<ArrIdxGuard>, err::ErrKind> {
         match expr {
             node::Expr::RefArray {
                 name,
@@ -48,7 +47,7 @@ impl IR {
                 else_idx,
                 ..
             } => {
-                self.check_arr_index::<IsUnsigned>(index).unwrap();
+                self.check_arr_index::<IsUnsigned>(index)?;
                 return self.check_ref_array(name, index, else_idx);
             }
             node::Expr::ConnectAddr(target) => {
@@ -60,7 +59,7 @@ impl IR {
             node::Expr::Add((l, r)) => self.check_ptr_add(expr, l, r),
             _ => {}
         }
-        None
+        Ok(None)
     }
 
     /// `name[index else else_idx]`の検査
@@ -71,61 +70,21 @@ impl IR {
         &mut self,
         name: &str,
         index: &node::Expr,
-        else_idx: &Option<Box<node::Expr>>,
-    ) -> Option<ArrIdxGuard> {
+        _else_idx: &Option<Box<node::Expr>>,
+    ) -> Result<Option<ArrIdxGuard>, err::ErrKind> {
+        // 添字は`const`/即値だけ。それ以外(可変な変数・引数など)は`Err`
+        // (`check_list.rs`の`IsImmOrConst`)
+        self.check_arr_index::<IsImmOrConst>(index)?;
+
         // 配列の長さ(範囲付きポインタなら範囲)を測る。どちらでもなければ対象外
-        let (lo, hi) = self.access_bounds(name)?;
-
-        // 添字が`const`/即値: 静的に検査するだけで、IRはそのまま
-        if self.check_arr_index::<IsImmOrConst>(&index).is_ok() {
-            self.arr_idx_checker(name, index);
-            self.range_ptr_checker(name, index);
-            return None;
+        if self.access_bounds(name).is_none() {
+            return Ok(None);
         }
 
-        // 添字が可変: `else_idx`が必須で、かつ`const`/即値でなければならない
-        let Some(else_expr) = else_idx.as_ref().map(|v| &**v) else {
-            panic!(
-                "`{}` の添字が可変なので、範囲外のときの添字(`else`)が必要です: {:?}",
-                name, index,
-            );
-        };
-        if self.check_arr_index::<IsImmOrConst>(else_expr).is_ok() {
-            panic!(
-                "`{}` の`else`の添字は即値か`const`の変数である必要があります: {:?}",
-                name, else_expr,
-            );
-        } else {
-            panic!();
-        }
-
-        // 有効な範囲が空だと、どの添字でもアクセスできない
-        // (IR側で`hi - 1`を使うので、ここで弾いておく)
-        if hi <= lo {
-            panic!(
-                "`{}` の有効範囲が空なので、可変な添字ではアクセスできません: {}..{}",
-                name, lo, hi,
-            );
-        }
-
-        // `else_idx`自体が範囲外だと、フォールバックが範囲外アクセスになる
-        if self.is_const_index(else_expr) {
-            let v = self.eval_expr(else_expr);
-            if v < lo || v >= hi {
-                panic!(
-                    "配列 `{}` の`else`の添字が範囲外です: 添字 {} (有効範囲 {}..{})",
-                    name, v, lo, hi,
-                );
-            }
-        }
-
-        Some(ArrIdxGuard {
-            name: name.to_string(),
-            lo,
-            hi,
-            index: index.clone(),
-            else_idx: else_expr.clone(),
-        })
+        // 静的に検査するだけで、IRはそのまま
+        self.arr_idx_checker(name, index);
+        self.range_ptr_checker(name, index);
+        Ok(None)
     }
 
     /// 配列の長さ(`0..len`)、または範囲付きポインタの範囲を返す
@@ -161,7 +120,8 @@ impl IR {
             | node::Expr::GreaterThenEq(..)
             | node::Expr::LessThen(..)
             | node::Expr::LessThenEq(..) => C::cond_is_invalid(&expr),
-            t => panic!("{:?}", t),
+            // 関数の呼び出し・メンバーアクセスなど、値を静的に決められない式は`Err`
+            t => C::unsupported_expr(t),
         }
     }
 
