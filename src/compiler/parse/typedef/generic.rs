@@ -362,8 +362,8 @@ impl Parser {
                 format!("{}_{}", Self::mangle_ty(ty_name), suffix)
             }
             node::TyNode::RefTy(inner) => Self::mangle_ty(inner),
-            node::TyNode::Stack { name, len } => format!("{}_stack{}", name, len),
-            node::TyNode::Static { name, len } => format!("{}_static{}", name, len),
+            node::TyNode::Stack { name, len } => format!("{:?}_stack{}", name, len),
+            node::TyNode::Static { name, len } => format!("{:?}_static{}", name, len),
             node::TyNode::ConstractMust(inner) | node::TyNode::ConstractOf(inner) => {
                 Self::mangle_ty(&inner.unwrap_ty())
             }

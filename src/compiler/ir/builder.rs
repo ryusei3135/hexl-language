@@ -521,7 +521,6 @@ impl IR {
                     ty
                 };
                 // `src/ir/ty_checker/var_ty.rs`
-                println!(" ty {:?}", ty);
                 self.check_var_ty(&ty, &expect_byte);
 
                 return Ok(match self.var_tree.get(&var_name) {
@@ -672,7 +671,7 @@ impl IR {
             node::TyNode::Static { name, len } => (name.clone(), *len, true),
             _ => panic!("gen_mem_def_var: スタック/静的領域の型ではありません"),
         };
-        let elem_size = self.size_of(&node::TyNode::Ty(ty_name.to_string()));
+        let elem_size = self.size_of(&ty_name);
 
         // 配列リテラルなら要素ごとに展開し、単一の値ならそのまま1要素として扱う
         let values = match *var.value {

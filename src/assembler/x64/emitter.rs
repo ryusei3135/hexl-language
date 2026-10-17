@@ -96,12 +96,22 @@ pub enum Section {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixupKind {
-    /// `jrcxz` / `jecxz` の 8bit 相対ジャンプ(同じセクション内の定義済みシンボルのみ)
-    Rel8,
     Rel32,
     RipRelative32,
     Abs32,
     Abs64,
+}
+
+/// `jrcxz` / `jecxz` の 8bit 相対ジャンプの未解決の参照
+///
+/// rel8 は再配置 (ELF の `.rela` / PE の再配置) で表せないので、`Fixup` / `FixupKind`
+/// には入れず、`emit_program` の最後に `Emitter` 自身が解決する
+/// (同じセクション内の定義済みシンボルのみ。`elf.rs` / `pe.rs` からは見えない)
+#[derive(Debug, Clone)]
+struct Rel8Fixup {
+    section: Section,
+    offset: usize,
+    symbol: String,
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +144,9 @@ pub struct Emitter {
     pub externs: Vec<String>,
 
     pub fixups: Vec<Fixup>,
+
+    /// `jrcxz` / `jecxz` の 8bit 相対ジャンプ (`resolve_rel8_fixups`で解決する)
+    rel8_fixups: Vec<Rel8Fixup>,
 }
 
 impl Emitter {
@@ -154,6 +167,8 @@ impl Emitter {
             externs: Vec::new(),
 
             fixups: Vec::new(),
+
+            rel8_fixups: Vec::new(),
         }
     }
 
@@ -166,7 +181,8 @@ impl Emitter {
     }
 
     pub fn finish(&mut self) -> Result<(), String> {
-        self.resolve_fixups()
+        self.resolve_fixups()?;
+        self.resolve_rel8_fixups()
     }
 
     fn emit_statement(&mut self, statement: &Statement) -> Result<(), String> {
@@ -1212,11 +1228,10 @@ impl Emitter {
 
         self.emit_u8(0);
 
-        self.fixups.push(Fixup {
+        self.rel8_fixups.push(Rel8Fixup {
             section: self.current_section,
             offset,
             symbol,
-            kind: FixupKind::Rel8,
         });
 
         Ok(())
@@ -1451,10 +1466,6 @@ impl Emitter {
 
             match target {
                 Some((target_section, target_offset)) => match fixup.kind {
-                    FixupKind::Rel8 => {
-                        self.resolve_rel8(&fixup, target_section, target_offset)?;
-                    }
-
                     FixupKind::Rel32 => {
                         self.resolve_rel32(&fixup, target_section, target_offset)?;
                     }
@@ -1473,8 +1484,7 @@ impl Emitter {
                 },
 
                 None => {
-                    // rel8 は再配置できないので、外部シンボルは使えない
-                    if fixup.kind != FixupKind::Rel8 && self.externs.contains(&fixup.symbol) {
+                    if self.externs.contains(&fixup.symbol) {
                         continue;
                     }
 
@@ -1486,25 +1496,34 @@ impl Emitter {
         Ok(())
     }
 
-    fn resolve_rel8(
-        &mut self,
-        fixup: &Fixup,
-        target_section: Section,
-        target_offset: usize,
-    ) -> Result<(), String> {
-        if fixup.section != target_section {
-            return Err("rel8 target is in another section".into());
+    /// `jrcxz` / `jecxz` のターゲットを解決する (rel8 は±127バイト)
+    fn resolve_rel8_fixups(&mut self) -> Result<(), String> {
+        let fixups = std::mem::take(&mut self.rel8_fixups);
+
+        for fixup in fixups {
+            let Some((target_section, target_offset)) = self.find_symbol(&fixup.symbol) else {
+                return Err(format!(
+                    "undefined symbol: {} (jrcxz/jecxz needs a symbol defined in the same file)",
+                    fixup.symbol
+                ));
+            };
+
+            if fixup.section != target_section {
+                return Err("rel8 target is in another section".into());
+            }
+
+            let next = fixup.offset + 1;
+
+            let relative = target_offset as i64 - next as i64;
+
+            if relative < i8::MIN as i64 || relative > i8::MAX as i64 {
+                return Err("rel8 out of range".into());
+            }
+
+            self.patch_bytes(fixup.section, fixup.offset, &[relative as i8 as u8])?;
         }
 
-        let next = fixup.offset + 1;
-
-        let relative = target_offset as i64 - next as i64;
-
-        if relative < i8::MIN as i64 || relative > i8::MAX as i64 {
-            return Err("rel8 out of range".into());
-        }
-
-        self.patch_bytes(fixup.section, fixup.offset, &[relative as i8 as u8])
+        Ok(())
     }
 
     fn resolve_rel32(

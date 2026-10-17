@@ -1353,6 +1353,8 @@ mod jcc_tests {
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();
         emitter.emit_program(&program)?;
+        // ラベルへのジャンプ (`jcc` / `jrcxz`) の相対値は `finish` で確定する
+        emitter.finish()?;
         Ok(emitter.text)
     }
 

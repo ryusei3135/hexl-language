@@ -412,10 +412,35 @@ impl IR {
                 };
                 return Ok(inst);
             }
-            node::TyNode::Stack { .. } => {
-                // 確保するスタックを増やす
-                self.stack_counter(&var.ty);
-                self.gen_mem_def_var::<M>(var)
+            node::TyNode::Stack { len, .. } => {
+                if *len == 1 {
+                    // 確保するスタックを増やす
+                    self.stack_counter(&var.ty);
+                    self.gen_mem_def_var::<M>(var)
+                } else {
+                    let array_ty = self.size_of(&var.ty);
+                    self.stack_counter(&var.ty);
+                    let init_values = match *var.value {
+                        node::Expr::Array(values) => values,
+                        value => vec![value],
+                    };
+                    let value_idx =
+                        self.gen_expr_ir::<M>(node::Expr::Array(init_values), Some(&array_ty))?;
+                    let ty_to_register = register_ty.as_ref().unwrap_or(&var.ty);
+                    self.var_tree.push::<'l'>(
+                        &var.name,
+                        self.id_counter,
+                        ty_to_register,
+                        &var_attr,
+                        || self.constract_flag.put_var_def(ty_to_register),
+                    )?;
+                    Ok(inst::Inst::Mov {
+                        name: Some(mem::take(&mut var.name)),
+                        size: array_ty,
+                        dst: self.id_counter,
+                        src: value_idx,
+                    })
+                }
             }
             node::TyNode::Static { .. } => self.gen_mem_def_var::<M>(var),
             node::TyNode::Ty(ty_name) => {

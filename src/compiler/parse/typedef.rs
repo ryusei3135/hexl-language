@@ -318,7 +318,8 @@ impl Parser {
     ///
     /// 呼び出し終了時は、`]`の次のトークンを指す
     fn define_mem_ty_node(&mut self, is_static: bool) -> Result<node::TyNode, err::ErrKind> {
-        let ty_name = self.next_tkn(&["name"])?.unwrap_name();
+        let ty = self.ty_node_after_delim()?;
+        self.back_tkn();
 
         let len = match self.next_tkn(&["number", "]"])? {
             lex::Tkn::Number(num) => {
@@ -340,9 +341,9 @@ impl Parser {
         self.next_tkn(&[])?;
 
         if is_static {
-            Ok(node::TyNode::Static { name: ty_name, len })
+            Ok(node::TyNode::Static { name: Box::new(ty), len })
         } else {
-            Ok(node::TyNode::Stack { name: ty_name, len })
+            Ok(node::TyNode::Stack { name: Box::new(ty), len })
         }
     }
 }

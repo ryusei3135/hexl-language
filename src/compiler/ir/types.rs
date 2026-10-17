@@ -47,10 +47,10 @@ impl TryFrom<&TyNode> for Size {
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
                 if *len == 1 {
-                    node::TyNode::Ty(name.to_owned()).try_into()?
+                    name.as_ref().try_into()?
                 } else {
                     Self::Array {
-                        size: Box::new(node::TyNode::Ty(name.to_owned()).try_into()?),
+                        size: Box::new(name.as_ref().try_into()?),
                         len: *len,
                     }
                 }
@@ -87,10 +87,10 @@ impl TryFrom<TyNode> for Size {
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
                 if len == 1 {
-                    node::TyNode::Ty(name.to_owned()).try_into()?
+                    (*name).try_into()?
                 } else {
                     Self::Array {
-                        size: Box::new(node::TyNode::Ty(name.to_owned()).try_into()?),
+                        size: Box::new((*name).try_into()?),
                         len,
                     }
                 }
@@ -383,7 +383,7 @@ impl IR {
             },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
             node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
-                let size = self.size_of(&node::TyNode::Ty(name.clone()));
+                let size = self.size_of(&name);
                 // 配列の作成
                 if len >= &1 {
                     types::Size::Array {

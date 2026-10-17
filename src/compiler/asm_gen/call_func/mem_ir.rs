@@ -23,6 +23,8 @@ impl AsmEmitter {
             self.mov_struct_var(size, dst, src, name, this_is_self);
         } else if size.is_pointer().is_none() && self.static_label(src).is_some() {
             self.mov_static_var(size, dst, name);
+        } else if let types::Size::Array { size: elem, len } = size {
+            self.init_array_node(name, elem, *len, dst, src, this_is_self);
         } else {
             self.mov_reg_var(size, dst, src, name, this_is_self);
         }
@@ -43,6 +45,75 @@ impl AsmEmitter {
             }
         }
         None
+    }
+
+    /// 配列リテラル(`Inst::InitArr`)で初期化する配列変数を定義する
+    ///
+    /// 領域全体(`要素のサイズ * len`)を`stk_use_counter`から先に確保し、
+    /// 要素`k`を`arr_base + (k + 1) * 要素のサイズ`へ書き込む。
+    /// リテラルの要素数が`len`より少ない場合(`arr: [uint 3] = {0}`)、
+    /// 残りの要素は0で埋める
+    fn init_array_node(
+        &mut self,
+        name: Option<&str>,
+        elem: &types::Size,
+        len: usize,
+        dst: usize,
+        src: usize,
+        this_is_self: SelfPtrInfo,
+    ) {
+        let inst::Inst::InitArr(elems) = self.inst_at(src) else {
+            panic!(
+                "配列の初期化式はInitArrである必要があります: {:?}",
+                self.curr_inst[src]
+            );
+        };
+        let elems: Vec<usize> = elems.clone();
+        assert!(
+            elems.len() <= len,
+            "配列リテラルの要素数({})が配列の長さ({})を超えています",
+            elems.len(),
+            len
+        );
+
+        let elem_bytes = elem.to_bytes();
+        let arr_base = self.stk_use_counter;
+        self.stk_use_counter = arr_base + elem_bytes * len;
+
+        let store_size = if elem.is_pointer().is_some() {
+            Size::DQ
+        } else {
+            elem.clone()
+        };
+
+        let mut txt = String::new();
+        for k in 0..len {
+            let value = match elems.get(k) {
+                Some(idx) => self.extract_operand_text(*idx, this_is_self),
+                None => "$0".to_string(),
+            };
+            let elem_ref = self
+                .asm_fmt
+                .fmt_ref_operand(FRAME_BASE_REG, arr_base + (k + 1) * elem_bytes);
+            txt.push_str(&self.mov_line(&elem_ref, &value, &store_size, true));
+        }
+        self.asm_text.push_str(txt.as_str());
+
+        if let Some(var_name) = name {
+            let array_ty = types::Size::Array {
+                size: Box::new(elem.clone()),
+                len,
+            };
+            self.insert_var_info(
+                var_name,
+                asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.reg_idx), &array_ty, dst)
+                    .with_arr_base(arr_base),
+            );
+        }
+        // 初期値が式の結果だった場合、そのレジスタはもう不要
+        for idx in &elems {
+            self.release_expr_temp(*idx);
+        }
     }
 
     /// 変数が使うレジスタを決めて、使用中として記録する(`self.reg_idx`も更新する)

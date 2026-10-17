@@ -10,7 +10,6 @@ impl IR {
         expect_ty: &types::Size,
     ) {
         // let ty = self.var_tree.get_ty_node(var_name).unwrap();
-        println!("{:?} fond var_ty {:?}", expect_ty, var_ty);
 
         match expect_ty {
             types::Size::Pointer { ty, .. } => {

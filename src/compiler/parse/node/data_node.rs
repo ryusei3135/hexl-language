@@ -189,14 +189,14 @@ pub enum TyNode {
     /// - name: 要素の型名
     /// - len: 要素数(指定が無ければ1)
     Stack {
-        name: String,
+        name: Box<TyNode>,
         len: usize,
     },
     /// 静的領域に確保する変数の型
     /// `name: ""[ty] = 100`
     /// スタックと同じ意味を持つが、確保される場所が静的領域になる
     Static {
-        name: String,
+        name: Box<TyNode>,
         len: usize,
     },
 
@@ -214,8 +214,8 @@ impl TyNode {
             Self::Ty(name) => name.to_string(),
             Self::SelfTy(name) => name.to_string(),
             Self::RefTy(t) => t.get_ty_str_name(),
-            Self::Stack { name, .. } => name.to_string(),
-            Self::Static { name, .. } => name.to_string(),
+            Self::Stack { name, .. } => name.get_ty_str_name(),
+            Self::Static { name, .. } => name.get_ty_str_name(),
             Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name(),
             Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty().get_ty_str_name(),
         }

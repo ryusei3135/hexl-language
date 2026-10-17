@@ -194,7 +194,7 @@ impl IR {
     /// 配列の長さ(`0..len`)、または範囲付きポインタの範囲を返す
     /// (どちらでもない変数は`None`)
     fn access_bounds<M: ResultMod>(&self, name: &str) -> Result<(usize, usize), types::Size> {
-        let ty = self.var_tree.get_ty_node(name).unwrap();
+        let ty = self.var_tree.get_ty_node(name).expect(name);
         let size: Result<types::Size, _> = ty.clone().try_into();
         println!("{:?} {:?}", size, ty);
         match size {
