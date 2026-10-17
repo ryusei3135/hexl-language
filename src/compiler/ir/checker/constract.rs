@@ -1,13 +1,12 @@
 use super::*;
 use crate::compiler::err::CompileErr;
 
-/// 関数の中で追跡している、`must`の契約を持つ変数
-#[derive(Clone, Debug)]
-struct MustVar {
-    name: String,
-    /// 一度でも関数の引数として渡されたら`true`
-    used: bool,
-}
+// 条件分岐・反復処理・共通の処理は、それぞれ別のファイルに分けている
+mod branch;
+mod common;
+mod loop_check;
+
+use common::MustVar;
 
 impl IR {
     /// 関数を呼び出すときの、引数1つ分の契約チェック
@@ -146,154 +145,23 @@ impl IR {
             .iter()
             .filter(|param| param.ty.is_constract_must())
             .for_each(|param| {
-                must_vars.push(MustVar {
-                    name: param.name.clone(),
-                    used: false,
-                });
+                must_vars.push(MustVar::new(param.name.clone()));
             });
 
         Self::walk_group2_nodes(&func.body, &mut must_vars);
 
-        for var in must_vars.iter().filter(|var| !var.used) {
+        // ループの中での契約の終了は、`ret`/`break`の前にしか置けない
+        let mut scope: Vec<String> = must_vars.iter().map(|v| v.name.clone()).collect();
+        scope.truncate(func.params.iter().filter(|p| p.ty.is_constract_must()).count());
+        Self::check_loop_contract_ends(&func.name, &func.body, &mut scope);
+
+        // 一度も渡されていない変数、または条件分岐の一部でしか
+        // 契約を終了していない変数はエラー
+        for var in must_vars
+            .iter()
+            .filter(|var| (!var.used && !var.ended_on_exit) || var.branch_mismatch)
+        {
             CompileErr::constract_must_not_used(&func.name, &var.name).unwrap();
-        }
-    }
-
-    fn walk_group2_nodes(nodes: &Body, must_vars: &mut Vec<MustVar>) {
-        for n in nodes.iter() {
-            match n.get_node() {
-                node::Group2Node::Expr(expr) => {
-                    Self::walk_expr(&expr, must_vars);
-                }
-                node::Group2Node::Stmt(node::StmtNode::Return(expr)) => {
-                    Self::walk_expr(&expr, must_vars);
-                }
-                node::Group2Node::Stmt(node::StmtNode::Continue | node::StmtNode::Break) => {}
-                _ => {}
-            }
-        }
-    }
-
-    fn walk_expr(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
-        match expr {
-            // 変数の定義: `must`の型ならここから追跡を始める
-            node::Expr::DefVar(var) => {
-                Self::walk_expr(&var.value, must_vars);
-                if var.ty.is_constract_must() {
-                    if must_vars.iter().rev().any(|entry| entry.name == var.name) {
-                        // 同名の契約変数がブロックや分岐ごとに再定義された場合、
-                        // 直近のスコープで使われる変数だけを追跡対象にする。
-                        let shadowed = must_vars
-                            .iter_mut()
-                            .rev()
-                            .find(|entry| entry.name == var.name)
-                            .unwrap();
-                        shadowed.used = false;
-                    } else {
-                        must_vars.push(MustVar {
-                            name: var.name.clone(),
-                            used: false,
-                        });
-                    }
-                }
-            }
-            // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
-            node::Expr::CallFunc(call_info) => {
-                call_info.args.iter().for_each(|arg| {
-                    if let Some(name) = Self::arg_var_name(arg) {
-                        Self::mark_used(name, must_vars);
-                    }
-                    Self::walk_expr(arg, must_vars);
-                });
-            }
-            node::Expr::Scope { target, .. }
-            | node::Expr::Member { target, .. }
-            | node::Expr::PtrMember { target, .. } => {
-                Self::walk_expr(target, must_vars);
-            }
-            node::Expr::Assign(assign) => {
-                Self::walk_expr(&assign.dst, must_vars);
-                Self::walk_expr(&assign.value, must_vars);
-            }
-            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
-                Self::walk_expr(target, must_vars);
-            }
-            node::Expr::VariantBind(bind) => {
-                Self::walk_expr(&bind.value, must_vars);
-            }
-            node::Expr::Add(pair)
-            | node::Expr::Sub(pair)
-            | node::Expr::Mul(pair)
-            | node::Expr::Div(pair)
-            | node::Expr::Surplus(pair)
-            | node::Expr::LessThen(pair)
-            | node::Expr::GreaterThen(pair)
-            | node::Expr::Equal(pair)
-            | node::Expr::NotEq(pair) => {
-                Self::walk_expr(&pair.0, must_vars);
-                Self::walk_expr(&pair.1, must_vars);
-            }
-            node::Expr::Match {
-                pattern,
-                arms,
-                arm_else,
-            } => {
-                if let Some(pattern) = pattern {
-                    Self::walk_expr(pattern, must_vars);
-                }
-                for arm in arms.iter() {
-                    let scope_start = must_vars.len();
-                    Self::walk_expr(&arm.pattern, must_vars);
-                    Self::walk_group2_nodes(&arm.body, must_vars);
-                    must_vars.truncate(scope_start);
-                }
-                if let Some(body) = arm_else {
-                    let scope_start = must_vars.len();
-                    Self::walk_group2_nodes(body, must_vars);
-                    must_vars.truncate(scope_start);
-                }
-            }
-            node::Expr::Loop { pattern, body } => {
-                let scope_start = must_vars.len();
-                if let Some(pattern) = pattern {
-                    Self::walk_expr(pattern, must_vars);
-                }
-                Self::walk_group2_nodes(body, must_vars);
-                must_vars.truncate(scope_start);
-            }
-            node::Expr::InitStruct { fields, .. } => {
-                fields
-                    .values()
-                    .for_each(|val| Self::walk_expr(val, must_vars));
-            }
-            node::Expr::Array(values) => {
-                values
-                    .iter()
-                    .for_each(|val| Self::walk_expr(val, must_vars));
-            }
-            node::Expr::RefArray { dst, index, .. } => {
-                Self::walk_expr(dst, must_vars);
-                Self::walk_expr(index, must_vars);
-            }
-            _ => {}
-        }
-    }
-
-    /// 引数の式が指している変数の名前を返す
-    /// (`&var`や`*var`のように包まれていても中身を辿る)
-    fn arg_var_name(arg: &node::Expr) -> Option<&String> {
-        match arg {
-            node::Expr::Var(name) => Some(name),
-            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
-                Self::arg_var_name(target)
-            }
-            _ => None,
-        }
-    }
-
-    fn mark_used(name: &str, must_vars: &mut Vec<MustVar>) {
-        if let Some(ref mut var) = must_vars.iter_mut().rev().find(|var| &var.name == name) {
-            var.used = true;
         }
     }
 }
@@ -464,14 +332,34 @@ g(v: int must=d) { d(v) }
     //    (現状の実装では検出できない。`#[ignore]`の理由を参照)
     // ------------------------------------------------------------------
     #[test]
-    #[ignore = "未実装: 契約の終了(`finish_constract_var`)は分岐ごとに分けて追跡されず、\
-                片方の分岐で終了すれば全体で終了済みになる"]
     fn ending_contract_in_only_one_branch_is_error() {
         // 片方の分岐でしか終了しない(両方で終了する場合は、
         // 下の`each_branch_may_end_the_contract_once`を参照)
         assert_err(&main_with(
             "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {}",
         ));
+        // もう片方の分岐だけで終了する場合
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n} else {\n c(x)\n}",
+        ));
+        // `else`が無い場合
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n}",
+        ));
+    }
+
+    #[test]
+    fn ending_contract_in_only_one_nested_branch_is_error() {
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n cond 2 == 2 {\n c(x)\n } else {}\n} else {\n c(x)\n}",
+        ));
+    }
+
+    #[test]
+    fn ending_must_param_in_only_one_branch_is_error() {
+        assert_err(
+            "a(): int must=c { ret 1 }\nc(v: int of a) { }\nh(v: int must=c) { cond 1 == 1 {\n c(v)\n} else {} }",
+        );
     }
 
     #[test]
@@ -486,9 +374,27 @@ g(v: int must=d) { d(v) }
     // 8. ループ内で契約を繰り返し終了する -> 二重終了を許可しない
     // ------------------------------------------------------------------
     #[test]
-    #[ignore = "未実装: ループの本体は一度しか解析されず、2周目の二重終了を検出できない"]
     fn ending_outer_contract_inside_loop_is_error() {
         assert_err(&main_with("x: int must=c = a()\nloop {\n c(x)\n}"));
+    }
+
+    #[test]
+    fn ending_outer_contract_inside_loop_is_ok_only_before_ret_or_break() {
+        assert_ok(&main_with("x: int must=c = a()\nloop {\n c(x)\n break\n}"));
+        assert_ok(&main_with("x: int must=c = a()\nloop {\n c(x)\n ret 0\n}"));
+        // `continue`では次の周で二重に終了してしまう
+        assert_err(&main_with("x: int must=c = a()\nloop {\n c(x)\n continue\n}"));
+        // 終了と`break`の間に別の文を挟めない
+        assert_err(&main_with(
+            "x: int must=c = a()\nloop {\n c(x)\n y: int = 1\n break\n}",
+        ));
+        // 分岐の中でも、その分岐の中の`ret`/`break`の前でなければならない
+        assert_ok(&main_with(
+            "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n break\n } else {}\n break\n}",
+        ));
+        assert_err(&main_with(
+            "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n } else {}\n break\n}",
+        ));
     }
 
     #[test]

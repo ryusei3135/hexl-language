@@ -17,3 +17,4 @@ build.rs
 *.o
 a
 c_frontend
+documents/docs.md

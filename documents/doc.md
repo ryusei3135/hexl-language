@@ -116,6 +116,7 @@ _start() {
 ```
 ## データ
 ### 構造体&バリアント
+- `impl`は構造体に外部からメゾットを付け足すことができる
 ```
 struct A {
     field: int
@@ -132,5 +133,10 @@ variant B {
     Mem(i64)
 
     func()...
+}
+
+impl A {
+    fn(self: Self) {
+    }
 }
 ```
