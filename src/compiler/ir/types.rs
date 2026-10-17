@@ -45,8 +45,15 @@ impl TryFrom<&TyNode> for Size {
         let size_ty = match ty {
             node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
-                node::TyNode::Ty(name.to_owned()).try_into()?
+            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
+                if *len == 1 {
+                    node::TyNode::Ty(name.to_owned()).try_into()?
+                } else {
+                    Self::Array {
+                        size: Box::new(node::TyNode::Ty(name.to_owned()).try_into()?),
+                        len: *len,
+                    }
+                }
             }
             node::TyNode::Pointer {
                 is_const,
@@ -78,8 +85,15 @@ impl TryFrom<TyNode> for Size {
         let size_ty = match ty {
             node::TyNode::Ty(ty_name) => embe_ty_sort(&ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, .. } | node::TyNode::Static { name, .. } => {
-                node::TyNode::Ty(name.to_owned()).try_into()?
+            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
+                if len == 1 {
+                    node::TyNode::Ty(name.to_owned()).try_into()?
+                } else {
+                    Self::Array {
+                        size: Box::new(node::TyNode::Ty(name.to_owned()).try_into()?),
+                        len,
+                    }
+                }
             }
             node::TyNode::Pointer {
                 is_const,

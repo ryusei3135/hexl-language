@@ -229,7 +229,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
     let nodes = parser.parser(&lexer.gen_tkns)?;
 
     let func_def_meta_data = ir_builder
-        .builder::<ir::ReturnErr>(
+        .builder::<ir::PanicErr>(
             &nodes,
             #[cfg(not(test))]
             &settings,

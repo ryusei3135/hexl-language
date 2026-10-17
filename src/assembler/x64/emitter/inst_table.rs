@@ -9,8 +9,8 @@
 //!    ```
 //!
 //!    サフィックス違い (`addq` / `addl` ...) は `|` で並べて同じ行に書く。
-//!    条件付きジャンプのように追加の引数が要る場合は、ここで渡す
-//!    (例: `"jl" => e.emit_jcc(Condition::L, &inst.operands)`)。
+//!    条件付きジャンプ (`jl` / `jne` など) は `dispatch` ではなく
+//!    下の `JCC_TABLE` (ニーモニック -> 条件) に1行足す。
 //!
 //! 2. 呼び出す `emit_xxx` を、このファイル下部の `impl Emitter` に書く
 //!    (`emit_nop` が最小の見本)。`emit_u8` / `emit_rex` /
@@ -231,6 +231,36 @@ fn sse_spec(name: &str) -> Option<SseSpec> {
     })
 }
 
+/// 条件付きジャンプ (Jcc) のニーモニックと条件の対応表 (別名は同じ行に並べる)
+///
+/// x86-64 の 16 種類の条件すべてに、GNU as が受け付ける別名を含めている。
+const JCC_TABLE: &[(&[&str], Condition)] = &[
+    (&["jo"], Condition::O),
+    (&["jno"], Condition::NO),
+    (&["jb", "jc", "jnae"], Condition::B),
+    (&["jae", "jnb", "jnc"], Condition::AE),
+    (&["je", "jz"], Condition::E),
+    (&["jne", "jnz"], Condition::NE),
+    (&["jbe", "jna"], Condition::BE),
+    (&["ja", "jnbe"], Condition::A),
+    (&["js"], Condition::S),
+    (&["jns"], Condition::NS),
+    (&["jp", "jpe"], Condition::P),
+    (&["jnp", "jpo"], Condition::NP),
+    (&["jl", "jnge"], Condition::L),
+    (&["jge", "jnl"], Condition::GE),
+    (&["jle", "jng"], Condition::LE),
+    (&["jg", "jnle"], Condition::G),
+];
+
+/// 条件付きジャンプのニーモニックから条件を求める (Jcc でなければ `None`)
+fn jcc_condition(name: &str) -> Option<Condition> {
+    JCC_TABLE
+        .iter()
+        .find(|(names, _)| names.contains(&name))
+        .map(|&(_, condition)| condition)
+}
+
 /// ニーモニックに対応する処理を呼び出す
 pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String> {
     let name = inst.mnemonic.as_str();
@@ -331,17 +361,16 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "lea" | "leaq" | "leal" => e.emit_lea(&inst.operands),
 
-        "jl" => e.emit_jcc(Condition::L, &inst.operands),
+        // 条件付きジャンプ (`jo` ... `jg`、別名を含む) は `JCC_TABLE` で引く
+        _ if jcc_condition(name).is_some() => match jcc_condition(name) {
+            Some(condition) => e.emit_jcc(condition, &inst.operands),
+            None => Err(format!("unsupported instruction: {}", name)),
+        },
 
-        "jle" => e.emit_jcc(Condition::LE, &inst.operands),
+        // CX/ECX/RCX が 0 ならジャンプ (8bit 相対のみ。64bitモードに `jcxz` は無い)
+        "jrcxz" => e.emit_jcxz(name, false, &inst.operands),
 
-        "jg" => e.emit_jcc(Condition::G, &inst.operands),
-
-        "jge" => e.emit_jcc(Condition::GE, &inst.operands),
-
-        "jz" | "je" => e.emit_jcc(Condition::E, &inst.operands),
-
-        "jnz" | "jne" => e.emit_jcc(Condition::NE, &inst.operands),
+        "jecxz" => e.emit_jcxz(name, true, &inst.operands),
 
         "jmp" => e.emit_jmp(&inst.operands),
 
@@ -1309,5 +1338,100 @@ mod alu_shift_tests {
         for asm in cases {
             assert!(assemble(asm).is_err(), "{} should fail", asm);
         }
+    }
+}
+
+#[cfg(test)]
+mod jcc_tests {
+    use crate::assembler::x64::{Lexer, Parser, convert};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize();
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// 16種類の条件と別名すべてが、GNU as の `jcc rel32` (`0F 8x`) と一致するか。
+    /// 期待値は `as` + `objcopy` で、ターゲットを 127 バイトより先に置いて生成したもの
+    /// (近いと `as` が短い形 `7x` に最適化するため)。ターゲット直後のラベルなので rel32 は 0
+    #[test]
+    fn all_jcc_match_gnu_as() {
+        let cases: &[(&str, &str)] = &[
+            ("jo", "0f8000000000"),
+            ("jno", "0f8100000000"),
+            ("jb", "0f8200000000"),
+            ("jc", "0f8200000000"),
+            ("jnae", "0f8200000000"),
+            ("jae", "0f8300000000"),
+            ("jnb", "0f8300000000"),
+            ("jnc", "0f8300000000"),
+            ("je", "0f8400000000"),
+            ("jz", "0f8400000000"),
+            ("jne", "0f8500000000"),
+            ("jnz", "0f8500000000"),
+            ("jbe", "0f8600000000"),
+            ("jna", "0f8600000000"),
+            ("ja", "0f8700000000"),
+            ("jnbe", "0f8700000000"),
+            ("js", "0f8800000000"),
+            ("jns", "0f8900000000"),
+            ("jp", "0f8a00000000"),
+            ("jpe", "0f8a00000000"),
+            ("jnp", "0f8b00000000"),
+            ("jpo", "0f8b00000000"),
+            ("jl", "0f8c00000000"),
+            ("jnge", "0f8c00000000"),
+            ("jge", "0f8d00000000"),
+            ("jnl", "0f8d00000000"),
+            ("jle", "0f8e00000000"),
+            ("jng", "0f8e00000000"),
+            ("jg", "0f8f00000000"),
+            ("jnle", "0f8f00000000"),
+        ];
+        for (mnemonic, expected) in cases {
+            let bytes = assemble(&format!("{} L\nL:\n", mnemonic)).unwrap();
+            assert_eq!(hex(&bytes), *expected, "{}", mnemonic);
+        }
+    }
+
+    /// 後ろ向きのジャンプ (rel32 が負)
+    #[test]
+    fn jcc_backward_target() {
+        // L: / jne L → 0F 85 と rel32 = -6
+        let bytes = assemble("L:\njne L\n").unwrap();
+        assert_eq!(hex(&bytes), "0f85faffffff");
+    }
+
+    #[test]
+    fn jrcxz_jecxz_match_gnu_as() {
+        assert_eq!(hex(&assemble("jrcxz L\nL:\n").unwrap()), "e300");
+        assert_eq!(hex(&assemble("jecxz L\nL:\n").unwrap()), "67e300");
+    }
+
+    /// rel8 は ±127 バイトまで。範囲を超えたらエラー
+    #[test]
+    fn jrcxz_rel8_range() {
+        let near = format!("jrcxz L\n{}L:\n", "nop\n".repeat(127));
+        assert_eq!(&hex(&assemble(&near).unwrap())[..4], "e37f");
+
+        let far = format!("jrcxz L\n{}L:\n", "nop\n".repeat(128));
+        assert!(assemble(&far).unwrap_err().contains("rel8 out of range"));
+    }
+
+    #[test]
+    fn jcc_requires_symbol_operand() {
+        assert!(assemble("jo $1\n").is_err());
+        assert!(assemble("jrcxz $1\n").is_err());
+        // Jcc ではないニーモニックは対象外 (`jcxz` は64bitモードに無い)
+        assert!(assemble("jcxz L\nL:\n").unwrap_err().contains("unsupported instruction"));
     }
 }

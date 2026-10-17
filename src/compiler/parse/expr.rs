@@ -784,6 +784,8 @@ mod expr_tests {
                 name: "ptr".to_string(),
                 dst: Box::new(node::Expr::PtrMember {
                     name: "ptr".to_string(),
+                    index: None,
+                    else_idx: None,
                     target: Box::new(node::Expr::Var("name".to_string())),
                 }),
                 value: Box::new(node::Expr::Number("10".to_string())),
@@ -805,6 +807,8 @@ mod expr_tests {
             node.body[0].get_node(),
             &node::Expr::PtrMember {
                 name: "ptr".to_string(),
+                index: None,
+                else_idx: None,
                 target: Box::new(node::Expr::CallFunc(node::CallInfo {
                     name: "f".to_string(),
                     temp_ty: Vec::new(),
@@ -831,6 +835,8 @@ mod expr_tests {
                 name: "a".to_string(),
                 value: Box::new(node::Expr::PtrMember {
                     name: "ptr".to_string(),
+                    index: None,
+                    else_idx: None,
                     target: Box::new(node::Expr::Var("name".to_string())),
                 }),
                 ty: node::TyNode::Ty("int".to_string()),

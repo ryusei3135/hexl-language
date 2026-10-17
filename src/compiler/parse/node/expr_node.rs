@@ -338,10 +338,16 @@ pub enum Expr {
     },
     /// ポインタが指す構造体のメンバー/メゾットへのアクセス
     /// `[name].member` (フィールドの参照/代入) / `[name].method(..)` (メゾット呼び出し)
+    /// `[name index].member` / `[name index else else_idx].member` (添字付き)
     /// - name: ポインタ変数の名前
+    /// - index: 添字を表す式(配列の`RefArray`と同じ。無ければ`None`)
+    ///   `const`や即値ではない場合は`else_idx`が必要(`ir/checker/access_mem.rs`)
+    /// - else_idx: ポインタの範囲外にアクセスしたときの添字(`RefArray`と同じ)
     /// - target: `Var(メンバー名)`(フィールドアクセス)、または`CallFunc(..)`(メゾット呼び出し)
     PtrMember {
         name: String,
+        index: Option<Box<Expr>>,
+        else_idx: Option<Box<Expr>>,
         target: Box<Expr>,
     },
 }

@@ -21,6 +21,15 @@ impl IR {
                 }
             }
             _ => {
+                // 配列の添字アクセス(`[arr i else 0]`)の基底として配列変数を使うとき、
+                // 期待される型は配列そのものではなく要素の型になる
+                // (`ref_array_node`/`insert_guarded_store`が配列の変数を`Var`として生成する)
+                if let types::Size::Array { size, .. } = var_ty {
+                    let elem: &types::Size = size;
+                    if elem == expect_ty {
+                        return;
+                    }
+                }
                 if var_ty != expect_ty {
                     // let changed_ty: types::Size = ty.clone().try_into().unwrap();
                     panic!("{:?} fond {:?}", expect_ty, var_ty);

@@ -33,41 +33,51 @@ impl IR {
     ///
     /// ## Returns
     /// 最後に積んだ命令(`end`のブロック)のid
+    /// 添字が可変な配列アクセスのIRを、範囲外のときの分岐つきで生成する
     pub(in crate::compiler::ir) fn insert_arr_guard<M: ResultMod>(
         &mut self,
         guard: checker::ArrIdxGuard,
         dst: node::Expr,
         expect_byte: &types::Size,
     ) -> Result<usize, err::ErrKind> {
+        let name = guard.name.clone();
+        self.insert_guarded_store::<M>(guard, dst, expect_byte, move |ir, dst, index| {
+            ir.push_inst(inst::Inst::InsertArr {
+                name: name.clone(),
+                dst,
+                index,
+            });
+        })
+    }
+
+    /// 範囲外のときの分岐つきで、`store(ir, dst_idx, index_idx)`が出す格納命令を生成する
+    /// (配列/ポインタのメンバーで骨組みを共有する)
+    pub(in crate::compiler::ir) fn insert_guarded_store<M: ResultMod>(
+        &mut self,
+        guard: checker::ArrIdxGuard,
+        dst: node::Expr,
+        expect_byte: &types::Size,
+        store: impl Fn(&mut Self, usize, usize),
+    ) -> Result<usize, err::ErrKind> {
         let else_label = self.next_pattern_label();
         let end_label = self.next_pattern_label();
 
-        // 代入する値と添字は、分岐の前に一度だけ評価する
         let dst_idx = self.gen_expr_ir::<M>(dst, Some(expect_byte))?;
         let index_ty = self.index_expect_ty(&guard.index, expect_byte);
         let index_idx = self.gen_expr_ir::<M>(guard.index.clone(), Some(&index_ty))?;
 
-        // 範囲外なら`else`のブロックへ飛ぶ
         self.insert_out_of_range_jmp(index_idx, guard.lo, guard.hi, else_label);
 
-        // 範囲内: `arr[idx] = dst`
-        self.push_inst(inst::Inst::InsertArr {
-            name: guard.name.clone(),
-            dst: dst_idx,
-            index: index_idx,
-        });
+        // 範囲内
+        store(self, dst_idx, index_idx);
         crate::push_jmp_code!(self, Jmp, &end_label);
 
-        // 範囲外: `arr[else_idx] = dst`
+        // 範囲外
         crate::push_jmp_code!(self, Block, &else_label);
         let else_ty = self.index_expect_ty(&guard.else_idx, expect_byte);
         let else_idx =
             M::handle::<usize>(self.gen_expr_ir::<M>(guard.else_idx.clone(), Some(&else_ty)))?;
-        self.push_inst(inst::Inst::InsertArr {
-            name: guard.name,
-            dst: dst_idx,
-            index: else_idx,
-        });
+        store(self, dst_idx, else_idx);
 
         crate::push_jmp_code!(self, Block, &end_label);
         Ok(self.id_counter - 1)

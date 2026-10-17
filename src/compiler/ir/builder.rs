@@ -383,7 +383,7 @@ impl IR {
         // (`src/ir/builder/variant_bind.rs`)
         let expr = self.scope_call_to_variant_init(expr);
         // `src/ir/builder/expr_node.rs`
-        let resolved = self.resolve_expect_byte(&expr, expect_byte);
+        let resolved = self.resolve_expect_byte::<M>(&expr, expect_byte)?;
         let expect_byte = &resolved;
         self.expr_counter += 1;
         // 配列/ポインタのアクセスやポインタの加算の範囲チェック
@@ -624,7 +624,7 @@ impl IR {
             }
             // ポインタが指す構造体のメンバー/メゾットへのアクセス
             // `[name].member` / `[name].method(..)`
-            node::Expr::PtrMember { name, target } => match &*target {
+            node::Expr::PtrMember { name, target, .. } => match &*target {
                 node::Expr::Var(member) => {
                     let result = self.member_is_var_via_ptr(&name, &member);
                     M::handle(result)?

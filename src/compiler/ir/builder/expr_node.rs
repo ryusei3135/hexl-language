@@ -185,21 +185,21 @@ impl IR {
     /// - それ以外は、渡された型をそのまま使う
     /// - どちらも無い(`None`で`Assign`でもない)なら、二項演算は
     ///   オペランドの変数の型(定義元の型)、それ以外は`DD`にする
-    pub(super) fn resolve_expect_byte(
-        &self,
+    pub(super) fn resolve_expect_byte<M: ResultMod>(
+        &mut self,
         expr: &node::Expr,
         expect_byte: Option<&types::Size>,
-    ) -> types::Size {
+    ) -> Result<types::Size, err::ErrKind> {
         if let node::Expr::Assign(assign_node) = expr {
-            if let Some(size) = self.member_ty_of_assign_dst(&assign_node.dst) {
-                return size;
+            if let Some(size) = self.member_ty_of_assign_dst::<M>(&assign_node.dst, expect_byte)? {
+                return Ok(size);
             }
             if let Some(ty_node) = self.var_tree.get_ty_node(&assign_node.name) {
                 let result = self.try_size_or_emit_struct(&ty_node);
-                return self.unwrap_or_report(result);
+                return Ok(self.unwrap_or_report(result));
             }
         }
-        expect_byte
+        Ok(expect_byte
             .cloned()
             .or_else(|| {
                 // 型が決まっていない二項演算(`if a < 10`など)は、
@@ -209,44 +209,76 @@ impl IR {
                     _ => self.infer_expr_ty(expr),
                 }
             })
-            .unwrap_or(types::Size::DD)
+            .unwrap_or(types::Size::DD))
     }
 
     /// 代入先が構造体のメンバーなら、そのメンバーの型を返す
-    fn member_ty_of_assign_dst(&self, dst: &node::Expr) -> Option<types::Size> {
+    /// # Panics
+    /// - メンバーのノードが変数以外ならpanic
+    fn member_ty_of_assign_dst<M: ResultMod>(
+        &mut self,
+        dst: &node::Expr,
+        expect_byte: Option<&types::Size>,
+    ) -> Result<Option<types::Size>, err::ErrKind> {
         // (構造体名, メンバー名, 配列メンバーの要素か)
         let (struct_name, member, is_arr_elem) = match dst {
             node::Expr::Member { scope, target } => {
-                let var_name = scope.last()?;
-                let struct_name = self.var_tree.get_ty_name(var_name).ok()?;
+                // スコープがemptyでないことは確定している
+                let var_name = scope.last().unwrap();
+                let struct_name = M::handle(self.var_tree.get_ty_name(var_name).or_else(|_| {
+                    Err(crate::GenUndefErrResult!(UndefStruct, var_name.to_string(), None))
+                }))?;
                 match &**target {
                     node::Expr::Var(m) => (struct_name, m.clone(), false),
                     node::Expr::RefArray { name, .. } => (struct_name, name.clone(), true),
-                    _ => return None,
+                    // パーサーですでにはじいているのでpanic
+                    n => panic!("構造体のメンバーに使えないノード {:?}", n),
                 }
             }
-            node::Expr::PtrMember { name, target } => {
-                let struct_name = self.var_tree.get_ty_name(name).ok()?;
-                match &**target {
-                    node::Expr::Var(m) => (struct_name, m.clone(), false),
-                    _ => return None,
+            node::Expr::PtrMember { name, target, .. } => {
+                // // 代入先のメンバーの型(`member_ty_of_dst`は副作用なしの版)
+                // let Some(member_ty) = self.member_ty_of_dst(dst) else {
+                //     return Err();
+                // };
+
+                match self.check_mem_access::<M>(dst).unwrap() {
+                    // 添字が可変で、範囲内と証明できない: 実行時ガード付きで格納する
+                    Some(guard) => {
+                        let name = name.clone();
+                        self.insert_arr_guard::<M>(guard, dst.clone(), &expect_byte.unwrap())?;
+
+                        let struct_name = self.var_tree.get_ty_name(&name)?;
+                        match &**target {
+                            node::Expr::Var(m) => (struct_name, m.clone(), false),
+                            node::Expr::RefArray { name, .. } => (struct_name, name.clone(), true),
+                            // パーサーですでにはじいているのでpanic
+                            n => panic!("構造体のメンバーに使えないノード {:?}", n),
+                                }
+                            }
+                    // 添字なし、または静的に範囲内と分かった場合: 今までの経路
+                    None => {
+                        panic!();
+                    }
                 }
             }
-            _ => return None,
+            // これは呼び出し元が`resolve_expect_byte`で代入先がメンバーかを調べているので、Noneっを返す
+            n => return Ok(None),
         };
         if is_arr_elem {
             // 配列メンバーは要素1つ分の型にする(`member_is_arr_ref`と同じ)
             let field_ty = self
                 .struct_tree
-                .get(&struct_name)?
+                .get(&struct_name)
+                .ok_or_else(|| crate::GenUndefErrResult!(UndefStruct, struct_name.to_string(), None))?
                 .fields
                 .iter()
-                .find(|field| field.name == member)?
+                .find(|field| field.name == member)
+                .ok_or_else(|| crate::GenUndefErrResult!(UndefStructMember, member.to_string(), None))?
                 .ty
                 .clone();
-            self.try_size_or_emit_struct(&field_ty).ok()
+            self.try_size_or_emit_struct(&field_ty).map(|x| Some(x))
         } else {
-            Some(self.struct_tree.get_mem_size(&struct_name, &member))
+            Ok(Some(self.struct_tree.get_mem_size(&struct_name, &member)))
         }
     }
 

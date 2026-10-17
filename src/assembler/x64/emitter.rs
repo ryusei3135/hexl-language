@@ -96,6 +96,8 @@ pub enum Section {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixupKind {
+    /// `jrcxz` / `jecxz` の 8bit 相対ジャンプ(同じセクション内の定義済みシンボルのみ)
+    Rel8,
     Rel32,
     RipRelative32,
     Abs32,
@@ -1180,6 +1182,47 @@ impl Emitter {
     }
 
     // ========================================================
+    // jrcxz / jecxz (8bit 相対のみ)
+    // ========================================================
+
+    /// `jrcxz` (`E3 cb`) / `jecxz` (`67 E3 cb`)
+    ///
+    /// 命令自体に 32bit 相対の形がないので、ターゲットは±127バイト以内。
+    /// (64bitモードに `jcxz` は無い)
+    fn emit_jcxz(&mut self, name: &str, addr32: bool, operands: &[Operand]) -> Result<(), String> {
+        if operands.len() != 1 {
+            return Err(format!("{} requires one operand", name));
+        }
+
+        let symbol = match &operands[0] {
+            Operand::Symbol(s) => s.clone(),
+
+            _ => {
+                return Err(format!("{} target must be symbol", name));
+            }
+        };
+
+        if addr32 {
+            self.emit_u8(0x67);
+        }
+
+        self.emit_u8(0xE3);
+
+        let offset = self.current_offset();
+
+        self.emit_u8(0);
+
+        self.fixups.push(Fixup {
+            section: self.current_section,
+            offset,
+            symbol,
+            kind: FixupKind::Rel8,
+        });
+
+        Ok(())
+    }
+
+    // ========================================================
     // call
     // ========================================================
 
@@ -1408,6 +1451,10 @@ impl Emitter {
 
             match target {
                 Some((target_section, target_offset)) => match fixup.kind {
+                    FixupKind::Rel8 => {
+                        self.resolve_rel8(&fixup, target_section, target_offset)?;
+                    }
+
                     FixupKind::Rel32 => {
                         self.resolve_rel32(&fixup, target_section, target_offset)?;
                     }
@@ -1426,7 +1473,8 @@ impl Emitter {
                 },
 
                 None => {
-                    if self.externs.contains(&fixup.symbol) {
+                    // rel8 は再配置できないので、外部シンボルは使えない
+                    if fixup.kind != FixupKind::Rel8 && self.externs.contains(&fixup.symbol) {
                         continue;
                     }
 
@@ -1436,6 +1484,27 @@ impl Emitter {
         }
 
         Ok(())
+    }
+
+    fn resolve_rel8(
+        &mut self,
+        fixup: &Fixup,
+        target_section: Section,
+        target_offset: usize,
+    ) -> Result<(), String> {
+        if fixup.section != target_section {
+            return Err("rel8 target is in another section".into());
+        }
+
+        let next = fixup.offset + 1;
+
+        let relative = target_offset as i64 - next as i64;
+
+        if relative < i8::MIN as i64 || relative > i8::MAX as i64 {
+            return Err("rel8 out of range".into());
+        }
+
+        self.patch_bytes(fixup.section, fixup.offset, &[relative as i8 as u8])
     }
 
     fn resolve_rel32(
@@ -1596,23 +1665,46 @@ impl Emitter {
 // Condition
 // ============================================================
 
-#[derive(Debug, Clone, Copy)]
+/// 条件付きジャンプ (Jcc) の条件。値は x86 の条件コード (cc) そのまま
+///
+/// `jcc rel32` は `0F 80+cc`、`jcc rel8` は `70+cc`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Condition {
-    E,
-    NE,
-    L,
-    LE,
-    G,
-    GE,
+    /// overflow (OF=1)
+    O = 0x0,
+    /// not overflow (OF=0)
+    NO = 0x1,
+    /// below / carry (CF=1, 符号なし <)
+    B = 0x2,
+    /// above or equal / not carry (CF=0, 符号なし >=)
+    AE = 0x3,
+    /// equal / zero (ZF=1)
+    E = 0x4,
+    /// not equal / not zero (ZF=0)
+    NE = 0x5,
+    /// below or equal (CF=1 or ZF=1, 符号なし <=)
+    BE = 0x6,
+    /// above (CF=0 and ZF=0, 符号なし >)
+    A = 0x7,
+    /// sign (SF=1)
+    S = 0x8,
+    /// not sign (SF=0)
+    NS = 0x9,
+    /// parity even (PF=1)
+    P = 0xA,
+    /// parity odd (PF=0)
+    NP = 0xB,
+    /// less (SF!=OF, 符号付き <)
+    L = 0xC,
+    /// greater or equal (SF=OF, 符号付き >=)
+    GE = 0xD,
+    /// less or equal (ZF=1 or SF!=OF, 符号付き <=)
+    LE = 0xE,
+    /// greater (ZF=0 and SF=OF, 符号付き >)
+    G = 0xF,
 }
 
+/// `jcc rel32` の2バイト目 (`0F 8x`)
 fn condition_opcode(condition: Condition) -> u8 {
-    match condition {
-        Condition::E => 0x84,
-        Condition::NE => 0x85,
-        Condition::L => 0x8C,
-        Condition::GE => 0x8D,
-        Condition::LE => 0x8E,
-        Condition::G => 0x8F,
-    }
+    0x80 | condition as u8
 }

@@ -75,6 +75,10 @@ impl Parser {
 
     /// ポインタが指す構造体のメンバー/メゾットへアクセスするノードを作成する
     /// `[name].member` / `[name].method(..)`
+    /// `[name index else else_idx].member` (`index`/`else_idx`は配列と同じ)
+    ///
+    /// ## Args
+    /// - index/else_idx: `[name index else else_idx]`の添字。無ければ`None`
     ///
     /// ## 呼び出し時の前提
     /// 呼び出し元で`current_tkn()`が`.`を指している状態で呼び出す
@@ -88,6 +92,8 @@ impl Parser {
     pub(in crate::compiler::parse) fn ptr_member_node(
         &mut self,
         name: &str,
+        index: Option<Box<node::Expr>>,
+        else_idx: Option<Box<node::Expr>>,
     ) -> Result<node::Expr, err::ErrKind> {
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
@@ -100,6 +106,8 @@ impl Parser {
             let call = self.call_func_expr(&member, true)?;
             return Ok(node::Expr::PtrMember {
                 name: name.to_string(),
+                index,
+                else_idx,
                 target: Box::new(call),
             });
         }
@@ -107,6 +115,8 @@ impl Parser {
         // フィールドへのアクセス: `[name].member`
         Ok(node::Expr::PtrMember {
             name: name.to_string(),
+            index,
+            else_idx,
             target: Box::new(node::Expr::Var(member)),
         })
     }

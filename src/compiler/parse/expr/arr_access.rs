@@ -36,7 +36,7 @@ impl Parser {
             // `[name].member` / `[name].method(..)`
             _ if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) => {
                 self.next_tkn(&["."])?;
-                self.ptr_member_node(&name)?
+                self.ptr_member_node(&name, None, None)?
             }
             _ => node::Expr::GetAddress(Box::new(result)),
         };
@@ -68,6 +68,14 @@ impl Parser {
         self.next_tkn(&["name"])?;
         let index = self.arr_access_index()?;
         let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
+
+        // `]`の次が`.`の場合、配列の要素ではなく、添字付きポインタが指す
+        // 構造体のメンバー/メゾットへのアクセス
+        // `[ptr index else else_idx].member`
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) {
+            self.next_tkn(&["."])?;
+            return self.ptr_member_node(&name, Some(Box::new(index)), else_idx);
+        }
 
         Ok(node::Expr::RefArray {
             dst: Box::new(node::Expr::Var(name.clone())),
@@ -141,6 +149,7 @@ impl Parser {
     ///
     /// ## 文法のルール
     /// `[name index] = value` / `[name index else else_idx] = value`
+    /// ポインタの場合は`[name index else else_idx].member = value`も使える
     /// - `[arr 0] = 10`
     /// - `[arr i else 0] = 10`
     /// - `[arr a.a else 0] = 10`
@@ -153,9 +162,16 @@ impl Parser {
     pub(in crate::compiler::parse) fn make_array_assign_node(
         &mut self,
         name: &str,
-    ) -> Result<node::Expr, err::ErrKind> {
+    ) -> Result<node::Group2Node, err::ErrKind> {
         let index = self.arr_access_index()?;
         let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
+
+        // `]`の次が`.`の場合、配列ではなく、添字付きポインタが指す
+        // 構造体のメンバー/メゾットへのアクセス(`stmt.rs`で定義)
+        // `[ptr index else else_idx].member = value` / `[ptr index].method(..)`
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) {
+            return self.ptr_member_stmt_node(name, Some(Box::new(index)), else_idx);
+        }
 
         // `]`の次の`=`まで進める
         let eq_tkn = self.next_tkn(&["="])?;
@@ -173,7 +189,8 @@ impl Parser {
                 else_idx,
             },
             value,
-        ))
+        )
+        .wrap_group2())
     }
 
     /// `[arr index ..]`の添字(`index`)の式を読み取る
@@ -339,6 +356,73 @@ mod test_access_arr_node {
                 var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()
+        );
+    }
+
+    /// `[ptr index else else_idx].member`のノード
+    fn ptr_member(
+        index: node::Expr,
+        else_idx: Option<node::Expr>,
+        target: node::Expr,
+    ) -> node::Expr {
+        node::Expr::PtrMember {
+            name: "ptr".to_string(),
+            index: Some(Box::new(index)),
+            else_idx: else_idx.map(Box::new),
+            target: Box::new(target),
+        }
+    }
+
+    /// `[ptr 1 else 0].name = 10`: 添字付きポインタのメンバーへ代入
+    #[test]
+    fn check_ptr_member_index_assign() {
+        assert_eq!(
+            first_stmt("[ptr 1 else 0].name = 10"),
+            node::AssignVar::new(
+                "ptr",
+                ptr_member(num("1"), Some(num("0")), var("name")),
+                num("10")
+            )
+            .wrap_group2()
+        );
+    }
+
+    /// `x: int = [ptr i else 0].name`: 添字付きポインタのメンバーを読み取る
+    #[test]
+    fn check_ptr_member_index_value() {
+        assert_eq!(
+            first_stmt("x: int = [ptr i else 0].name"),
+            node::Expr::DefVar(node::DefineVar {
+                name: "x".to_string(),
+                value: Box::new(ptr_member(var("i"), Some(num("0")), var("name"))),
+                ty: node::TyNode::Ty("int".to_string()),
+                var_attr: parse::VarMutAttr::Invar,
+            })
+            .wrap_group2()
+        );
+    }
+
+    /// `[ptr 1].name = 10`: `else`なしでも書ける(`const`の添字)
+    #[test]
+    fn check_ptr_member_index_without_else() {
+        assert_eq!(
+            first_stmt("[ptr 1].name = 10"),
+            node::AssignVar::new("ptr", ptr_member(num("1"), None, var("name")), num("10"))
+                .wrap_group2()
+        );
+    }
+
+    /// `[ptr 1 else 0].f()`: 添字付きポインタのメゾット呼び出し
+    #[test]
+    fn check_ptr_member_index_call() {
+        let call = node::Expr::CallFunc(node::CallInfo {
+            name: "f".to_string(),
+            temp_ty: Vec::new(),
+            args: Vec::new(),
+        });
+        assert_eq!(
+            first_stmt("[ptr 1 else 0].f()"),
+            ptr_member(num("1"), Some(num("0")), call).wrap_group2()
         );
     }
 

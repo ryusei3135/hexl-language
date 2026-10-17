@@ -12,6 +12,7 @@ pub enum CompileErr {
     /// 配列の中に使えない式がある
     UnexpectArrIndexExprKind(node::Expr),
     InvalidIndexIsNotConst(String),
+    ArrElseIndexNotFound,
     /// 不変の変数に値を代入しようとした
     AssignToImmutableVar(String),
     /// ポインタに指定された範囲と初期値の長さが一致しない

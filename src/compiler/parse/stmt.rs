@@ -252,9 +252,11 @@ impl Parser {
                         // `name`の次が添字の式(数字/変数/`a.a`など)の場合、
                         // 配列への代入
                         // `[name index] = value` / `[name index else 0] = value`
+                        // (`]`の次が`.`の場合は、添字付きポインタのメンバーへのアクセス
+                        // `[name index else 0].member = value`)
                         Ok(ref next) if Self::is_arr_index_start(next) => {
                             // expr/arr_access.rsで定義
-                            self.make_array_assign_node(&name)?.wrap_group2()
+                            self.make_array_assign_node(&name)?
                         }
                         // それ以外の場合、ポインタへの代入、または
                         // ポインタが指す構造体のメンバー/メゾットへのアクセス
@@ -371,9 +373,43 @@ impl Parser {
         self.make_preproc(&name)
     }
 
+    /// ポインタが指す構造体のメンバー/メゾットへアクセスする文のノードを作成する
+    /// - `[name].member = value` / `[name].method(..)`
+    /// - `[name index else else_idx].member = value` (`index`/`else_idx`は配列と同じ)
+    ///
+    /// ## 呼び出し時の前提
+    /// `current_tkn()`が`]`を指し、その次が`.`である必要がある
+    pub(in crate::compiler::parse) fn ptr_member_stmt_node(
+        &mut self,
+        name: &str,
+        index: Option<Box<node::Expr>>,
+        else_idx: Option<Box<node::Expr>>,
+    ) -> Result<node::Group2Node, err::ErrKind> {
+        self.next_tkn(&["."])?;
+        let member_node = self.ptr_member_node(name, index, else_idx)?;
+
+        // メゾット呼び出しの場合、`ptr_member_node`の時点ですでに
+        // 呼び出し式の次のトークンまで進んでいるので、そのまま式として返す
+        if matches!(&member_node, node::Expr::PtrMember { target, .. } if matches!(**target, node::Expr::CallFunc(..)))
+        {
+            return Ok(member_node.wrap_group2());
+        }
+
+        // フィールドアクセスの場合、続く`=`の有無で代入か参照かを判断する
+        // `[name].member = value`
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::Equal)) {
+            self.next_tkn(&["="])?;
+            let value = self.expr_branch()?;
+            Ok(node::AssignVar::new(name, member_node, value).wrap_group2())
+        } else {
+            Ok(member_node.wrap_group2())
+        }
+    }
+
     /// `[name]`から始まる文のノードを作成する
     ///
     /// ## 対応する構文
+    /// (添字付き`[name index else 0].member`は`make_array_assign_node`が処理する)
     /// - `[name] = value`             : ポインタが指す値へ代入
     /// - `[name].member = value`      : ポインタが指す構造体のメンバーへ代入
     /// - `[name].method(..)`          : ポインタが指す構造体のメゾットを呼び出す
@@ -388,25 +424,7 @@ impl Parser {
 
         // `]`の次が`.`の場合、ポインタが指す構造体のメンバー/メゾットへアクセスする
         if matches!(self.peek_tkn(), Ok(lex::Tkn::Dot)) {
-            self.next_tkn(&["."])?;
-            let member_node = self.ptr_member_node(name)?;
-
-            // メゾット呼び出しの場合、`ptr_member_node`の時点ですでに
-            // 呼び出し式の次のトークンまで進んでいるので、そのまま式として返す
-            if matches!(&member_node, node::Expr::PtrMember { target, .. } if matches!(**target, node::Expr::CallFunc(..)))
-            {
-                return Ok(member_node.wrap_group2());
-            }
-
-            // フィールドアクセスの場合、続く`=`の有無で代入か参照かを判断する
-            // `[name].member = value`
-            return if matches!(self.peek_tkn(), Ok(lex::Tkn::Equal)) {
-                self.next_tkn(&["="])?;
-                let value = self.expr_branch()?;
-                Ok(node::AssignVar::new(name, member_node, value).wrap_group2())
-            } else {
-                Ok(member_node.wrap_group2())
-            };
+            return self.ptr_member_stmt_node(name, None, None);
         }
 
         // 既存通り: ポインタが指す値そのものへの代入 `[name] = value`

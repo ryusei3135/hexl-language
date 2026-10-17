@@ -89,7 +89,7 @@ add(a mut: int, b: int): Option<int> {
 
 test_arr(idx: uint): int {
     arr: [int 5] = {0}
-    ret [arr idx]
+    ret [arr idx else 0]
 }
 
 _start(): int {
