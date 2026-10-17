@@ -174,7 +174,7 @@ impl UsedRegManager {
     /// 構成するノード(`Inst::Expr`・`Inst::Float`・`Inst::Str`)のidも含める
     /// (`gen_node_asm`はこれらも生成しない。残すと、式が未登録の変数を参照したり、
     /// 使われない式の命令・定数が出力されたりする)
-    pub fn unused_var_nodes(
+    pub(in crate::compiler::asm_gen) fn unused_var_nodes(
         var_counter: &counter_mnger::VarCounter,
         body: &[inst::Inst],
     ) -> std::collections::HashSet<usize> {
@@ -307,7 +307,7 @@ impl UsedRegManager {
     /// オフセットで保存する(`call_func/mem_ir.rs`の`mov_value_ir`)。
     /// 同じ名前が別のスコープで構造体以外として定義されていても、
     /// 名前ごとに割り当てるので、1つでも構造体の定義があれば対象にする
-    pub fn stack_var_names(body: &[inst::Inst]) -> Vec<String> {
+    pub(in crate::compiler::asm_gen) fn stack_var_names(body: &[inst::Inst]) -> Vec<String> {
         let mut names: Vec<String> = Vec::new();
         for node in body {
             if let inst::Inst::Mov {
@@ -325,13 +325,13 @@ impl UsedRegManager {
     }
 
     /// 変数`name`に割り当てたレジスタ(割り当てていなければ`None`)
-    pub fn allocated_reg(&self, name: &str) -> Option<RegisterMode> {
+    pub(in crate::compiler::asm_gen) fn allocated_reg(&self, name: &str) -> Option<RegisterMode> {
         self.allocated.get(name).copied()
     }
 
     /// 変数`name`に割り当てたレジスタを取り消す(変数を生成しないことにした場合に、
     /// 取り置いたレジスタを他の変数や式が使えるようにする)
-    pub fn release_allocation(&mut self, name: &str) {
+    pub(in crate::compiler::asm_gen) fn release_allocation(&mut self, name: &str) {
         if let Some(reg) = self.allocated.remove(name) {
             self.pending.retain(|r| *r != reg);
         }
@@ -339,13 +339,13 @@ impl UsedRegManager {
 
     /// `reg`が、まだ定義されていない変数のために取り置かれているか
     /// (他の式の一時的な結果に使ってはいけない)
-    pub fn is_reserved(&self, reg: RegisterMode) -> bool {
+    pub(in crate::compiler::asm_gen) fn is_reserved(&self, reg: RegisterMode) -> bool {
         self.pending.contains(&reg)
     }
 
     /// 変数`name`を定義し、レジスタ`reg`に置いたことを記録する
     /// (割り当てたレジスタなら、取り置きをやめて使用中として扱う)
-    pub fn bind_var(&mut self, name: &str, reg: &RegisterMode) {
+    pub(in crate::compiler::asm_gen) fn bind_var(&mut self, name: &str, reg: &RegisterMode) {
         if self.allocated.get(name) == Some(&reg) {
             self.pending.retain(|r| r != reg);
         }
@@ -354,7 +354,7 @@ impl UsedRegManager {
 
     /// 指定したレジスタを使用中として記録する
     /// Some(..)の場合使われていないレジスタを返す
-    pub fn mark_used(&mut self, reg: &RegisterMode) -> bool {
+    pub(in crate::compiler::asm_gen) fn mark_used(&mut self, reg: &RegisterMode) -> bool {
         if !self.touched.contains(&reg) {
             self.touched.push(reg.clone());
         }
@@ -367,7 +367,7 @@ impl UsedRegManager {
     }
 
     /// 現在使用中のレジスタ番号を、使用され始めた順(昇順)に取得する
-    pub fn used_regs(&self) -> Vec<RegisterMode> {
+    pub(in crate::compiler::asm_gen) fn used_regs(&self) -> Vec<RegisterMode> {
         let mut regs = self.used.clone();
         regs.sort();
         regs
@@ -375,7 +375,7 @@ impl UsedRegManager {
 
     /// 現在の関数で使ったレジスタのうち、`callee_saved`に当たるもの
     /// (関数の入口で退避し、出口で戻す必要がある。昇順)
-    pub fn callee_regs_to_save(&self) -> Vec<RegisterMode> {
+    pub(in crate::compiler::asm_gen) fn callee_regs_to_save(&self) -> Vec<RegisterMode> {
         let mut regs: Vec<RegisterMode> = self
             .touched
             .iter()
@@ -391,7 +391,7 @@ impl UsedRegManager {
 
     /// 記録している使用中のレジスタの情報を全て消去する
     /// (関数一つ分のアセンブリ言語の生成が終わった際などに使う)
-    pub fn clear(&mut self) {
+    pub(in crate::compiler::asm_gen) fn clear(&mut self) {
         self.used.clear();
         self.scope_marks.clear();
         self.allocated.clear();
@@ -414,7 +414,7 @@ impl UsedRegManager {
     /// 以降は他の変数や式が使える。変数の名前と割り当ては残るので、
     /// 同じ名前の変数を別のスコープで定義するときは、空いていれば
     /// 同じレジスタを使う。
-    pub fn end_scope(&mut self) -> Vec<RegisterMode> {
+    pub(in crate::compiler::asm_gen) fn end_scope(&mut self) -> Vec<RegisterMode> {
         let outer = self
             .scope_marks
             .pop()
@@ -431,18 +431,18 @@ impl UsedRegManager {
 
     /// 指定したレジスタを、使用中の記録から外す
     /// (式の一時的な結果を、使い終わった時点で解放するために使う)
-    pub fn release(&mut self, reg: &RegisterMode) {
+    pub(in crate::compiler::asm_gen) fn release(&mut self, reg: &RegisterMode) {
         self.used.retain(|r| r != reg);
     }
 
     /// 指定したレジスタが使用中かどうか
-    pub fn is_used(&self, reg: &RegisterMode) -> bool {
+    pub(in crate::compiler::asm_gen) fn is_used(&self, reg: &RegisterMode) -> bool {
         self.used.contains(&reg)
     }
 
     /// `regs`の中で、現在使用中でないレジスタのうち最小の番号を返す
     /// (`EndScope`で解放したレジスタから、次に使うレジスタを選ぶために使う)
-    pub fn lowest_free<'a>(&self, regs: &'a [RegisterMode]) -> Option<&'a RegisterMode> {
+    pub(in crate::compiler::asm_gen) fn lowest_free<'a>(&self, regs: &'a [RegisterMode]) -> Option<&'a RegisterMode> {
         regs.iter()
             .filter(|reg| !self.is_used(reg))
             .min_by_key(|reg| match reg {
@@ -452,7 +452,7 @@ impl UsedRegManager {
 
     /// 指定したレジスタを使用中として登録し直す
     /// (スコープ終了後も生きている変数のレジスタを残すために使う)
-    pub fn restore(&mut self, regs: &[RegisterMode]) {
+    pub(in crate::compiler::asm_gen) fn restore(&mut self, regs: &[RegisterMode]) {
         regs.iter().for_each(|reg| {
             self.mark_used(reg);
         });

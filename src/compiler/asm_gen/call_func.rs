@@ -73,8 +73,8 @@ impl AsmEmitter {
         // 変数のレジスタは領域へ`mov`で退避し、その変数が参照されるまで復元しない
         // (`lazy_spill.rs`)。退避中のレジスタは中身が壊れているので保存しない。
         // それ以外(式の一時的な結果など)は、従来どおり`push`/`pop`
-        let mut lazy_regs: Vec<RegisterMode> = Vec::new();
-        let mut eager_regs: Vec<RegisterMode> = Vec::new();
+        let mut lazy_regs: Vec<RegisterMode> = Vec::with_capacity(protected_regs.len());
+        let mut eager_regs: Vec<RegisterMode> = Vec::with_capacity(protected_regs.len());
         for reg in protected_regs {
             if self.spilled_regs.contains_key(&reg) || self.is_callee_saved(reg) {
                 continue;
@@ -627,8 +627,6 @@ impl AsmEmitter {
     /// `prologue_end`は、スタックフレームの直後(=本体の先頭)の位置
     fn fix_callee_saved(&mut self, prologue_end: usize) {
         let callee_regs = self.used_reg.callee_regs_to_save();
-        let mut save_asm = String::new();
-        let mut restore_asm = String::new();
 
         let save_asm = callee_regs
             .iter()

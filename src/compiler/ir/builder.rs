@@ -9,7 +9,6 @@ mod variant_bind;
 use super::*;
 use crate::compiler::ir::types::*;
 use crate::compiler::{err::*, models::Body, parse};
-use result_mod::*;
 
 const NEXT_VAR_NODE_IS_GET_ADDR: bool = true;
 
@@ -128,7 +127,7 @@ impl IR {
         }
     }
 
-    pub fn builder<M: ResultMod>(
+    pub(crate) fn builder<M: ResultMod>(
         &mut self,
         nodes: &[node::Group1Node],
         #[cfg(not(test))] settings: &crate::OptSettings,
@@ -643,18 +642,18 @@ impl IR {
         Ok(self.id_counter - 1)
     }
 
-    /// `gen_expr_ir::<PanicErr>`の結果を`usize`で返す
-    ///
-    /// `Result`を返すようにする前の`gen_expr_ir`と同じ使い方をする呼び出し側用
-    /// (エラーはその場でpanicするので`Err`は返らない)
-    #[inline(always)]
-    pub(in crate::compiler::ir) fn gen_expr_ir_or_panic(
-        &mut self,
-        expr: node::Expr,
-        expect_byte: Option<&types::Size>,
-    ) -> usize {
-        self.gen_expr_ir::<PanicErr>(expr, expect_byte).unwrap()
-    }
+    // /// `gen_expr_ir::<PanicErr>`の結果を`usize`で返す
+    // ///
+    // /// `Result`を返すようにする前の`gen_expr_ir`と同じ使い方をする呼び出し側用
+    // /// (エラーはその場でpanicするので`Err`は返らない)
+    // #[inline(always)]
+    // pub(in crate::compiler::ir) fn gen_expr_ir_or_panic(
+    //     &mut self,
+    //     expr: node::Expr,
+    //     expect_byte: Option<&types::Size>,
+    // ) -> usize {
+    //     self.gen_expr_ir::<PanicErr>(expr, expect_byte).unwrap()
+    // }
 
     /// スタック/静的領域に確保する変数の定義から
     /// `inst::Inst::Struct(Vec<inst::MemoryInst>)` を生成する

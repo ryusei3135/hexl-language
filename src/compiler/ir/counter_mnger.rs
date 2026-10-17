@@ -55,16 +55,6 @@ impl VarCounter {
         self.args[index] += 1;
     }
 
-    /// ローカル変数が使われた回数(一度も使われていなければ0)
-    pub fn var_use_count(&self, var_name: &str) -> usize {
-        self.list.get(var_name).copied().unwrap_or(0)
-    }
-
-    /// `index`番目の引数が使われた回数(一度も使われていなければ0)
-    pub fn arg_use_count(&self, index: usize) -> usize {
-        self.args.get(index).copied().unwrap_or(0)
-    }
-
     /// ローカル変数を、使われた回数が多い順に並べて返す
     /// (同じ回数なら名前順。レジスタに優先的に置きたい順)
     pub fn vars_by_priority(&self) -> Vec<(&str, usize)> {
@@ -75,14 +65,6 @@ impl VarCounter {
             .collect();
         vars.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
         vars
-    }
-
-    /// 引数を、使われた回数が多い順に並べて`(引数の番号, 回数)`で返す
-    /// (同じ回数なら番号が小さい順)
-    pub fn args_by_priority(&self) -> Vec<(usize, usize)> {
-        let mut args: Vec<(usize, usize)> = self.args.iter().copied().enumerate().collect();
-        args.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-        args
     }
 }
 

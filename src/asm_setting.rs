@@ -4,7 +4,6 @@ use std::fs;
 
 use serde::{Deserialize, Serialize};
 
-use crate::OptSettings;
 use crate::compiler::asm_gen;
 use crate::compiler::ir;
 
@@ -220,7 +219,7 @@ pub fn load_setting() -> Result<AsmSetting, AsmSettingError> {
 
 /// アセンブリ言語のフォーマットを取得し、生成する
 pub fn gen_asm_text(
-    mut tree: ir::def_tree::FuncTree,
+    tree: ir::def_tree::FuncTree,
     extern_funcs: &[ir::inst::Inst],
     global_funcs: &[String],
     inline_name: Option<&str>,

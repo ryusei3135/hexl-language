@@ -20,12 +20,10 @@ mod pe;
 
 use std::path::Path;
 
-pub use error::{LinkError, LinkResult, UndefinedRef};
+pub use error::LinkResult;
 pub use link::{
-    DEFAULT_BASE_ADDRESS, LinkOptions, LinkOutput, Linker, OutputFormat, OutputSection,
-    OutputSymbol,
+    LinkOptions, LinkOutput, Linker
 };
-pub use pe::{DllImport, PeSubsystem};
 
 /// オブジェクトファイルのパスを受け取り、すべてを読み込んでリンクする。
 ///
