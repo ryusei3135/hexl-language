@@ -87,6 +87,10 @@ pub struct Parser {
     /// `pending_funcs`と同じ理由で、解析がすべて終わってから
     /// `gen_nodes`の後ろに追加する
     pub(super) pending_types: Vec<node::Group1Node>,
+    /// `impl Name { .. }`が、`Name`の定義より先に書かれたときに、
+    /// 解析済みのメゾットを予約しておく場所(型名 -> メゾット)。
+    /// `Name`の`struct`/`variant`の定義が終わったときに、その型へ追加する
+    pub(super) reserved_impls: HashMap<String, Vec<node::Group1Node>>,
 }
 
 impl Parser {
@@ -107,6 +111,7 @@ impl Parser {
             generic_types: HashMap::new(),
             generated_types: Vec::new(),
             pending_types: Vec::new(),
+            reserved_impls: HashMap::new(),
         }
     }
 
@@ -144,6 +149,14 @@ impl Parser {
         self.collect_generic_types()?;
         self.collect_generic_funcs()?;
         self.parse_loop()?;
+
+        // `impl Name { .. }`の`Name`が、最後まで定義されなかった
+        if let Some(name) = self.reserved_impls.keys().min().cloned() {
+            return crate::err_at!(self.expected_tkn(
+                "struct or variant definition for `impl`",
+                lex::Tkn::Name(name)
+            ));
+        }
 
         // 使われた型引数ごとに作った構造体/バリアント、呼び出された型ごとに
         // 作った関数を、通常のノードの後ろに追加する
@@ -183,6 +196,11 @@ impl Parser {
                                 let node = self.variant_node()?;
                                 self.gen_nodes.push(node);
                             }
+                        }
+                        // `impl Name { func() {..} }`
+                        // (終了時は`impl`を閉じる`}`を指す。`struct`と同じ)
+                        lex::Tkn::KeyWordImpl => {
+                            self.impl_node()?;
                         }
                         t => {
                             return crate::err_at!(self.unexpect_tkn_in_stmt(t));

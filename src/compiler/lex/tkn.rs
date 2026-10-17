@@ -77,6 +77,7 @@ pub enum Tkn {
     KeyWordWhere,
     KeyWordAllow,
     KeyWordElse,
+    KeyWordImpl,
 }
 
 impl Tkn {

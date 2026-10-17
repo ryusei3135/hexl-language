@@ -15,6 +15,12 @@ struct Name {
     }
 }
 
+impl Name {
+    fn(self: Self) {
+        self.name
+    }
+}
+
 variant E {
     a
     b(int)

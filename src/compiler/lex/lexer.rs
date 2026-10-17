@@ -316,6 +316,7 @@ impl Lexer {
                     "where" => Tkn::KeyWordWhere,
                     "allow" => Tkn::KeyWordAllow,
                     "else" => Tkn::KeyWordElse,
+                    "impl" => Tkn::KeyWordImpl,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),

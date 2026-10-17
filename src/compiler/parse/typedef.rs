@@ -1,5 +1,6 @@
 mod def_fields;
 mod generic;
+mod impl_block;
 mod variant_field;
 
 use super::{Parser, *};
@@ -25,11 +26,15 @@ impl Parser {
             }
         }
 
-        let fields = self.define_struct_fields()?;
+        let (fields, mut methods) = self.define_struct_fields()?;
         // 構造体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
         self.gen_flag = GenFlag::Group1;
-        let r = node::StructDefine::new(name, fields.0, fields.1);
+        // この構造体より先に`impl 名前 { .. }`が書かれていたら、そのメゾットを追加する
+        if let Some(reserved) = self.reserved_impls.remove(&name) {
+            methods.extend(reserved);
+        }
+        let r = node::StructDefine::new(name, fields, methods);
         Ok(r)
     }
 
@@ -72,10 +77,14 @@ impl Parser {
             }
         }
 
-        let (fields, methods) = self.define_variant_fields(variant_mode)?;
+        let (fields, mut methods) = self.define_variant_fields(variant_mode)?;
         // 共用体の中身をすべて処理し終わったので、`None`にする
         self.struct_self_name = None;
         self.gen_flag = GenFlag::Group1;
+        // このバリアントより先に`impl 名前 { .. }`が書かれていたら、そのメゾットを追加する
+        if let Some(reserved) = self.reserved_impls.remove(&name) {
+            methods.extend(reserved);
+        }
         Ok(node::VariantDefine::new(name, fields, methods))
     }
 
