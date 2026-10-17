@@ -35,9 +35,7 @@ impl Parser {
             .chain(self.pending_types.iter_mut())
             .find_map(|node| match node {
                 node::Group1Node::StructDefine(def) if def.name == name => Some(&mut def.methods),
-                node::Group1Node::VariantDefine(def) if def.name == name => {
-                    Some(&mut def.methods)
-                }
+                node::Group1Node::VariantDefine(def) if def.name == name => Some(&mut def.methods),
                 _ => None,
             });
 
@@ -153,8 +151,8 @@ mod impl_block_test {
 
     #[test]
     fn impl_for_variant() {
-        let nodes = parse_nodes("variant V { X Y } impl V { f(a: int) {ret 1} }")
-            .expect("node is err");
+        let nodes =
+            parse_nodes("variant V { X Y } impl V { f(a: int) {ret 1} }").expect("node is err");
         let node::Group1Node::VariantDefine(def) = &nodes[0] else {
             panic!("not variant");
         };

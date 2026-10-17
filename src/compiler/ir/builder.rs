@@ -378,6 +378,12 @@ impl IR {
         expr: node::Expr,
         expect_byte: Option<&types::Size>,
     ) -> Result<usize, err::ErrKind> {
+        // 前置の単項演算子(`+a` `-a` `!a` `~a` `++a` `--a`)は、
+        // 既存のノードに展開してから生成し直す
+        // (`src/ir/builder/expr_node.rs`の`desugar_unary`)
+        if let Some(expanded) = self.desugar_unary::<M>(&expr, expect_byte)? {
+            return self.gen_expr_ir::<M>(expanded, expect_byte);
+        }
         // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
         // (`src/ir/builder/variant_bind.rs`)
         let expr = self.scope_call_to_variant_init(expr);
@@ -639,6 +645,16 @@ impl IR {
                 t => panic!("{:?}", t),
             },
             node::Expr::RangeNode(..) => panic!(),
+            // 単項演算子は、この`match`の前の`desugar_unary`で展開済み
+            node::Expr::Sign(..)
+            | node::Expr::Inversion(..)
+            | node::Expr::CmpNot(..)
+            | node::Expr::LeftInc(..)
+            | node::Expr::LeftDec(..) => {
+                unreachable!("単項演算子は`desugar_unary`で展開されている")
+            }
+            // `&&` `||` `? :`など、IRの生成が未対応のノード
+            other => panic!("この式のIR生成はまだ対応していません: {:?}", other),
         };
 
         self.ir_tree.push(inst);
@@ -1662,5 +1678,67 @@ mod method_call_via_member_tests {
             "{:?}",
             body
         );
+    }
+}
+
+#[cfg(test)]
+mod unary_expr_ir_tests {
+    use super::*;
+    use crate::compiler::{lex, parse};
+
+    fn build_func_body(src: &str) -> Vec<inst::Inst> {
+        let mut lexer = lex::Lexer::new();
+        lexer.analy(&src.to_string()).unwrap();
+        let mut parser = parse::Parser::new();
+        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let mut ir = IR::new();
+        ir.builder(&nodes).unwrap();
+        ir.test_only_get_func_body("main").to_vec()
+    }
+
+    fn has_kind(body: &[inst::Inst], expected: inst::ExprKind) -> bool {
+        body.iter().any(|inst| match inst {
+            inst::Inst::Expr(e) => e.kind == expected,
+            _ => false,
+        })
+    }
+
+    #[test]
+    fn negative_sign_expands_to_sub_from_zero() {
+        let body = build_func_body("main(): int { a: int = 10 b: int = -a ret b }");
+        assert!(has_kind(&body, inst::ExprKind::Sub), "{:?}", body);
+    }
+
+    #[test]
+    fn positive_sign_generates_no_extra_inst() {
+        let plain = build_func_body("main(): int { a: int = 10 b: int = a ret b }");
+        let signed = build_func_body("main(): int { a: int = 10 b: int = +a ret b }");
+        assert_eq!(plain.len(), signed.len());
+    }
+
+    #[test]
+    fn bit_inversion_expands_to_xor() {
+        let body = build_func_body("main(): int { a: int = 10 b: int = ~a ret b }");
+        assert!(has_kind(&body, inst::ExprKind::XorCalcul), "{:?}", body);
+    }
+
+    #[test]
+    fn bit_inversion_of_unsigned_uses_type_max_mask() {
+        // 符号なしに`-1`は入らないので、型の最大値をマスクにする
+        let body = build_func_body("main(): uint { a: uint = 10 b: uint = ~a ret b }");
+        assert!(has_kind(&body, inst::ExprKind::XorCalcul), "{:?}", body);
+    }
+
+    #[test]
+    fn logical_not_expands_to_equal_zero() {
+        let body = build_func_body("main(): int { a: int = 10 b: int = !a ret b }");
+        assert!(has_kind(&body, inst::ExprKind::Equal), "{:?}", body);
+    }
+
+    #[test]
+    fn unary_minus_literal_in_comparison_is_typed_like_other_operand() {
+        // `a < -1`の`-1`は、`a`の型(定義元の型)になる
+        let body = build_func_body("main(): int { a: int = 10 cond a < -1 { b: int = 1 } }");
+        assert!(has_kind(&body, inst::ExprKind::LessThen), "{:?}", body);
     }
 }

@@ -23,7 +23,8 @@ impl Parser {
     ) -> Result<node::Expr, err::ErrKind> {
         let node = if self
             .next_tkn(&[
-                "(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "]", "++", "--",
+                "(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=",
+                "<<=", ">>=", "]", "++", "--",
             ])
             .map(|_| true)?
         {
@@ -130,10 +131,70 @@ impl Parser {
         }
     }
 
+    /// 式の最上位(最も優先順位が低い条件演算子`? :`)。呼び出し元はここから式を読む
+    ///
+    /// 優先順位(低 -> 高):
+    /// `? :` < `||` < `&&` < `|` < `^` < `&` < `==` `!=` < ...
+    ///
+    /// 右結合: `a ? b : c ? d : e` は `a ? b : (c ? d : e)`
     pub(in crate::compiler::parse) fn expr_or(
         &mut self,
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
+        let cond = self.expr_cmp_or(init_struct)?;
+        if self.current_tkn() != &lex::Tkn::Question {
+            return Ok(cond);
+        }
+
+        // 現在のトークンは`?`。`then`は`?`の次から読む
+        let then = self.expr_or(init_struct)?;
+        if self.current_tkn() != &lex::Tkn::Colon {
+            return crate::err_at!(self.expected_at_current(":"));
+        }
+        // 現在のトークンは`:`。`else`は`:`の次から読む
+        let els = self.expr_or(init_struct)?;
+
+        Ok(node::Expr::Ternary((
+            Box::new(cond),
+            Box::new(then),
+            Box::new(els),
+        )))
+    }
+
+    /// `||`
+    fn expr_cmp_or(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_cmp_and(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::CmpOr => {
+                    node::Expr::CmpOr(node::Expr::wrap(left, self.expr_cmp_and(init_struct)?))
+                }
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// `&&`
+    fn expr_cmp_and(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.expr_bit_or(init_struct)?;
+
+        loop {
+            left = match self.current_tkn() {
+                lex::Tkn::CmpAnd => {
+                    node::Expr::CmpAnd(node::Expr::wrap(left, self.expr_bit_or(init_struct)?))
+                }
+                _ => break,
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// `|`
+    fn expr_bit_or(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
         let mut left = self.expr_xor(init_struct)?;
 
         loop {
@@ -260,23 +321,62 @@ impl Parser {
     }
 
     fn expr_mul(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
-        let mut left = self.expr_value(ini_struct)?;
+        let mut left = self.expr_unary(ini_struct)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Mul => {
-                    node::Expr::Mul(node::Expr::wrap(left, self.expr_value(ini_struct)?))
+                    node::Expr::Mul(node::Expr::wrap(left, self.expr_unary(ini_struct)?))
                 }
                 lex::Tkn::Div => {
-                    node::Expr::Div(node::Expr::wrap(left, self.expr_value(ini_struct)?))
+                    node::Expr::Div(node::Expr::wrap(left, self.expr_unary(ini_struct)?))
                 }
                 lex::Tkn::Surplus => {
-                    node::Expr::Surplus(node::Expr::wrap(left, self.expr_value(ini_struct)?))
+                    node::Expr::Surplus(node::Expr::wrap(left, self.expr_unary(ini_struct)?))
                 }
                 _ => break,
             };
         }
         Ok(left)
+    }
+
+    /// 前置の単項演算子: `++` `--` `+` `-` `!` `~`
+    ///
+    /// `expr_value`と同じ規約で、呼び出し時の現在のトークンは「値の直前の
+    /// トークン」(`=`や二項演算子など)。次のトークンが単項演算子なら
+    /// 1つ進めて、続くオペランドを再帰で読む(`- -a`や`!~a`も可)。
+    /// 単項演算子でなければ、そのまま`expr_value`に処理を委ねる。
+    ///
+    /// - `++a` -> `LeftInc(a)` / `--a` -> `LeftDec(a)`
+    /// - `+a`  -> `Sign((true, a))` / `-a` -> `Sign((false, a))`
+    /// - `!a`  -> `CmpNot(a)` (論理反転) / `~a` -> `Inversion(a)` (ビット反転)
+    ///
+    /// 優先順位は乗除(`*` `/` `%`)より高い(`-a * b`は`(-a) * b`)
+    fn expr_unary(&mut self, ini_struct: bool) -> Result<node::Expr, err::ErrKind> {
+        let op = self.next_tkn_ref(&[])?;
+        if !matches!(
+            op,
+            lex::Tkn::Inc
+                | lex::Tkn::Dec
+                | lex::Tkn::Add
+                | lex::Tkn::Sub
+                | lex::Tkn::Not
+                | lex::Tkn::Inversion
+        ) {
+            return self.expr_value(ini_struct);
+        }
+
+        // 演算子を現在のトークンにする。オペランドは次のトークンから始まる
+        self.next_tkn(&[])?;
+        let operand = Box::new(self.expr_unary(ini_struct)?);
+        Ok(match op {
+            lex::Tkn::Inc => node::Expr::LeftInc(operand),
+            lex::Tkn::Dec => node::Expr::LeftDec(operand),
+            lex::Tkn::Add => node::Expr::Sign((true, operand)),
+            lex::Tkn::Sub => node::Expr::Sign((false, operand)),
+            lex::Tkn::Not => node::Expr::CmpNot(operand),
+            _ => node::Expr::Inversion(operand),
+        })
     }
 
     fn expr_value(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
@@ -378,10 +478,7 @@ impl Parser {
                     };
                     self.next_tkn(&[")"])?;
                     let var = self.expr_value(init_struct)?;
-                    return Ok(node::Expr::Cast((
-                        node::TyNode::Ty(ty_name),
-                        Box::new(var),
-                    )));
+                    return Ok(node::Expr::Cast((node::TyNode::Ty(ty_name), Box::new(var))));
                 }
 
                 let result = self.expr_or(init_struct)?;
@@ -991,5 +1088,176 @@ mod expr_tests {
             "main(): int { loop a > 0 { cond { a > 5 => { break } else => { break } } a-- } }",
         );
         assert!(p.parser(&tkns).is_ok());
+    }
+
+    fn parse_value_of(src: &str) -> node::Expr {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes(src);
+        let node::Group1Node::FuncDefine(ref func) = p.parser(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        let node::Group2Node::Expr(node::Expr::DefVar(var)) = func.body[0].get_node() else {
+            panic!("not variable definition");
+        };
+        *var.value.clone()
+    }
+
+    fn var(name: &str) -> Box<node::Expr> {
+        Box::new(node::Expr::Var(name.to_string()))
+    }
+
+    #[test]
+    fn check_unary_sign() {
+        assert_eq!(
+            parse_value_of("main(): int { a: int = -b }"),
+            node::Expr::Sign((false, var("b")))
+        );
+        assert_eq!(
+            parse_value_of("main(): int { a: int = +b }"),
+            node::Expr::Sign((true, var("b")))
+        );
+    }
+
+    #[test]
+    fn check_unary_not_and_inversion() {
+        assert_eq!(
+            parse_value_of("main(): int { a: int = !b }"),
+            node::Expr::CmpNot(var("b"))
+        );
+        assert_eq!(
+            parse_value_of("main(): int { a: int = ~b }"),
+            node::Expr::Inversion(var("b"))
+        );
+    }
+
+    #[test]
+    fn check_unary_prefix_inc_dec() {
+        assert_eq!(
+            parse_value_of("main(): int { a: int = ++b }"),
+            node::Expr::LeftInc(var("b"))
+        );
+        assert_eq!(
+            parse_value_of("main(): int { a: int = --b }"),
+            node::Expr::LeftDec(var("b"))
+        );
+    }
+
+    #[test]
+    fn check_unary_nested() {
+        // `!~b` / `- -b`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = !~b }"),
+            node::Expr::CmpNot(Box::new(node::Expr::Inversion(var("b"))))
+        );
+        assert_eq!(
+            parse_value_of("main(): int { a: int = - -b }"),
+            node::Expr::Sign((false, Box::new(node::Expr::Sign((false, var("b"))))))
+        );
+    }
+
+    #[test]
+    fn check_unary_precedence() {
+        // `-b * c` は `(-b) * c`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = -b * c }"),
+            node::Expr::Mul((Box::new(node::Expr::Sign((false, var("b")))), var("c")))
+        );
+        // `b - -c` は 二項の`-`と単項の`-`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b - -c }"),
+            node::Expr::Sub((var("b"), Box::new(node::Expr::Sign((false, var("c"))))))
+        );
+        // `-(b + c)`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = -(b + c) }"),
+            node::Expr::Sign((false, Box::new(node::Expr::Add((var("b"), var("c"))))))
+        );
+    }
+
+    #[test]
+    fn check_logical_and_or() {
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b && c }"),
+            node::Expr::CmpAnd((var("b"), var("c")))
+        );
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b || c }"),
+            node::Expr::CmpOr((var("b"), var("c")))
+        );
+    }
+
+    #[test]
+    fn check_logical_precedence() {
+        // `b || c && d` は `b || (c && d)`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b || c && d }"),
+            node::Expr::CmpOr((var("b"), Box::new(node::Expr::CmpAnd((var("c"), var("d"))))))
+        );
+        // `b && c | d` は `b && (c | d)`(ビット演算の方が優先)
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b && c | d }"),
+            node::Expr::CmpAnd((
+                var("b"),
+                Box::new(node::Expr::OrCalcul((var("c"), var("d"))))
+            ))
+        );
+        // `!b && c` は `(!b) && c`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = !b && c }"),
+            node::Expr::CmpAnd((Box::new(node::Expr::CmpNot(var("b"))), var("c")))
+        );
+        // 左結合: `b && c && d` は `(b && c) && d`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b && c && d }"),
+            node::Expr::CmpAnd((Box::new(node::Expr::CmpAnd((var("b"), var("c")))), var("d")))
+        );
+    }
+
+    #[test]
+    fn check_ternary() {
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b ? c : d }"),
+            node::Expr::Ternary((var("b"), var("c"), var("d")))
+        );
+    }
+
+    #[test]
+    fn check_ternary_precedence() {
+        // 条件部は`||`より低い: `b || c ? d : e` は `(b || c) ? d : e`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b || c ? d : e }"),
+            node::Expr::Ternary((
+                Box::new(node::Expr::CmpOr((var("b"), var("c")))),
+                var("d"),
+                var("e")
+            ))
+        );
+        // 右結合: `b ? c : d ? e : f` は `b ? c : (d ? e : f)`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b ? c : d ? e : f }"),
+            node::Expr::Ternary((
+                var("b"),
+                var("c"),
+                Box::new(node::Expr::Ternary((var("d"), var("e"), var("f"))))
+            ))
+        );
+        // then側のネスト: `b ? c ? d : e : f`
+        assert_eq!(
+            parse_value_of("main(): int { a: int = b ? c ? d : e : f }"),
+            node::Expr::Ternary((
+                var("b"),
+                Box::new(node::Expr::Ternary((var("c"), var("d"), var("e")))),
+                var("f")
+            ))
+        );
+        // 括弧内でも使える
+        assert_eq!(
+            parse_value_of("main(): int { a: int = (b ? c : d) + e }"),
+            node::Expr::Add((
+                Box::new(node::Expr::Ternary((var("b"), var("c"), var("d")))),
+                var("e")
+            ))
+        );
     }
 }

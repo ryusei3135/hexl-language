@@ -21,9 +21,7 @@ mod pe;
 use std::path::Path;
 
 pub use error::LinkResult;
-pub use link::{
-    LinkOptions, LinkOutput, Linker
-};
+pub use link::{LinkOptions, LinkOutput, Linker};
 
 /// オブジェクトファイルのパスを受け取り、すべてを読み込んでリンクする。
 ///

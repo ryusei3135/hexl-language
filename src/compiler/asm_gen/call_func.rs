@@ -783,9 +783,9 @@ impl AsmEmitter {
                 self.curr_inst[value],
                 inst::Inst::Expr(..) | inst::Inst::Cast { .. }
             ) && self
-                    .last_inst_idx
-                    .iter()
-                    .any(|(idx, reg)| *idx == value && *reg == current_reg)
+                .last_inst_idx
+                .iter()
+                .any(|(idx, reg)| *idx == value && *reg == current_reg)
             {
                 return;
             }

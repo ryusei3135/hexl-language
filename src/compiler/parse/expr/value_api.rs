@@ -69,8 +69,7 @@ impl Parser {
         if self.is_variant_field(&name, &mem_name) {
             // unsafeな共用体の初期化: `Type::mem { mem: expr }`
             // (`Type::Mem(expr)`はタグ付き共用体用なので、`{`が続くときだけここに入る)
-            if self.is_unsafe_variant(&name)
-                && matches!(self.next_tkn_ref(&[])?, lex::Tkn::LBrace)
+            if self.is_unsafe_variant(&name) && matches!(self.next_tkn_ref(&[])?, lex::Tkn::LBrace)
             {
                 self.next_tkn(&["{"])?;
                 return self.unsafe_variant_init_node(name, &mem_name);
@@ -151,7 +150,9 @@ impl Parser {
         };
         if fields.len() != 1 || !fields.contains_key(mem_name) {
             let found = self.current_tkn().clone();
-            return crate::err_at!(self.expected_tkn("exactly one field matching the member", found));
+            return crate::err_at!(
+                self.expected_tkn("exactly one field matching the member", found)
+            );
         }
         Ok(node::Expr::InitVariant {
             is_self,

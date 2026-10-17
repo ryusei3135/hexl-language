@@ -34,15 +34,27 @@ pub enum Tkn {
     LShift,
     RShift,
 
-    AddEq, // +=
-    SubEq, // -=
-    MulEq, // *=
-    DivEq, // /=
+    AddEq,     // +=
+    SubEq,     // -=
+    MulEq,     // *=
+    DivEq,     // /=
+    SurplusEq, // %=
+    AndEq,     // &=
+    XorEq,     // ^=
+    OrEq,      // |=
+    LShiftEq,  // <<=
+    RShiftEq,  // >>=
 
     Inc,
     Dec,
 
+    Inversion,
+
     CompleSyn,
+
+    CmpAnd,
+    CmpOr,
+    Question,
 
     /// 整数リテラル (`10` / 16進数は10進数の文字列に変換済み)
     Number(String),
@@ -78,6 +90,7 @@ pub enum Tkn {
     KeyWordAllow,
     KeyWordElse,
     KeyWordImpl,
+    KeyWordExtern,
 }
 
 impl Tkn {

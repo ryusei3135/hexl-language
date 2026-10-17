@@ -978,8 +978,7 @@ impl AsmEmitter {
             let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some();
             let operand = self.extract_operand_text(expr.ls, None);
             let dst = self.get_reg(Some(self.reg_idx), &Self::value_reg_size(&resolved_size));
-            let mut output =
-                self.mov_line(&dst, &operand, &resolved_size, is_memory_access);
+            let mut output = self.mov_line(&dst, &operand, &resolved_size, is_memory_access);
             let mut update = self.asm_fmt.get_opcode_tmpl(key).replace("{dst}", &operand);
             update = if is_memory_access {
                 self.asm_fmt

@@ -145,7 +145,7 @@ impl IR {
         }
 
         // 静的に検査するだけで、IRはそのまま
-        self.arr_idx_checker(name, index);
+        self.arr_idx_checker::<M>(name, index)?;
         self.range_ptr_checker(name, index);
         Ok(None)
     }

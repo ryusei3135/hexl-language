@@ -45,10 +45,7 @@ impl IR {
 
     /// 分岐1つ分を、分岐前の状態のコピーに対して解析して返す
     /// (分岐の中で定義された変数は結果に含めない)
-    fn walk_branch(
-        must_vars: &[MustVar],
-        walk: impl FnOnce(&mut Vec<MustVar>),
-    ) -> Vec<MustVar> {
+    fn walk_branch(must_vars: &[MustVar], walk: impl FnOnce(&mut Vec<MustVar>)) -> Vec<MustVar> {
         let outer_len = must_vars.len();
         let mut local = must_vars.to_vec();
         walk(&mut local);

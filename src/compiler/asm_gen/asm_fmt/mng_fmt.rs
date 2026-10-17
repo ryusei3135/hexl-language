@@ -475,7 +475,7 @@ impl MngAsmFmt {
             Size::DD | Size::UDD => &self.reg_fmt.dd,
             Size::DQ | Size::UDQ => &self.reg_fmt.dq,
             Size::Pointer { .. } => &self.reg_fmt.dq,
-            _ => panic!(),
+            t => panic!("レジスタに変換できない型 {:?}", t),
         };
         self.fmt
             .fmt

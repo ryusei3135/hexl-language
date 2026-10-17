@@ -18,6 +18,31 @@ impl Lexer {
                 self.gen_tkns.pop();
                 Some(tkn)
             }
+            Tkn::And => {
+                let t = match self.gen_tkns.last()?.tkn {
+                    Tkn::And => Tkn::CmpAnd,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(t)
+            }
+            // `||` (`&&`と同じく、単独の`|`が2つ隣り合ったとき)
+            Tkn::Or => {
+                let t = match self.gen_tkns.last()?.tkn {
+                    Tkn::Or => Tkn::CmpOr,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(t)
+            }
+            Tkn::CmpOr => {
+                let t = match self.gen_tkns.last()?.tkn {
+                    Tkn::CmpOr => Tkn::CmpOr,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(t)
+            }
             Tkn::Add => {
                 let t = match self.gen_tkns.last()?.tkn {
                     Tkn::Add => Tkn::Inc,
@@ -65,6 +90,12 @@ impl Lexer {
                     Tkn::Sub => Tkn::SubEq,
                     Tkn::Mul => Tkn::MulEq,
                     Tkn::Div => Tkn::DivEq,
+                    Tkn::Surplus => Tkn::SurplusEq,
+                    Tkn::And => Tkn::AndEq,
+                    Tkn::Xor => Tkn::XorEq,
+                    Tkn::Or => Tkn::OrEq,
+                    Tkn::LShift => Tkn::LShiftEq,
+                    Tkn::RShift => Tkn::RShiftEq,
                     Tkn::LAngleBracket => Tkn::LessThanEq,
                     Tkn::RAngleBracket => Tkn::GreaterThanEq,
                     _ => return None,

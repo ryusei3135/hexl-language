@@ -96,6 +96,10 @@ impl IR {
             | node::Expr::OrCalcul(n) => {
                 Self::is_untyped_literal(&n.0) && Self::is_untyped_literal(&n.1)
             }
+            // `-1`や`~0`のような、即値だけの単項演算
+            node::Expr::Sign((_, target))
+            | node::Expr::Inversion(target)
+            | node::Expr::CmpNot(target) => Self::is_untyped_literal(target),
             _ => false,
         }
     }
@@ -115,6 +119,14 @@ impl IR {
                 self.try_size_or_emit_struct(&ty_node).ok()?
             }
             node::Expr::Inc(target) | node::Expr::Dec(target) => {
+                return self.infer_expr_ty(target);
+            }
+            // 単項演算の結果は、オペランドと同じ型
+            // (`!a`は比較の結果なので、型を決める元にしない)
+            node::Expr::Sign((_, target))
+            | node::Expr::Inversion(target)
+            | node::Expr::LeftInc(target)
+            | node::Expr::LeftDec(target) => {
                 return self.infer_expr_ty(target);
             }
             // キャストの結果は、キャスト先の型(組み込み型のみ)
@@ -195,6 +207,7 @@ impl IR {
             | node::Expr::OrCalcul(n) => {
                 Self::literal_has_float(&n.0) || Self::literal_has_float(&n.1)
             }
+            node::Expr::Sign((_, target)) => Self::literal_has_float(target),
             _ => false,
         }
     }
@@ -336,15 +349,10 @@ impl IR {
         Ok(inst::Inst::Cast { src, after })
     }
 
-    pub(super) fn build_inc_dec_expr<M: ResultMod>(
-        &mut self,
-        target: node::Expr,
-        kind: inst::ExprKind,
-    ) -> Result<inst::Inst, err::ErrKind> {
-        let node::Expr::Var(name) = &target else {
-            return Err(err::ErrKind::UnexpectedToken);
-        };
-
+    /// `++`/`--`(前置/後置)の対象の変数を確認して、その型を返す
+    ///
+    /// 対象は、再代入できる整数型の変数のみ
+    fn inc_dec_var_ty<M: ResultMod>(&mut self, name: &str) -> Result<types::Size, err::ErrKind> {
         let var_attr = self.var_tree.is_mut(name);
         self.ensure_var_is_assignable(name, &var_attr)?;
 
@@ -363,6 +371,19 @@ impl IR {
         ) {
             return Err(CompileErr::inc_dec_requires_integer(name).with_span(self.current_span));
         }
+        Ok(ty)
+    }
+
+    pub(super) fn build_inc_dec_expr<M: ResultMod>(
+        &mut self,
+        target: node::Expr,
+        kind: inst::ExprKind,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        let node::Expr::Var(name) = &target else {
+            return Err(err::ErrKind::UnexpectedToken);
+        };
+
+        let ty = self.inc_dec_var_ty::<M>(name)?;
 
         let idx = self.gen_expr_ir::<M>(target, Some(&ty))?;
         Ok(inst::ExprInst {
@@ -372,6 +393,75 @@ impl IR {
             kind,
         }
         .new())
+    }
+
+    /// 前置の単項演算子(`+` `-` `!` `~` `++` `--`)を、既存のノードに展開する
+    ///
+    /// 単項演算専用の命令は作らず、バックエンドが対応済みの命令だけで表す
+    /// - `+a`  -> `a`
+    /// - `-a`  -> `0 - a`
+    /// - `~a`  -> `a ^ (全ビットが1の値)`
+    /// - `!a`  -> `a == 0`
+    /// - `++a` -> `a = a + 1`(式の値は、加算後の値)
+    /// - `--a` -> `a = a - 1`(式の値は、減算後の値)
+    ///
+    /// 単項演算のノードでなければ`Ok(None)`
+    pub(super) fn desugar_unary<M: ResultMod>(
+        &mut self,
+        expr: &node::Expr,
+        expect_byte: Option<&types::Size>,
+    ) -> Result<Option<node::Expr>, err::ErrKind> {
+        // オペランドの型。分からなければ呼び出し側の期待する型
+        let operand_ty = |this: &Self, target: &node::Expr| -> Option<types::Size> {
+            this.infer_expr_ty(target).or_else(|| expect_byte.cloned())
+        };
+        let num = |value: &str| node::Expr::Number(value.to_string());
+
+        Ok(Some(match expr {
+            node::Expr::Sign((true, target)) => (**target).clone(),
+            node::Expr::Sign((false, target)) => {
+                let is_float = operand_ty(self, target).is_some_and(|ty| ty.is_float())
+                    || Self::literal_has_float(target);
+                let zero = if is_float {
+                    node::Expr::Float("0.0".to_string())
+                } else {
+                    num("0")
+                };
+                node::Expr::Sub(node::Expr::wrap(zero, (**target).clone()))
+            }
+            node::Expr::Inversion(target) => {
+                use types::Size;
+                // 全ビットが1の値(符号付きは-1、符号なしは型の最大値)
+                let mask = match operand_ty(self, target).unwrap_or(Size::DD) {
+                    Size::UDB => u8::MAX.to_string(),
+                    Size::UDW => u16::MAX.to_string(),
+                    Size::UDD => u32::MAX.to_string(),
+                    Size::UDQ => u64::MAX.to_string(),
+                    Size::F32 | Size::F64 => return Err(err::ErrKind::UnexpectedToken),
+                    _ => "-1".to_string(),
+                };
+                node::Expr::XorCalcul(node::Expr::wrap((**target).clone(), num(&mask)))
+            }
+            node::Expr::CmpNot(target) => {
+                node::Expr::Equal(node::Expr::wrap((**target).clone(), num("0")))
+            }
+            node::Expr::LeftInc(target) | node::Expr::LeftDec(target) => {
+                let node::Expr::Var(name) = &**target else {
+                    return Err(err::ErrKind::UnexpectedToken);
+                };
+                // 後置の`++`/`--`と同じ条件(再代入できる整数型の変数)を確認する
+                self.inc_dec_var_ty::<M>(name)?;
+                let var = node::Expr::Var(name.clone());
+                let calc = node::Expr::wrap(var.clone(), num("1"));
+                let value = if matches!(expr, node::Expr::LeftInc(_)) {
+                    node::Expr::Add(calc)
+                } else {
+                    node::Expr::Sub(calc)
+                };
+                node::AssignVar::new(name, var, value)
+            }
+            _ => return Ok(None),
+        }))
     }
 
     pub(super) fn assign_expr_node<M: ResultMod>(

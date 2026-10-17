@@ -277,6 +277,20 @@ pub enum Expr {
     Inc(Box<Expr>),
     Dec(Box<Expr>),
 
+    Inversion(Box<Expr>),
+    CmpNot(Box<Expr>),
+    Sign((bool, Box<Expr>)),
+    LeftInc(Box<Expr>),
+    LeftDec(Box<Expr>),
+
+    /// 条件演算子: `cond ? then : else` -> `Ternary((cond, then, else))`
+    Ternary((Box<Expr>, Box<Expr>, Box<Expr>)),
+
+    // &&
+    CmpAnd((Box<Expr>, Box<Expr>)),
+    // ||
+    CmpOr((Box<Expr>, Box<Expr>)),
+
     LessThen((Box<Expr>, Box<Expr>)),
     GreaterThen((Box<Expr>, Box<Expr>)),
     LessThenEq((Box<Expr>, Box<Expr>)),

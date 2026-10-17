@@ -1,6 +1,4 @@
-use crate::{
-    compiler::asm_gen::asm_emitter::{RESERVED_REGS, VarIndexInfo},
-};
+use crate::compiler::asm_gen::asm_emitter::{RESERVED_REGS, VarIndexInfo};
 //use crate::ir::def_tree::{VarMetaData, VarTree};
 
 use super::*;

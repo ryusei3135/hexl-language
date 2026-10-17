@@ -136,7 +136,7 @@ impl VarTree {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) fn is_mut(&self, name: &String) -> parse::VarMutAttr {
+    pub(in crate::compiler::ir) fn is_mut(&self, name: &str) -> parse::VarMutAttr {
         self.hash.get(name).unwrap().var_attr.clone()
     }
 

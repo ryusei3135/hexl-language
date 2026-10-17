@@ -22,7 +22,11 @@ impl IR {
 
     /// 関数全体を辿り、ループを見つけたら`check_loop_block`で検査する
     /// `scope`は今見えている`must`の変数名
-    pub(super) fn check_loop_contract_ends(func_name: &String, nodes: &Body, scope: &mut Vec<String>) {
+    pub(super) fn check_loop_contract_ends(
+        func_name: &String,
+        nodes: &Body,
+        scope: &mut Vec<String>,
+    ) {
         for n in nodes.iter() {
             match n.get_node() {
                 node::Group2Node::Expr(expr)
@@ -42,9 +46,7 @@ impl IR {
                     scope.push(var.name.clone());
                 }
             }
-            node::Expr::Match {
-                arms, arm_else, ..
-            } => {
+            node::Expr::Match { arms, arm_else, .. } => {
                 for arm in arms.iter() {
                     let start = scope.len();
                     Self::check_loop_contract_ends(func_name, &arm.body, scope);
@@ -97,9 +99,7 @@ impl IR {
             if let Some(expr) = &expr {
                 match expr {
                     // 分岐の本体は、それぞれ同じ規則で検査する
-                    node::Expr::Match {
-                        arms, arm_else, ..
-                    } => {
+                    node::Expr::Match { arms, arm_else, .. } => {
                         for arm in arms.iter() {
                             Self::check_loop_block(func_name, &arm.body, &mut guarded.clone());
                         }

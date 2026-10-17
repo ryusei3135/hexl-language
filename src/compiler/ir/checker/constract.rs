@@ -152,7 +152,12 @@ impl IR {
 
         // ループの中での契約の終了は、`ret`/`break`の前にしか置けない
         let mut scope: Vec<String> = must_vars.iter().map(|v| v.name.clone()).collect();
-        scope.truncate(func.params.iter().filter(|p| p.ty.is_constract_must()).count());
+        scope.truncate(
+            func.params
+                .iter()
+                .filter(|p| p.ty.is_constract_must())
+                .count(),
+        );
         Self::check_loop_contract_ends(&func.name, &func.body, &mut scope);
 
         // 一度も渡されていない変数、または条件分岐の一部でしか
@@ -343,9 +348,7 @@ g(v: int must=d) { d(v) }
             "x: int must=c = a()\ncond 1 == 1 {\n} else {\n c(x)\n}",
         ));
         // `else`が無い場合
-        assert_err(&main_with(
-            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n}",
-        ));
+        assert_err(&main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n}"));
     }
 
     #[test]
@@ -383,7 +386,9 @@ g(v: int must=d) { d(v) }
         assert_ok(&main_with("x: int must=c = a()\nloop {\n c(x)\n break\n}"));
         assert_ok(&main_with("x: int must=c = a()\nloop {\n c(x)\n ret 0\n}"));
         // `continue`では次の周で二重に終了してしまう
-        assert_err(&main_with("x: int must=c = a()\nloop {\n c(x)\n continue\n}"));
+        assert_err(&main_with(
+            "x: int must=c = a()\nloop {\n c(x)\n continue\n}",
+        ));
         // 終了と`break`の間に別の文を挟めない
         assert_err(&main_with(
             "x: int must=c = a()\nloop {\n c(x)\n y: int = 1\n break\n}",

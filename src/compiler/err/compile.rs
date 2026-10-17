@@ -15,6 +15,7 @@ pub enum CompileErr {
     ArrElseIndexNotFound,
     /// 不変の変数に値を代入しようとした
     AssignToImmutableVar(String),
+    ArrIndexIsOutBounds(String),
     /// ポインタに指定された範囲と初期値の長さが一致しない
     PointerRangeLengthMismatch {
         range: (usize, usize),

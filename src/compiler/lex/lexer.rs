@@ -64,7 +64,9 @@ mod local {
         RBracket,
         Not,
         Surplus,
+        Question,
 
+        Inversion,
         CompleSyn,
 
         Number,
@@ -259,6 +261,7 @@ impl Lexer {
                 GenFlag::Comma => Tkn::Comma,
                 GenFlag::Colon => Tkn::Colon,
                 GenFlag::Surplus => Tkn::Surplus,
+                GenFlag::Inversion => Tkn::Inversion,
                 GenFlag::And => Tkn::And,
                 GenFlag::Xor => Tkn::Xor,
                 GenFlag::Or => Tkn::Or,
@@ -267,6 +270,7 @@ impl Lexer {
                 GenFlag::RAngleBracket => Tkn::RAngleBracket,
                 GenFlag::LBracket => Tkn::LBracket,
                 GenFlag::RBracket => Tkn::RBracket,
+                GenFlag::Question => Tkn::Question,
 
                 GenFlag::CompleSyn => Tkn::CompleSyn,
                 GenFlag::Number => {
@@ -317,6 +321,7 @@ impl Lexer {
                     "allow" => Tkn::KeyWordAllow,
                     "else" => Tkn::KeyWordElse,
                     "impl" => Tkn::KeyWordImpl,
+                    "extern" => Tkn::KeyWordExtern,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),
@@ -379,6 +384,8 @@ impl Lexer {
             Some('.') => GenFlag::Dot,
             Some('!') => GenFlag::Not,
             Some('%') => GenFlag::Surplus,
+            Some('~') => GenFlag::Inversion,
+            Some('?') => GenFlag::Question,
             _ => return self.get_value_by_flag_ty(chr, StkResult::GenTkn),
         };
         self.over_write_flag::<true>(sym_flag);

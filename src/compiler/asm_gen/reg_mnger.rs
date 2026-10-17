@@ -453,7 +453,10 @@ impl UsedRegManager {
 
     /// `regs`の中で、現在使用中でないレジスタのうち最小の番号を返す
     /// (`EndScope`で解放したレジスタから、次に使うレジスタを選ぶために使う)
-    pub(in crate::compiler::asm_gen) fn lowest_free<'a>(&self, regs: &'a [RegisterMode]) -> Option<&'a RegisterMode> {
+    pub(in crate::compiler::asm_gen) fn lowest_free<'a>(
+        &self,
+        regs: &'a [RegisterMode],
+    ) -> Option<&'a RegisterMode> {
         regs.iter()
             .filter(|reg| !self.is_used(reg))
             .min_by_key(|reg| match reg {

@@ -2,6 +2,7 @@
 //! 探索
 
 use super::*;
+use crate::err::CompileErr;
 
 impl IR {
     /// 範囲付きポインタや配列の長さを超えて数を指定しているかを
@@ -54,30 +55,37 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や`name`が配列型でない場合は判定できない
     /// ため`true`を返す(配列型でない場合は`range_ptr_checker`に任せる)
-    pub(in crate::compiler::ir) fn arr_idx_checker(
+    pub(in crate::compiler::ir) fn arr_idx_checker<M: ResultMod>(
         &mut self,
         name: &str,
         index: &node::Expr,
-    ) -> bool {
+    ) -> Result<bool, err::ErrKind> {
         if self.is_const_index(index) == false {
-            return true;
+            return Ok(true);
         }
 
-        let ty = self.var_tree.get_ty_node(name).unwrap();
+        let ty = M::handle(
+            self.var_tree
+                .get_ty_node(name)
+                .ok_or_else(|| crate::GenUndefErrResult!(UndefVar, name.to_string(), None)),
+        )?;
         let len = match &ty.try_into() {
             Ok(types::Size::Array { len, .. }) => *len,
             // 配列型でなければこのチェックの対象外
-            _ => return true,
+            _ => return Ok(true),
         };
 
         let idx_value = self.eval_expr(index);
         if idx_value >= len {
-            panic!(
-                "配列 `{}` の添字が範囲外です: 添字 {} (配列の長さ {})",
-                name, idx_value, len,
-            );
+            M::handle(crate::GenCompileErr!(
+                ArrIndexIsOutBounds,
+                format!(
+                    "配列 `{}` の添字が範囲外です: 添字 {} (配列の長さ {})",
+                    name, idx_value, len,
+                )
+            ))?;
         }
-        true
+        Ok(true)
     }
 
     /// 範囲付きポインタが範囲を超えていないか

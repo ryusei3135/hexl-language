@@ -1563,7 +1563,7 @@ mod alu_shift_tests {
 
 #[cfg(test)]
 mod inc_dec_tests {
-    use crate::assembler::x64::{convert, Lexer, Parser};
+    use crate::assembler::x64::{Lexer, Parser, convert};
 
     use super::*;
 
