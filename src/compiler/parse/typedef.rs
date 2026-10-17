@@ -341,9 +341,15 @@ impl Parser {
         self.next_tkn(&[])?;
 
         if is_static {
-            Ok(node::TyNode::Static { name: Box::new(ty), len })
+            Ok(node::TyNode::Static {
+                name: Box::new(ty),
+                len,
+            })
         } else {
-            Ok(node::TyNode::Stack { name: Box::new(ty), len })
+            Ok(node::TyNode::Stack {
+                name: Box::new(ty),
+                len,
+            })
         }
     }
 }

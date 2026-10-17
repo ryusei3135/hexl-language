@@ -226,7 +226,11 @@ impl IR {
                 // スコープがemptyでないことは確定している
                 let var_name = scope.last().unwrap();
                 let struct_name = M::handle(self.var_tree.get_ty_name(var_name).or_else(|_| {
-                    Err(crate::GenUndefErrResult!(UndefStruct, var_name.to_string(), None))
+                    Err(crate::GenUndefErrResult!(
+                        UndefStruct,
+                        var_name.to_string(),
+                        None
+                    ))
                 }))?;
                 match &**target {
                     node::Expr::Var(m) => (struct_name, m.clone(), false),
@@ -253,8 +257,8 @@ impl IR {
                             node::Expr::RefArray { name, .. } => (struct_name, name.clone(), true),
                             // パーサーですでにはじいているのでpanic
                             n => panic!("構造体のメンバーに使えないノード {:?}", n),
-                                }
-                            }
+                        }
+                    }
                     // 添字なし、または静的に範囲内と分かった場合: 今までの経路
                     None => {
                         panic!();
@@ -269,11 +273,15 @@ impl IR {
             let field_ty = self
                 .struct_tree
                 .get(&struct_name)
-                .ok_or_else(|| crate::GenUndefErrResult!(UndefStruct, struct_name.to_string(), None))?
+                .ok_or_else(|| {
+                    crate::GenUndefErrResult!(UndefStruct, struct_name.to_string(), None)
+                })?
                 .fields
                 .iter()
                 .find(|field| field.name == member)
-                .ok_or_else(|| crate::GenUndefErrResult!(UndefStructMember, member.to_string(), None))?
+                .ok_or_else(|| {
+                    crate::GenUndefErrResult!(UndefStructMember, member.to_string(), None)
+                })?
                 .ty
                 .clone();
             self.try_size_or_emit_struct(&field_ty).map(|x| Some(x))

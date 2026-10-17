@@ -94,9 +94,7 @@ impl IR {
             Err(e) if Self::is_not_const_index_err(&e) => {
                 // 長さ/範囲が分からない変数、`else`の添字がない場合はガードを作れない
                 let range = match self.access_bounds::<M>(name) {
-                    Ok(range) => {
-                        range
-                    }
+                    Ok(range) => range,
                     Err(e) => {
                         panic!("{:?} {:?}", e, name);
                     }
@@ -199,9 +197,7 @@ impl IR {
         println!("{:?} {:?}", size, ty);
         match size {
             Ok(types::Size::Array { len, .. }) => Ok((0, len)),
-            Ok(types::Size::Pointer {
-                range, ..
-            }) => Ok(range.unwrap_or((0, 0))),
+            Ok(types::Size::Pointer { range, .. }) => Ok(range.unwrap_or((0, 0))),
             Ok(t) => Err(t),
             Err(e) => panic!("{:?}", e),
         }

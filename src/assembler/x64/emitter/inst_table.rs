@@ -1434,6 +1434,10 @@ mod jcc_tests {
         assert!(assemble("jo $1\n").is_err());
         assert!(assemble("jrcxz $1\n").is_err());
         // Jcc ではないニーモニックは対象外 (`jcxz` は64bitモードに無い)
-        assert!(assemble("jcxz L\nL:\n").unwrap_err().contains("unsupported instruction"));
+        assert!(
+            assemble("jcxz L\nL:\n")
+                .unwrap_err()
+                .contains("unsupported instruction")
+        );
     }
 }
