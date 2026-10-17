@@ -893,6 +893,8 @@ impl AsmEmitter {
             }
         } else {
             match expr.kind {
+                inst::ExprKind::Inc => "inc",
+                inst::ExprKind::Dec => "dec",
                 inst::ExprKind::AndCalcul => "and",
                 inst::ExprKind::XorCalcul => "xor",
                 inst::ExprKind::OrCalcul => "or",
@@ -932,6 +934,8 @@ impl AsmEmitter {
     ///  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
     fn expr_mnemonic(kind: &inst::ExprKind) -> &'static str {
         match kind {
+            inst::ExprKind::Inc => "inc",
+            inst::ExprKind::Dec => "dec",
             inst::ExprKind::AndCalcul => "and",
             inst::ExprKind::XorCalcul => "xor",
             inst::ExprKind::OrCalcul => "or",
@@ -962,6 +966,23 @@ impl AsmEmitter {
         let mnemonic = Self::expr_mnemonic(&expr.kind);
 
         let resolved_size: Size = self.get_expr_ty(expr.ls);
+        if matches!(expr.kind, inst::ExprKind::Inc | inst::ExprKind::Dec) {
+            let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some();
+            let operand = self.extract_operand_text(expr.ls, None);
+            let dst = self.get_reg(Some(self.reg_idx), &Self::value_reg_size(&resolved_size));
+            let mut output =
+                self.mov_line(&dst, &operand, &resolved_size, is_memory_access);
+            let mut update = self.asm_fmt.get_opcode_tmpl(key).replace("{dst}", &operand);
+            update = if is_memory_access {
+                self.asm_fmt
+                    .fmt_memory_mnemonic_resize(mnemonic, &update, &resolved_size)
+            } else {
+                self.asm_fmt
+                    .fmt_mnemonic_resize(mnemonic, &update, &resolved_size)
+            };
+            output.push_str(&update);
+            return output;
+        }
         // `<`/`>`は、どちらかのオペランドが符号なしなら符号なしの比較
         // (`jl`/`jg`ではなく`jb`/`ja`)にする。`==`/`!=`は符号に関係ない
         let is_unsigned_cmp = matches!(

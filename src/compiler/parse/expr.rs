@@ -22,10 +22,21 @@ impl Parser {
         name: String,
     ) -> Result<node::Expr, err::ErrKind> {
         let node = if self
-            .next_tkn(&["(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "]"])
+            .next_tkn(&[
+                "(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "]", "++", "--",
+            ])
             .map(|_| true)?
         {
             match &self.current_tkn() {
+                lex::Tkn::Inc | lex::Tkn::Dec => {
+                    let postfix = self.current_tkn().clone();
+                    self.advance_tkn_checked()?;
+                    return Ok(if postfix == lex::Tkn::Inc {
+                        node::Expr::Inc(Box::new(node::Expr::Var(name)))
+                    } else {
+                        node::Expr::Dec(Box::new(node::Expr::Var(name)))
+                    });
+                }
                 lex::Tkn::Dot | lex::Tkn::ModPathTkn => {
                     let dst = self.build_scope_node(&name)?;
                     println!("{:?}", self.next_tkn_ref(&[]));
@@ -286,6 +297,16 @@ impl Parser {
                     self.next_tkn(&[])?;
                     return Ok(node::Expr::Var(name));
                 }
+                lex::Tkn::Inc | lex::Tkn::Dec => {
+                    let postfix = self.next_tkn(&[])?;
+                    self.advance_tkn_checked()?;
+                    let var = self.gen_name_node::<false>(name, init_struct)?;
+                    return Ok(if postfix == lex::Tkn::Inc {
+                        node::Expr::Inc(Box::new(var))
+                    } else {
+                        node::Expr::Dec(Box::new(var))
+                    });
+                }
                 // データ付きバリアントなど
                 lex::Tkn::ModPathTkn => {
                     self.advance_tkn_checked()?;
@@ -325,7 +346,21 @@ impl Parser {
                 self.gen_name_node::<true>(self_name, init_struct)?
             }
             lex::Tkn::Str(value) => node::Expr::Str(value),
-            lex::Tkn::Name(name) => self.gen_name_node::<false>(name, init_struct)?,
+            lex::Tkn::Name(name) => {
+                let var = self.gen_name_node::<false>(name, init_struct)?;
+                match self.current_tkn() {
+                    lex::Tkn::Inc => {
+                        self.advance_tkn();
+                        return Ok(node::Expr::Inc(Box::new(var)));
+                    }
+                    lex::Tkn::Dec => {
+                        self.advance_tkn();
+                        return Ok(node::Expr::Dec(Box::new(var)));
+                    }
+                    _ => {}
+                }
+                var
+            }
             lex::Tkn::LParen => {
                 let result = self.expr_or(init_struct)?;
 
@@ -873,5 +908,42 @@ mod expr_tests {
             })
             .wrap_group2()
         );
+    }
+
+    #[test]
+    fn check_postfix_increment_node() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): int { a++ }");
+        let node::Group1Node::FuncDefine(ref func) = p.parser(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        assert_eq!(
+            func.body[0].get_node(),
+            &node::Expr::Inc(Box::new(node::Expr::Var("a".to_string()))).wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_postfix_decrement_node() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): int { a-- }");
+        let node::Group1Node::FuncDefine(ref func) = p.parser(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        assert_eq!(
+            func.body[0].get_node(),
+            &node::Expr::Dec(Box::new(node::Expr::Var("a".to_string()))).wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_postfix_decrement_after_nested_block() {
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes(
+            "main(): int { loop a > 0 { cond { a > 5 => { break } else => { break } } a-- } }",
+        );
+        assert!(p.parser(&tkns).is_ok());
     }
 }

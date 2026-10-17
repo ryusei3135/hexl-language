@@ -46,6 +46,8 @@ pub enum CompileErr {
     },
     /// `must`の契約を持つ変数へ再代入しようとした
     AssignToMustVar(String),
+    /// `++`/`--`を整数以外の変数に使おうとした
+    IncDecRequiresInteger(String),
 
     VariableConstractExpired(String),
     ReassignActiveContract(String),
@@ -158,6 +160,10 @@ impl CompileErr {
         ))))
     }
 
+    pub fn inc_dec_requires_integer(var_name: &str) -> err::ErrKind {
+        err::ErrKind::CompileErr(Box::new(Self::IncDecRequiresInteger(var_name.to_string())))
+    }
+
     /// エラーの内容を表示するための文字列を作る
     ///
     /// 既に`CompileErr`を表示する仕組み(`Display`の実装や
@@ -167,6 +173,9 @@ impl CompileErr {
         match self {
             Self::AssignToImmutableVar(var_name) => {
                 format!("不変の変数`{var_name}`には代入できません")
+            }
+            Self::IncDecRequiresInteger(var_name) => {
+                format!("`++`/`--`は整数型の変数`{var_name}`にのみ使用できます")
             }
             Self::PointerRangeLengthMismatch { range, value_len } => {
                 format!(

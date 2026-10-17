@@ -270,6 +270,9 @@ pub enum Expr {
     Div((Box<Expr>, Box<Expr>)),
     Surplus((Box<Expr>, Box<Expr>)),
 
+    Inc(Box<Expr>),
+    Dec(Box<Expr>),
+
     LessThen((Box<Expr>, Box<Expr>)),
     GreaterThen((Box<Expr>, Box<Expr>)),
     LessThenEq((Box<Expr>, Box<Expr>)),

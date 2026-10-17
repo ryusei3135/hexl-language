@@ -401,6 +401,8 @@ impl IR {
                 let idx = self.gen_expr_ir::<M>(*target, Some(&expect_byte))?;
                 inst::Inst::Pointer(idx)
             }
+            node::Expr::Inc(var) => self.build_inc_dec_expr::<M>(*var, inst::ExprKind::Inc)?,
+            node::Expr::Dec(var) => self.build_inc_dec_expr::<M>(*var, inst::ExprKind::Dec)?,
 
             node::Expr::Add(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Add)?

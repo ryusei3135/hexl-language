@@ -274,6 +274,9 @@ impl UsedRegManager {
             // 式(`fv + f2`など)。オペランドも副作用が無ければ、式のノードごと
             // 生成しない(`nodes`に加える)
             inst::Inst::Expr(expr) => {
+                if matches!(expr.kind, inst::ExprKind::Inc | inst::ExprKind::Dec) {
+                    return false;
+                }
                 if !Self::collect_pure_expr_vars(body, expr.ls, visited, vars, nodes)
                     || !Self::collect_pure_expr_vars(body, expr.rs, visited, vars, nodes)
                 {
@@ -481,6 +484,15 @@ mod unused_var_tests {
         })
     }
 
+    fn inc(dst: usize, value: usize) -> inst::Inst {
+        inst::Inst::Expr(inst::ExprInst {
+            dst,
+            ls: value,
+            rs: value,
+            kind: inst::ExprKind::Inc,
+        })
+    }
+
     /// `fv3: float = fv + f2`(`fv3`は未使用、`fv`/`f2`は`fv3`の式でのみ使用)
     #[test]
     fn removes_variables_used_only_by_the_expression_of_an_unused_variable() {
@@ -534,6 +546,16 @@ mod unused_var_tests {
         var_counter.use_var("fv3");
 
         assert!(UsedRegManager::unused_var_nodes(&var_counter, &body).is_empty());
+    }
+
+    #[test]
+    fn keeps_increment_side_effects_inside_unused_initializers() {
+        let body = vec![mov("value", 0, 4), inc(1, 0), mov("unused", 2, 1)];
+        let mut var_counter = counter_mnger::VarCounter::new();
+        var_counter.use_var("value");
+
+        let removed = UsedRegManager::unused_var_nodes(&var_counter, &body);
+        assert!(removed.is_empty());
     }
 }
 

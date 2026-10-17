@@ -18,6 +18,22 @@ impl Lexer {
                 self.gen_tkns.pop();
                 Some(tkn)
             }
+            Tkn::Add => {
+                let t = match self.gen_tkns.last()?.tkn {
+                    Tkn::Add => Tkn::Inc,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(t)
+            }
+            Tkn::Sub => {
+                let t = match self.gen_tkns.last()?.tkn {
+                    Tkn::Sub => Tkn::Dec,
+                    _ => return None,
+                };
+                self.gen_tkns.pop();
+                Some(t)
+            }
             Tkn::LAngleBracket => {
                 let t = match self.gen_tkns.last()?.tkn {
                     Tkn::LAngleBracket => Tkn::LShift,

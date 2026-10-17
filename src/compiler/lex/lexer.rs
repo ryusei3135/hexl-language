@@ -652,6 +652,30 @@ mod tests {
     }
 
     #[test]
+    fn check_postfix_increment_and_decrement_tokens() {
+        let mut lex = lexer();
+        lex.analy(&"a++ b-- a + +b a - -b".to_string()).unwrap();
+        let tkns: Vec<Tkn> = lex.gen_tkns.into_iter().map(|t| t.tkn).collect();
+        assert_eq!(
+            tkns,
+            vec![
+                Tkn::Name("a".to_string()),
+                Tkn::Inc,
+                Tkn::Name("b".to_string()),
+                Tkn::Dec,
+                Tkn::Name("a".to_string()),
+                Tkn::Add,
+                Tkn::Add,
+                Tkn::Name("b".to_string()),
+                Tkn::Name("a".to_string()),
+                Tkn::Sub,
+                Tkn::Sub,
+                Tkn::Name("b".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn check_not_eq_tkn() {
         // `!=` が `Not, Equal` の2トークンに分かれず、
         // `NotEq` 1トークンとして生成されることを確認する。

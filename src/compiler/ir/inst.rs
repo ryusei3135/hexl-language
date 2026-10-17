@@ -7,6 +7,8 @@ pub enum ExprKind {
     Sub,
     Mul,
     Div,
+    Inc,
+    Dec,
     Surplus,
     LessThen,
     GreaterThen,

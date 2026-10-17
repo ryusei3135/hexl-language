@@ -135,6 +135,20 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
 
     op: &[
         (
+            "inc",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}inc {dst}\n",
+            },
+        ),
+        (
+            "dec",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}dec {dst}\n",
+            },
+        ),
+        (
             "push",
             StaticOperandInfo {
                 len: 1,

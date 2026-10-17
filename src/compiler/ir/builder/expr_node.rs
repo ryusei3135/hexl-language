@@ -5,6 +5,21 @@ use crate::compiler::ir::result_mod::*;
 use err_factory::expr_node;
 
 impl IR {
+    fn ensure_var_is_assignable(
+        &self,
+        name: &str,
+        attr: &parse::VarMutAttr,
+    ) -> Result<(), err::ErrKind> {
+        // `must`の契約を持つ変数は、値をすり替えられないため再代入できない
+        if self.var_tree.is_constract_must(name) {
+            CompileErr::assign_to_must_var(name).map_err(|err| err.with_span(self.current_span))?;
+        }
+        if !matches!(attr, parse::VarMutAttr::Var) {
+            CompileErr::assign_to_imm_var(name).map_err(|err| err.with_span(self.current_span))?;
+        }
+        Ok(())
+    }
+
     fn get_ast_len(&self, ast: &node::Expr) -> Option<usize> {
         match ast {
             node::Expr::Str(value) => Some(value.len()),
@@ -98,6 +113,9 @@ impl IR {
             node::Expr::Var(name) => {
                 let ty_node = self.var_tree.get_ty_node(name)?;
                 self.try_size_or_emit_struct(&ty_node).ok()?
+            }
+            node::Expr::Inc(target) | node::Expr::Dec(target) => {
+                return self.infer_expr_ty(target);
             }
             node::Expr::Add(n)
             | node::Expr::Sub(n)
@@ -290,23 +308,51 @@ impl IR {
         }
     }
 
+    pub(super) fn build_inc_dec_expr<M: ResultMod>(
+        &mut self,
+        target: node::Expr,
+        kind: inst::ExprKind,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        let node::Expr::Var(name) = &target else {
+            return Err(err::ErrKind::UnexpectedToken);
+        };
+
+        let var_attr = self.var_tree.is_mut(name);
+        self.ensure_var_is_assignable(name, &var_attr)?;
+
+        let ty_node = self.var_tree.get_ty_node(name).unwrap();
+        let ty = M::handle(self.try_size_or_emit_struct(&ty_node))?;
+        if !matches!(
+            &ty,
+            types::Size::DB
+                | types::Size::UDB
+                | types::Size::DW
+                | types::Size::UDW
+                | types::Size::DD
+                | types::Size::UDD
+                | types::Size::DQ
+                | types::Size::UDQ
+        ) {
+            return Err(CompileErr::inc_dec_requires_integer(name).with_span(self.current_span));
+        }
+
+        let idx = self.gen_expr_ir::<M>(target, Some(&ty))?;
+        Ok(inst::ExprInst {
+            dst: self.id_counter,
+            ls: idx,
+            rs: idx,
+            kind,
+        }
+        .new())
+    }
+
     pub(super) fn assign_expr_node<M: ResultMod>(
         &mut self,
         assign_node: node::AssignVar,
         expect_byte: &types::Size,
         attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
-        // `must`の契約を持つ変数は、`mut`かどうかに関わらず
-        // 再代入できない(契約が別の値にすり替わってしまうため)
-        if self.var_tree.is_constract_must(&assign_node.name) {
-            CompileErr::assign_to_must_var(&assign_node.name)
-                .map_err(|err| err.with_span(self.current_span))?;
-        }
-
-        if !matches!(attr, parse::VarMutAttr::Var) {
-            CompileErr::assign_to_imm_var(&assign_node.name)
-                .map_err(|err| err.with_span(self.current_span))?;
-        }
+        self.ensure_var_is_assignable(&assign_node.name, attr)?;
 
         // 範囲付きポインタ変数への再代入が範囲を超えていないかを確認する
         // (`src/ir/checker/tracking.rs`)

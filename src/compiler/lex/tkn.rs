@@ -39,6 +39,9 @@ pub enum Tkn {
     MulEq, // *=
     DivEq, // /=
 
+    Inc,
+    Dec,
+
     CompleSyn,
 
     /// 整数リテラル (`10` / 16進数は10進数の文字列に変換済み)

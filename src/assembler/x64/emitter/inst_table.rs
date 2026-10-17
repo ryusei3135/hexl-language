@@ -288,6 +288,13 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "pop" | "popq" | "popl" | "popw" => e.emit_pop(&inst.operands),
 
+        "inc" | "incq" | "incl" | "incw" | "incb" => {
+            e.emit_inc_dec(&inst.operands, 0, mnemonic_suffix_bits(name, "inc"))
+        }
+        "dec" | "decq" | "decl" | "decw" | "decb" => {
+            e.emit_inc_dec(&inst.operands, 1, mnemonic_suffix_bits(name, "dec"))
+        }
+
         "mov" | "movq" | "movl" | "movw" | "movb" => {
             e.emit_mov(&inst.operands, mov_size_bits(name))
         }
@@ -798,6 +805,52 @@ fn reject_rip_symbol_with_imm(name: &str, mem: &MemoryOperand) -> Result<(), Str
 }
 
 impl Emitter {
+    fn emit_inc_dec(
+        &mut self,
+        operands: &[Operand],
+        group: u8,
+        suffix_bits: Option<u32>,
+    ) -> Result<(), String> {
+        let name = if group == 0 { "inc" } else { "dec" };
+        if operands.len() != 1 {
+            return Err(format!("{} requires one operand", name));
+        }
+
+        match &operands[0] {
+            Operand::Register(reg) => {
+                let bits = reg.bits() as u32;
+                if !matches!(bits, 8 | 16 | 32 | 64) {
+                    return Err(format!("{}: unsupported operand size", name));
+                }
+                Self::check_suffix(name, suffix_bits, bits)?;
+                self.emit_sized_prefix(bits, false, false, reg.id() >= 8, needs_empty_rex(*reg));
+                self.emit_u8(if bits == 8 { 0xFE } else { 0xFF });
+                self.emit_u8(0b11_000_000 | (group << 3) | (reg.id() & 7));
+                Ok(())
+            }
+            Operand::Memory(mem) => {
+                let bits = suffix_bits
+                    .ok_or_else(|| format!("{}: memory operand requires a size suffix", name))?;
+                if !matches!(bits, 8 | 16 | 32 | 64) {
+                    return Err(format!("{}: unsupported operand size", name));
+                }
+                self.emit_sized_prefix(
+                    bits,
+                    false,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    false,
+                );
+                self.emit_u8(if bits == 8 { 0xFE } else { 0xFF });
+                self.emit_memory_modrm(group, mem)
+            }
+            operand => Err(format!(
+                "{}: expected a register or memory operand, got {:?}",
+                name, operand
+            )),
+        }
+    }
+
     /// `[0x66] [REX]` を出力する。`bits` が 16 なら `0x66`、64 なら REX.W
     fn emit_sized_prefix(&mut self, bits: u32, r: bool, x: bool, b: bool, empty_rex: bool) {
         if bits == 16 {
@@ -1336,6 +1389,69 @@ mod alu_shift_tests {
         ];
 
         for asm in cases {
+            assert!(assemble(asm).is_err(), "{} should fail", asm);
+        }
+    }
+}
+
+#[cfg(test)]
+mod inc_dec_tests {
+    use crate::assembler::x64::{convert, Lexer, Parser};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize();
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    #[test]
+    fn inc_dec_encode_register_and_memory_widths() {
+        let cases: &[(&str, &str)] = &[
+            ("incb %al", "fec0"),
+            ("incb %spl", "40fec4"),
+            ("incw %ax", "66ffc0"),
+            ("incl %eax", "ffc0"),
+            ("incq %rax", "48ffc0"),
+            ("incl %r9d", "41ffc1"),
+            ("incq %r9", "49ffc1"),
+            ("incb -1(%rbp)", "fe45ff"),
+            ("incw 2(%rax)", "66ff4002"),
+            ("incl 8(%r12)", "41ff442408"),
+            ("incq -8(%rbp)", "48ff45f8"),
+            ("decb %spl", "40fecc"),
+            ("decw %r8w", "6641ffc8"),
+            ("decl %r9d", "41ffc9"),
+            ("decq %r9", "49ffc9"),
+            ("decb -1(%rbp)", "fe4dff"),
+            ("decq -8(%rbp)", "48ff4df8"),
+        ];
+
+        for (asm, expected) in cases {
+            let bytes = assemble(asm).unwrap_or_else(|err| panic!("{}: {}", asm, err));
+            assert_eq!(hex(&bytes), *expected, "{}", asm);
+        }
+    }
+
+    #[test]
+    fn inc_dec_reject_invalid_operands() {
+        for asm in [
+            "inc",
+            "dec %eax, %ebx",
+            "incq %eax",
+            "decb %ax",
+            "inc (%rax)",
+            "inc $1",
+            "dec %xmm0",
+        ] {
             assert!(assemble(asm).is_err(), "{} should fail", asm);
         }
     }
