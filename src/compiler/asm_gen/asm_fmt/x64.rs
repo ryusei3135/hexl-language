@@ -340,6 +340,66 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}lea {src1}, {dst}\n",
             },
         ),
+        // ===== 型変換(`asm_emitter/cast.rs`) =====
+        // 整数 → 浮動小数点数(`l`は32bit、`q`は64bitの整数)
+        (
+            "cvtsi2ssl",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvtsi2ssl {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cvtsi2ssq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvtsi2ssq {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cvtsi2sdl",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvtsi2sdl {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cvtsi2sdq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvtsi2sdq {src1}, {dst}\n",
+            },
+        ),
+        // 浮動小数点数 → 整数(小数点以下を切り捨てる)
+        (
+            "cvttss2si",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvttss2si {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cvttsd2si",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvttsd2si {src1}, {dst}\n",
+            },
+        ),
+        // `float` ⇔ `f64`
+        (
+            "cvtss2sd",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvtss2sd {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cvtsd2ss",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cvtsd2ss {src1}, {dst}\n",
+            },
+        ),
         // ===== 単精度浮動小数点 =====
         (
             "float_mov",

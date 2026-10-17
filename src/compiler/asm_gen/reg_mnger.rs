@@ -285,6 +285,14 @@ impl UsedRegManager {
                 nodes.push(id);
                 true
             }
+            // キャスト: 元の値が副作用の無い式なら、キャストのノードごと生成しない
+            inst::Inst::Cast { src, .. } => {
+                if !Self::collect_pure_expr_vars(body, *src, visited, vars, nodes) {
+                    return false;
+                }
+                nodes.push(id);
+                true
+            }
             // 浮動小数点・文字列のリテラル(定数を`.data`へ出力するノード)
             inst::Inst::Float { .. } | inst::Inst::Str { .. } => {
                 nodes.push(id);

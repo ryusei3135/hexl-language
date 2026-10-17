@@ -401,6 +401,9 @@ impl IR {
                 let idx = self.gen_expr_ir::<M>(*target, Some(&expect_byte))?;
                 inst::Inst::Pointer(idx)
             }
+            // `(ty)expr`: 組み込み型へのキャスト
+            // `src/ir/builder/expr_node.rs`
+            node::Expr::Cast((ty, target)) => self.build_cast_inst::<M>(&ty, *target)?,
             node::Expr::Inc(var) => self.build_inc_dec_expr::<M>(*var, inst::ExprKind::Inc)?,
             node::Expr::Dec(var) => self.build_inc_dec_expr::<M>(*var, inst::ExprKind::Dec)?,
 

@@ -26,6 +26,12 @@ impl Parser {
         self.tkns.as_ref()?.get(self.idx + 2).map(|v| v.tkn.clone())
     }
 
+    /// `peek_tkn`の3つ先版。キャスト`(T)var`のように、
+    /// `(` `Name` `)` `Name`という並びかを、位置を進めずに判断するときに使う
+    pub(in crate::compiler::parse) fn peek3_tkn(&self) -> Option<lex::Tkn> {
+        self.tkns.as_ref()?.get(self.idx + 3).map(|v| v.tkn.clone())
+    }
+
     /// 次のトークンが存在する場合だけ位置を1つ進める。
     /// 存在しない場合は位置を変えずに`None`を返す
     pub(in crate::compiler::parse) fn advance_tkn(&mut self) -> Option<lex::Tkn> {

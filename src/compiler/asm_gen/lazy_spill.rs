@@ -143,6 +143,7 @@ impl AsmEmitter {
             inst::Inst::Pointer(inner) | inst::Inst::GetAddress(inner) => {
                 self.collect_node_refs(*inner, visited, names)
             }
+            inst::Inst::Cast { src, .. } => self.collect_node_refs(*src, visited, names),
             inst::Inst::InitArr(ids) => ids
                 .iter()
                 .all(|item| self.collect_node_refs(*item, visited, names)),
@@ -192,6 +193,7 @@ impl AsmEmitter {
                 self.collect_node_refs(*src, &mut HashSet::new(), &mut names)
             }
             inst::Inst::Expr(_)
+            | inst::Inst::Cast { .. }
             | inst::Inst::AssignVar { .. }
             | inst::Inst::Ret(_)
             | inst::Inst::CallFunc(_)
@@ -228,6 +230,7 @@ impl AsmEmitter {
                 self.collect_node_refs(expr.ls, &mut visited, names)
                     && self.collect_node_refs(expr.rs, &mut visited, names)
             }
+            inst::Inst::Cast { src, .. } => self.collect_node_refs(*src, &mut visited, names),
             inst::Inst::AssignVar { name, dst, value } => {
                 names.push(name.clone());
                 self.collect_node_refs(*dst, &mut visited, names)

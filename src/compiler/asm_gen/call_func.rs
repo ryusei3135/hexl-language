@@ -489,8 +489,13 @@ impl AsmEmitter {
             inst::Inst::ExpectJmp(name) => self.expect_jmp(name),
             // 生成しない変数の初期値だけを構成する式・定数は生成しない
             // (`unused_var_nodes`)
-            inst::Inst::Expr(_) | inst::Inst::Float { .. } | inst::Inst::Str { .. }
+            inst::Inst::Expr(_)
+            | inst::Inst::Cast { .. }
+            | inst::Inst::Float { .. }
+            | inst::Inst::Str { .. }
                 if self.unused_var_nodes.contains(&node_idx) => {}
+            // `asm_emitter/cast.rs`
+            inst::Inst::Cast { src, after } => self.gen_cast_asm(node_idx, *src, after),
             inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
             inst::Inst::Expr(expr) => self.gen_expr_asm(expr),
             inst::Inst::Num { .. } => {}
@@ -774,8 +779,10 @@ impl AsmEmitter {
                     RegisterMode::Normal(self.reg_idx)
                 }
             });
-            if matches!(self.curr_inst[value], inst::Inst::Expr(..))
-                && self
+            if matches!(
+                self.curr_inst[value],
+                inst::Inst::Expr(..) | inst::Inst::Cast { .. }
+            ) && self
                     .last_inst_idx
                     .iter()
                     .any(|(idx, reg)| *idx == value && *reg == current_reg)

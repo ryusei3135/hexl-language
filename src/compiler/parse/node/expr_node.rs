@@ -257,6 +257,10 @@ pub enum Expr {
     GetAddress(Box<Expr>),
     ConnectAddr(Box<Expr>),
 
+    /// キャスト: `(T)var` -> `Cast((T, var))`
+    /// 変換先の型と、変換する式(変数など)が入る
+    Cast((TyNode, Box<Expr>)),
+
     Number(String),
     /// 小数点を含む数値リテラル: `3.14` (ソース上の文字列のまま保持する)
     Float(String),

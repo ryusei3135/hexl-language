@@ -1,4 +1,5 @@
 mod arr;
+mod cast;
 mod data_mem_factory;
 mod div_ir;
 mod insert_fmt_reg;
@@ -326,7 +327,10 @@ impl AsmEmitter {
     ///
     /// 変数がそのレジスタを持っている場合は解放しない。
     pub(super) fn release_expr_temp(&mut self, node_idx: usize) {
-        if !matches!(self.curr_inst[node_idx], inst::Inst::Expr(..)) {
+        if !matches!(
+            self.curr_inst[node_idx],
+            inst::Inst::Expr(..) | inst::Inst::Cast { .. }
+        ) {
             return;
         }
         let Some(reg) = self
@@ -589,6 +593,7 @@ impl AsmEmitter {
         match &self.curr_inst[src1] {
             inst::Inst::Num { size, .. } => Self::value_reg_size(size),
             inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(src1)),
+            inst::Inst::Cast { after, .. } => Self::value_reg_size(after),
             _ => Size::DQ,
         }
     }
@@ -627,6 +632,7 @@ impl AsmEmitter {
             },
             inst::Inst::GetAddress(..) => Size::DQ,
             inst::Inst::InsertArr { ref name, .. } => self.arr_elem_ty(name),
+            inst::Inst::Cast { ref after, .. } => after.clone(),
             inst::Inst::AssignVar { value, .. } => self.get_expr_ty(value),
             inst::Inst::InitArr(ref ids) => {
                 let size = ids
@@ -862,6 +868,8 @@ impl AsmEmitter {
             let reg = result.1;
             let size = match node {
                 inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(parent_id)),
+                // キャストの結果は、キャスト先の型のサイズで参照する
+                inst::Inst::Cast { after, .. } => Self::value_reg_size(after),
                 _ => Size::DQ,
             };
             match reg {

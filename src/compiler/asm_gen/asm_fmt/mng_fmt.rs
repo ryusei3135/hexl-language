@@ -196,6 +196,32 @@ impl MngAsmFmt {
             .replace("{dst}", dst)
     }
 
+    /// 整数を大きい幅へ拡張する命令を返す(AT&Tなら`movsbl`/`movzwq`/`movslq`など)
+    ///
+    /// - signed: `true`なら符号拡張(`movs..`)、`false`ならゼロ拡張(`movz..`)
+    /// - from/to: 拡張前/拡張後の幅(`b`/`w`/`l`/`q`)
+    ///
+    /// フォーマットに`movs{from}{to}`/`movz{from}{to}`が定義されていればそのテンプレートを、
+    /// なければAT&Tの命令を返す(`get_sign_extend`/`get_zero_extend`と同じキー)。
+    /// 符号なしの32bit → 64bitに専用の命令は無い(`movl`で上位32bitが0になる)ので、
+    /// 呼び出し側で`mov`にすること
+    pub(in crate::compiler::asm_gen) fn get_int_extend(
+        &self,
+        signed: bool,
+        from: char,
+        to: char,
+        src: &str,
+        dst: &str,
+    ) -> String {
+        let mnemonic = format!("mov{}{}{}", if signed { 's' } else { 'z' }, from, to);
+        self.opcode_fmt
+            .get(&mnemonic)
+            .map(|o| o.template.clone())
+            .unwrap_or_else(|| format!("{{space}}{} {{src1}}, {{dst}}\n", mnemonic))
+            .replace("{src1}", src)
+            .replace("{dst}", dst)
+    }
+
     /// 符号なし整数の比較(`<`/`>`)のテンプレートを返す。
     /// `key`は符号付きの比較のキー(`cmp_l`/`cmp_g`)
     ///

@@ -140,6 +140,12 @@ enum SseForm {
     CmpPs,
     /// `cmpeqps xmm/m, xmm` など。比較述語が命令名に含まれる (imm8 は固定値)
     CmpPsPredicate(u8),
+    /// 整数レジスタ/メモリから浮動小数点レジスタへ変換
+    IntToFloat,
+    /// 浮動小数点レジスタ/メモリから整数レジスタへ切り捨て変換
+    FloatToInt,
+    /// 単精度と倍精度の変換
+    FloatPrecision,
 }
 
 /// SSE 命令1つ分の符号化情報
@@ -204,6 +210,44 @@ fn sse_spec(name: &str) -> Option<SseSpec> {
         "sqrtss" => op(F3, 0x51),
         "sqrtsd" => op(F2, 0x51),
         "sqrtps" => op(None, 0x51),
+
+        // 整数と浮動小数点の変換
+        "cvtsi2ss" | "cvtsi2ssl" | "cvtsi2ssq" => SseSpec {
+            prefix: F3,
+            opcode: 0x2A,
+            store_opcode: None,
+            form: SseForm::IntToFloat,
+        },
+        "cvtsi2sd" | "cvtsi2sdl" | "cvtsi2sdq" => SseSpec {
+            prefix: F2,
+            opcode: 0x2A,
+            store_opcode: None,
+            form: SseForm::IntToFloat,
+        },
+        "cvttss2si" | "cvttss2sil" | "cvttss2siq" => SseSpec {
+            prefix: F3,
+            opcode: 0x2C,
+            store_opcode: None,
+            form: SseForm::FloatToInt,
+        },
+        "cvttsd2si" | "cvttsd2sil" | "cvttsd2siq" => SseSpec {
+            prefix: F2,
+            opcode: 0x2C,
+            store_opcode: None,
+            form: SseForm::FloatToInt,
+        },
+        "cvtss2sd" => SseSpec {
+            prefix: F3,
+            opcode: 0x5A,
+            store_opcode: None,
+            form: SseForm::FloatPrecision,
+        },
+        "cvtsd2ss" => SseSpec {
+            prefix: F2,
+            opcode: 0x5A,
+            store_opcode: None,
+            form: SseForm::FloatPrecision,
+        },
 
         // 比較 (結果は EFLAGS の ZF/PF/CF)
         "comiss" => op(None, 0x2F),
@@ -446,10 +490,18 @@ impl Emitter {
     // 符号化が必要なので、ここではエラーにする。
     // --------------------------------------------------------
     fn emit_sse(&mut self, name: &str, spec: SseSpec, operands: &[Operand]) -> Result<(), String> {
+        match spec.form {
+            SseForm::IntToFloat | SseForm::FloatToInt | SseForm::FloatPrecision => {
+                return self.emit_sse_conversion(name, spec, operands);
+            }
+            _ => {}
+        }
+
         // cmpps だけ先頭に imm8 が付く
         let (imm, operands) = match spec.form {
             SseForm::Op => (None, operands),
             SseForm::CmpPsPredicate(pred) => (Some(pred), operands),
+            SseForm::IntToFloat | SseForm::FloatToInt | SseForm::FloatPrecision => unreachable!(),
             SseForm::CmpPs => match operands.split_first() {
                 Some((Operand::Immediate(value), rest)) => {
                     if !(0..=7).contains(value) {
@@ -536,6 +588,99 @@ impl Emitter {
             self.emit_u8(imm);
         }
 
+        Ok(())
+    }
+
+    fn emit_sse_conversion(
+        &mut self,
+        name: &str,
+        spec: SseSpec,
+        operands: &[Operand],
+    ) -> Result<(), String> {
+        if operands.len() != 2 {
+            return Err(format!("{} requires two operands", name));
+        }
+
+        let suffix_bits = if name.ends_with('l') {
+            Some(32)
+        } else if name.ends_with('q') {
+            Some(64)
+        } else {
+            None
+        };
+
+        let (reg, rm, w) = match (spec.form, &operands[0], &operands[1]) {
+            (SseForm::IntToFloat, Operand::Register(src), Operand::Register(dst)) => {
+                let bits = src.bits() as u32;
+                if *src == Reg::Rip || !matches!(bits, 32 | 64) {
+                    return Err(format!(
+                        "{}: integer source must be a 32-bit or 64-bit register",
+                        name
+                    ));
+                }
+                Self::check_suffix(name, suffix_bits, bits)?;
+                (xmm_operand(name, *dst)?, SseRm::Reg(*src), bits == 64)
+            }
+            (SseForm::IntToFloat, Operand::Memory(mem), Operand::Register(dst)) => {
+                let bits = suffix_bits.unwrap_or(32);
+                (xmm_operand(name, *dst)?, SseRm::Mem(mem), bits == 64)
+            }
+            (SseForm::FloatToInt, Operand::Register(src), Operand::Register(dst)) => {
+                let bits = dst.bits() as u32;
+                if *dst == Reg::Rip || !matches!(bits, 32 | 64) {
+                    return Err(format!(
+                        "{}: integer destination must be a 32-bit or 64-bit register",
+                        name
+                    ));
+                }
+                Self::check_suffix(name, suffix_bits, bits)?;
+                (*dst, SseRm::Reg(xmm_operand(name, *src)?), bits == 64)
+            }
+            (SseForm::FloatToInt, Operand::Memory(mem), Operand::Register(dst)) => {
+                let bits = dst.bits() as u32;
+                if *dst == Reg::Rip || !matches!(bits, 32 | 64) {
+                    return Err(format!(
+                        "{}: integer destination must be a 32-bit or 64-bit register",
+                        name
+                    ));
+                }
+                Self::check_suffix(name, suffix_bits, bits)?;
+                (*dst, SseRm::Mem(mem), bits == 64)
+            }
+            (SseForm::FloatPrecision, Operand::Register(src), Operand::Register(dst)) => (
+                xmm_operand(name, *dst)?,
+                SseRm::Reg(xmm_operand(name, *src)?),
+                false,
+            ),
+            (SseForm::FloatPrecision, Operand::Memory(mem), Operand::Register(dst)) => {
+                (xmm_operand(name, *dst)?, SseRm::Mem(mem), false)
+            }
+            _ => return Err(format!("unsupported {} operands", name)),
+        };
+
+        if let Some(prefix) = spec.prefix {
+            self.emit_u8(prefix);
+        }
+
+        match rm {
+            SseRm::Reg(rm) => {
+                self.emit_rex(w, reg.id() >= 8, false, rm.id() >= 8);
+                self.emit_u8(0x0F);
+                self.emit_u8(spec.opcode);
+                self.emit_u8(0b11_000_000 | ((reg.id() & 7) << 3) | (rm.id() & 7));
+            }
+            SseRm::Mem(mem) => {
+                self.emit_rex(
+                    w,
+                    reg.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                );
+                self.emit_u8(0x0F);
+                self.emit_u8(spec.opcode);
+                self.emit_memory_modrm(reg.id(), mem)?;
+            }
+        }
         Ok(())
     }
 
@@ -1169,6 +1314,21 @@ mod sse_tests {
             ("cmpnleps %xmm1, %xmm0", "0fc2c106"),
             ("cmpordps %xmm1, %xmm0", "0fc2c107"),
             ("movss 4(%rip), %xmm0", "f30f100504000000"),
+            ("cvtsi2ss %eax, %xmm0", "f30f2ac0"),
+            ("cvtsi2ssq %rax, %xmm0", "f3480f2ac0"),
+            ("cvtsi2ss (%rax), %xmm0", "f30f2a00"),
+            ("cvtsi2sd %r9, %xmm10", "f24d0f2ad1"),
+            ("cvtsi2ssl -4(%rbp), %xmm1", "f30f2a4dfc"),
+            ("cvtsi2sdq 8(%r12), %xmm8", "f24d0f2a442408"),
+            ("cvttss2si %xmm0, %eax", "f30f2cc0"),
+            ("cvttss2siq %xmm10, %r9", "f34d0f2cca"),
+            ("cvttsd2si %xmm1, %rax", "f2480f2cc1"),
+            ("cvttsd2sil -8(%rbp), %r8d", "f3440f2c45f8"),
+            ("cvttsd2siq 16(%r13,%r12,4), %rax", "f24b0f2c44a510"),
+            ("cvtss2sd %xmm1, %xmm0", "f30f5ac1"),
+            ("cvtss2sd 4(%rax), %xmm9", "f3440f5a4804"),
+            ("cvtsd2ss %xmm10, %xmm2", "f2410f5ad2"),
+            ("cvtsd2ss -8(%rbp), %xmm8", "f2440f5a45f8"),
         ];
 
         for (asm, expected) in cases {
@@ -1190,6 +1350,13 @@ mod sse_tests {
             "movss %xmm0",                // オペランド不足
             "add %xmm0, %xmm1",           // SSE 以外の命令はベクトルレジスタ不可
             "mov %xmm0, %rax",
+            "cvtsi2ss %xmm0, %xmm1",  // integer source required
+            "cvtsi2ss %rax, %eax",    // xmm destination required
+            "cvtsi2ssq %eax, %xmm0",  // suffix/register width mismatch
+            "cvttss2si %xmm0, %xmm1", // integer destination required
+            "cvttsd2siq %xmm0, %eax", // suffix/register width mismatch
+            "cvtss2sd %xmm0, %eax",   // xmm destination required
+            "cvtsd2ss %ymm0, %xmm0",  // VEX source is unsupported
         ];
 
         for asm in cases {

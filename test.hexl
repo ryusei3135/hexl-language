@@ -95,9 +95,10 @@ add(a mut: int, b: int): Option<int> {
     ret Option::None
 }
 
-test_arr(idx: uint): int {
+test_arr(idx: uint): i64 {
     arr: [int 5] = {0}
-    ret [arr idx else 0]
+    var: int = [arr idx else 0]
+    ret (i64)var
 }
 
 _start(): int {

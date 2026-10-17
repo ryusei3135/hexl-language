@@ -362,6 +362,28 @@ impl Parser {
                 var
             }
             lex::Tkn::LParen => {
+                // キャスト: `(T)var` -> `Cast((T, Box(var)))`
+                // 現在のトークンは`(`。`(` `Name` `)` `Name`の並びのときだけキャストとみなす
+                // (`(a) - b`や`(a) * b`のような、括弧で囲んだ式とは区別される)
+                if matches!(self.peek_tkn()?, lex::Tkn::Name(_))
+                    && self.peek2_tkn() == Some(lex::Tkn::RParen)
+                    && matches!(self.peek3_tkn(), Some(lex::Tkn::Name(_)))
+                {
+                    // `T`、`)`と進めて、現在のトークンを`)`にする。
+                    // `expr_value`は現在のトークンの次から値を読む。
+                    // 値を読み終えた後の位置の調整は`expr_value`が行うので、
+                    // ここでは追加で進めずにそのまま返す
+                    let lex::Tkn::Name(ty_name) = self.next_tkn(&["name"])? else {
+                        return crate::err_at!(self.internal_state_err("cast type name"));
+                    };
+                    self.next_tkn(&[")"])?;
+                    let var = self.expr_value(init_struct)?;
+                    return Ok(node::Expr::Cast((
+                        node::TyNode::Ty(ty_name),
+                        Box::new(var),
+                    )));
+                }
+
                 let result = self.expr_or(init_struct)?;
 
                 if self.current_tkn() == &lex::Tkn::LParen {
@@ -881,6 +903,30 @@ mod expr_tests {
                     target: Box::new(node::Expr::Var("name".to_string())),
                 }),
                 ty: node::TyNode::Ty("int".to_string()),
+                var_attr: parse::VarMutAttr::Invar,
+            })
+            .wrap_group2()
+        );
+    }
+
+    #[test]
+    fn check_cast_expr() {
+        // キャスト: `(T)var` -> `Cast((T, Box(var)))`
+        let mut p = parse::Parser::new();
+        let tkns = gen_nodes("main(): int { a: i64 = (i64)b ret 1 }");
+        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        assert_eq!(
+            node.body[0].get_node(),
+            &node::Expr::DefVar(node::DefineVar {
+                name: "a".to_string(),
+                value: Box::new(node::Expr::Cast((
+                    node::TyNode::Ty("i64".to_string()),
+                    Box::new(node::Expr::Var("b".to_string())),
+                ))),
+                ty: node::TyNode::Ty("i64".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
             })
             .wrap_group2()

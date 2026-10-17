@@ -143,6 +143,12 @@ pub enum Inst {
         size: usize,
         stk: usize,
     },
+    Cast {
+        /// キャストする対象のノード
+        src: usize,
+        /// キャストする型
+        after: types::Size,
+    },
 
     ExternFunc(String),
     Expr(ExprInst),
@@ -270,6 +276,7 @@ impl Inst {
                 ty => Some(ty),
             },
             Self::GetAddress(..) => Some(types::Size::DQ),
+            Self::Cast { after, .. } => Some(after.clone()),
             Self::AssignVar { value, .. } => insts[*value].value_ty(insts),
             Self::Num { size, .. }
             | Self::Float { size, .. }
@@ -301,6 +308,7 @@ impl Inst {
         match &self {
             inst::Inst::Param(p) => Some(p.clone().ty),
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),
+            inst::Inst::Cast { after, .. } => Some(after.clone()),
             inst::Inst::Num { size, .. } => Some(size.clone()),
             inst::Inst::Float { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),

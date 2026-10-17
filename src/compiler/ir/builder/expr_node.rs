@@ -117,6 +117,11 @@ impl IR {
             node::Expr::Inc(target) | node::Expr::Dec(target) => {
                 return self.infer_expr_ty(target);
             }
+            // キャストの結果は、キャスト先の型(組み込み型のみ)
+            node::Expr::Cast((ty, _)) => match ty {
+                node::TyNode::Ty(_) => types::Size::try_from(ty).ok()?,
+                _ => return None,
+            },
             node::Expr::Add(n)
             | node::Expr::Sub(n)
             | node::Expr::Mul(n)
@@ -306,6 +311,29 @@ impl IR {
         } else {
             Ok(Some(self.struct_tree.get_mem_size(&struct_name, &member)))
         }
+    }
+
+    /// `node::Expr::Cast((ty, target))`を`inst::Inst::Cast`にする
+    ///
+    /// キャスト先`ty`は組み込みの型(`byte`/`int`/`u64`/`float`など)に限る。
+    /// 構造体・バリアント型・ポインタ・配列などは受け付けない
+    ///
+    /// - 組み込み型の名前でない(ユーザー定義の型名など): `TryFrom`が返す未定義の型のエラー
+    /// - `TyNode::Ty`以外の型: `UnexpectedToken`
+    ///   (専用のエラーを`err`に用意したら差し替える)
+    pub(super) fn build_cast_inst<M: ResultMod>(
+        &mut self,
+        ty: &node::TyNode,
+        target: node::Expr,
+    ) -> Result<inst::Inst, err::ErrKind> {
+        let after = match ty {
+            node::TyNode::Ty(_) => types::Size::try_from(ty)?,
+            _ => return Err(err::ErrKind::UnexpectedToken),
+        };
+        // 変換元は、式自身の型で生成する(分からなければキャスト先の型)
+        let before = self.infer_expr_ty(&target).unwrap_or_else(|| after.clone());
+        let src = self.gen_expr_ir::<M>(target, Some(&before))?;
+        Ok(inst::Inst::Cast { src, after })
     }
 
     pub(super) fn build_inc_dec_expr<M: ResultMod>(
