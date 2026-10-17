@@ -373,13 +373,19 @@ impl Parser {
                 | lex::Tkn::RBracket => {
                     self.next_tkn(&[])?;
                 }
-                // `}` は、構造体初期化(`Name { .. }`)や配列リテラル
+                // `}` は、構造体初期化(`Name { .. }`)、unsafeな共用体の初期化
+                // (`Type::mem { mem: .. }`)や配列リテラル
                 // (`{ .. }`)を閉じる場合にのみ、ここで読み飛ばす。
                 // `self.b`のようなメンバーアクセスの直後に続く`}`は
                 // 呼び出し元のブロック(関数/メゾットの本体など)を
                 // 閉じるトークンなので、消費せずそのまま残す
                 lex::Tkn::RBrace
-                    if matches!(v, node::Expr::InitStruct { .. } | node::Expr::Array(..)) =>
+                    if matches!(
+                        v,
+                        node::Expr::InitStruct { .. }
+                            | node::Expr::InitVariant { .. }
+                            | node::Expr::Array(..)
+                    ) =>
                 {
                     self.next_tkn(&[])?;
                 }

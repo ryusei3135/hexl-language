@@ -207,6 +207,8 @@ impl MngAsmFmt {
         let (unsigned_key, from, to) = match key {
             "cmp_l" => ("cmp_b", "jl", "jb"),
             "cmp_g" => ("cmp_a", "jg", "ja"),
+            "cmp_l_e" => ("cmp_b_e", "jle", "jbe"),
+            "cmp_g_e" => ("cmp_a_e", "jge", "jae"),
             _ => return self.get_opcode_tmpl(key),
         };
         match self.opcode_fmt.get(unsigned_key) {

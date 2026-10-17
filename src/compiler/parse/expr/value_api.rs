@@ -67,6 +67,14 @@ impl Parser {
             return crate::err_at!(self.expected_tkn("name", found));
         };
         if self.is_variant_field(&name, &mem_name) {
+            // unsafeな共用体の初期化: `Type::mem { mem: expr }`
+            // (`Type::Mem(expr)`はタグ付き共用体用なので、`{`が続くときだけここに入る)
+            if self.is_unsafe_variant(&name)
+                && matches!(self.next_tkn_ref(&[])?, lex::Tkn::LBrace)
+            {
+                self.next_tkn(&["{"])?;
+                return self.unsafe_variant_init_node(name, &mem_name);
+            }
             return self.variant_init_node::<false>(&name);
         }
         if matches!(self.next_tkn_ref(&[])?, lex::Tkn::LParen) {
@@ -104,6 +112,52 @@ impl Parser {
                         .is_some_and(|suffix| suffix.starts_with('$'));
                 is_matching_type && def.find_field(field_name).is_some()
             })
+    }
+
+    /// `type_name`がunsafeな共用体(タグを持たない)として定義済みか調べる。
+    /// `is_variant_field`と同様に、ジェネリクスで増えた`Name$int`も対象にする
+    fn is_unsafe_variant(&self, type_name: &str) -> bool {
+        self.gen_nodes
+            .iter()
+            .chain(self.pending_types.iter())
+            .any(|node| {
+                let node::Group1Node::VariantDefine(def) = node else {
+                    return false;
+                };
+                let is_matching_type = def.name == type_name
+                    || def
+                        .name
+                        .strip_prefix(type_name)
+                        .is_some_and(|suffix| suffix.starts_with('$'));
+                is_matching_type && !def.is_tagged()
+            })
+    }
+
+    /// unsafeな共用体の初期化ノードを作成する: `Type::mem { mem: expr }`
+    /// 呼び出し時の`current_tkn()`は`{`。
+    /// `{ .. }`の中身は構造体の初期化と同じ書き方なので`struct_init_node`で読み、
+    /// `InitVariant`に変換する。フィールドはちょうど1つで、
+    /// `::`の後ろの名前(`mem_name`)と一致していなければならない
+    fn unsafe_variant_init_node(
+        &mut self,
+        name: String,
+        mem_name: &str,
+    ) -> Result<node::Expr, err::ErrKind> {
+        let node::Expr::InitStruct {
+            is_self, fields, ..
+        } = self.struct_init_node::<false>(&name)?
+        else {
+            return crate::err_at!(self.internal_state_err("struct init"));
+        };
+        if fields.len() != 1 || !fields.contains_key(mem_name) {
+            let found = self.current_tkn().clone();
+            return crate::err_at!(self.expected_tkn("exactly one field matching the member", found));
+        }
+        Ok(node::Expr::InitVariant {
+            is_self,
+            name,
+            fields,
+        })
     }
 
     /// 配列リテラルのノードを作成する

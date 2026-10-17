@@ -966,7 +966,10 @@ impl AsmEmitter {
         // (`jl`/`jg`ではなく`jb`/`ja`)にする。`==`/`!=`は符号に関係ない
         let is_unsigned_cmp = matches!(
             expr.kind,
-            inst::ExprKind::LessThen | inst::ExprKind::GreaterThen
+            inst::ExprKind::LessThen
+                | inst::ExprKind::GreaterThen
+                | inst::ExprKind::LessThenEq
+                | inst::ExprKind::GreaterThenEq
         ) && (resolved_size.is_unsigned()
             || self.get_expr_ty(expr.rs).is_unsigned());
         let wrap_size = resolved_size.wrap_dst_size();

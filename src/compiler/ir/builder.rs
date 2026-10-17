@@ -424,7 +424,7 @@ impl IR {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::GreaterThen)?
             }
             node::Expr::LessThenEq(node) => {
-                self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::GreaterThenEq)?
+                self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::LessThenEq)?
             }
             node::Expr::GreaterThenEq(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::GreaterThenEq)?

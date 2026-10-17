@@ -283,6 +283,20 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}cmp {src2}, {src1}\n{space}ja {label}\n",
             },
         ),
+        (
+            "cmp_b_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n{space}jbe {label}\n",
+            },
+        ),
+        (
+            "cmp_a_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n{space}jae {label}\n",
+            },
+        ),
         // 符号なし整数を64bitへゼロ拡張する(`movl`は上位32bitが0になるので不要)
         (
             "movzbq",

@@ -31,6 +31,11 @@ variant Result<T, E> {
     Err(E)
 }
 
+variant"unsafe" UnsafeV {
+    name: int
+    name2: i64
+}
+
 f<T>(): T {
     e mut: E = E::b(10)
     cond E::b(val) mut:= e {
@@ -48,6 +53,9 @@ f<T>(): T {
 
 
 func4(): int must=func5 {
+    jjj: UnsafeV = UnsafeV::name {
+        name: 1
+    }
     ret 10
 }
 
