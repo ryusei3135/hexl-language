@@ -93,10 +93,9 @@ pub enum Tkn {
     KeyWordExtern,
 
     keyWordRegister,
-    KeyWordAsync
+    KeyWordAsync,
     KeyWordAwait,
     KeyWordMove,
-    KeyWordAllow,
 }
 
 impl Tkn {
