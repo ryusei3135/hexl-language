@@ -2,8 +2,7 @@
 この言語および処理系に対するすべての重要な変更を記録します。
 できるだけコードの横幅は短くしたい
 
-## [Unreleased]
-
+## [Released]
 ## [1.0] - 2026-10-18
 ### Added
 - 演算子の追加
@@ -17,7 +16,14 @@
         #include "file.c"
         #include "file.h"
         ```
+- キーワードの追加
+    - keyWordRegister,
+    - KeyWordAsync
+    - KeyWordAwait,
+    - KeyWordMove,
+    - KeyWordAllow,
 
+## [Unreleased]
 
 ## [0.16.1] - 2026-10-17
 ### Fixed

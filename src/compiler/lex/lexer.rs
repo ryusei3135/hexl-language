@@ -153,6 +153,12 @@ impl Lexer {
             .preproc_table
             .preprocess(content)
             .unwrap_or(content.to_string());
+        // `#include "file.c"` / `#include "file.h"` は展開せず、名前だけ保存する
+        for file in self.preproc_table.take_c_files() {
+            if !self.include_c_file_list.contains(&file) {
+                self.include_c_file_list.push(file);
+            }
+        }
 
         // 現在の行の何文字目か
         let mut chr_counter: usize = 1;
@@ -328,6 +334,11 @@ impl Lexer {
                     "else" => Tkn::KeyWordElse,
                     "impl" => Tkn::KeyWordImpl,
                     "extern" => Tkn::KeyWordExtern,
+                    "register" => Tkn::keyWordRegister,
+                    "async" => Tkn::KeyWordAsync,
+                    "await" => Tkn::KeyWordAwait,
+                    "move" => Tkn::KeyWordMove,
+                    "allow" => Tkn::KeyWordAllow,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),
@@ -1224,5 +1235,60 @@ mod tests {
             ],
             "m.hexl",
         );
+    }
+
+    #[test]
+    fn check_include_c_file_only_saves_name() {
+        // `.c` / `.h` は読み込まず(ファイルが無くてもよい)、名前だけが保存される。
+        // ソースには何も展開されず、後ろのトークンの行番号もずれない
+        let mut lex = Lexer::with_os("linux");
+        lex.analy(&"ret 1\n#include \"a.c\"\n#include \"b.h\"\nret 2".to_string())
+            .unwrap();
+        assert_eq!(lex.include_c_file_list, vec!["a.c", "b.h"]);
+        let nums: Vec<(String, usize)> = lex
+            .gen_tkns
+            .iter()
+            .filter_map(|t| match &t.tkn {
+                Tkn::Number(n) => Some((n.clone(), t.line)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(nums, vec![("1".to_string(), 1), ("2".to_string(), 4)]);
+    }
+
+    #[test]
+    fn check_include_c_file_duplicate_is_saved_once() {
+        let mut lex = Lexer::with_os("linux");
+        lex.analy(&"#include \"a.c\"\n#include \"a.c\"".to_string())
+            .unwrap();
+        assert_eq!(lex.include_c_file_list, vec!["a.c"]);
+    }
+
+    #[test]
+    fn check_include_c_file_in_inactive_branch_is_skipped() {
+        let mut lex = Lexer::with_os("linux");
+        lex.analy(
+            &"#if #windows\n#include \"w.c\"\n#endif\n#if #linux\n#include \"l.c\"\n#endif"
+                .to_string(),
+        )
+        .unwrap();
+        assert_eq!(lex.include_c_file_list, vec!["l.c"]);
+    }
+
+    #[test]
+    fn check_include_c_file_inside_included_file() {
+        // `.hexl`から`#include`された先にある`.c`も保存される
+        let base = std::env::temp_dir().join(format!("hexl_inc_cfile_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("a.hexl"), "#include \"x.c\"\nret 1\n").unwrap();
+        let main_path = base.join("m.hexl");
+        std::fs::write(&main_path, "#include \"a.hexl\"").unwrap();
+        let mut lex = Lexer::with_os("linux");
+        lex.set_source_file(main_path.to_str().unwrap());
+        lex.analy(&std::fs::read_to_string(&main_path).unwrap())
+            .unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(lex.include_c_file_list, vec!["x.c"]);
     }
 }

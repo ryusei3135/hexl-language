@@ -43,6 +43,10 @@ pub(in crate::compiler::lex) struct Preprocessor {
     base_dir: PathBuf,
     /// 今インライン展開中のファイルの正規化したパス(循環した `#include` の検出用)
     include_stack: Vec<PathBuf>,
+    /// `#include "file.c"` / `#include "file.h"` で指定された、C言語のファイル名
+    /// (書かれたとおりの名前。読み込みや展開はせず、名前を保存するだけ。
+    /// `Lexer`が`take_c_files`で受け取り、`include_c_file_list`に入れる)
+    c_files: Vec<String>,
 }
 
 impl Preprocessor {
@@ -51,7 +55,13 @@ impl Preprocessor {
             tables: HashMap::new(),
             base_dir: PathBuf::new(),
             include_stack: Vec::new(),
+            c_files: Vec::new(),
         }
+    }
+
+    /// これまでの`#include`で集まったC言語のファイル名を取り出す(取り出した分は空になる)
+    pub(in crate::compiler::lex) fn take_c_files(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.c_files)
     }
 
     /// これから処理するソースファイルの場所を教える。
@@ -69,42 +79,52 @@ impl Preprocessor {
     /// (`#if` の状態は、ファイルの中で閉じる)。
     ///
     /// ファイルが読めない場合と、`#include` が循環している場合は panic する。
+    ///
+    /// `.c` / `.h` は読み込まず、ファイル名だけを`c_files`に保存して、
+    /// 空の文字列を返す(ソースには何も展開しない)。
     fn include_inline(&mut self, rel: &str) -> String {
-        let path = self.base_dir.join(rel);
-        let canon = fs::canonicalize(&path).unwrap_or_else(|e| {
-            panic!(
-                "`#include \"{}\"`: cannot open `{}`: {}",
-                rel,
-                path.display(),
-                e
-            )
-        });
-        if self.include_stack.contains(&canon) {
-            panic!(
-                "`#include \"{}\"`: circular include of `{}`",
-                rel,
-                canon.display()
-            );
-        }
-        let text = fs::read_to_string(&canon).unwrap_or_else(|e| {
-            panic!(
-                "`#include \"{}\"`: cannot read `{}`: {}",
-                rel,
-                canon.display(),
-                e
-            )
-        });
+        if rel.ends_with(".c") || rel.ends_with(".h") {
+            if !self.c_files.iter().any(|f| f == rel) {
+                self.c_files.push(rel.to_string());
+            }
+            String::new()
+        } else {
+            let path = self.base_dir.join(rel);
+            let canon = fs::canonicalize(&path).unwrap_or_else(|e| {
+                panic!(
+                    "`#include \"{}\"`: cannot open `{}`: {}",
+                    rel,
+                    path.display(),
+                    e
+                )
+            });
+            if self.include_stack.contains(&canon) {
+                panic!(
+                    "`#include \"{}\"`: circular include of `{}`",
+                    rel,
+                    canon.display()
+                );
+            }
+            let text = fs::read_to_string(&canon).unwrap_or_else(|e| {
+                panic!(
+                    "`#include \"{}\"`: cannot read `{}`: {}",
+                    rel,
+                    canon.display(),
+                    e
+                )
+            });
 
-        // 取り込んだファイルの中の `#include` は、そのファイルの場所が基準
-        let saved_base = std::mem::replace(
-            &mut self.base_dir,
-            canon.parent().map(Path::to_path_buf).unwrap_or_default(),
-        );
-        self.include_stack.push(canon);
-        let out = self.preprocess_text(&text);
-        self.include_stack.pop();
-        self.base_dir = saved_base;
-        out
+            // 取り込んだファイルの中の `#include` は、そのファイルの場所が基準
+            let saved_base = std::mem::replace(
+                &mut self.base_dir,
+                canon.parent().map(Path::to_path_buf).unwrap_or_default(),
+            );
+            self.include_stack.push(canon);
+            let out = self.preprocess_text(&text);
+            self.include_stack.pop();
+            self.base_dir = saved_base;
+            out
+        }
     }
 
     /// 実行環境(`DEFAULT`)のOSシンボルを定義する。
