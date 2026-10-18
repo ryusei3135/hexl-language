@@ -6,6 +6,7 @@ mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
 mod emit_tmpl_key;
+mod var_mnger;
 
 use super::emit_fn_name::emit_fn_name_id;
 use super::*;
@@ -13,96 +14,8 @@ use crate::asm_setting;
 use crate::compiler::ir::inst::Inst;
 use crate::compiler::ir::types;
 
-/// 演算結果を格納するレジスタの「適切なサイズ」が、テンプレートを
-/// 組み立てる時点ではまだ決まらない演算子の一覧。
-///
-/// `*`(Mul)/`/`(Div)/`%`(Surplus)は`idiv`/`imul`を使うため、結果を
-/// 格納するレジスタのサイズが、オペランドがメモリ上の値かどうかを
-/// 見て初めて確定する(`format_expr_inst`内の`check_node_is_memory_value`
-/// による判定より後)。そのため、テンプレートを組み立てる時点では
-/// レジスタの「番号」だけを埋め込んでおき([`AsmEmitter::replace_insert_fmt_reg`]
-/// を参照)、サイズが確定してから改めて実際のレジスタ名へ展開し直す
-/// 必要がある。
-#[allow(dead_code)]
-pub(in crate::compiler::asm_gen) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
-    inst::ExprKind::Mul,
-    inst::ExprKind::Div,
-    inst::ExprKind::Surplus,
-];
+pub use var_mnger::VarIndexInfo;
 
-/// 式の結果や変数を置くレジスタとして、自動では割り当てないレジスタ。
-///
-/// - `0`: `%rax` 戻り値・`idiv`の商・システムコール番号
-/// - `2`: `%rdx` `idiv`の余り・`cqto`/`cltd`の結果・第3引数
-///
-/// `/`と`%`は、この2つのレジスタを必ず書き換える。一般の式の結果を
-/// ここに置いてしまうと、割り算のたびに壊れてしまう(引数のレジスタが
-/// 破壊されるバグの原因の一つだった)ので、割り当て対象から外す。
-pub(in crate::compiler::asm_gen) const RESERVED_REGS: [usize; 2] = [0, 2];
-
-#[derive(Debug, Clone)]
-pub(in crate::compiler::asm_gen) struct VarIndexInfo {
-    /// レジスタ番号。`is_stack`が`true`の変数(ポインタでない構造体の
-    /// 変数)はレジスタを持たないので[`VarIndexInfo::NO_REG`]が入る
-    /// (`%rbp`からの位置は`offset`を使う)
-    pub reg: RegisterMode,
-    /// `is_stack`が`true`の場合の、`%rbp`からのバイトオフセット
-    /// (構造体先頭のメンバーの位置)。`is_stack`が`false`の場合は`0`で意味を持たない
-    pub offset: usize,
-    pub size: types::Size,
-    pub index: usize,
-    pub is_stack: bool,
-    /// 配列変数の場合の、先頭要素を置く直前の`stk_use_counter`
-    /// (`%rbp`からのバイトオフセット)。要素`i`は
-    /// `%rbp - (arr_base + (i + 1) * 要素サイズ)`に置かれる
-    /// (要素0が最も`%rbp`に近い)。配列以外では`0`
-    pub arr_base: usize,
-    /// スタック上のメモリ(配列など、`mem_val_ir`で確保した領域)に
-    /// 実体がある変数かどうか。`true`の場合、`reg`はレジスタ番号として
-    /// 使われていないので、レジスタの使用中の管理や、インラインアセンブラの
-    /// レジスタ退避の対象にしてはいけない
-    pub in_mem: bool,
-}
-
-impl VarIndexInfo {
-    /// レジスタを持たない変数(`is_stack`)の`reg`に入れる値。
-    /// レジスタ番号として使うと範囲外になって即座にpanicするので、
-    /// オフセットをレジスタ番号と取り違えるバグを見逃さない
-    pub const NO_REG: usize = usize::MAX;
-
-    pub fn new(reg: RegisterMode, size: &types::Size, index: usize) -> Self {
-        Self {
-            reg: reg,
-            offset: 0,
-            size: size.clone(),
-            index: index,
-            is_stack: false,
-            arr_base: 0,
-            in_mem: false,
-        }
-    }
-
-    /// ポインタでない構造体の変数を、`%rbp`からのオフセット(`offset`)に
-    /// 直接置かれている変数として登録する。レジスタは使わない
-    pub fn new_stack(offset: usize, size: &types::Size, index: usize) -> Self {
-        Self {
-            reg: RegisterMode::Normal(Self::NO_REG),
-            offset,
-            size: size.clone(),
-            index: index,
-            is_stack: true,
-            arr_base: 0,
-            in_mem: false,
-        }
-    }
-
-    /// 配列の先頭の位置(`%rbp`からのオフセット)を記録する
-    pub fn with_arr_base(mut self, arr_base: usize) -> Self {
-        self.arr_base = arr_base;
-        self.in_mem = true;
-        self
-    }
-}
 
 impl AsmEmitter {
     pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData, os: &str) -> Self {
@@ -242,11 +155,6 @@ impl AsmEmitter {
                 println!("warning");
             }
         });
-    }
-
-    /// 指定された名前の変数の型を返す
-    pub fn get_var_ty(&self, var_name: &str) -> Size {
-        self.var_info(var_name).size.clone()
     }
 
     #[inline(always)]
@@ -409,21 +317,6 @@ impl AsmEmitter {
         }
     }
 
-    #[inline(always)]
-    pub(in crate::compiler::asm_gen) fn update_value_info(&mut self, name: &str, index: usize) {
-        self.var_info_mut(name).index = index;
-    }
-
-    #[inline(always)]
-    pub(in crate::compiler::asm_gen) fn update_value_reg(
-        &mut self,
-        name: &str,
-        reg: &RegisterMode,
-    ) {
-        self.used_reg.mark_used(reg);
-        self.var_info_mut(name).reg = reg.clone();
-    }
-
     /// 渡された情報を、設定したアセンブリ言語のフォーマット
     /// 通りに加工する。
     pub(in crate::compiler::asm_gen) fn format_line(
@@ -521,52 +414,6 @@ impl AsmEmitter {
         self.fill_tmpl(opcode, &dst_text, &src_text)
     }
 
-    /// レジスタに載せる値の型`ty`から、実際に使うレジスタの
-    /// サイズを決める。
-    ///
-    /// - `DB`/`DW`/`DD`/`DQ`: そのままのサイズ
-    /// - 配列: 要素のサイズ
-    /// - ポインタ/構造体など: アドレスを持つので64bit(`DQ`)
-    pub(in crate::compiler::asm_gen) fn value_reg_size(ty: &Size) -> Size {
-        match ty {
-            Size::DB | Size::DW | Size::DD | Size::DQ | Size::F32 | Size::F64 => ty.clone(),
-            // 符号なしは、同じ幅の符号付きと同じレジスタを使う
-            Size::UDB | Size::UDW | Size::UDD | Size::UDQ => ty.to_signed(),
-            Size::Array { size, .. } => Self::value_reg_size(size),
-            _ => Size::DQ,
-        }
-    }
-
-    /// `format_line`で、結果を書き込む先(`dst`)のレジスタの
-    /// サイズを決める。
-    ///
-    /// 1. `address`(`lea`)は常にアドレスなので64bit
-    /// 2. メモリ上の値を読む場合は、読む対象のサイズ
-    /// 3. 即値・式の結果・関数の戻り値など(メモリ以外)は、
-    ///    代入先の型(`dst_ty`)のサイズ
-    /// 4. `dst_ty`が無い(`self`を持つメソッド内など)場合は、
-    ///    値そのものの型から推測できるときだけその型、
-    ///    できなければ64bit
-    ///
-    /// 以前は3.と4.が無く、メモリ以外の値は常に64bitレジスタ
-    /// (`%rcx`など)に書き込まれていた。
-    fn resolve_dst_reg_size(&self, opcode: &str, src1: usize, dst_ty: SelfPtrInfo) -> Size {
-        if opcode == "address" {
-            return Size::DQ;
-        }
-        if let Some(size) = self.check_node_is_mem_val(src1) {
-            return Self::value_reg_size(&size);
-        }
-        if let Some(ty) = dst_ty {
-            return Self::value_reg_size(ty);
-        }
-        match &self.curr_inst[src1] {
-            inst::Inst::Num { size, .. } => Self::value_reg_size(size),
-            inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(src1)),
-            inst::Inst::Cast { after, .. } => Self::value_reg_size(after),
-            _ => Size::DQ,
-        }
-    }
 
     #[inline(always)]
     fn gen_resize_mnemonic(&self, formated: &str, opcode: &str, src1: usize) -> Option<String> {
@@ -695,22 +542,6 @@ impl AsmEmitter {
             }
             inst::Inst::InsertArr { ref name, .. } => self.var_size(name),
             _ => None,
-        }
-    }
-
-    /// ## 引数
-    /// - reg_idx これは必ずusizeで無ければいけない、
-    fn get_reg(&self, reg_idx: Option<usize>, size: &Size) -> String {
-        let num = if reg_idx.is_none() {
-            self.reg_idx
-        } else {
-            // これは必ずSome
-            reg_idx.unwrap()
-        };
-        if size.is_float() {
-            self.asm_fmt.get_fmt_float_reg(num, size)
-        } else {
-            self.asm_fmt.get_fmt_reg(num, size)
         }
     }
 

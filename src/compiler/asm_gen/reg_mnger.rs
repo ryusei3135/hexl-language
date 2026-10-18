@@ -16,7 +16,6 @@
 //!
 use std::collections::HashMap;
 
-use crate::compiler::asm_gen::asm_emitter::RESERVED_REGS;
 use crate::compiler::ir::counter_mnger;
 
 pub(in crate::compiler::asm_gen) const MARKED_REG: bool = true;
@@ -503,6 +502,53 @@ impl AsmEmitter {
                     && !self.used_reg.is_reserved(*reg)
             })
             .expect("使用できるレジスタが足りません")
+    }
+    
+    /// ## 引数
+    /// - reg_idx これは必ずusizeで無ければいけない、
+    pub(in crate::compiler::asm_gen) fn get_reg(&self, reg_idx: Option<usize>, size: &Size) -> String {
+        let num = if reg_idx.is_none() {
+            self.reg_idx
+        } else {
+            // これは必ずSome
+            reg_idx.unwrap()
+        };
+        if size.is_float() {
+            self.asm_fmt.get_fmt_float_reg(num, size)
+        } else {
+            self.asm_fmt.get_fmt_reg(num, size)
+        }
+    }
+
+    /// `format_line`で、結果を書き込む先(`dst`)のレジスタの
+    /// サイズを決める。
+    ///
+    /// 1. `address`(`lea`)は常にアドレスなので64bit
+    /// 2. メモリ上の値を読む場合は、読む対象のサイズ
+    /// 3. 即値・式の結果・関数の戻り値など(メモリ以外)は、
+    ///    代入先の型(`dst_ty`)のサイズ
+    /// 4. `dst_ty`が無い(`self`を持つメソッド内など)場合は、
+    ///    値そのものの型から推測できるときだけその型、
+    ///    できなければ64bit
+    ///
+    /// 以前は3.と4.が無く、メモリ以外の値は常に64bitレジスタ
+    /// (`%rcx`など)に書き込まれていた。
+    pub(in crate::compiler::asm_gen) fn resolve_dst_reg_size(&self, opcode: &str, src1: usize, dst_ty: SelfPtrInfo) -> Size {
+        if opcode == "address" {
+            return Size::DQ;
+        }
+        if let Some(size) = self.check_node_is_mem_val(src1) {
+            return Self::value_reg_size(&size);
+        }
+        if let Some(ty) = dst_ty {
+            return Self::value_reg_size(ty);
+        }
+        match &self.curr_inst[src1] {
+            inst::Inst::Num { size, .. } => Self::value_reg_size(size),
+            inst::Inst::Expr(..) => Self::value_reg_size(&self.get_expr_ty(src1)),
+            inst::Inst::Cast { after, .. } => Self::value_reg_size(after),
+            _ => Size::DQ,
+        }
     }
 }
 

@@ -44,6 +44,33 @@ impl RegisterMode {
     }
 }
 
+/// 演算結果を格納するレジスタの「適切なサイズ」が、テンプレートを
+/// 組み立てる時点ではまだ決まらない演算子の一覧。
+///
+/// `*`(Mul)/`/`(Div)/`%`(Surplus)は`idiv`/`imul`を使うため、結果を
+/// 格納するレジスタのサイズが、オペランドがメモリ上の値かどうかを
+/// 見て初めて確定する(`format_expr_inst`内の`check_node_is_memory_value`
+/// による判定より後)。そのため、テンプレートを組み立てる時点では
+/// レジスタの「番号」だけを埋め込んでおき([`AsmEmitter::replace_insert_fmt_reg`]
+/// を参照)、サイズが確定してから改めて実際のレジスタ名へ展開し直す
+/// 必要がある。
+#[allow(dead_code)]
+pub(in crate::compiler::asm_gen) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3] = &[
+    inst::ExprKind::Mul,
+    inst::ExprKind::Div,
+    inst::ExprKind::Surplus,
+];
+
+/// 式の結果や変数を置くレジスタとして、自動では割り当てないレジスタ。
+///
+/// - `0`: `%rax` 戻り値・`idiv`の商・システムコール番号
+/// - `2`: `%rdx` `idiv`の余り・`cqto`/`cltd`の結果・第3引数
+///
+/// `/`と`%`は、この2つのレジスタを必ず書き換える。一般の式の結果を
+/// ここに置いてしまうと、割り算のたびに壊れてしまう(引数のレジスタが
+/// 破壊されるバグの原因の一つだった)ので、割り当て対象から外す。
+pub(in crate::compiler::asm_gen) const RESERVED_REGS: [usize; 2] = [0, 2];
+
 pub struct AsmEmitter {
     pub(in crate::compiler::asm_gen) asm_text: String,
     pub(in crate::compiler::asm_gen) data_sec_text: String,
