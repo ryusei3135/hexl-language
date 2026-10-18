@@ -14,6 +14,7 @@ pub enum Size {
     UDQ,
     F32,
     F64,
+    Bool,
     Struct(Vec<Box<(String, Size)>>),
     /// バリアント型
     /// - `fields`: メンバー名と型(型なしメンバーは`Void`)。定義順がタグの値
@@ -195,7 +196,7 @@ impl Size {
     pub(in crate::compiler::ir) fn is_builtin_ty_name(name: &str) -> bool {
         matches!(
             name,
-            "byte" | "i16" | "int" | "i64" | "ubyte" | "u16" | "uint" | "u64" | "float" | "f64"
+            "byte" | "i16" | "int" | "i64" | "ubyte" | "u16" | "uint" | "u64" | "float" | "f64" | "bool"
         )
     }
 
@@ -216,7 +217,7 @@ impl Size {
     /// このサイズがバイト単位で何バイトかを返す
     pub(crate) fn to_bytes(&self) -> usize {
         match self {
-            Self::DB | Self::UDB => 1,
+            Self::DB | Self::UDB | Self::Bool => 1,
             Self::DW | Self::UDW => 2,
             Self::DD | Self::UDD | Self::F32 => 4,
             Self::DQ | Self::UDQ | Self::F64 => 8,
@@ -287,6 +288,7 @@ fn embe_ty_sort(ty_name: &str) -> Result<Size, err::ErrKind> {
         "u64" => Size::UDQ,
         "float" => Size::F32,
         "f64" => Size::F64,
+        "bool" => Size::Bool,
         _ => {
             return Err(crate::GenUndefErrResult!(
                 UndefVarTy,
