@@ -7,8 +7,15 @@ pub enum CType {
     Named { name: String, konst: bool },
     /// ポインタ。`konst`はポインタ自身が`const`(`T *const`)
     Ptr { inner: Box<CType>, konst: bool },
-    Array { inner: Box<CType>, len: Option<usize> },
-    Func { ret: Box<CType>, params: Vec<CParam>, variadic: bool },
+    Array {
+        inner: Box<CType>,
+        len: Option<usize>,
+    },
+    Func {
+        ret: Box<CType>,
+        params: Vec<CParam>,
+        variadic: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -19,7 +26,10 @@ pub struct CParam {
 
 impl CType {
     pub fn named(name: &str) -> CType {
-        CType::Named { name: name.to_string(), konst: false }
+        CType::Named {
+            name: name.to_string(),
+            konst: false,
+        }
     }
 
     /// 最上位の`const`を立てる
@@ -95,7 +105,10 @@ pub struct CExpr {
 pub enum CExprKind {
     Ident(String),
     /// 列挙定数(パース時に解決済み): 列挙型名, メンバー名
-    EnumConst { ename: String, variant: String },
+    EnumConst {
+        ename: String,
+        variant: String,
+    },
     /// 10進に直した整数(サフィックスは捨てる)
     Int(String),
     Float(String),
@@ -187,10 +200,19 @@ pub struct CField {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CDef {
-    Struct { name: String, fields: Vec<CField> },
-    Union { name: String, fields: Vec<CField> },
+    Struct {
+        name: String,
+        fields: Vec<CField>,
+    },
+    Union {
+        name: String,
+        fields: Vec<CField>,
+    },
     /// (メンバー名, 値)
-    Enum { name: String, members: Vec<(String, i64)> },
+    Enum {
+        name: String,
+        members: Vec<(String, i64)>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -209,9 +231,13 @@ pub enum CItem {
     Def(CDef),
     Func(CFunc),
     /// 本体の無い関数宣言(プロトタイプ)。nodeに対応するものが無いので読み飛ばす
-    Proto { name: String },
+    Proto {
+        name: String,
+    },
     /// `extern`の変数宣言。読み飛ばす
-    ExternVar { name: String },
+    ExternVar {
+        name: String,
+    },
     /// 本体のあるグローバル変数(nodeに対応するものが無い)
     Global(CDecl),
 }

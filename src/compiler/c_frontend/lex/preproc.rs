@@ -3,14 +3,17 @@
 //! 対応: #include / #define / #undef / #if / #ifdef / #ifndef / #elif / #else / #endif /
 //!       #error / #warning / #pragma(once) / #line、`#` `##` 演算子、可変長引数、
 //!       `defined`、`__FILE__` `__LINE__` `__DATE__` `__TIME__` `__COUNTER__`、
-//!       `, ## __VA_ARGS__`(GNU 拡張)。
+//!       `, ## __VA_ARGS__`(GNU 拡張)、`__VA_OPT__`、`_Pragma("...")`、
+//!       `__has_include` / `__has_include_next`、`#include_next`、
+//!       `__INCLUDE_LEVEL__` `__BASE_FILE__`、組み込みの標準ヘッダ(`builtin_headers.rs`)。
 //! マクロ展開は Dave Prosser の hide-set アルゴリズム(C 規格の例どおりに動く)。
 
-use crate::compiler::c_frontend::lex::lexer::{TokenInfo, Lexer, Token};
+use super::builtin_headers::builtin_header;
+use crate::compiler::c_frontend::lex;
+use crate::compiler::c_frontend::lex::lexer::{Lexer, Token, TokenInfo};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::path::{Path, PathBuf};
-use crate::compiler::c_frontend::lex;
 
 // ====================================================================
 // エラー
@@ -146,7 +149,10 @@ fn stringize(arg: &[PpTok], at: &PpTok) -> PpTok {
         }
     }
     PpTok::synth(
-        Token::StringLiteral { prefix: String::new(), body: s.clone() },
+        Token::StringLiteral {
+            prefix: String::new(),
+            body: s.clone(),
+        },
         format!("\"{}\"", s),
         at,
     )
@@ -184,6 +190,7 @@ pub struct Preprocessor {
     depth: usize,
     counter: u64,
     cur_file: String,
+    base_file: String,
     cur_key: String,
     cur_dir: PathBuf,
     line_delta: i64,
@@ -198,7 +205,7 @@ impl Default for Preprocessor {
 }
 
 impl Preprocessor {
-    pub fn new() -> Self {
+    pub(in crate::compiler::c_frontend) fn new() -> Self {
         let mut p = Preprocessor {
             macros: HashMap::new(),
             include_dirs: Vec::new(),
@@ -208,6 +215,7 @@ impl Preprocessor {
             depth: 0,
             counter: 0,
             cur_file: String::new(),
+            base_file: String::new(),
             cur_key: String::new(),
             cur_dir: PathBuf::new(),
             line_delta: 0,
@@ -224,28 +232,45 @@ impl Preprocessor {
             p.define(n, v).expect("builtin macro");
         }
         let (date, time) = build_date_time();
-        p.define("__DATE__", &format!("\"{}\"", date)).expect("builtin macro");
-        p.define("__TIME__", &format!("\"{}\"", time)).expect("builtin macro");
+        p.define("__DATE__", &format!("\"{}\"", date))
+            .expect("builtin macro");
+        p.define("__TIME__", &format!("\"{}\"", time))
+            .expect("builtin macro");
         p
     }
 
     /// `-I dir`(`#include "..."` と `<...>` の両方で探す)
-    pub fn add_include_dir(&mut self, dir: impl Into<PathBuf>) {
+    pub(in crate::compiler::c_frontend::lex) fn add_include_dir(
+        &mut self,
+        dir: impl Into<PathBuf>,
+    ) {
         self.include_dirs.push(dir.into());
     }
 
     /// システムヘッダ用ディレクトリ(`-I` の後に探す)
-    pub fn add_system_include_dir(&mut self, dir: impl Into<PathBuf>) {
+    pub(in crate::compiler::c_frontend::lex) fn add_system_include_dir(
+        &mut self,
+        dir: impl Into<PathBuf>,
+    ) {
         self.system_dirs.push(dir.into());
     }
 
     /// メモリ上のヘッダを登録する(ファイルより優先。テストや組み込みヘッダ用)
-    pub fn add_virtual_file(&mut self, name: &str, contents: &str) {
-        self.virtual_files.insert(name.to_string(), contents.to_string());
+    pub(in crate::compiler::c_frontend::lex) fn add_virtual_file(
+        &mut self,
+        name: &str,
+        contents: &str,
+    ) {
+        self.virtual_files
+            .insert(name.to_string(), contents.to_string());
     }
 
     /// `-DNAME=VALUE` 相当。`define("F(x)", "x+1")` で関数形式も定義できる
-    pub fn define(&mut self, name: &str, value: &str) -> Result<(), PpError> {
+    pub(in crate::compiler::c_frontend::lex) fn define(
+        &mut self,
+        name: &str,
+        value: &str,
+    ) -> Result<(), PpError> {
         let src = format!("{} {}", name, value);
         let cmd = |e: lex::LexError| PpError {
             file: "<command-line>".into(),
@@ -273,21 +298,31 @@ impl Preprocessor {
     }
 
     /// `-UNAME` 相当
-    pub fn undef(&mut self, name: &str) {
+    pub(in crate::compiler::c_frontend::lex) fn undef(&mut self, name: &str) {
         self.macros.remove(name);
     }
 
-    pub fn is_defined(&self, name: &str) -> bool {
-        self.macros.contains_key(name) || matches!(name, "__LINE__" | "__FILE__" | "__COUNTER__")
+    pub(in crate::compiler::c_frontend::lex) fn is_defined(&self, name: &str) -> bool {
+        self.macros.contains_key(name)
+            || matches!(
+                name,
+                "__LINE__"
+                    | "__FILE__"
+                    | "__COUNTER__"
+                    | "__INCLUDE_LEVEL__"
+                    | "__BASE_FILE__"
+                    | "__has_include"
+                    | "__has_include_next"
+            )
     }
 
     /// `#warning` やマクロ再定義などの警告
-    pub fn warnings(&self) -> &[String] {
+    pub(in crate::compiler::c_frontend::lex) fn warnings(&self) -> &[String] {
         &self.warnings
     }
 
     /// 解釈しなかった `#pragma` の本文
-    pub fn pragmas(&self) -> &[String] {
+    pub(in crate::compiler::c_frontend::lex) fn pragmas(&self) -> &[String] {
         &self.pragmas
     }
 
@@ -297,11 +332,18 @@ impl Preprocessor {
 
     /// ソース文字列をプリプロセスする。戻り値は末尾に Eof を含む。
     /// 注意: マクロ定義は呼び出しをまたいで残る(翻訳単位ごとに新しい Preprocessor を使うこと)。
-    pub fn preprocess(&mut self, file_name: &str, src: &str) -> Result<Vec<TokenInfo>, PpError> {
+    pub(in crate::compiler::c_frontend) fn preprocess(
+        &mut self,
+        file_name: &str,
+        src: &str,
+    ) -> Result<Vec<TokenInfo>, PpError> {
         self.run_main(file_name, file_name, src)
     }
 
-    pub fn preprocess_file(&mut self, path: impl AsRef<Path>) -> Result<Vec<TokenInfo>, PpError> {
+    pub(in crate::compiler::c_frontend::lex) fn preprocess_file(
+        &mut self,
+        path: impl AsRef<Path>,
+    ) -> Result<Vec<TokenInfo>, PpError> {
         let p = path.as_ref();
         let name = p.to_string_lossy().into_owned();
         let src = std::fs::read_to_string(p).map_err(|e| PpError {
@@ -317,7 +359,11 @@ impl Preprocessor {
     }
 
     fn run_main(&mut self, name: &str, key: &str, src: &str) -> Result<Vec<TokenInfo>, PpError> {
-        let dir = Path::new(name).parent().map(Path::to_path_buf).unwrap_or_default();
+        let dir = Path::new(name)
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        self.base_file = name.to_string();
         let mut out = Vec::new();
         self.process_file(name, key, dir, src, &mut out)?;
 
@@ -330,7 +376,12 @@ impl Preprocessor {
                 _ => None,
             };
             if let Some(msg) = bad {
-                return Err(PpError { file: name.to_string(), line: t.line, col: t.col, msg });
+                return Err(PpError {
+                    file: name.to_string(),
+                    line: t.line,
+                    col: t.col,
+                    msg,
+                });
             }
             res.push(TokenInfo {
                 token: t.token,
@@ -355,7 +406,12 @@ impl Preprocessor {
     }
 
     fn err(&self, t: &PpTok, msg: impl Into<String>) -> PpError {
-        PpError { file: self.cur_file.clone(), line: t.line, col: t.col, msg: msg.into() }
+        PpError {
+            file: self.cur_file.clone(),
+            line: t.line,
+            col: t.col,
+            msg: msg.into(),
+        }
     }
 
     // ----------------------------------------------------------------
@@ -385,7 +441,10 @@ impl Preprocessor {
             msg: e.msg,
         })?;
         let bytes = src.as_bytes();
-        let toks: Vec<PpTok> = tokens.into_iter().map(|s| PpTok::from_spanned(s, bytes)).collect();
+        let toks: Vec<PpTok> = tokens
+            .into_iter()
+            .map(|s| PpTok::from_spanned(s, bytes))
+            .collect();
 
         let saved_file = std::mem::replace(&mut self.cur_file, name.to_string());
         let saved_key = std::mem::replace(&mut self.cur_key, key.to_string());
@@ -544,7 +603,8 @@ impl Preprocessor {
                 self.macros.remove(n);
                 Ok(())
             }
-            "include" | "include_next" => self.do_include(hash, rest, out),
+            "include" => self.do_include(hash, rest, false, out),
+            "include_next" => self.do_include(hash, rest, true, out),
             "error" => Err(self.err(hash, format!("#error {}", join_spelling(rest)))),
             "warning" => {
                 self.warnings.push(format!(
@@ -556,11 +616,7 @@ impl Preprocessor {
                 Ok(())
             }
             "pragma" => {
-                if rest.first().and_then(name_of) == Some("once") {
-                    self.pragma_once.insert(self.cur_key.clone());
-                } else {
-                    self.pragmas.push(join_spelling(rest));
-                }
+                self.handle_pragma(rest);
                 Ok(())
             }
             "line" => {
@@ -661,7 +717,11 @@ impl Preprocessor {
             f.space = false;
         }
 
-        let mac = Macro { params, variadic, body };
+        let mac = Macro {
+            params,
+            variadic,
+            body,
+        };
         // 仕様どおりの検証
         if let Some(l) = mac.body.last() {
             if is_punct(l, "##") {
@@ -675,7 +735,12 @@ impl Preprocessor {
         }
         if mac.params.is_some() {
             for (i, t) in mac.body.iter().enumerate() {
-                if is_punct(t, "#") && !mac.body.get(i + 1).map_or(false, |n| param_index(&mac, n).is_some()) {
+                if is_punct(t, "#")
+                    && !mac
+                        .body
+                        .get(i + 1)
+                        .map_or(false, |n| param_index(&mac, n).is_some())
+                {
                     return Err(self.err(t, "'#' の後にはマクロ仮引数が必要です"));
                 }
             }
@@ -687,39 +752,61 @@ impl Preprocessor {
     // #include / #line
     // ----------------------------------------------------------------
 
-    fn do_include(&mut self, hash: &PpTok, rest: &[PpTok], out: &mut Vec<PpTok>) -> Result<(), PpError> {
-        let (name, angle) = match rest.first().map(|t| &t.token) {
-            Some(Token::HeaderName { name }) => (name.clone(), true),
-            Some(Token::StringLiteral { prefix, body }) if prefix.is_empty() => (body.clone(), false),
+    /// `#pragma` の本文を処理する。`once` はここで消費し、それ以外は `pragmas()` に積む
+    fn handle_pragma(&mut self, rest: &[PpTok]) {
+        if rest.first().and_then(name_of) == Some("once") {
+            self.pragma_once.insert(self.cur_key.clone());
+        } else {
+            self.pragmas.push(join_spelling(rest));
+        }
+    }
+
+    /// `#include` / `#include_next` / `__has_include` の引数を (名前, 山括弧か) にする。
+    /// `#include MACRO` の場合は展開してから解釈する。書式が不正なら Err(メッセージ)
+    fn include_target(&mut self, rest: &[PpTok]) -> Result<(String, bool), String> {
+        match rest.first().map(|t| &t.token) {
+            Some(Token::HeaderName { name }) => Ok((name.clone(), true)),
+            Some(Token::StringLiteral { prefix, body }) if prefix.is_empty() => {
+                Ok((body.clone(), false))
+            }
             _ => {
-                // `#include MACRO` : 展開してから解釈する
-                let ex = self.expand(rest.to_vec())?;
+                let ex = self.expand(rest.to_vec()).map_err(|e| e.msg)?;
                 match ex.first().map(|t| &t.token) {
-                    Some(Token::StringLiteral { prefix, body }) if prefix.is_empty() => (body.clone(), false),
+                    Some(Token::StringLiteral { prefix, body }) if prefix.is_empty() => {
+                        Ok((body.clone(), false))
+                    }
                     Some(Token::Punct { name: "<" }) => {
                         let mut s = String::new();
-                        let mut closed = false;
                         for (k, t) in ex.iter().enumerate().skip(1) {
                             if is_punct(t, ">") {
-                                closed = true;
-                                break;
+                                return Ok((s, true));
                             }
                             if k > 1 && t.space {
                                 s.push(' ');
                             }
                             s.push_str(&t.spelling);
                         }
-                        if !closed {
-                            return Err(self.err(hash, "#include の '>' がありません"));
-                        }
-                        (s, true)
+                        Err("#include の '>' がありません".to_string())
                     }
-                    _ => return Err(self.err(hash, "#include の書式が不正です")),
+                    _ => Err("#include の書式が不正です".to_string()),
                 }
             }
-        };
-        let Some(f) = self.find_include(&name, angle) else {
-            return Err(self.err(hash, format!("インクルードファイルが見つかりません: {}", name)));
+        }
+    }
+
+    fn do_include(
+        &mut self,
+        hash: &PpTok,
+        rest: &[PpTok],
+        next: bool,
+        out: &mut Vec<PpTok>,
+    ) -> Result<(), PpError> {
+        let (name, angle) = self.include_target(rest).map_err(|m| self.err(hash, m))?;
+        let Some(f) = self.find_include(&name, angle, next) else {
+            return Err(self.err(
+                hash,
+                format!("インクルードファイルが見つかりません: {}", name),
+            ));
         };
         if self.pragma_once.contains(&f.key) {
             return Ok(());
@@ -727,20 +814,35 @@ impl Preprocessor {
         self.process_file(&f.name, &f.key, f.dir, &f.text, out)
     }
 
-    fn find_include(&self, name: &str, angle: bool) -> Option<Found> {
-        if let Some(text) = self.virtual_files.get(name) {
-            return Some(Found {
-                name: name.to_string(),
-                key: format!("virt:{}", name),
-                text: text.clone(),
-                dir: PathBuf::new(),
-            });
+    /// `next` が真なら `#include_next`: 現在のファイルが見つかった検索ディレクトリより後ろだけを探す
+    fn find_include(&self, name: &str, angle: bool, next: bool) -> Option<Found> {
+        if !next {
+            if let Some(text) = self.virtual_files.get(name) {
+                return Some(Found {
+                    name: name.to_string(),
+                    key: format!("virt:{}", name),
+                    text: text.clone(),
+                    dir: PathBuf::new(),
+                });
+            }
+        }
+        let search: Vec<&PathBuf> = self
+            .include_dirs
+            .iter()
+            .chain(self.system_dirs.iter())
+            .collect();
+        let mut start = 0;
+        if next {
+            // 現在のファイルのあるディレクトリが検索リストにあれば、その次から探す
+            if let Some(i) = search.iter().position(|d| **d == self.cur_dir) {
+                start = i + 1;
+            }
         }
         let mut cands: Vec<PathBuf> = Vec::new();
-        if !angle {
+        if !angle && !next {
             cands.push(self.cur_dir.join(name));
         }
-        for d in self.include_dirs.iter().chain(self.system_dirs.iter()) {
+        for d in &search[start..] {
             cands.push(d.join(name));
         }
         for p in cands {
@@ -762,6 +864,17 @@ impl Preprocessor {
                     key,
                     text,
                     dir: p.parent().map(Path::to_path_buf).unwrap_or_default(),
+                });
+            }
+        }
+        // 最後に組み込みの標準ヘッダ(利用者の `-I` が優先される)
+        if angle || !next {
+            if let Some(text) = builtin_header(name) {
+                return Some(Found {
+                    name: format!("<{}>", name),
+                    key: format!("builtin:{}", name),
+                    text: text.to_string(),
+                    dir: PathBuf::new(),
                 });
             }
         }
@@ -794,6 +907,66 @@ impl Preprocessor {
         let mut i = 0;
         while i < rest.len() {
             let t = &rest[i];
+            if matches!(
+                name_of(t),
+                Some("__has_include") | Some("__has_include_next")
+            ) {
+                let next = name_of(t) == Some("__has_include_next");
+                if !rest.get(i + 1).map_or(false, |n| is_punct(n, "(")) {
+                    return Err(self.err(t, "__has_include の後に '(' がありません"));
+                }
+                // 対応する ')' を探す
+                let mut depth = 0usize;
+                let mut close = None;
+                for (k, x) in rest.iter().enumerate().skip(i + 1) {
+                    if is_punct(x, "(") {
+                        depth += 1;
+                    } else if is_punct(x, ")") {
+                        depth -= 1;
+                        if depth == 0 {
+                            close = Some(k);
+                            break;
+                        }
+                    }
+                }
+                let Some(close) = close else {
+                    return Err(self.err(t, "__has_include( に対応する ')' がありません"));
+                };
+                let inner = &rest[i + 2..close];
+                // `#if` の中では `<a.h>` は HeaderName にならないので、`<` ... `>` を自前で組み立てる
+                let target = match inner.first().map(|x| &x.token) {
+                    Some(Token::Punct { name: "<" }) => {
+                        let mut s = String::new();
+                        let mut ok = false;
+                        for (k, x) in inner.iter().enumerate().skip(1) {
+                            if is_punct(x, ">") {
+                                ok = true;
+                                break;
+                            }
+                            if k > 1 && x.space {
+                                s.push(' ');
+                            }
+                            s.push_str(&x.spelling);
+                        }
+                        if !ok {
+                            return Err(self.err(t, "__has_include の '>' がありません"));
+                        }
+                        (s, true)
+                    }
+                    _ => self.include_target(inner).map_err(|m| self.err(t, m))?,
+                };
+                let v = self.find_include(&target.0, target.1, next).is_some() as u64;
+                toks.push(PpTok::synth(
+                    Token::IntLiteral {
+                        value: v,
+                        suffix: String::new(),
+                    },
+                    v.to_string(),
+                    t,
+                ));
+                i = close + 1;
+                continue;
+            }
             if name_of(t) == Some("defined") {
                 let paren = rest.get(i + 1).map_or(false, |n| is_punct(n, "("));
                 let name_idx = if paren { i + 2 } else { i + 1 };
@@ -809,7 +982,10 @@ impl Preprocessor {
                 }
                 let v = self.is_defined(nm) as u64;
                 toks.push(PpTok::synth(
-                    Token::IntLiteral { value: v, suffix: String::new() },
+                    Token::IntLiteral {
+                        value: v,
+                        suffix: String::new(),
+                    },
                     v.to_string(),
                     t,
                 ));
@@ -825,7 +1001,10 @@ impl Preprocessor {
             return Err(self.err(hash, "#if の式がありません"));
         }
         // 3. 評価(残った識別子は 0)
-        let mut ev = Ev { toks: &toks, pos: 0 };
+        let mut ev = Ev {
+            toks: &toks,
+            pos: 0,
+        };
         let v = ev.ternary(true).map_err(|m| self.err(hash, m))?;
         if ev.pos != toks.len() {
             return Err(self.err(hash, "#if の式が不正です"));
@@ -842,7 +1021,10 @@ impl Preprocessor {
             "__LINE__" => {
                 let n = (t.line as i64 + self.line_delta).max(0) as u64;
                 Some(PpTok::synth(
-                    Token::IntLiteral { value: n, suffix: String::new() },
+                    Token::IntLiteral {
+                        value: n,
+                        suffix: String::new(),
+                    },
                     n.to_string(),
                     t,
                 ))
@@ -850,7 +1032,32 @@ impl Preprocessor {
             "__FILE__" => {
                 let esc = escape_str(&self.cur_file);
                 Some(PpTok::synth(
-                    Token::StringLiteral { prefix: String::new(), body: esc.clone() },
+                    Token::StringLiteral {
+                        prefix: String::new(),
+                        body: esc.clone(),
+                    },
+                    format!("\"{}\"", esc),
+                    t,
+                ))
+            }
+            "__INCLUDE_LEVEL__" => {
+                let n = self.depth.saturating_sub(1) as u64;
+                Some(PpTok::synth(
+                    Token::IntLiteral {
+                        value: n,
+                        suffix: String::new(),
+                    },
+                    n.to_string(),
+                    t,
+                ))
+            }
+            "__BASE_FILE__" => {
+                let esc = escape_str(&self.base_file);
+                Some(PpTok::synth(
+                    Token::StringLiteral {
+                        prefix: String::new(),
+                        body: esc.clone(),
+                    },
                     format!("\"{}\"", esc),
                     t,
                 ))
@@ -859,7 +1066,10 @@ impl Preprocessor {
                 let n = self.counter;
                 self.counter += 1;
                 Some(PpTok::synth(
-                    Token::IntLiteral { value: n, suffix: String::new() },
+                    Token::IntLiteral {
+                        value: n,
+                        suffix: String::new(),
+                    },
                     n.to_string(),
                     t,
                 ))
@@ -882,6 +1092,36 @@ impl Preprocessor {
             }
             if let Some(rep) = self.dynamic(&name, &t) {
                 out.push(rep);
+                continue;
+            }
+            // `_Pragma("...")` : #pragma と同じに扱い、トークンは出力しない
+            if name == "_Pragma" {
+                let ok = q.front().map_or(false, |n| is_punct(n, "("))
+                    && matches!(
+                        q.get(1).map(|n| &n.token),
+                        Some(Token::StringLiteral { .. })
+                    )
+                    && q.get(2).map_or(false, |n| is_punct(n, ")"));
+                if !ok {
+                    return Err(self.err(&t, "_Pragma の後には (\"文字列\") が必要です"));
+                }
+                q.pop_front();
+                let lit = q.pop_front().unwrap();
+                q.pop_front();
+                let Token::StringLiteral { body, .. } = &lit.token else {
+                    unreachable!()
+                };
+                // destringize: `\\` -> `\`, `\"` -> `"`
+                let text = body.replace("\\\"", "\"").replace("\\\\", "\\");
+                let sub = Lexer::new_pp(&text)
+                    .tokenize()
+                    .map_err(|e| self.err(&t, e.msg))?;
+                let toks: Vec<PpTok> = sub
+                    .into_iter()
+                    .filter(|x| !matches!(x.token, Token::Eof))
+                    .map(|x| PpTok::from_spanned(x, text.as_bytes()))
+                    .collect();
+                self.handle_pragma(&toks);
                 continue;
             }
             let Some(mac) = self.macros.get(&name).cloned() else {
@@ -926,7 +1166,8 @@ impl Preprocessor {
                             ));
                         }
                     }
-                    let mut h: HashSet<String> = t.hide.intersection(&close.hide).cloned().collect();
+                    let mut h: HashSet<String> =
+                        t.hide.intersection(&close.hide).cloned().collect();
                     h.insert(name.clone());
                     (args, h)
                 }
@@ -976,7 +1217,8 @@ impl Preprocessor {
         hs: &HashSet<String>,
         site: &PpTok,
     ) -> Result<Vec<PpTok>, PpError> {
-        let body = &mac.body;
+        let resolved = self.resolve_va_opt(mac, args)?;
+        let body = &resolved;
         let nparams = mac.params.as_ref().map_or(0, |v| v.len());
         let mut os: Vec<PpTok> = Vec::new();
         let mut i = 0;
@@ -1056,6 +1298,54 @@ impl Preprocessor {
         Ok(os)
     }
 
+    /// 可変引数マクロの本体にある `__VA_OPT__(...)` を解決する。
+    /// 可変引数が空でなければ括弧の中身に置き換え、空なら取り除く。
+    fn resolve_va_opt(&self, mac: &Macro, args: &[Vec<PpTok>]) -> Result<Vec<PpTok>, PpError> {
+        let body = &mac.body;
+        if !mac.variadic || !body.iter().any(|t| name_of(t) == Some("__VA_OPT__")) {
+            return Ok(body.clone());
+        }
+        let has_va = args.last().map_or(false, |a| !a.is_empty());
+        let mut out: Vec<PpTok> = Vec::with_capacity(body.len());
+        let mut i = 0;
+        while i < body.len() {
+            let t = &body[i];
+            if name_of(t) != Some("__VA_OPT__") {
+                out.push(t.clone());
+                i += 1;
+                continue;
+            }
+            if !body.get(i + 1).map_or(false, |n| is_punct(n, "(")) {
+                return Err(self.err(t, "__VA_OPT__ の後に '(' がありません"));
+            }
+            let mut depth = 0usize;
+            let mut close = None;
+            for (k, x) in body.iter().enumerate().skip(i + 1) {
+                if is_punct(x, "(") {
+                    depth += 1;
+                } else if is_punct(x, ")") {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(k);
+                        break;
+                    }
+                }
+            }
+            let Some(close) = close else {
+                return Err(self.err(t, "__VA_OPT__( に対応する ')' がありません"));
+            };
+            if has_va {
+                let mut inner: Vec<PpTok> = body[i + 2..close].to_vec();
+                if let Some(f) = inner.first_mut() {
+                    f.space = t.space;
+                }
+                out.extend(inner);
+            }
+            i = close + 1;
+        }
+        Ok(out)
+    }
+
     /// `os` の末尾トークンと `rs` の先頭トークンを連結(`##`)
     fn glue(&self, os: &mut Vec<PpTok>, rs: &[PpTok]) -> Result<(), PpError> {
         let Some(first) = rs.first() else {
@@ -1077,11 +1367,15 @@ impl Preprocessor {
         let toks = Lexer::new_pp(&text)
             .tokenize()
             .map_err(|e| self.err(l, e.msg))?;
-        let valid = toks.len() == 2 && !matches!(toks[0].token, Token::Other { .. } | Token::PpNumber { .. });
+        let valid = toks.len() == 2
+            && !matches!(toks[0].token, Token::Other { .. } | Token::PpNumber { .. });
         if !valid {
             return Err(self.err(
                 l,
-                format!("'{}' と '{}' の連結は有効なトークンになりません", l.spelling, r.spelling),
+                format!(
+                    "'{}' と '{}' の連結は有効なトークンになりません",
+                    l.spelling, r.spelling
+                ),
             ));
         }
         let hide = l.hide.intersection(&r.hide).cloned().collect();
@@ -1158,7 +1452,10 @@ impl<'a> Ev<'a> {
             }
             let b = self.ternary(live && !cond)?;
             let r = if cond { a } else { b };
-            Ok(Val { v: r.v, u: a.u || b.u })
+            Ok(Val {
+                v: r.v,
+                u: a.u || b.u,
+            })
         } else {
             Ok(c)
         }
@@ -1190,7 +1487,10 @@ impl<'a> Ev<'a> {
         }
         if self.eat("-") {
             let x = self.unary(live)?;
-            return Ok(Val { v: x.v.wrapping_neg(), u: x.u });
+            return Ok(Val {
+                v: x.v.wrapping_neg(),
+                u: x.u,
+            });
         }
         if self.eat("~") {
             let x = self.unary(live)?;
@@ -1198,7 +1498,10 @@ impl<'a> Ev<'a> {
         }
         if self.eat("!") {
             let x = self.unary(live)?;
-            return Ok(Val { v: (x.v == 0) as i64, u: false });
+            return Ok(Val {
+                v: (x.v == 0) as i64,
+                u: false,
+            });
         }
         self.primary(live)
     }
@@ -1234,9 +1537,16 @@ impl<'a> Ev<'a> {
 
 fn apply(op: &str, l: Val, r: Val, live: bool) -> R<Val> {
     let u = l.u || r.u;
-    let b = |x: bool| Val { v: x as i64, u: false };
+    let b = |x: bool| Val {
+        v: x as i64,
+        u: false,
+    };
     let cmp = |f: fn(std::cmp::Ordering) -> bool| {
-        let o = if u { (l.v as u64).cmp(&(r.v as u64)) } else { l.v.cmp(&r.v) };
+        let o = if u {
+            (l.v as u64).cmp(&(r.v as u64))
+        } else {
+            l.v.cmp(&r.v)
+        };
         b(f(o))
     };
     Ok(match op {
@@ -1249,7 +1559,11 @@ fn apply(op: &str, l: Val, r: Val, live: bool) -> R<Val> {
         "<=" => cmp(|o| o.is_le()),
         ">=" => cmp(|o| o.is_ge()),
         "<<" => Val {
-            v: if (0..64).contains(&r.v) { l.v.wrapping_shl(r.v as u32) } else { 0 },
+            v: if (0..64).contains(&r.v) {
+                l.v.wrapping_shl(r.v as u32)
+            } else {
+                0
+            },
             u: l.u,
         },
         ">>" => Val {
@@ -1266,9 +1580,18 @@ fn apply(op: &str, l: Val, r: Val, live: bool) -> R<Val> {
             },
             u: l.u,
         },
-        "+" => Val { v: l.v.wrapping_add(r.v), u },
-        "-" => Val { v: l.v.wrapping_sub(r.v), u },
-        "*" => Val { v: l.v.wrapping_mul(r.v), u },
+        "+" => Val {
+            v: l.v.wrapping_add(r.v),
+            u,
+        },
+        "-" => Val {
+            v: l.v.wrapping_sub(r.v),
+            u,
+        },
+        "*" => Val {
+            v: l.v.wrapping_mul(r.v),
+            u,
+        },
         "/" | "%" => {
             if r.v == 0 {
                 if live {
@@ -1277,9 +1600,19 @@ fn apply(op: &str, l: Val, r: Val, live: bool) -> R<Val> {
                 Val { v: 0, u }
             } else if u {
                 let (a, c) = (l.v as u64, r.v as u64);
-                Val { v: (if op == "/" { a / c } else { a % c }) as i64, u }
+                Val {
+                    v: (if op == "/" { a / c } else { a % c }) as i64,
+                    u,
+                }
             } else {
-                Val { v: if op == "/" { l.v.wrapping_div(r.v) } else { l.v.wrapping_rem(r.v) }, u }
+                Val {
+                    v: if op == "/" {
+                        l.v.wrapping_div(r.v)
+                    } else {
+                        l.v.wrapping_rem(r.v)
+                    },
+                    u,
+                }
             }
         }
         "&" => Val { v: l.v & r.v, u },
@@ -1360,7 +1693,11 @@ fn char_value(prefix: &str, body: &str) -> Option<i64> {
         for u in &units {
             v = (v << 8) | (*u as i64 & 0xff);
         }
-        Some(if units.len() == 1 { (v as u8 as i8) as i64 } else { v as i32 as i64 })
+        Some(if units.len() == 1 {
+            (v as u8 as i8) as i64
+        } else {
+            v as i32 as i64
+        })
     } else {
         Some(units[0] as i64)
     }
@@ -1404,10 +1741,13 @@ fn build_date_time() -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
+    use crate::compiler::c_frontend::lex::lexer::lex;
 
-    fn toks_of(v: Vec<Spanned>) -> Vec<Token> {
-        v.into_iter().map(|t| t.token).filter(|t| *t != Token::Eof).collect()
+    fn toks_of(v: Vec<TokenInfo>) -> Vec<Token> {
+        v.into_iter()
+            .map(|t| t.token)
+            .filter(|t| *t != Token::Eof)
+            .collect()
     }
 
     fn pp(src: &str) -> Vec<Token> {
@@ -1427,12 +1767,18 @@ mod tests {
     fn object_like_and_undef() {
         same("#define N 10\nint a[N];\n#undef N\nN", "int a[10]; N");
         same("#define EMPTY\nint EMPTY x;", "int x;");
-        same("#define inline __inline\ninline int f();", "__inline int f();");
+        same(
+            "#define inline __inline\ninline int f();",
+            "__inline int f();",
+        );
     }
 
     #[test]
     fn function_like() {
-        same("#define SQ(x) ((x)*(x))\nSQ(1+2) SQ(SQ(3))", "((1+2)*(1+2)) ((((3)*(3)))*(((3)*(3))))");
+        same(
+            "#define SQ(x) ((x)*(x))\nSQ(1+2) SQ(SQ(3))",
+            "((1+2)*(1+2)) ((((3)*(3)))*(((3)*(3))))",
+        );
         same("#define F(a, b) a + b\nF(1, (2, 3))", "1 + (2, 3)");
         // 関数形式マクロ名が '(' なしで現れた場合はそのまま
         same("#define F(x) x\nint F; F (7)", "int F; 7");
@@ -1440,7 +1786,10 @@ mod tests {
 
     #[test]
     fn multiline_define() {
-        same("#define ADD(a, b) \\\n    ((a) + \\\n     (b))\nADD(1, 2)", "((1) + (2))");
+        same(
+            "#define ADD(a, b) \\\n    ((a) + \\\n     (b))\nADD(1, 2)",
+            "((1) + (2))",
+        );
     }
 
     #[test]
@@ -1455,9 +1804,15 @@ mod tests {
             "#define STR(x) #x\n#define XSTR(x) STR(x)\n#define N 42\nSTR(N) XSTR(N) STR(a   +  b)",
             "\"N\" \"42\" \"a + b\"",
         );
-        same("#define CAT(a,b) a##b\nCAT(foo, 12) CAT(1,2) CAT(,x) CAT(x,)", "foo12 12 x x");
-        same(r#"#define S(x) #x
-S("a\n" 'b')"#, r#""\"a\\n\" 'b'""#);
+        same(
+            "#define CAT(a,b) a##b\nCAT(foo, 12) CAT(1,2) CAT(,x) CAT(x,)",
+            "foo12 12 x x",
+        );
+        same(
+            r#"#define S(x) #x
+S("a\n" 'b')"#,
+            r#""\"a\\n\" 'b'""#,
+        );
     }
 
     #[test]
@@ -1516,7 +1871,10 @@ char c[2][6] = { "hello", "" };
         same("#ifdef X\nA\n#endif\n#ifndef X\nB\n#endif", "B");
         // 評価されない側のゼロ除算はエラーにならない
         same("#if 1 || (1/0)\nok\n#endif", "ok");
-        same("#if (2 || 3) == 1 && -1 < 0 && -1 > 0u && 'a' == 97 && '\\n' == 10 && 0x10 == 16\nok\n#endif", "ok");
+        same(
+            "#if (2 || 3) == 1 && -1 < 0 && -1 > 0u && 'a' == 97 && '\\n' == 10 && 0x10 == 16\nok\n#endif",
+            "ok",
+        );
         same("#if 1 ? 0 : 1\nA\n#else\nB\n#endif", "B");
         // 未定義識別子は 0
         same("#if FOO == 0 && !BAR\nok\n#endif", "ok");
@@ -1524,7 +1882,10 @@ char c[2][6] = { "hello", "" };
 
     #[test]
     fn skipped_groups_tolerate_garbage() {
-        same("#if 0\nit's \"broken\n#error nope\n1e+ @ `\n#else\nok\n#endif", "ok");
+        same(
+            "#if 0\nit's \"broken\n#error nope\n1e+ @ `\n#else\nok\n#endif",
+            "ok",
+        );
     }
 
     #[test]
@@ -1535,11 +1896,27 @@ char c[2][6] = { "hello", "" };
         assert!(Preprocessor::new().preprocess("t.c", "#if 1\n").is_err());
         assert!(Preprocessor::new().preprocess("t.c", "#endif\n").is_err());
         assert!(Preprocessor::new().preprocess("t.c", "#else\n").is_err());
-        assert!(Preprocessor::new().preprocess("t.c", "#if 1/0\n#endif\n").is_err());
-        assert!(Preprocessor::new().preprocess("t.c", "#include \"nope.h\"\n").is_err());
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#if 1/0\n#endif\n")
+                .is_err()
+        );
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#include \"nope.h\"\n")
+                .is_err()
+        );
         assert!(Preprocessor::new().preprocess("t.c", "#bogus\n").is_err());
-        assert!(Preprocessor::new().preprocess("t.c", "#define F(x) x\nF(1,2)\n").is_err());
-        assert!(Preprocessor::new().preprocess("t.c", "#define C(a,b) a##b\nC(+,-)\n").is_err());
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#define F(x) x\nF(1,2)\n")
+                .is_err()
+        );
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#define C(a,b) a##b\nC(+,-)\n")
+                .is_err()
+        );
     }
 
     #[test]
@@ -1570,13 +1947,19 @@ char c[2][6] = { "hello", "" };
             pp("a\n__LINE__"),
             vec![
                 Token::Ident { name: "a".into() },
-                Token::IntLiteral { value: 2, suffix: "".into() }
+                Token::IntLiteral {
+                    value: 2,
+                    suffix: "".into()
+                }
             ]
         );
         assert_eq!(pp("#line 100\n__LINE__"), lexed("100"));
         assert_eq!(
             pp("__FILE__"),
-            vec![Token::StringLiteral { prefix: "".into(), body: "test.c".into() }]
+            vec![Token::StringLiteral {
+                prefix: "".into(),
+                body: "test.c".into()
+            }]
         );
         assert_eq!(pp("__COUNTER__ __COUNTER__"), lexed("0 1"));
         assert_eq!(pp("__STDC_VERSION__"), lexed("201112L"));
@@ -1588,7 +1971,13 @@ char c[2][6] = { "hello", "" };
         let mut p = Preprocessor::new();
         p.define("DEBUG", "1").unwrap();
         p.define("ADD(a,b)", "((a)+(b))").unwrap();
-        let out = toks_of(p.preprocess("t.c", "#if DEBUG\nADD(1,2)\n#endif\n#warning hi\n#define DEBUG 2\n").unwrap());
+        let out = toks_of(
+            p.preprocess(
+                "t.c",
+                "#if DEBUG\nADD(1,2)\n#endif\n#warning hi\n#define DEBUG 2\n",
+            )
+            .unwrap(),
+        );
         assert_eq!(out, lexed("((1)+(2))"));
         assert_eq!(p.warnings().len(), 2);
     }
@@ -1598,5 +1987,118 @@ char c[2][6] = { "hello", "" };
         // 行頭以外の # はディレクティブではない(エラーにもならない場合のみ確認)
         same("#define EMPTY\nEMPTY\n  # define X 5\nX", "5");
         same("/* c */ #define Y 6\nY", "6");
+    }
+
+    #[test]
+    fn va_opt() {
+        same(
+            "#define F(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)\nF(1) F(1, 2, 3)",
+            "f(1) f(1 , 2, 3)",
+        );
+        same(
+            "#define G(...) g(0 __VA_OPT__(, __VA_ARGS__))\nG() G(7)",
+            "g(0) g(0, 7)",
+        );
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#define H(...) __VA_OPT__ x\n")
+                .is_ok()
+        );
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#define H(...) __VA_OPT__ x\nH(1)\n")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn pragma_operator() {
+        let mut p = Preprocessor::new();
+        let out = toks_of(
+            p.preprocess("t.c", "int _Pragma(\"pack(1)\") x;\n#pragma foo bar\n")
+                .unwrap(),
+        );
+        assert_eq!(out, lexed("int x;"));
+        assert_eq!(p.pragmas(), ["pack(1)", "foo bar"]);
+        // マクロの中でも使える。once は#pragma onceと同じ
+        let mut p = Preprocessor::new();
+        p.add_virtual_file("o.h", "_Pragma(\"once\")\nint o;\n");
+        let out = toks_of(
+            p.preprocess("t.c", "#include \"o.h\"\n#include \"o.h\"\n")
+                .unwrap(),
+        );
+        assert_eq!(out, lexed("int o;"));
+        assert!(Preprocessor::new().preprocess("t.c", "_Pragma(1)").is_err());
+    }
+
+    #[test]
+    fn has_include() {
+        let mut p = Preprocessor::new();
+        p.add_virtual_file("here.h", "");
+        let src = "#if __has_include(\"here.h\") && __has_include(<stdint.h>) && !__has_include(<nope.h>)\nyes\n#else\nno\n#endif\n\
+                   #ifdef __has_include\ndef\n#endif\n";
+        assert_eq!(toks_of(p.preprocess("t.c", src).unwrap()), lexed("yes def"));
+    }
+
+    #[test]
+    fn include_level_and_base_file() {
+        let mut p = Preprocessor::new();
+        p.add_virtual_file("i.h", "__INCLUDE_LEVEL__ __FILE__ __BASE_FILE__\n");
+        let out = toks_of(
+            p.preprocess("main.c", "__INCLUDE_LEVEL__\n#include \"i.h\"\n")
+                .unwrap(),
+        );
+        assert_eq!(out, lexed("0 1 \"i.h\" \"main.c\""));
+    }
+
+    #[test]
+    fn include_next() {
+        let dir = std::env::temp_dir().join(format!("pp_next_{}", std::process::id()));
+        let (a, b) = (dir.join("a"), dir.join("b"));
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("h.h"), "int first;\n#include_next <h.h>\n").unwrap();
+        std::fs::write(b.join("h.h"), "int second;\n").unwrap();
+        let mut p = Preprocessor::new();
+        p.add_include_dir(&a);
+        p.add_include_dir(&b);
+        let out = toks_of(p.preprocess("main.c", "#include <h.h>\n").unwrap());
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(out, lexed("int first; int second;"));
+    }
+
+    #[test]
+    fn builtin_headers() {
+        let src = "#include <stdbool.h>\n#include <stdint.h>\n#include <limits.h>\n#include <stddef.h>\n\
+                   bool b = true; uint8_t u = UINT8_MAX; int m = INT_MAX; void *n = NULL;";
+        let out = pp(src);
+        assert!(out.contains(&Token::KeyWord {
+            name: "_Bool".into()
+        }));
+        assert!(
+            !out.iter()
+                .any(|t| matches!(t, Token::Ident { name } if name == "true" || name == "NULL"))
+        );
+        // 二重インクルードしても typedef は一度だけ
+        let src2 = "#include <stddef.h>\n#include <stddef.h>\nsize_t n;";
+        let n = pp(src2)
+            .iter()
+            .filter(|t| matches!(t, Token::Ident { name } if name == "size_t"))
+            .count();
+        assert_eq!(n, 2); // typedef と変数宣言
+        // 利用者のヘッダが組み込みより優先される
+        let mut p = Preprocessor::new();
+        p.add_include_dir("/nonexistent");
+        p.add_virtual_file("/nonexistent/stdbool.h", "int mine;");
+        assert_eq!(
+            toks_of(p.preprocess("t.c", "#include <stdbool.h>").unwrap()),
+            lexed("int mine;")
+        );
+        // 未知のヘッダはエラーのまま
+        assert!(
+            Preprocessor::new()
+                .preprocess("t.c", "#include <nonexistent.h>")
+                .is_err()
+        );
     }
 }

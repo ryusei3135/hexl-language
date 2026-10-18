@@ -20,6 +20,14 @@ pub enum ExprKind {
     AndCalcul,
     XorCalcul,
     OrCalcul,
+
+    Ternary,
+    TernaryLessThen,
+    TernaryGreaterThen,
+    TernaryLessThenEq,
+    TernaryGreaterThenEq,
+    TernaryEqual,
+    TernaryNotEq,
 }
 
 pub type ValueId = usize;
@@ -373,6 +381,9 @@ impl Inst {
             }
             types::Size::F64 => {
                 value.parse::<f64>().unwrap();
+            }
+            types::Size::Bool => {
+                value.parse::<u8>().unwrap();
             }
             types::Size::Struct(_) => {
                 panic!("gen_num: 構造体型に数値を直接代入することはできません");

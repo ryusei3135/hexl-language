@@ -3,10 +3,16 @@
 `lex/preproc.rs` が返すトークン列を読み、`node.zip` のノード(`Group1Node` / `Group2Info` / `Expr`)を作る。
 
 ```
-トークン --(parser.rs)--> CAST(cast.rs) --(lower.rs)--> node
+トークン --(parser/)--> CAST(cast.rs) --(lower.rs)--> node
 ```
 
-* `parser.rs` … C の構文解析。typedef 名・列挙定数・構造体の定義を読みながら進める。
+* `parser/` … C の構文解析。typedef 名・列挙定数・構造体の定義を読みながら進める。`impl Parser` を構文ごとに次のファイルへ分けている。
+  * `mod.rs` … `Parser` の状態(トークン列・typedef 表など)と入口 `parse_unit`
+  * `function.rs` … 関数定義、仮引数リスト、関数本体 `{ }`、`return`
+  * `iteration.rs` … `while` / `do-while` / `for` / `break` / `continue`
+  * `conditional.rs` … `if` / `switch` / `case` / `default` / 三項演算子 `?:`
+  * `data_type.rs` … 型指定子、struct / union / enum、宣言子、typedef、初期化子、ローカル変数宣言
+  * `other.rs` … トークン操作、文の振り分け(`parse_stmt`)、式、定数式の評価、文字・文字列リテラルの展開
 * `lower.rs`  … CAST から node への変換。node に無い構文はここで書き換えるか、エラーにする。
 * `prelude.rs` … node / lexer など外部への依存を 1 か所に集めたファイル。
 * `error.rs`  … `ParseError`。`kind` が `Syntax`(Cとして誤り)か `Unsupported`(node で表せない)かで区別できる。
@@ -28,7 +34,7 @@ node.zip は `crate::compiler::{models::Body, parse::VarMutAttr, err::ErrKind}` 
 | `crate::lexer::{Spanned, Token}` で lexer を参照できる | `preproc.rs` が既にこの書き方 |
 | パーサは `crate::compiler` の子孫モジュールに置く | `node/mod.rs` の再エクスポートが `pub(in crate::compiler)` |
 
-**`lex/mod.rs` は `mod lexer; mod preproc;`(非公開) のままだが、`preproc.rs` は `crate::lexer` を参照している。** 今回は lex には手を入れていない。組み込むときは lexer / preproc が `crate::lexer` / `crate::preproc` から見えるようにすること。
+`lex/mod.rs` から `Preprocessor` / `PpError` を公開した(`c_frontend` の中から `lex::Preprocessor` で使える)。
 
 動作確認は、`lexer.rs` `preproc.rs` `node/` `parse/` を `#[path]` で束ねた別クレートで行った(`models` / `VarMutAttr` / `ErrKind` は上の仮定どおりの仮実装)。
 
@@ -127,7 +133,7 @@ node に表す方法が無いか、意味を保ったまま書き換えられな
 | `RefArray.else_idx` | 常に `None`(C は範囲外の添字を扱わない) | `ir/checker/access_mem.rs` によると、`const` でも即値でもない添字には `else_idx` が必要。**そのままだと検査で落ちる可能性が高い** |
 | `AssignVar.name` | 代入先の根になっている変数名 | |
 | `Inc` / `Dec` | 値の意味は不明のまま、文として使うときと前置の `++i` だけ使う | |
-| 整数の型 | 型の名前は C のまま(`"int"` `"unsigned long"` ...)。node 側の型名が違うなら `parser.rs` の `base_name` で一括変更 | |
+| 整数の型 | 型の名前は C のまま(`"int"` `"unsigned long"` ...)。node 側の型名が違うなら `parser/data_type.rs` の `base_name` で一括変更 | |
 | `Number` の負数 | `Number("-5")` と文字列に `-` を含める | |
 | ポインタ演算 | `p + 1` は `Add` のまま。C の「要素の大きさ倍」を node が行うかは不明 | |
 | `!(a < b)` を `a >= b` に反転 | 浮動小数点の NaN では結果が変わる | |

@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(Debug, Clone)]
 pub struct VarIndexInfo {
     /// レジスタ番号。`is_stack`が`true`の変数(ポインタでない構造体の

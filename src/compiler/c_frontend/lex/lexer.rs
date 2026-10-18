@@ -2,24 +2,48 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(in crate::compiler::c_frontend) enum Token {
-    KeyWord { name: String },
-    Ident { name: String },
+    KeyWord {
+        name: String,
+    },
+    Ident {
+        name: String,
+    },
     /// 整数定数。suffix は "", "u", "l", "ul", "ll", "ull" など(元の綴り)
-    IntLiteral { value: u64, suffix: String },
+    IntLiteral {
+        value: u64,
+        suffix: String,
+    },
     /// 浮動小数点定数。suffix は "", "f", "l"(元の綴り)
-    FloatLiteral { value: f64, suffix: String },
+    FloatLiteral {
+        value: f64,
+        suffix: String,
+    },
     /// 文字定数。body はクォートを除いた生のテキスト(エスケープ未展開)
-    CharLiteral { prefix: String, body: String },
+    CharLiteral {
+        prefix: String,
+        body: String,
+    },
     /// 文字列リテラル。body はクォートを除いた生のテキスト(エスケープ未展開)
-    StringLiteral { prefix: String, body: String },
+    StringLiteral {
+        prefix: String,
+        body: String,
+    },
     /// パンクチュエータ(ダイグラフは正規形に変換)
-    Punct { name: &'static str },
+    Punct {
+        name: &'static str,
+    },
     /// `#include <...>` のヘッダ名(山括弧を除いた中身)。#include 直後にだけ生成される
-    HeaderName { name: String },
+    HeaderName {
+        name: String,
+    },
     /// 数値として解釈できない pp-number(寛容モードのみ)
-    PpNumber { text: String },
+    PpNumber {
+        text: String,
+    },
     /// どのトークンにも当てはまらない1文字(寛容モードのみ)
-    Other { ch: char },
+    Other {
+        ch: char,
+    },
     Eof,
 }
 
@@ -52,29 +76,108 @@ impl fmt::Display for LexError {
 impl std::error::Error for LexError {}
 
 const KEYWORDS: &[&str] = &[
-    "auto", "break", "case", "char", "const", "continue", "default", "do",
-    "double", "else", "enum", "extern", "float", "for", "goto", "if",
-    "inline", "int", "long", "register", "restrict", "return", "short",
-    "signed", "sizeof", "static", "struct", "switch", "typedef", "union",
-    "unsigned", "void", "volatile", "while",
+    "auto",
+    "break",
+    "case",
+    "char",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "extern",
+    "float",
+    "for",
+    "goto",
+    "if",
+    "inline",
+    "int",
+    "long",
+    "register",
+    "restrict",
+    "return",
+    "short",
+    "signed",
+    "sizeof",
+    "static",
+    "struct",
+    "switch",
+    "typedef",
+    "union",
+    "unsigned",
+    "void",
+    "volatile",
+    "while",
     // C11
-    "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic",
-    "_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local",
+    "_Alignas",
+    "_Alignof",
+    "_Atomic",
+    "_Bool",
+    "_Complex",
+    "_Generic",
+    "_Imaginary",
+    "_Noreturn",
+    "_Static_assert",
+    "_Thread_local",
 ];
 
 /// (綴り, 正規形)。長いものを先に。
 const PUNCTS: &[(&str, &str)] = &[
     ("%:%:", "##"),
-    ("...", "..."), ("<<=", "<<="), (">>=", ">>="),
-    ("->", "->"), ("++", "++"), ("--", "--"), ("<<", "<<"), (">>", ">>"),
-    ("<=", "<="), (">=", ">="), ("==", "=="), ("!=", "!="), ("&&", "&&"),
-    ("||", "||"), ("*=", "*="), ("/=", "/="), ("%=", "%="), ("+=", "+="),
-    ("-=", "-="), ("&=", "&="), ("^=", "^="), ("|=", "|="), ("##", "##"),
-    ("<:", "["), (":>", "]"), ("<%", "{"), ("%>", "}"), ("%:", "#"),
-    ("[", "["), ("]", "]"), ("(", "("), (")", ")"), ("{", "{"), ("}", "}"),
-    (".", "."), ("&", "&"), ("*", "*"), ("+", "+"), ("-", "-"), ("~", "~"),
-    ("!", "!"), ("/", "/"), ("%", "%"), ("<", "<"), (">", ">"), ("^", "^"),
-    ("|", "|"), ("?", "?"), (":", ":"), (";", ";"), ("=", "="), (",", ","),
+    ("...", "..."),
+    ("<<=", "<<="),
+    (">>=", ">>="),
+    ("->", "->"),
+    ("++", "++"),
+    ("--", "--"),
+    ("<<", "<<"),
+    (">>", ">>"),
+    ("<=", "<="),
+    (">=", ">="),
+    ("==", "=="),
+    ("!=", "!="),
+    ("&&", "&&"),
+    ("||", "||"),
+    ("*=", "*="),
+    ("/=", "/="),
+    ("%=", "%="),
+    ("+=", "+="),
+    ("-=", "-="),
+    ("&=", "&="),
+    ("^=", "^="),
+    ("|=", "|="),
+    ("##", "##"),
+    ("<:", "["),
+    (":>", "]"),
+    ("<%", "{"),
+    ("%>", "}"),
+    ("%:", "#"),
+    ("[", "["),
+    ("]", "]"),
+    ("(", "("),
+    (")", ")"),
+    ("{", "{"),
+    ("}", "}"),
+    (".", "."),
+    ("&", "&"),
+    ("*", "*"),
+    ("+", "+"),
+    ("-", "-"),
+    ("~", "~"),
+    ("!", "!"),
+    ("/", "/"),
+    ("%", "%"),
+    ("<", "<"),
+    (">", ">"),
+    ("^", "^"),
+    ("|", "|"),
+    ("?", "?"),
+    (":", ":"),
+    (";", ";"),
+    ("=", "="),
+    (",", ","),
     ("#", "#"),
 ];
 
@@ -146,7 +249,15 @@ impl<'a> Lexer<'a> {
                 }
                 _ => 0,
             };
-            out.push(TokenInfo { token, line, col, start, end: self.pos, bol, space_before });
+            out.push(TokenInfo {
+                token,
+                line,
+                col,
+                start,
+                end: self.pos,
+                bol,
+                space_before,
+            });
         }
     }
 
@@ -176,7 +287,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn err<T>(&self, msg: impl Into<String>) -> Result<T, LexError> {
-        Err(LexError { line: self.line, col: self.col, msg: msg.into() })
+        Err(LexError {
+            line: self.line,
+            col: self.col,
+            msg: msg.into(),
+        })
     }
 
     fn text(&self, a: usize, b: usize) -> String {
@@ -349,15 +464,27 @@ impl<'a> Lexer<'a> {
         let start = self.pos;
         loop {
             if self.pos >= self.src.len() {
-                return Err(LexError { line: l0, col: c0, msg: "リテラルが閉じられていません".into() });
+                return Err(LexError {
+                    line: l0,
+                    col: c0,
+                    msg: "リテラルが閉じられていません".into(),
+                });
             }
             match self.at(0) {
                 b'\n' => {
-                    return Err(LexError { line: l0, col: c0, msg: "リテラル内に改行があります".into() });
+                    return Err(LexError {
+                        line: l0,
+                        col: c0,
+                        msg: "リテラル内に改行があります".into(),
+                    });
                 }
                 b'\\' => {
                     if self.pos + 1 >= self.src.len() {
-                        return Err(LexError { line: l0, col: c0, msg: "リテラルが閉じられていません".into() });
+                        return Err(LexError {
+                            line: l0,
+                            col: c0,
+                            msg: "リテラルが閉じられていません".into(),
+                        });
                     }
                     self.bump_n(2);
                 }
@@ -369,7 +496,11 @@ impl<'a> Lexer<'a> {
         self.bump(); // 閉じクォート
         if q == b'\'' {
             if body.is_empty() {
-                return Err(LexError { line: l0, col: c0, msg: "空の文字定数です".into() });
+                return Err(LexError {
+                    line: l0,
+                    col: c0,
+                    msg: "空の文字定数です".into(),
+                });
             }
             Ok(Token::CharLiteral { prefix, body })
         } else {
@@ -396,7 +527,9 @@ impl<'a> Lexer<'a> {
                         break;
                     }
                 }
-                Ok(Token::PpNumber { text: self.text(start, self.pos) })
+                Ok(Token::PpNumber {
+                    text: self.text(start, self.pos),
+                })
             }
             r => r,
         }
@@ -408,11 +541,18 @@ impl<'a> Lexer<'a> {
         let mut is_float = false;
         let mut hex = false;
 
-        let digit = |c: u8, hex: bool| if hex { c.is_ascii_hexdigit() } else { c.is_ascii_digit() };
+        let digit = |c: u8, hex: bool| {
+            if hex {
+                c.is_ascii_hexdigit()
+            } else {
+                c.is_ascii_digit()
+            }
+        };
 
         if self.at(0) == b'0'
             && matches!(self.at(1), b'x' | b'X')
-            && (self.at(2).is_ascii_hexdigit() || (self.at(2) == b'.' && self.at(3).is_ascii_hexdigit()))
+            && (self.at(2).is_ascii_hexdigit()
+                || (self.at(2) == b'.' && self.at(3).is_ascii_hexdigit()))
         {
             hex = true;
             self.bump_n(2);
@@ -445,7 +585,11 @@ impl<'a> Lexer<'a> {
 
         let body = self.text(start, self.pos);
         if hex && is_float && !body.to_ascii_lowercase().contains('p') {
-            return Err(LexError { line: l0, col: c0, msg: "16進浮動小数には p 指数が必要です".into() });
+            return Err(LexError {
+                line: l0,
+                col: c0,
+                msg: "16進浮動小数には p 指数が必要です".into(),
+            });
         }
 
         let sfx_start = self.pos;
@@ -464,12 +608,22 @@ impl<'a> Lexer<'a> {
             if !matches!(lower.as_str(), "" | "f" | "l") {
                 return Err(bad("浮動小数"));
             }
-            let value = if hex { parse_hex_float(&body) } else { body.parse::<f64>().ok() }
-                .ok_or_else(|| LexError { line: l0, col: c0, msg: format!("不正な浮動小数: {}", body) })?;
+            let value = if hex {
+                parse_hex_float(&body)
+            } else {
+                body.parse::<f64>().ok()
+            }
+            .ok_or_else(|| LexError {
+                line: l0,
+                col: c0,
+                msg: format!("不正な浮動小数: {}", body),
+            })?;
             Ok(Token::FloatLiteral { value, suffix })
         } else {
-            let ok = matches!(lower.as_str(), "" | "u" | "l" | "ul" | "lu" | "ll" | "ull" | "llu")
-                && !suffix.contains("lL")
+            let ok = matches!(
+                lower.as_str(),
+                "" | "u" | "l" | "ul" | "lu" | "ll" | "ull" | "llu"
+            ) && !suffix.contains("lL")
                 && !suffix.contains("Ll");
             if !ok {
                 return Err(bad("整数"));
@@ -526,30 +680,106 @@ mod tests {
     fn keywords_and_idents() {
         let t = toks("int _Bool foo _Static_assert");
         assert_eq!(t[0], Token::KeyWord { name: "int".into() });
-        assert_eq!(t[1], Token::KeyWord { name: "_Bool".into() });
+        assert_eq!(
+            t[1],
+            Token::KeyWord {
+                name: "_Bool".into()
+            }
+        );
         assert_eq!(t[2], Token::Ident { name: "foo".into() });
-        assert_eq!(t[3], Token::KeyWord { name: "_Static_assert".into() });
+        assert_eq!(
+            t[3],
+            Token::KeyWord {
+                name: "_Static_assert".into()
+            }
+        );
     }
 
     #[test]
     fn numbers() {
         let t = toks("42 0x1Fu 017 1.5f .5 1e3 0x1.8p1 10UL");
-        assert_eq!(t[0], Token::IntLiteral { value: 42, suffix: "".into() });
-        assert_eq!(t[1], Token::IntLiteral { value: 31, suffix: "u".into() });
-        assert_eq!(t[2], Token::IntLiteral { value: 15, suffix: "".into() });
-        assert_eq!(t[3], Token::FloatLiteral { value: 1.5, suffix: "f".into() });
-        assert_eq!(t[4], Token::FloatLiteral { value: 0.5, suffix: "".into() });
-        assert_eq!(t[5], Token::FloatLiteral { value: 1000.0, suffix: "".into() });
-        assert_eq!(t[6], Token::FloatLiteral { value: 3.0, suffix: "".into() });
-        assert_eq!(t[7], Token::IntLiteral { value: 10, suffix: "UL".into() });
+        assert_eq!(
+            t[0],
+            Token::IntLiteral {
+                value: 42,
+                suffix: "".into()
+            }
+        );
+        assert_eq!(
+            t[1],
+            Token::IntLiteral {
+                value: 31,
+                suffix: "u".into()
+            }
+        );
+        assert_eq!(
+            t[2],
+            Token::IntLiteral {
+                value: 15,
+                suffix: "".into()
+            }
+        );
+        assert_eq!(
+            t[3],
+            Token::FloatLiteral {
+                value: 1.5,
+                suffix: "f".into()
+            }
+        );
+        assert_eq!(
+            t[4],
+            Token::FloatLiteral {
+                value: 0.5,
+                suffix: "".into()
+            }
+        );
+        assert_eq!(
+            t[5],
+            Token::FloatLiteral {
+                value: 1000.0,
+                suffix: "".into()
+            }
+        );
+        assert_eq!(
+            t[6],
+            Token::FloatLiteral {
+                value: 3.0,
+                suffix: "".into()
+            }
+        );
+        assert_eq!(
+            t[7],
+            Token::IntLiteral {
+                value: 10,
+                suffix: "UL".into()
+            }
+        );
     }
 
     #[test]
     fn strings_and_chars() {
         let t = toks(r#"u8"hi\n" L'a' '\''"#);
-        assert_eq!(t[0], Token::StringLiteral { prefix: "u8".into(), body: "hi\\n".into() });
-        assert_eq!(t[1], Token::CharLiteral { prefix: "L".into(), body: "a".into() });
-        assert_eq!(t[2], Token::CharLiteral { prefix: "".into(), body: "\\'".into() });
+        assert_eq!(
+            t[0],
+            Token::StringLiteral {
+                prefix: "u8".into(),
+                body: "hi\\n".into()
+            }
+        );
+        assert_eq!(
+            t[1],
+            Token::CharLiteral {
+                prefix: "L".into(),
+                body: "a".into()
+            }
+        );
+        assert_eq!(
+            t[2],
+            Token::CharLiteral {
+                prefix: "".into(),
+                body: "\\'".into()
+            }
+        );
     }
 
     #[test]
@@ -573,8 +803,18 @@ mod tests {
 
     #[test]
     fn header_name_and_lenient() {
-        let t = Lexer::new_pp("#include <sys/a-1.2.h>\n#if 0\nit's \"x\n#endif\n").tokenize().unwrap();
-        assert_eq!(t[2].token, Token::HeaderName { name: "sys/a-1.2.h".into() });
-        assert!(t.iter().any(|s| matches!(s.token, Token::Other { ch: '\'' })));
+        let t = Lexer::new_pp("#include <sys/a-1.2.h>\n#if 0\nit's \"x\n#endif\n")
+            .tokenize()
+            .unwrap();
+        assert_eq!(
+            t[2].token,
+            Token::HeaderName {
+                name: "sys/a-1.2.h".into()
+            }
+        );
+        assert!(
+            t.iter()
+                .any(|s| matches!(s.token, Token::Other { ch: '\'' }))
+        );
     }
 }

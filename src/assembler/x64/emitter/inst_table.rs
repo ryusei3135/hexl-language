@@ -9,8 +9,8 @@
 //!    ```
 //!
 //!    サフィックス違い (`addq` / `addl` ...) は `|` で並べて同じ行に書く。
-//!    条件付きジャンプ (`jl` / `jne` など) は `dispatch` ではなく
-//!    下の `JCC_TABLE` (ニーモニック -> 条件) に1行足す。
+//!    条件付きジャンプ (`jl` / `jne` など) と条件付き移動 (`cmovl` / `cmovne` など) は
+//!    下の `JCC_TABLE` (ニーモニック -> 条件) で管理する。
 //!
 //! 2. 呼び出す `emit_xxx` を、このファイル下部の `impl Emitter` に書く
 //!    (`emit_nop` が最小の見本)。`emit_u8` / `emit_rex` /
@@ -305,6 +305,33 @@ fn jcc_condition(name: &str) -> Option<Condition> {
         .map(|&(_, condition)| condition)
 }
 
+/// 条件付き移動のニーモニックから条件とサイズ接尾辞を求める。
+fn cmov_spec(name: &str) -> Option<(Condition, Option<u32>)> {
+    let name = name.strip_prefix("cmov")?;
+    let condition = |name: &str| {
+        JCC_TABLE
+            .iter()
+            .find(|(names, _)| names.iter().any(|jcc| jcc.strip_prefix('j') == Some(name)))
+            .map(|&(_, condition)| condition)
+    };
+
+    if let Some(condition) = condition(name) {
+        return Some((condition, None));
+    }
+
+    let (condition_name, bits) = match name.chars().last()? {
+        'w' => (name.strip_suffix('w')?, 16),
+        'l' => (name.strip_suffix('l')?, 32),
+        'q' => (name.strip_suffix('q')?, 64),
+        _ => return None,
+    };
+    if condition_name.is_empty() {
+        return None;
+    }
+
+    condition(condition_name).map(|condition| (condition, Some(bits)))
+}
+
 /// ニーモニックに対応する処理を呼び出す
 pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String> {
     let name = inst.mnemonic.as_str();
@@ -325,6 +352,10 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
             "{}: vector registers (%xmm/%ymm/%zmm) are not supported by this instruction",
             name
         ));
+    }
+
+    if let Some((condition, suffix_bits)) = cmov_spec(name) {
+        return e.emit_cmov(condition, suffix_bits, &inst.operands);
     }
 
     match name {
@@ -463,6 +494,60 @@ fn xmm_operand(name: &str, reg: Reg) -> Result<Reg, String> {
 }
 
 impl Emitter {
+    fn emit_cmov(
+        &mut self,
+        condition: Condition,
+        suffix_bits: Option<u32>,
+        operands: &[Operand],
+    ) -> Result<(), String> {
+        let [src, Operand::Register(dst)] = operands else {
+            return Err(
+                "conditional move requires a register destination and register or memory source"
+                    .into(),
+            );
+        };
+
+        let bits = dst.bits() as u32;
+        if !matches!(bits, 16 | 32 | 64) {
+            return Err("conditional move requires a 16-, 32-, or 64-bit destination".into());
+        }
+        Self::check_suffix("cmov", suffix_bits, bits)?;
+
+        let (src_reg, mem) = match src {
+            Operand::Register(reg) => {
+                if reg.bits() as u32 != bits {
+                    return Err("conditional move source and destination sizes do not match".into());
+                }
+                (Some(*reg), None)
+            }
+            Operand::Memory(mem) => (None, Some(mem)),
+            _ => {
+                return Err("conditional move source must be a register or memory operand".into());
+            }
+        };
+
+        let (x, b) = match (src_reg, mem) {
+            (Some(src), None) => (false, src.id() >= 8),
+            (None, Some(mem)) => (
+                self.memory_index_extended(mem),
+                self.memory_base_extended(mem),
+            ),
+            _ => unreachable!(),
+        };
+        self.emit_sized_prefix(bits, dst.id() >= 8, x, b, false);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x40 | condition as u8);
+
+        match (src_reg, mem) {
+            (Some(src), None) => {
+                self.emit_u8(0b11_000_000 | ((dst.id() & 7) << 3) | (src.id() & 7));
+                Ok(())
+            }
+            (None, Some(mem)) => self.emit_memory_modrm(dst.id(), mem),
+            _ => unreachable!(),
+        }
+    }
+
     // --------------------------------------------------------
     // nop  (0x90)  ← 命令追加の見本
     // --------------------------------------------------------
@@ -1246,7 +1331,7 @@ impl Emitter {
 
 #[cfg(test)]
 mod sse_tests {
-    use crate::assembler::x64::{Lexer, Parser, convert};
+    use crate::assembler::x64::{convert, Lexer, Parser};
 
     use super::*;
 
@@ -1367,7 +1452,7 @@ mod sse_tests {
 
 #[cfg(test)]
 mod alu_shift_tests {
-    use crate::assembler::x64::{Lexer, Parser, convert};
+    use crate::assembler::x64::{convert, Lexer, Parser};
 
     use super::*;
 
@@ -1563,7 +1648,7 @@ mod alu_shift_tests {
 
 #[cfg(test)]
 mod inc_dec_tests {
-    use crate::assembler::x64::{Lexer, Parser, convert};
+    use crate::assembler::x64::{convert, Lexer, Parser};
 
     use super::*;
 
@@ -1626,7 +1711,7 @@ mod inc_dec_tests {
 
 #[cfg(test)]
 mod jcc_tests {
-    use crate::assembler::x64::{Lexer, Parser, convert};
+    use crate::assembler::x64::{convert, Lexer, Parser};
 
     use super::*;
 
@@ -1717,10 +1802,85 @@ mod jcc_tests {
         assert!(assemble("jo $1\n").is_err());
         assert!(assemble("jrcxz $1\n").is_err());
         // Jcc ではないニーモニックは対象外 (`jcxz` は64bitモードに無い)
-        assert!(
-            assemble("jcxz L\nL:\n")
-                .unwrap_err()
-                .contains("unsupported instruction")
-        );
+        assert!(assemble("jcxz L\nL:\n")
+            .unwrap_err()
+            .contains("unsupported instruction"));
+    }
+}
+
+#[cfg(test)]
+mod cmov_tests {
+    use crate::assembler::x64::{convert, Lexer, Parser};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize();
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        emitter.finish()?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    #[test]
+    fn cmov_encodes_register_and_memory_operands() {
+        let cases: &[(&str, &str)] = &[
+            ("cmovl %eax, %ecx", "0f4cc8"),
+            ("cmovge %cx, %ax", "660f4dc1"),
+            ("cmovne %r8, %r9", "4d0f45c8"),
+            ("cmovb %eax, %edx", "0f42d0"),
+            ("cmovnbl %eax, %ecx", "0f43c8"),
+            ("cmovlew %ax, %cx", "660f4ec8"),
+            ("cmovle 8(%r12), %r9", "4d0f4e4c2408"),
+        ];
+
+        for (source, expected) in cases {
+            assert_eq!(
+                hex(&assemble(&format!("{}\n", source)).unwrap()),
+                *expected,
+                "{}",
+                source
+            );
+        }
+    }
+
+    #[test]
+    fn cmov_supports_all_condition_codes_and_aliases() {
+        let names = [
+            "o", "no", "b", "c", "nae", "ae", "nb", "nc", "e", "z", "ne", "nz", "be", "na", "a",
+            "nbe", "s", "ns", "p", "pe", "np", "po", "l", "nge", "ge", "nl", "le", "ng", "g",
+            "nle",
+        ];
+        let codes = [
+            0x40, 0x41, 0x42, 0x42, 0x42, 0x43, 0x43, 0x43, 0x44, 0x44, 0x45, 0x45, 0x46, 0x46,
+            0x47, 0x47, 0x48, 0x49, 0x4a, 0x4a, 0x4b, 0x4b, 0x4c, 0x4c, 0x4d, 0x4d, 0x4e, 0x4e,
+            0x4f, 0x4f,
+        ];
+
+        for (name, code) in names.iter().zip(codes) {
+            let source = format!("cmov{} %eax, %ecx\n", name);
+            let expected = format!("0f{:02x}c8", code);
+            assert_eq!(hex(&assemble(&source).unwrap()), expected, "{}", source);
+        }
+    }
+
+    #[test]
+    fn cmov_rejects_invalid_operands_and_sizes() {
+        for source in [
+            "cmovl $1, %eax",
+            "cmovl %eax, (%rax)",
+            "cmovl %ax, %ecx",
+            "cmovb %al, %cl",
+            "cmovlq %eax, %ecx",
+            "cmovl %eax",
+        ] {
+            assert!(assemble(&format!("{}\n", source)).is_err(), "{}", source);
+        }
     }
 }

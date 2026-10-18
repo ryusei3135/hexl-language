@@ -81,3 +81,30 @@
     - `/`と`%`は`format_div_expr_inst`(`div_ir.rs`)へ
 
 - `2026-10-13`配列の添字が普通の変数(ローカル変数/関数の引数)の場合(`[arr index2 else 0] = 10`)に対応。`operand_txt.rs`の`insert_arr_txt`が`Inst::Mov`/`Inst::Param`の添字を`arr.rs`の`ref_arr_for_var`へ渡す。`ref_arr_for_struct_member`と`ref_arr_for_var`は、添字のオペランドを受け取る共通の`ref_arr_indexed`(一時レジスタの解放→基準の取得→添字の読み込み→`neg`/補正→組み立て)を使う
+
+## 三項演算子(2026-10-18)
+`cond ? left : right`のうち、条件がメモリに触れず両辺が整数だけの式のもの(`ir/builder.rs`の`ternary_is_select`)を
+`cmp`+`cmov`で生成する。それ以外はIR側で条件分岐(ラベルとジャンプ)に展開されるので、ここには来ない。
+生成は`asm_emitter/ternary.rs`(`gen_expr_asm`が`Ternary*`を振り分ける)。
+
+IRの並び(`gen_ternary_select_ir` / `gen_ternary_cond_ir`)
+
+| 順 | IR | 生成するもの |
+|----|----|--------------|
+| 1 | 左辺(真のときの値) | (通常の式) |
+| 2 | 右辺(偽のときの値) | (通常の式) |
+| 3 | `&&`/`||`の畳み込み(`AndCalcul`/`OrCalcul`) | (通常の式。各比較は0/1) |
+| 4 | `Expr { kind: Ternary<比較>, ls, rs }`(番号`n-1`) | `cmp`だけ(`gen_ternary_cmp_asm`)。結果のレジスタは作らない |
+| 5 | `Expr { kind: Ternary, ls: 左辺, rs: 右辺 }`(番号`n`) | `mov 右辺, dst` → `cmov<cc> 左辺, dst`(`gen_ternary_select_asm`) |
+
+- 左辺・右辺は条件より先に生成する。`add`/`sub`は`cmp`のフラグを壊すため、`cmp`は選ぶ命令の直前に置く(`mov`はフラグを変えない)。
+- `Ternary`は直前(番号`n-1`)が`Ternary<比較>`であることを前提にする(違えばpanic)。
+- `&&`/`||`は、各比較を通常の比較(0/1)で作って`and`/`or`で畳み込み、最後に`TernaryNotEq(結果, 0)`を比較する。`!(..)`は`TernaryEqual(結果, 0)`。
+- 符号なし整数(どちらかのオペランドが符号なし)の`<` `>` `<=` `>=`は`cmovb`/`cmova`/`cmovbe`/`cmovae`(`get_unsigned_cmov_tmpl`)。
+- `cmp`の比較される側・`cmov`の元は即値にできないので、即値のときは一時レジスタへ`mov`してから使う。
+- `cmov`は8bitのレジスタを使えないので、8bitの値は32bitのレジスタ名で操作する。
+- `cmov`のテンプレートにはサイズ接尾辞を付けない(`fmt_mnemonic_resize`の`mov`の置き換えが`cmov`にも当たるため通さない)。
+- 小数は使えない(panic)。IR側が小数を含む三項演算子を条件分岐へ回す。
+- 未使用の変数の初期値が三項演算子のときは、条件(`n-1`)も一緒に生成しない(`reg_mnger.rs`の`collect_pure_expr_vars`)。
+- フォーマット(`asm_fmt/x64.rs`)のキー: `tcmp`(`cmp`のみ)、`cmov_l`/`cmov_g`/`cmov_l_e`/`cmov_g_e`/`cmov_e`/`cmov_ne`、符号なし用の`cmov_b`/`cmov_a`/`cmov_b_e`/`cmov_a_e`。
+  以前の`cmov_*`は`mov`+`cmov`の2行で、`cmp`が無くフラグが未設定のまま`cmov`していたため、`cmov`の1行にした。

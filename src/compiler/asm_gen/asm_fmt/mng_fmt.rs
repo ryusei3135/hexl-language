@@ -243,6 +243,25 @@ impl MngAsmFmt {
         }
     }
 
+    /// 符号なし整数の比較に対応する、`cmov`のテンプレートを返す
+    /// (`cmov_l`/`cmov_g`/`cmov_l_e`/`cmov_g_e`のみ。それ以外は同じキーのテンプレート)
+    ///
+    /// フォーマットに符号なし用のキー(`cmov_b`など)が無い場合は、
+    /// 符号付き用のテンプレートの`cmovl`などを`cmovb`などに置き換える
+    pub(in crate::compiler::asm_gen) fn get_unsigned_cmov_tmpl(&self, key: &str) -> String {
+        let (unsigned_key, from, to) = match key {
+            "cmov_l" => ("cmov_b", "cmovl", "cmovb"),
+            "cmov_g" => ("cmov_a", "cmovg", "cmova"),
+            "cmov_l_e" => ("cmov_b_e", "cmovle", "cmovbe"),
+            "cmov_g_e" => ("cmov_a_e", "cmovge", "cmovae"),
+            _ => return self.get_opcode_tmpl(key),
+        };
+        match self.opcode_fmt.get(unsigned_key) {
+            Some(o) => o.template.clone(),
+            None => self.get_opcode_tmpl(key).replace(from, to),
+        }
+    }
+
     /// オフセット無しのメモリ参照(AT&T構文なら`(%rbx)`)を作る。
     ///
     /// `ref_stack`のテンプレート(`-{size}({src})`など)から、オフセット部分

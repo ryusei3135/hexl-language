@@ -54,6 +54,12 @@ pub struct IR {
     var_counter: counter_mnger::VarCounter,
 
     expr_is_ptr_val: bool,
+    /// Someのとき
+    /// 参考演算子を処理しているときに、これは例`cmovcc`に変換可能かなどを
+    /// 追跡する、もしtrueのままなら参考演算子のIRを生成し
+    /// falseなら普通の条件分岐にする。
+    /// Noneのときは参考演算子を追跡していない
+    pub(in crate::compiler::ir) ternatry: Option<bool>,
 }
 
 pub const IS_ASSIGN_EXPR: bool = true;

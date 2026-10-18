@@ -710,6 +710,15 @@ impl AsmEmitter {
 
     #[inline(always)]
     pub(super) fn gen_expr_asm(&mut self, expr: &inst::ExprInst) {
+        // 三項演算子(`asm_emitter/ternary.rs`)
+        // - 条件(`Ternary<比較>`): `cmp`だけを出す。結果のレジスタは作らない
+        // - 選ぶ命令(`Ternary`): `mov`と`cmov`で左辺か右辺を結果のレジスタへ置く
+        if Self::is_ternary_cmp_kind(&expr.kind) {
+            return self.gen_ternary_cmp_asm(expr);
+        }
+        if expr.kind == inst::ExprKind::Ternary {
+            return self.gen_ternary_select_asm(expr);
+        }
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
         // (以前は`reg_idx`を進めるだけだったため、引数の`%rdi`などまで

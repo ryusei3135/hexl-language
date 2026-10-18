@@ -282,6 +282,87 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}cmp {src2}, {src1}\n{space}jnz {label}\n",
             },
         ),
+        // ===== 三項演算子(`asm_emitter/ternary.rs`) =====
+        // 比較だけ(フラグを設定する。ジャンプはしない)
+        (
+            "tcmp",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmp {src2}, {src1}\n",
+            },
+        ),
+        // 条件が真のとき`{src1}`(レジスタ)を`{dst}`へ移す。
+        // `{dst}`へ偽のときの値を`mov`してから、直前の`cmp`のフラグで使う
+        (
+            "cmov_l",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovl {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_g",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovg {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_l_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovle {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_g_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovge {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmove {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_ne",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovne {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_b",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovb {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_a",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmova {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_b_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovbe {src1}, {dst}\n",
+            },
+        ),
+        (
+            "cmov_a_e",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}cmovae {src1}, {dst}\n",
+            },
+        ),
         // 符号なし整数の比較(`<`はbelow, `>`はabove)
         (
             "cmp_b",

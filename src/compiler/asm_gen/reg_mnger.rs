@@ -276,6 +276,15 @@ impl UsedRegManager {
                 if matches!(expr.kind, inst::ExprKind::Inc | inst::ExprKind::Dec) {
                     return false;
                 }
+                // 三項演算子は、条件(ひとつ前のノード。`asm_emitter/ternary.rs`)も
+                // 一緒に消さないと、生成しない変数を参照する`cmp`だけが残ってしまう
+                if expr.kind == inst::ExprKind::Ternary {
+                    if let Some(cond) = id.checked_sub(1) {
+                        if !Self::collect_pure_expr_vars(body, cond, visited, vars, nodes) {
+                            return false;
+                        }
+                    }
+                }
                 if !Self::collect_pure_expr_vars(body, expr.ls, visited, vars, nodes)
                     || !Self::collect_pure_expr_vars(body, expr.rs, visited, vars, nodes)
                 {
@@ -503,10 +512,14 @@ impl AsmEmitter {
             })
             .expect("使用できるレジスタが足りません")
     }
-    
+
     /// ## 引数
     /// - reg_idx これは必ずusizeで無ければいけない、
-    pub(in crate::compiler::asm_gen) fn get_reg(&self, reg_idx: Option<usize>, size: &Size) -> String {
+    pub(in crate::compiler::asm_gen) fn get_reg(
+        &self,
+        reg_idx: Option<usize>,
+        size: &Size,
+    ) -> String {
         let num = if reg_idx.is_none() {
             self.reg_idx
         } else {
@@ -533,7 +546,12 @@ impl AsmEmitter {
     ///
     /// 以前は3.と4.が無く、メモリ以外の値は常に64bitレジスタ
     /// (`%rcx`など)に書き込まれていた。
-    pub(in crate::compiler::asm_gen) fn resolve_dst_reg_size(&self, opcode: &str, src1: usize, dst_ty: SelfPtrInfo) -> Size {
+    pub(in crate::compiler::asm_gen) fn resolve_dst_reg_size(
+        &self,
+        opcode: &str,
+        src1: usize,
+        dst_ty: SelfPtrInfo,
+    ) -> Size {
         if opcode == "address" {
             return Size::DQ;
         }

@@ -5,7 +5,7 @@
 //! let out = parse::parse_c(tokens)?;   // out.nodes: Vec<Group1Node>
 //! ```
 //!
-//! 流れは `トークン -> (parser.rs) CAST -> (lower.rs) node`。
+//! 流れは `トークン -> (parser/) CAST -> (lower.rs) node`。
 //! `node`で表現できないものは`ParseErrorKind::Unsupported`になる。一覧はNOTE.md。
 
 mod cast;
@@ -30,7 +30,9 @@ pub(in crate::compiler::c_frontend) struct ParseOutput {
 }
 
 /// プリプロセス済みのトークン列(`Preprocessor::preprocess`の戻り値)をパースする
-pub(in crate::compiler::c_frontend) fn parse_c(tokens: Vec<TokenInfo>) -> Result<ParseOutput, ParseError> {
+pub(in crate::compiler::c_frontend) fn parse_c(
+    tokens: Vec<TokenInfo>,
+) -> Result<ParseOutput, ParseError> {
     let (items, mut warnings) = parser::Parser::new(tokens).parse_unit()?;
     let (nodes, w2) = lower::Lowerer::new().lower_unit(items)?;
     warnings.extend(w2);

@@ -1,5 +1,5 @@
 mod err_factory;
-mod expr_node;
+mod node_process;
 mod member;
 mod preproc;
 mod proc_fn_info;
@@ -38,6 +38,7 @@ impl IR {
             constract_flag: checker::ConstractFlags::new(),
             var_counter: counter_mnger::VarCounter::new(),
             expr_is_ptr_val: false,
+            ternatry: None,
         }
     }
 
@@ -475,6 +476,28 @@ impl IR {
                 dst: self.id_counter,
                 value,
             },
+            // `cond ? left : right`
+            // 条件式がメモリに触れず、両辺が数字のみの式なら`ExprKind::Ternary`の1命令にする。
+            // それ以外は、副作用やメモリアクセスを選ばれた側でだけ実行するため、
+            // `cond`と同じ形の条件分岐(ラベルとジャンプ)に展開する
+            node::Expr::Ternary(node) => {
+                let (cond, left, right) = node;
+                // この条件がtrueなら必ず三項演算子
+                if Self::ternary_is_select(&cond, &left, &right) {
+                    // `ternary_expr`が`self.ternatry = Some(true)`にして、(cond, left, right)を生成する
+                    let idxs = self.ternary_expr::<M>(cond, left, right, expect_byte)?;
+                    inst::ExprInst {
+                        dst: idxs.0,
+                        ls: idxs.1,
+                        rs: idxs.2,
+                        kind: inst::ExprKind::Ternary,
+                    }
+                    .new()
+                } else {
+                    self.ternatry = None;
+                    return self.gen_ternary_branch_ir::<M>(cond, left, right, expect_byte);
+                }
+            }
             // 配列を初期化する
             node::Expr::Array(init_nodes) => {
                 // `src/ir/builder/expr_node.rs`
@@ -855,6 +878,114 @@ impl IR {
 
         // 条件が終了したときにジャンプする場所を指定
         crate::push_jmp_code!(self, Block, end_label);
+        Ok(self.id_counter - 1)
+    }
+
+    /// 三項演算子を`ExprKind::Ternary`の1命令にできるか
+    ///
+    /// 両辺は評価しても副作用が無い必要がある(`Ternary`は両辺を先に評価するため)
+    /// - 左右の式が、数字のみの式
+    /// - 条件式が、メモリにアクセスしない式
+    fn ternary_is_select(cond: &node::Expr, left: &node::Expr, right: &node::Expr) -> bool {
+        Self::is_number_only(left) && Self::is_number_only(right) && Self::is_mem_free(cond)
+    }
+
+    /// 数字(整数・小数)と演算子だけでできた式か
+    fn is_number_only(expr: &node::Expr) -> bool {
+        match expr {
+            node::Expr::Number(_) | node::Expr::Float(_) => true,
+            node::Expr::Add(n)
+            | node::Expr::Sub(n)
+            | node::Expr::Mul(n)
+            | node::Expr::Div(n)
+            | node::Expr::Surplus(n)
+            | node::Expr::LShift(n)
+            | node::Expr::RShift(n)
+            | node::Expr::AndCalcul(n)
+            | node::Expr::XorCalcul(n)
+            | node::Expr::OrCalcul(n) => Self::is_number_only(&n.0) && Self::is_number_only(&n.1),
+            node::Expr::Sign((_, target))
+            | node::Expr::Inversion(target)
+            | node::Expr::CmpNot(target) => Self::is_number_only(target),
+            _ => false,
+        }
+    }
+
+    /// メモリにアクセスしない式か(変数・数字・演算・比較・キャストだけ)
+    ///
+    /// 配列・ポインタ・メンバー・関数呼び出し・代入・`++`/`--`などが
+    /// 1つでも含まれていれば`false`(安全側に倒す)
+    fn is_mem_free(expr: &node::Expr) -> bool {
+        match expr {
+            node::Expr::Var(_) | node::Expr::Number(_) | node::Expr::Float(_) => true,
+            node::Expr::Add(n)
+            | node::Expr::Sub(n)
+            | node::Expr::Mul(n)
+            | node::Expr::Div(n)
+            | node::Expr::Surplus(n)
+            | node::Expr::LShift(n)
+            | node::Expr::RShift(n)
+            | node::Expr::AndCalcul(n)
+            | node::Expr::XorCalcul(n)
+            | node::Expr::OrCalcul(n)
+            | node::Expr::LessThen(n)
+            | node::Expr::GreaterThen(n)
+            | node::Expr::LessThenEq(n)
+            | node::Expr::GreaterThenEq(n)
+            | node::Expr::Equal(n)
+            | node::Expr::NotEq(n) => Self::is_mem_free(&n.0) && Self::is_mem_free(&n.1),
+            node::Expr::Sign((_, target))
+            | node::Expr::Inversion(target)
+            | node::Expr::CmpNot(target) => Self::is_mem_free(target),
+            node::Expr::Cast((_, target)) => Self::is_mem_free(target),
+            _ => false,
+        }
+    }
+
+    /// 三項演算子を条件分岐に展開する(`gen_match_expr_ir`と同じ形)
+    ///
+    /// ```text
+    ///   ExpectJmp(then)
+    ///   <cond>
+    ///   <right>        条件が偽のとき
+    ///   Jmp(end)
+    ///   Block(then)
+    ///   <left>         条件が真のとき
+    ///   Jmp(end)
+    ///   Block(end)
+    /// ```
+    /// `ternary_expr`と違い、`left`/`right`は選ばれたときだけ評価される。
+    /// 戻り値は、最後に生成した命令の番号
+    fn gen_ternary_branch_ir<M: ResultMod>(
+        &mut self,
+        cond: Box<node::Expr>,
+        left: Box<node::Expr>,
+        right: Box<node::Expr>,
+        expect_byte: &types::Size,
+    ) -> Result<usize, err::ErrKind> {
+        // 中の式が発番するラベルと重ならないよう、先にまとめて発番する
+        let then_label = self.next_pattern_label();
+        let end_label = self.next_pattern_label();
+
+        // 条件が真なら`then_label`へ(`ExpectJmp`は条件式より前に置く)
+        crate::push_jmp_code!(self, ExpectJmp, &then_label);
+        let _ = self.gen_expr_ir::<M>(*cond, None)?;
+
+        // 条件が偽のとき
+        self.begin_scope();
+        let _ = self.gen_expr_ir::<M>(*right, Some(expect_byte))?;
+        self.end_block_scope();
+        crate::push_jmp_code!(self, Jmp, &end_label);
+
+        // 条件が真のとき
+        crate::push_jmp_code!(self, Block, &then_label);
+        self.begin_scope();
+        let _ = self.gen_expr_ir::<M>(*left, Some(expect_byte))?;
+        self.end_block_scope();
+        crate::push_jmp_code!(self, Jmp, &end_label);
+
+        // 合流
+        crate::push_jmp_code!(self, Block, &end_label);
         Ok(self.id_counter - 1)
     }
 

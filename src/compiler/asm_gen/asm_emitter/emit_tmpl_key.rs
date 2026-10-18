@@ -4,7 +4,6 @@
 
 use super::*;
 
-
 impl AsmEmitter {
     /// 式の種類から、アセンブリのテンプレートを引くキーを返す
     pub(super) fn expr_tmpl_key(expr: &inst::ExprInst, insts: &[Inst]) -> &'static str {
@@ -57,6 +56,17 @@ impl AsmEmitter {
                 inst::ExprKind::GreaterThenEq => "cmp_g_e",
                 inst::ExprKind::Equal => "cmp_e",
                 inst::ExprKind::NotEq => "cmp_ne",
+                // 三項演算子の条件(`ir`の`gen_ternary_cond_ir`)は比較だけ(`cmp`)を出す。
+                // どの`cmov`を使うかは、選ぶ側(`Ternary`)が条件のノードの種類から決める
+                // (`asm_emitter/ternary.rs`)
+                inst::ExprKind::TernaryLessThen
+                | inst::ExprKind::TernaryGreaterThen
+                | inst::ExprKind::TernaryLessThenEq
+                | inst::ExprKind::TernaryGreaterThenEq
+                | inst::ExprKind::TernaryEqual
+                | inst::ExprKind::TernaryNotEq => "tcmp",
+                // 選ぶ側は`format_expr_inst`を通らない(`gen_ternary_select_asm`)
+                inst::ExprKind::Ternary => unreachable!("`Ternary`は`ternary.rs`で生成する"),
             }
         }
     }
@@ -83,7 +93,14 @@ impl AsmEmitter {
             | inst::ExprKind::LessThenEq
             | inst::ExprKind::GreaterThenEq
             | inst::ExprKind::NotEq
-            | inst::ExprKind::Equal => "cmp",
+            | inst::ExprKind::Equal
+            | inst::ExprKind::TernaryLessThen
+            | inst::ExprKind::TernaryGreaterThen
+            | inst::ExprKind::TernaryLessThenEq
+            | inst::ExprKind::TernaryGreaterThenEq
+            | inst::ExprKind::TernaryEqual
+            | inst::ExprKind::TernaryNotEq => "cmp",
+            inst::ExprKind::Ternary => unreachable!("`Ternary`は`ternary.rs`で生成する"),
         }
     }
 }

@@ -142,7 +142,10 @@ impl Parser {
         // #include "file.c"と文字列のみで指定されたものを処理
         include_c_list: &[String],
     ) -> Result<&[node::Group1Node], err::ErrKind> {
-        use std::{fs, path::{Path, PathBuf}};
+        use std::{
+            fs,
+            path::{Path, PathBuf},
+        };
 
         self.tkns = Some(tkns.to_owned());
 

@@ -2,10 +2,11 @@ mod arr;
 mod cast;
 mod data_mem_factory;
 mod div_ir;
+mod emit_tmpl_key;
 mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
-mod emit_tmpl_key;
+mod ternary;
 mod var_mnger;
 
 use super::emit_fn_name::emit_fn_name_id;
@@ -15,7 +16,6 @@ use crate::compiler::ir::inst::Inst;
 use crate::compiler::ir::types;
 
 pub use var_mnger::VarIndexInfo;
-
 
 impl AsmEmitter {
     pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData, os: &str) -> Self {
@@ -413,7 +413,6 @@ impl AsmEmitter {
         };
         self.fill_tmpl(opcode, &dst_text, &src_text)
     }
-
 
     #[inline(always)]
     fn gen_resize_mnemonic(&self, formated: &str, opcode: &str, src1: usize) -> Option<String> {

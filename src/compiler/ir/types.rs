@@ -196,7 +196,17 @@ impl Size {
     pub(in crate::compiler::ir) fn is_builtin_ty_name(name: &str) -> bool {
         matches!(
             name,
-            "byte" | "i16" | "int" | "i64" | "ubyte" | "u16" | "uint" | "u64" | "float" | "f64" | "bool"
+            "byte"
+                | "i16"
+                | "int"
+                | "i64"
+                | "ubyte"
+                | "u16"
+                | "uint"
+                | "u64"
+                | "float"
+                | "f64"
+                | "bool"
         )
     }
 

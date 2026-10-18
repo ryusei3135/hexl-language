@@ -34,9 +34,19 @@ pub type PResult<T> = Result<T, ParseError>;
 
 impl ParseError {
     pub fn syntax(line: usize, col: usize, msg: impl Into<String>) -> Self {
-        Self { kind: ParseErrorKind::Syntax, line, col, msg: msg.into() }
+        Self {
+            kind: ParseErrorKind::Syntax,
+            line,
+            col,
+            msg: msg.into(),
+        }
     }
     pub fn unsupported(line: usize, col: usize, msg: impl Into<String>) -> Self {
-        Self { kind: ParseErrorKind::Unsupported, line, col, msg: msg.into() }
+        Self {
+            kind: ParseErrorKind::Unsupported,
+            line,
+            col,
+            msg: msg.into(),
+        }
     }
 }

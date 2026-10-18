@@ -22,7 +22,9 @@ struct StructInfo {
 /// 入れ子になった`break`/`continue`の行き先
 enum Frame {
     /// ループ。`cont`は`continue`の前に実行する文(`for`の更新式・`do-while`の判定)
-    Loop { cont: Vec<Group2Info> },
+    Loop {
+        cont: Vec<Group2Info>,
+    },
     Switch,
 }
 
@@ -74,7 +76,12 @@ impl Lowerer {
         }
         for it in &items {
             if let CItem::Def(CDef::Struct { name, fields } | CDef::Union { name, fields }) = it {
-                self.structs.insert(name.clone(), StructInfo { fields: fields.clone() });
+                self.structs.insert(
+                    name.clone(),
+                    StructInfo {
+                        fields: fields.clone(),
+                    },
+                );
             }
         }
         for it in items {
@@ -82,16 +89,23 @@ impl Lowerer {
                 CItem::Def(d) => self.lower_def(d)?,
                 CItem::Func(f) => self.lower_func(f)?,
                 CItem::Proto { name } => {
-                    self.warnings.push(format!("関数宣言 `{}` は読み飛ばしました(nodeに対応するものが無い)", name));
+                    self.warnings.push(format!(
+                        "関数宣言 `{}` は読み飛ばしました(nodeに対応するものが無い)",
+                        name
+                    ));
                 }
                 CItem::ExternVar { name } => {
-                    self.warnings.push(format!("extern変数宣言 `{}` は読み飛ばしました", name));
+                    self.warnings
+                        .push(format!("extern変数宣言 `{}` は読み飛ばしました", name));
                 }
                 CItem::Global(d) => {
                     return unsup(
                         d.line,
-                        format!("グローバル変数 `{}`(Group1Nodeにグローバル変数のノードが無い)", d.name),
-                    )
+                        format!(
+                            "グローバル変数 `{}`(Group1Nodeにグローバル変数のノードが無い)",
+                            d.name
+                        ),
+                    );
                 }
             }
         }
@@ -107,15 +121,24 @@ impl Lowerer {
             CType::Named { name, .. } => TyNode::Ty(name.clone()),
             CType::Ptr { inner, .. } => {
                 let is_const = inner.is_const();
-                TyNode::Pointer { is_const, ty_name: Box::new(self.to_ty(inner, line)?), range: None }
+                TyNode::Pointer {
+                    is_const,
+                    ty_name: Box::new(self.to_ty(inner, line)?),
+                    range: None,
+                }
             }
             CType::Array { inner, len } => {
                 let Some(len) = len else {
                     return unsup(line, "大きさの無い配列型(初期化子から大きさを決められない)");
                 };
-                TyNode::Stack { name: Box::new(self.to_ty(inner, line)?), len: *len }
+                TyNode::Stack {
+                    name: Box::new(self.to_ty(inner, line)?),
+                    len: *len,
+                }
             }
-            CType::Func { .. } => return unsup(line, "関数型・関数ポインタ(TyNodeに対応するものが無い)"),
+            CType::Func { .. } => {
+                return unsup(line, "関数型・関数ポインタ(TyNodeに対応するものが無い)");
+            }
         })
     }
 
@@ -135,7 +158,10 @@ impl Lowerer {
             CDef::Struct { name, fields } => {
                 let mut fs = Vec::new();
                 for f in &fields {
-                    fs.push(StructField { name: f.name.clone(), ty: self.to_ty(&f.ty, 0)? });
+                    fs.push(StructField {
+                        name: f.name.clone(),
+                        ty: self.to_ty(&f.ty, 0)?,
+                    });
                 }
                 self.out.push(StructDefine::new(name, fs, Vec::new()));
             }
@@ -162,7 +188,10 @@ impl Lowerer {
                         );
                     }
                 }
-                let fs = members.into_iter().map(|(m, _)| VariantField::typeless_new(m)).collect();
+                let fs = members
+                    .into_iter()
+                    .map(|(m, _)| VariantField::typeless_new(m))
+                    .collect();
                 self.out.push(VariantDefine::new(name, fs, Vec::new()));
             }
         }
@@ -190,7 +219,11 @@ impl Lowerer {
             params.push(ArgsNode {
                 name,
                 ty: self.to_ty(&p.ty, f.line)?,
-                var_attr: if p.ty.is_const() { VarMutAttr::Invar } else { VarMutAttr::Var },
+                var_attr: if p.ty.is_const() {
+                    VarMutAttr::Invar
+                } else {
+                    VarMutAttr::Var
+                },
             });
         }
         let ret_ty = self.to_ty(&f.ret, f.line)?;
@@ -202,7 +235,11 @@ impl Lowerer {
         }
         // void関数の末尾の`return;`は不要
         if is_void {
-            if let Some(Group2Info { node: Group2Node::Stmt(StmtNode::Return(Expr::Number(n))), .. }) = body.last() {
+            if let Some(Group2Info {
+                node: Group2Node::Stmt(StmtNode::Return(Expr::Number(n))),
+                ..
+            }) = body.last()
+            {
                 if n == "0" && ends_with_bare_return(&f.body) {
                     body.pop();
                 }
@@ -248,7 +285,10 @@ impl Lowerer {
             }
         }
         set.insert(emitted.clone());
-        self.scopes.last_mut().expect("scope").insert(name.to_string(), emitted.clone());
+        self.scopes
+            .last_mut()
+            .expect("scope")
+            .insert(name.to_string(), emitted.clone());
         emitted
     }
 
@@ -329,8 +369,20 @@ impl Lowerer {
                 let l = self.lower_do_while(body, c, line)?;
                 out.push(self.info(line, Group2Node::Expr(l)));
             }
-            CStmtKind::For { init, cond, step, body } => {
-                self.lower_for(init.as_deref(), cond.as_ref(), step.as_ref(), body, line, out)?;
+            CStmtKind::For {
+                init,
+                cond,
+                step,
+                body,
+            } => {
+                self.lower_for(
+                    init.as_deref(),
+                    cond.as_ref(),
+                    step.as_ref(),
+                    body,
+                    line,
+                    out,
+                )?;
             }
             CStmtKind::Return(e) => {
                 let v = match e {
@@ -347,9 +399,15 @@ impl Lowerer {
                     return unsup(
                         line,
                         "switchの途中にある`break`(case本体の末尾以外。Matchにはswitchを抜ける手段が無い)",
-                    )
+                    );
                 }
-                None => return Err(ParseError::syntax(line, 0, "ループ/switchの外に`break`があります")),
+                None => {
+                    return Err(ParseError::syntax(
+                        line,
+                        0,
+                        "ループ/switchの外に`break`があります",
+                    ));
+                }
             },
             CStmtKind::Continue => {
                 let cont = self.frames.iter().rev().find_map(|f| match f {
@@ -361,13 +419,26 @@ impl Lowerer {
                         out.extend(c);
                         out.push(self.info(line, Group2Node::Stmt(StmtNode::Continue)));
                     }
-                    None => return Err(ParseError::syntax(line, 0, "ループの外に`continue`があります")),
+                    None => {
+                        return Err(ParseError::syntax(
+                            line,
+                            0,
+                            "ループの外に`continue`があります",
+                        ));
+                    }
                 }
             }
-            CStmtKind::Goto(l) => return unsup(line, format!("goto {}(nodeにgoto/ラベルが無い)", l)),
-            CStmtKind::Label(l) => return unsup(line, format!("ラベル {}:(nodeにgoto/ラベルが無い)", l)),
+            CStmtKind::Goto(l) => {
+                return unsup(line, format!("goto {}(nodeにgoto/ラベルが無い)", l));
+            }
+            CStmtKind::Label(l) => {
+                return unsup(line, format!("ラベル {}:(nodeにgoto/ラベルが無い)", l));
+            }
             CStmtKind::Case(_) | CStmtKind::Default => {
-                return unsup(line, "switch直下以外にあるcase/defaultラベル(Duff's deviceなど)")
+                return unsup(
+                    line,
+                    "switch直下以外にあるcase/defaultラベル(Duff's deviceなど)",
+                );
             }
         }
         Ok(())
@@ -382,12 +453,19 @@ impl Lowerer {
         if d.storage == Storage::Static {
             tynode = match tynode {
                 TyNode::Stack { name, len } => TyNode::Static { name, len },
-                other => TyNode::Static { name: Box::new(other), len: 1 },
+                other => TyNode::Static {
+                    name: Box::new(other),
+                    len: 1,
+                },
             };
         }
         // 初期化子は宣言した変数自身をまだ見えない状態で評価したいので、宣言は最後
         let name = self.declare(&d.name);
-        let var_attr = if d.ty.is_const() { VarMutAttr::Invar } else { VarMutAttr::Var };
+        let var_attr = if d.ty.is_const() {
+            VarMutAttr::Invar
+        } else {
+            VarMutAttr::Var
+        };
         Ok(DefineVar::new(&name, value, &tynode, var_attr).wrap())
     }
 
@@ -426,7 +504,10 @@ impl Lowerer {
                 let mut v = Vec::new();
                 for (d, it) in items {
                     if !d.is_empty() {
-                        return unsup(line, "配列の添字指示子 `[i] = v`(Expr::Arrayは先頭からの並びしか持てない)");
+                        return unsup(
+                            line,
+                            "配列の添字指示子 `[i] = v`(Expr::Arrayは先頭からの並びしか持てない)",
+                        );
                     }
                     v.push(self.lower_init(inner, Some(it), line)?);
                 }
@@ -437,7 +518,12 @@ impl Lowerer {
                     let name = type_name(ty);
                     let fields_def: Vec<CField> = match self.structs.get(&name) {
                         Some(s) => s.fields.clone(),
-                        None => return unsup(line, format!("`{}`の定義が見えないので初期化子の対応が取れない", name)),
+                        None => {
+                            return unsup(
+                                line,
+                                format!("`{}`の定義が見えないので初期化子の対応が取れない", name),
+                            );
+                        }
                     };
                     let mut fields: HashMap<String, Box<Expr>> = HashMap::new();
                     let mut next = 0usize;
@@ -450,15 +536,25 @@ impl Lowerer {
                                 fields_def
                                     .iter()
                                     .position(|f| &f.name == n)
-                                    .ok_or_else(|| ParseError::syntax(line, 0, format!("`{}`にメンバー`{}`がありません", name, n)))?
+                                    .ok_or_else(|| {
+                                        ParseError::syntax(
+                                            line,
+                                            0,
+                                            format!("`{}`にメンバー`{}`がありません", name, n),
+                                        )
+                                    })?
                             }
                             Some(Designator::Index(_)) => {
-                                return unsup(line, "構造体への添字指示子")
+                                return unsup(line, "構造体への添字指示子");
                             }
                             None => next,
                         };
                         let Some(f) = fields_def.get(idx) else {
-                            return Err(ParseError::syntax(line, 0, format!("`{}`の初期化子が多すぎます", name)));
+                            return Err(ParseError::syntax(
+                                line,
+                                0,
+                                format!("`{}`の初期化子が多すぎます", name),
+                            ));
                         };
                         let v = self.lower_init(&f.ty, Some(it), line)?;
                         fields.insert(f.name.clone(), Box::new(v));
@@ -468,9 +564,17 @@ impl Lowerer {
                         }
                     }
                     Ok(if kind == TagKind::Struct {
-                        Expr::InitStruct { is_self: false, name, fields }
+                        Expr::InitStruct {
+                            is_self: false,
+                            name,
+                            fields,
+                        }
                     } else {
-                        Expr::InitVariant { is_self: false, name, fields }
+                        Expr::InitVariant {
+                            is_self: false,
+                            name,
+                            fields,
+                        }
                     })
                 }
                 _ => {
@@ -478,7 +582,11 @@ impl Lowerer {
                     if items.len() == 1 && items[0].0.is_empty() {
                         return self.lower_init(ty, Some(&items[0].1), line);
                     }
-                    Err(ParseError::syntax(line, 0, "スカラ型に波括弧の初期化子が付いています"))
+                    Err(ParseError::syntax(
+                        line,
+                        0,
+                        "スカラ型に波括弧の初期化子が付いています",
+                    ))
                 }
             },
         }
@@ -495,10 +603,16 @@ impl Lowerer {
         loop {
             let pat = self.lower_cond(cond)?;
             let body = self.lower_body(then)?;
-            arms.push(MatchArm { pattern: Box::new(pat), body });
+            arms.push(MatchArm {
+                pattern: Box::new(pat),
+                body,
+            });
             match els {
                 None => break,
-                Some(CStmt { kind: CStmtKind::If(c2, t2, e2), .. }) => {
+                Some(CStmt {
+                    kind: CStmtKind::If(c2, t2, e2),
+                    ..
+                }) => {
                     cond = c2;
                     then = t2;
                     els = e2.as_deref();
@@ -509,7 +623,11 @@ impl Lowerer {
                 }
             }
         }
-        Ok(Expr::Match { pattern: None, arms, arm_else })
+        Ok(Expr::Match {
+            pattern: None,
+            arms,
+            arm_else,
+        })
     }
 
     fn guard_break(&mut self, cond: &CExpr, line: usize) -> PResult<Option<Group2Info>> {
@@ -521,7 +639,10 @@ impl Lowerer {
         let brk = self.info(line, Group2Node::Stmt(StmtNode::Break));
         let m = Expr::Match {
             pattern: None,
-            arms: vec![MatchArm { pattern: Box::new(neg), body: vec![brk] }],
+            arms: vec![MatchArm {
+                pattern: Box::new(neg),
+                body: vec![brk],
+            }],
             arm_else: None,
         };
         Ok(Some(self.info(line, Group2Node::Expr(m))))
@@ -530,17 +651,29 @@ impl Lowerer {
     fn lower_while(&mut self, c: &CExpr, body: &CStmt, line: usize) -> PResult<Expr> {
         let guard = self.guard_break(c, line)?;
         self.frames.push(Frame::Loop { cont: Vec::new() });
-        let b = self.lower_body_with(std::slice::from_ref(body), guard.into_iter().collect(), Vec::new());
+        let b = self.lower_body_with(
+            std::slice::from_ref(body),
+            guard.into_iter().collect(),
+            Vec::new(),
+        );
         self.frames.pop();
-        Ok(Expr::Loop { pattern: None, body: b? })
+        Ok(Expr::Loop {
+            pattern: None,
+            body: b?,
+        })
     }
 
     fn lower_do_while(&mut self, body: &CStmt, c: &CExpr, line: usize) -> PResult<Expr> {
         let guard: Vec<Group2Info> = self.guard_break(c, line)?.into_iter().collect();
-        self.frames.push(Frame::Loop { cont: guard.clone() });
+        self.frames.push(Frame::Loop {
+            cont: guard.clone(),
+        });
         let b = self.lower_body_with(std::slice::from_ref(body), Vec::new(), guard);
         self.frames.pop();
-        Ok(Expr::Loop { pattern: None, body: b? })
+        Ok(Expr::Loop {
+            pattern: None,
+            body: b?,
+        })
     }
 
     fn lower_for(
@@ -566,10 +699,18 @@ impl Lowerer {
             if let Some(s) = step {
                 self.lower_expr_stmt(s, &mut step_nodes)?;
             }
-            self.frames.push(Frame::Loop { cont: step_nodes.clone() });
+            self.frames.push(Frame::Loop {
+                cont: step_nodes.clone(),
+            });
             let b = self.lower_body_with(std::slice::from_ref(body), guard, step_nodes);
             self.frames.pop();
-            out.push(self.info(line, Group2Node::Expr(Expr::Loop { pattern: None, body: b? })));
+            out.push(self.info(
+                line,
+                Group2Node::Expr(Expr::Loop {
+                    pattern: None,
+                    body: b?,
+                }),
+            ));
             Ok(())
         })();
         self.scopes.pop();
@@ -593,7 +734,10 @@ impl Lowerer {
             match &it.kind {
                 CStmtKind::Case(_) | CStmtKind::Default => {
                     if !in_labels {
-                        groups.push((std::mem::take(&mut cur_labels), std::mem::take(&mut cur_body)));
+                        groups.push((
+                            std::mem::take(&mut cur_labels),
+                            std::mem::take(&mut cur_body),
+                        ));
                         in_labels = true;
                     }
                     match &it.kind {
@@ -637,20 +781,31 @@ impl Lowerer {
                 chain.extend(bodies[j].iter().copied());
             }
             self.frames.push(Frame::Switch);
-            let lowered = self.lower_body_with(&chain.into_iter().cloned().collect::<Vec<_>>(), Vec::new(), Vec::new());
+            let lowered = self.lower_body_with(
+                &chain.into_iter().cloned().collect::<Vec<_>>(),
+                Vec::new(),
+                Vec::new(),
+            );
             self.frames.pop();
             let lowered = lowered?;
             for l in &groups[i].0 {
                 match l {
                     Label::Case(e) => {
                         let p = self.lower_expr(e, true)?;
-                        arms.push(MatchArm { pattern: Box::new(p), body: lowered.clone() });
+                        arms.push(MatchArm {
+                            pattern: Box::new(p),
+                            body: lowered.clone(),
+                        });
                     }
                     Label::Default => arm_else = Some(lowered.clone()),
                 }
             }
         }
-        Ok(Expr::Match { pattern: Some(Box::new(pattern)), arms, arm_else })
+        Ok(Expr::Match {
+            pattern: Some(Box::new(pattern)),
+            arms,
+            arm_else,
+        })
     }
 
     // ---------------------------------------------------------------
@@ -680,7 +835,10 @@ impl Lowerer {
     }
 
     fn bin(&mut self, a: &CExpr, b: &CExpr) -> PResult<(Box<Expr>, Box<Expr>)> {
-        Ok((Box::new(self.lower_expr(a, true)?), Box::new(self.lower_expr(b, true)?)))
+        Ok((
+            Box::new(self.lower_expr(a, true)?),
+            Box::new(self.lower_expr(b, true)?),
+        ))
     }
 
     /// `(変換した式, 値が必ず0か1か)`
@@ -688,9 +846,10 @@ impl Lowerer {
         let line = e.line;
         let r = match &e.kind {
             CExprKind::Ident(n) => Expr::Var(self.resolve(n)),
-            CExprKind::EnumConst { ename, variant } => {
-                Expr::EnumVariant { name: ename.clone(), variant: variant.clone() }
-            }
+            CExprKind::EnumConst { ename, variant } => Expr::EnumVariant {
+                name: ename.clone(),
+                variant: variant.clone(),
+            },
             CExprKind::Int(s) => Expr::Number(s.clone()),
             CExprKind::Float(s) => Expr::Float(s.clone()),
             CExprKind::Char(v) => Expr::Number(v.to_string()),
@@ -704,7 +863,10 @@ impl Lowerer {
                     None => self.lower_expr(r, true)?,
                     Some(op) => {
                         if !side_effect_free(l) {
-                            return unsup(line, "副作用のある左辺への複合代入(`a[i++] += 1`など。左辺が2回評価されてしまう)");
+                            return unsup(
+                                line,
+                                "副作用のある左辺への複合代入(`a[i++] += 1`など。左辺が2回評価されてしまう)",
+                            );
                         }
                         let (a, b) = self.bin(l, r)?;
                         make_bin(*op, a, b)
@@ -720,7 +882,10 @@ impl Lowerer {
                 let bb = vec![self.info(line, Group2Node::Expr(vb))];
                 Expr::Match {
                     pattern: None,
-                    arms: vec![MatchArm { pattern: Box::new(pat), body: ba }],
+                    arms: vec![MatchArm {
+                        pattern: Box::new(pat),
+                        body: ba,
+                    }],
                     arm_else: Some(bb),
                 }
             }
@@ -732,7 +897,11 @@ impl Lowerer {
                 for x in args {
                     a.push(self.lower_expr(x, true)?);
                 }
-                Expr::CallFunc(CallInfo { name: name.clone(), temp_ty: Vec::new(), args: a })
+                Expr::CallFunc(CallInfo {
+                    name: name.clone(),
+                    temp_ty: Vec::new(),
+                    args: a,
+                })
             }
             CExprKind::Index(base, idx) => {
                 let dst = self.lower_expr(base, true)?;
@@ -750,30 +919,56 @@ impl Lowerer {
                 Expr::Cast((ty, Box::new(self.lower_expr(a, true)?)))
             }
             CExprKind::SizeofType(_) | CExprKind::SizeofExpr(_) => {
-                return unsup(line, "sizeof(nodeにsizeofが無く、型の大きさはこの段階では決まらない)")
+                return unsup(
+                    line,
+                    "sizeof(nodeにsizeofが無く、型の大きさはこの段階では決まらない)",
+                );
             }
-            CExprKind::Comma(_) => return unsup(line, "式の中のカンマ演算子(文・`for`の初期化/更新式の中だけ分解して対応)"),
+            CExprKind::Comma(_) => {
+                return unsup(
+                    line,
+                    "式の中のカンマ演算子(文・`for`の初期化/更新式の中だけ分解して対応)",
+                );
+            }
         };
         Ok((r, false))
     }
 
-    fn lower_unary(&mut self, op: UnOp, a: &CExpr, used: bool, line: usize) -> PResult<(Expr, bool)> {
+    fn lower_unary(
+        &mut self,
+        op: UnOp,
+        a: &CExpr,
+        used: bool,
+        line: usize,
+    ) -> PResult<(Expr, bool)> {
         Ok(match op {
             UnOp::Plus => (self.lower_expr(a, true)?, false),
             UnOp::Neg => match &a.kind {
                 CExprKind::Int(s) => (Expr::Number(format!("-{}", s)), false),
                 CExprKind::Float(s) => (Expr::Float(format!("-{}", s)), false),
-                _ => (Expr::Sub(Expr::wrap(Expr::Number("0".into()), self.lower_expr(a, true)?)), false),
+                _ => (
+                    Expr::Sub(Expr::wrap(
+                        Expr::Number("0".into()),
+                        self.lower_expr(a, true)?,
+                    )),
+                    false,
+                ),
             },
             UnOp::Not => {
                 let (x, is_bool) = self.lower_expr_ex(a, true)?;
                 (negate(x, is_bool), true)
             }
             UnOp::BitNot => (
-                Expr::XorCalcul(Expr::wrap(self.lower_expr(a, true)?, Expr::Number("-1".into()))),
+                Expr::XorCalcul(Expr::wrap(
+                    self.lower_expr(a, true)?,
+                    Expr::Number("-1".into()),
+                )),
                 false,
             ),
-            UnOp::Deref => (Expr::ConnectAddr(Box::new(self.lower_expr(a, true)?)), false),
+            UnOp::Deref => (
+                Expr::ConnectAddr(Box::new(self.lower_expr(a, true)?)),
+                false,
+            ),
             UnOp::Addr => (Expr::GetAddress(Box::new(self.lower_expr(a, true)?)), false),
             UnOp::PreInc => (Expr::Inc(Box::new(self.lower_expr(a, true)?)), false),
             UnOp::PreDec => (Expr::Dec(Box::new(self.lower_expr(a, true)?)), false),
@@ -785,12 +980,25 @@ impl Lowerer {
                     );
                 }
                 let x = Box::new(self.lower_expr(a, true)?);
-                (if op == UnOp::PostInc { Expr::Inc(x) } else { Expr::Dec(x) }, false)
+                (
+                    if op == UnOp::PostInc {
+                        Expr::Inc(x)
+                    } else {
+                        Expr::Dec(x)
+                    },
+                    false,
+                )
             }
         })
     }
 
-    fn lower_binary(&mut self, op: BinOp, a: &CExpr, b: &CExpr, line: usize) -> PResult<(Expr, bool)> {
+    fn lower_binary(
+        &mut self,
+        op: BinOp,
+        a: &CExpr,
+        b: &CExpr,
+        line: usize,
+    ) -> PResult<(Expr, bool)> {
         match op {
             BinOp::LogAnd | BinOp::LogOr => {
                 let l = self.lower_cond(a)?;
@@ -798,7 +1006,11 @@ impl Lowerer {
                 let e = if is_pure(b) {
                     // 右辺に副作用も異常終了もないので、短絡評価しなくても結果は同じ
                     let pair = Expr::wrap(l, r);
-                    if op == BinOp::LogAnd { Expr::AndCalcul(pair) } else { Expr::OrCalcul(pair) }
+                    if op == BinOp::LogAnd {
+                        Expr::AndCalcul(pair)
+                    } else {
+                        Expr::OrCalcul(pair)
+                    }
                 } else {
                     // 短絡評価を保つため、Matchで書く(`a && b` = `a ? b : 0`)
                     let (then_v, else_v) = if op == BinOp::LogAnd {
@@ -810,7 +1022,10 @@ impl Lowerer {
                     let eb = vec![self.info(line, Group2Node::Expr(else_v))];
                     Expr::Match {
                         pattern: None,
-                        arms: vec![MatchArm { pattern: Box::new(l), body: tb }],
+                        arms: vec![MatchArm {
+                            pattern: Box::new(l),
+                            body: tb,
+                        }],
                         arm_else: Some(eb),
                     }
                 };
@@ -818,7 +1033,10 @@ impl Lowerer {
             }
             _ => {
                 let (x, y) = self.bin(a, b)?;
-                let is_bool = matches!(op, BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne);
+                let is_bool = matches!(
+                    op,
+                    BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne
+                );
                 Ok((make_bin(op, x, y), is_bool))
             }
         }
@@ -883,7 +1101,10 @@ impl Lowerer {
             CExprKind::Ident(s) => {
                 let mut scope = vec![self.resolve(s)];
                 scope.extend_from_slice(&fields[..fields.len() - 1]);
-                Ok(Expr::Member { scope, target: Box::new(Expr::Var(fields[fields.len() - 1].clone())) })
+                Ok(Expr::Member {
+                    scope,
+                    target: Box::new(Expr::Var(fields[fields.len() - 1].clone())),
+                })
             }
             // `a[i].m`
             CExprKind::Index(base, idx) => match &base.kind {
@@ -893,7 +1114,10 @@ impl Lowerer {
                     else_idx: None,
                     target: Box::new(target(&fields)),
                 }),
-                _ => unsup(line, "変数名以外を添字アクセスしてからメンバーを参照する式(`a[i][j].m`など)"),
+                _ => unsup(
+                    line,
+                    "変数名以外を添字アクセスしてからメンバーを参照する式(`a[i][j].m`など)",
+                ),
             },
             // `(*p).m`
             CExprKind::Unary(UnOp::Deref, inner) => match &inner.kind {
@@ -941,7 +1165,13 @@ fn void_value() -> Expr {
 }
 
 fn ends_with_bare_return(body: &[CStmt]) -> bool {
-    matches!(body.last(), Some(CStmt { kind: CStmtKind::Return(None), .. }))
+    matches!(
+        body.last(),
+        Some(CStmt {
+            kind: CStmtKind::Return(None),
+            ..
+        })
+    )
 }
 
 fn is_const_true(e: &CExpr) -> bool {
@@ -1001,15 +1231,28 @@ fn negate(e: Expr, is_bool: bool) -> Expr {
 /// 評価しても副作用(代入・関数呼び出し・++/--)が無い
 fn side_effect_free(e: &CExpr) -> bool {
     match &e.kind {
-        CExprKind::Ident(_) | CExprKind::EnumConst { .. } | CExprKind::Int(_) | CExprKind::Float(_)
-        | CExprKind::Char(_) | CExprKind::Str(_) | CExprKind::SizeofType(_) => true,
+        CExprKind::Ident(_)
+        | CExprKind::EnumConst { .. }
+        | CExprKind::Int(_)
+        | CExprKind::Float(_)
+        | CExprKind::Char(_)
+        | CExprKind::Str(_)
+        | CExprKind::SizeofType(_) => true,
         CExprKind::Unary(op, a) => {
-            !matches!(op, UnOp::PreInc | UnOp::PreDec | UnOp::PostInc | UnOp::PostDec)
-                && side_effect_free(a)
+            !matches!(
+                op,
+                UnOp::PreInc | UnOp::PreDec | UnOp::PostInc | UnOp::PostDec
+            ) && side_effect_free(a)
         }
-        CExprKind::Binary(_, a, b) | CExprKind::Index(a, b) => side_effect_free(a) && side_effect_free(b),
-        CExprKind::Cond(a, b, c) => side_effect_free(a) && side_effect_free(b) && side_effect_free(c),
-        CExprKind::Member(a, _, _) | CExprKind::Cast(_, a) | CExprKind::SizeofExpr(a) => side_effect_free(a),
+        CExprKind::Binary(_, a, b) | CExprKind::Index(a, b) => {
+            side_effect_free(a) && side_effect_free(b)
+        }
+        CExprKind::Cond(a, b, c) => {
+            side_effect_free(a) && side_effect_free(b) && side_effect_free(c)
+        }
+        CExprKind::Member(a, _, _) | CExprKind::Cast(_, a) | CExprKind::SizeofExpr(a) => {
+            side_effect_free(a)
+        }
         CExprKind::Assign(..) | CExprKind::Call(..) | CExprKind::Comma(_) => false,
     }
 }
@@ -1017,10 +1260,18 @@ fn side_effect_free(e: &CExpr) -> bool {
 /// 副作用も、メモリ参照・0除算による異常終了も無い(短絡評価を省いても結果が変わらない)
 fn is_pure(e: &CExpr) -> bool {
     match &e.kind {
-        CExprKind::Ident(_) | CExprKind::EnumConst { .. } | CExprKind::Int(_) | CExprKind::Float(_)
-        | CExprKind::Char(_) | CExprKind::Str(_) | CExprKind::SizeofType(_) => true,
+        CExprKind::Ident(_)
+        | CExprKind::EnumConst { .. }
+        | CExprKind::Int(_)
+        | CExprKind::Float(_)
+        | CExprKind::Char(_)
+        | CExprKind::Str(_)
+        | CExprKind::SizeofType(_) => true,
         CExprKind::Unary(op, a) => {
-            matches!(op, UnOp::Plus | UnOp::Neg | UnOp::Not | UnOp::BitNot | UnOp::Addr) && is_pure(a)
+            matches!(
+                op,
+                UnOp::Plus | UnOp::Neg | UnOp::Not | UnOp::BitNot | UnOp::Addr
+            ) && is_pure(a)
         }
         CExprKind::Binary(op, a, b) => {
             !matches!(op, BinOp::Div | BinOp::Mod) && is_pure(a) && is_pure(b)
@@ -1040,7 +1291,9 @@ fn strip_trailing_break<'a>(body: &[&'a CStmt]) -> (Vec<&'a CStmt>, bool) {
             v.pop();
             (v, true)
         }
-        Some(CStmtKind::Return(_)) | Some(CStmtKind::Continue) | Some(CStmtKind::Goto(_)) => (v, true),
+        Some(CStmtKind::Return(_)) | Some(CStmtKind::Continue) | Some(CStmtKind::Goto(_)) => {
+            (v, true)
+        }
         _ => (v, false),
     }
 }
@@ -1048,12 +1301,20 @@ fn strip_trailing_break<'a>(body: &[&'a CStmt]) -> (Vec<&'a CStmt>, bool) {
 /// `int a[] = {1,2,3}` / `char s[] = "abc"` の大きさを決める
 fn fix_array_len(ty: &CType, init: Option<&CInit>) -> CType {
     match (ty, init) {
-        (CType::Array { inner, len: None }, Some(CInit::List(items))) => {
-            CType::Array { inner: inner.clone(), len: Some(items.len()) }
-        }
-        (CType::Array { inner, len: None }, Some(CInit::Expr(CExpr { kind: CExprKind::Str(s), .. }))) => {
-            CType::Array { inner: inner.clone(), len: Some(s.chars().count() + 1) }
-        }
+        (CType::Array { inner, len: None }, Some(CInit::List(items))) => CType::Array {
+            inner: inner.clone(),
+            len: Some(items.len()),
+        },
+        (
+            CType::Array { inner, len: None },
+            Some(CInit::Expr(CExpr {
+                kind: CExprKind::Str(s),
+                ..
+            })),
+        ) => CType::Array {
+            inner: inner.clone(),
+            len: Some(s.chars().count() + 1),
+        },
         _ => ty.clone(),
     }
 }
