@@ -12,7 +12,10 @@ Hexlはrustで実装されたプログラミング言語であり
 
 
 ## **english ver**
-[english doc](./documents/english.md)
+[english doc](./documents/en_doc.md_)
+
+## document jp
+[doc](./documents/doc.md)
 
 ## 概要（Overview）
 可能な限りpanicしない言語

@@ -334,7 +334,7 @@ impl Lexer {
                     "else" => Tkn::KeyWordElse,
                     "impl" => Tkn::KeyWordImpl,
                     "extern" => Tkn::KeyWordExtern,
-                    "register" => Tkn::keyWordRegister,
+                    "register" => Tkn::KeyWordRegister,
                     "async" => Tkn::KeyWordAsync,
                     "await" => Tkn::KeyWordAwait,
                     "move" => Tkn::KeyWordMove,

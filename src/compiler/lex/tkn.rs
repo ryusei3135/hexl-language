@@ -92,7 +92,7 @@ pub enum Tkn {
     KeyWordImpl,
     KeyWordExtern,
 
-    keyWordRegister,
+    KeyWordRegister,
     KeyWordAsync,
     KeyWordAwait,
     KeyWordMove,
