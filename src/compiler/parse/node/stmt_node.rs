@@ -1,5 +1,15 @@
+use crate::compiler::node::FuncDefInfo::{AllDef, DefOnly};
+
 use super::*;
 
+/// 関数のノードが中身まで定義されているか
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FuncDefInfo {
+    /// 関数の定義だけの場合、中身はない
+    DefOnly,
+    /// 中身まですべて定義されている
+    AllDef,
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArgsNode {
     pub name: String,
@@ -19,6 +29,7 @@ pub struct FuncDefine {
     pub ret_ty: TyNode,
     pub body: Vec<Group2Info>,
     pub module: Option<String>,
+    def_info: FuncDefInfo,
 }
 
 impl FuncDefine {
@@ -31,6 +42,7 @@ impl FuncDefine {
             ret_ty: ret_ty,
             body: Vec::new(),
             module: None,
+            def_info: FuncDefInfo::DefOnly,
         })
     }
 
@@ -45,6 +57,10 @@ impl FuncDefine {
     }
 
     pub fn add(&mut self, node: Group2Info) {
+        // 関数の処理が追加された
+        if self.def_info == DefOnly {
+            self.def_info = AllDef;
+        }
         self.body.push(node);
     }
 }

@@ -5,6 +5,7 @@ mod div_ir;
 mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
+mod emit_tmpl_key;
 
 use super::emit_fn_name::emit_fn_name_id;
 use super::*;
@@ -288,37 +289,6 @@ impl AsmEmitter {
     /// 確保済みならそれを、そうでなければIRの`stk`を返す
     pub(in crate::compiler::asm_gen) fn ptr_stk(&self, ptr_idx: usize, ir_stk: usize) -> usize {
         self.struct_stk_map.get(&ptr_idx).copied().unwrap_or(ir_stk)
-    }
-
-    /// 式の結果や変数を置く、空いているレジスタを1つ確保して返す。
-    ///
-    /// 以前は`self.reg_idx`を単純にインクリメントしていたため、
-    /// 引数が入っているレジスタ(`%rdi`/`%rsi`など)や、他の変数が
-    /// 使っているレジスタまで上書きしていた。ここでは
-    /// - 使用中(引数・変数・まだ使う式の結果)のレジスタ
-    /// - `RESERVED_REGS`(`%rax`/`%rdx`)
-    /// を避けて、最も小さい番号の空きレジスタを返す。
-    ///
-    /// 返したレジスタを使用中にするのは呼び出し側の責任
-    /// (`mark_used`を呼ぶ)。
-    pub(in crate::compiler::asm_gen) fn alloc_reg(&self, size: &Size) -> RegisterMode {
-        let (count, mode) = if size.is_float() {
-            (self.asm_fmt.float_reg_count(), RegisterMode::Float(0))
-        } else {
-            (self.asm_fmt.reg_count(), RegisterMode::Normal(0))
-        };
-        (0..count)
-            .map(|index| match mode {
-                RegisterMode::Normal(_) => RegisterMode::Normal(index),
-                RegisterMode::Float(_) => RegisterMode::Float(index),
-            })
-            .find(|reg| {
-                !matches!(reg, RegisterMode::Normal(index) if RESERVED_REGS.contains(index))
-                    && !self.used_reg.is_used(reg)
-                    // まだ定義されていない変数のために割り当てたレジスタは使わない
-                    && !self.used_reg.is_reserved(*reg)
-            })
-            .expect("使用できるレジスタが足りません")
     }
 
     /// `node_idx`が式(`Inst::Expr`)の場合、その結果を持っていた一時的な
@@ -878,87 +848,6 @@ impl AsmEmitter {
             }
         } else {
             panic!("{:?}", node);
-        }
-    }
-
-    /// 式の種類から、アセンブリのテンプレートを引くキーを返す
-    fn expr_tmpl_key(expr: &inst::ExprInst, insts: &[Inst]) -> &'static str {
-        if expr.is_float(insts) {
-            match expr.kind {
-                inst::ExprKind::Add => "float_add",
-                inst::ExprKind::Sub => "float_sub",
-                // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
-                // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
-                inst::ExprKind::Mul => "float_mul",
-                inst::ExprKind::Div | inst::ExprKind::Surplus => "float_div",
-                inst::ExprKind::LessThen => "cmp_l",
-                inst::ExprKind::GreaterThen => "cmp_g",
-                inst::ExprKind::LessThenEq => "cmp_l_e",
-                inst::ExprKind::GreaterThenEq => "cmp_g_e",
-                inst::ExprKind::Equal => "cmp_e",
-                inst::ExprKind::NotEq => "cmp_ne",
-                _ => panic!(),
-            }
-        } else {
-            match expr.kind {
-                inst::ExprKind::Inc => "inc",
-                inst::ExprKind::Dec => "dec",
-                inst::ExprKind::AndCalcul => "and",
-                inst::ExprKind::XorCalcul => "xor",
-                inst::ExprKind::OrCalcul => "or",
-                inst::ExprKind::LShift => "lshift",
-                inst::ExprKind::RShift => "rshist",
-                inst::ExprKind::Add => "add",
-                inst::ExprKind::Sub => "sub",
-                // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
-                // (2オペランドの`imul`は`%rax`/`%rdx`を書き換えない)
-                inst::ExprKind::Mul => {
-                    if expr.is_unsigned(insts) {
-                        "mul"
-                    } else {
-                        "imul"
-                    }
-                }
-                inst::ExprKind::Div | inst::ExprKind::Surplus => {
-                    if expr.is_unsigned(insts) {
-                        "div"
-                    } else {
-                        "idiv"
-                    }
-                }
-                inst::ExprKind::LessThen => "cmp_l",
-                inst::ExprKind::GreaterThen => "cmp_g",
-                inst::ExprKind::LessThenEq => "cmp_l_e",
-                inst::ExprKind::GreaterThenEq => "cmp_g_e",
-                inst::ExprKind::Equal => "cmp_e",
-                inst::ExprKind::NotEq => "cmp_ne",
-            }
-        }
-    }
-
-    /// 式の種類から、ニーモニックのサイズ調整に使う、実際のニーモニックの文字列を返す
-    /// (`cmp_l`/`cmp_g`はテンプレートを引くためのキーであって、
-    ///  実際にテンプレート中で使われるニーモニックは"cmp"なので、
-    ///  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
-    fn expr_mnemonic(kind: &inst::ExprKind) -> &'static str {
-        match kind {
-            inst::ExprKind::Inc => "inc",
-            inst::ExprKind::Dec => "dec",
-            inst::ExprKind::AndCalcul => "and",
-            inst::ExprKind::XorCalcul => "xor",
-            inst::ExprKind::OrCalcul => "or",
-            inst::ExprKind::LShift => "lshift",
-            inst::ExprKind::RShift => "rshist",
-            inst::ExprKind::Add => "add",
-            inst::ExprKind::Sub => "sub",
-            inst::ExprKind::Mul => "imul",
-            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
-            inst::ExprKind::LessThen
-            | inst::ExprKind::GreaterThen
-            | inst::ExprKind::LessThenEq
-            | inst::ExprKind::GreaterThenEq
-            | inst::ExprKind::NotEq
-            | inst::ExprKind::Equal => "cmp",
         }
     }
 

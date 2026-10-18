@@ -473,6 +473,39 @@ impl UsedRegManager {
     }
 }
 
+impl AsmEmitter {
+    /// 式の結果や変数を置く、空いているレジスタを1つ確保して返す。
+    ///
+    /// 以前は`self.reg_idx`を単純にインクリメントしていたため、
+    /// 引数が入っているレジスタ(`%rdi`/`%rsi`など)や、他の変数が
+    /// 使っているレジスタまで上書きしていた。ここでは
+    /// - 使用中(引数・変数・まだ使う式の結果)のレジスタ
+    /// - `RESERVED_REGS`(`%rax`/`%rdx`)
+    /// を避けて、最も小さい番号の空きレジスタを返す。
+    ///
+    /// 返したレジスタを使用中にするのは呼び出し側の責任
+    /// (`mark_used`を呼ぶ)。
+    pub(in crate::compiler::asm_gen) fn alloc_reg(&self, size: &Size) -> RegisterMode {
+        let (count, mode) = if size.is_float() {
+            (self.asm_fmt.float_reg_count(), RegisterMode::Float(0))
+        } else {
+            (self.asm_fmt.reg_count(), RegisterMode::Normal(0))
+        };
+        (0..count)
+            .map(|index| match mode {
+                RegisterMode::Normal(_) => RegisterMode::Normal(index),
+                RegisterMode::Float(_) => RegisterMode::Float(index),
+            })
+            .find(|reg| {
+                !matches!(reg, RegisterMode::Normal(index) if RESERVED_REGS.contains(index))
+                    && !self.used_reg.is_used(reg)
+                    // まだ定義されていない変数のために割り当てたレジスタは使わない
+                    && !self.used_reg.is_reserved(*reg)
+            })
+            .expect("使用できるレジスタが足りません")
+    }
+}
+
 #[cfg(test)]
 mod unused_var_tests {
     use super::*;
