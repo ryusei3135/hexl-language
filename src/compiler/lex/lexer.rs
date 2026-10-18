@@ -96,6 +96,7 @@ pub struct Lexer {
     chr_stk: String,
     pub gen_tkns: Vec<LocatedTkn>,
     preproc_table: Preprocessor,
+    pub include_c_file_list: Vec<String>,
     /// `join_sym_tkn`が「直前のトークンと結合してよいか(=本当にソース上で
     /// 隣接した文字だったか)」を判定するために使う。これが無いと、
     /// `gen_tkns`の末尾が`Mul`かどうかだけで判定してしまい、
@@ -119,8 +120,12 @@ impl Lexer {
     /// これから解析するソースファイルのパスを教える。
     /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
     pub fn set_source_file(&mut self, file: &str) {
-        self.preproc_table
-            .set_source_file(std::path::Path::new(file));
+        if file.ends_with(".c") || file.ends_with(".h") {
+            self.include_c_file_list.push(file.to_string());
+        } else {
+            self.preproc_table
+                .set_source_file(std::path::Path::new(file));
+        }
     }
 
     fn with_preproc(preproc_table: Preprocessor) -> Self {
@@ -130,6 +135,7 @@ impl Lexer {
             chr_stk: String::new(),
             gen_tkns: Vec::new(),
             preproc_table,
+            include_c_file_list: Vec::new(),
             saw_gap: true,
         }
     }

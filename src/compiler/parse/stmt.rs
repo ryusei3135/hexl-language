@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::compiler::{models::Body, node::Group2Info};
+use crate::compiler::{c_frontend, models::Body, node::Group2Info};
 
 use super::*;
 
@@ -135,12 +135,22 @@ impl Parser {
         Ok(())
     }
 
+    /// c言語のノードも作成
     pub fn parser(
         &mut self,
         tkns: &[lex::LocatedTkn],
+        // #include "file.c"と文字列のみで指定されたものを処理
+        include_c_list: &[String],
     ) -> Result<&[node::Group1Node], err::ErrKind> {
+        use std::{fs, path::{Path, PathBuf}};
+
         self.tkns = Some(tkns.to_owned());
 
+        for f in include_c_list {
+            let content = fs::read_to_string(f).unwrap();
+            let n = c_frontend::emit_c_node(&content);
+            self.gen_nodes.extend(n);
+        }
         // 呼び出しが定義より前に書かれていても、その型の関数を
         // 作れるように、先にジェネリクス関数の定義を集めておく
         // 構造体/バリアントのジェネリクスも同様。関数の定義を集める際に、

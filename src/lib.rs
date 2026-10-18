@@ -225,8 +225,9 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
 
     // アセンブリ言語のデータを作成
     lexer.analy(&content)?;
+    let c_file_list: &[String] = &lexer.include_c_file_list;
 
-    let nodes = parser.parser(&lexer.gen_tkns)?;
+    let nodes = parser.parser(&lexer.gen_tkns, c_file_list)?;
 
     let func_def_meta_data = ir_builder
         .builder::<ir::PanicErr>(
