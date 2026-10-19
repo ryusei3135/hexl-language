@@ -131,8 +131,8 @@ mod variant_node_test {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
-        let mut p = parse::Parser::new();
-        let nodes = p.parser(&tkns).expect("node is err");
+        let mut p = parse::Parser::new_for_test();
+        let nodes = p.parser_for_test(&tkns).expect("node is err");
         let node::Group1Node::VariantDefine(variant_node) = nodes[0].clone() else {
             panic!("not variant");
         };

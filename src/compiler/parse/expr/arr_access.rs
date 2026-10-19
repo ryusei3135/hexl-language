@@ -272,9 +272,9 @@ mod test_access_arr_node {
 
     /// `main(): int { <stmt> }`の、1行目のノードを返す
     fn first_stmt(stmt: &str) -> node::Group2Node {
-        let mut p = parse::Parser::new();
+        let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes(&format!("main(): int {{ {} }}", stmt));
-        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };

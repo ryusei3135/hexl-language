@@ -48,6 +48,14 @@ fn unsup<T>(line: usize, msg: impl Into<String>) -> PResult<T> {
     Err(ParseError::unsupported(line, 0, msg))
 }
 
+fn span_at(line: usize) -> std::rc::Rc<crate::compiler::err::Span> {
+    std::rc::Rc::new(crate::compiler::err::Span::new(line, 0))
+}
+
+fn expr_at(node: ExprNode, line: usize) -> Expr {
+    Expr::new(node, span_at(line))
+}
+
 impl Lowerer {
     pub fn new() -> Self {
         Lowerer {
@@ -161,9 +169,11 @@ impl Lowerer {
                     fs.push(StructField {
                         name: f.name.clone(),
                         ty: self.to_ty(&f.ty, 0)?,
+                        span: span_at(0),
                     });
                 }
-                self.out.push(StructDefine::new(name, fs, Vec::new()));
+                self.out
+                    .push(StructDefine::new(name, fs, Vec::new(), span_at(0)));
             }
             CDef::Union { name, fields } => {
                 let mut fs = Vec::new();
@@ -172,9 +182,11 @@ impl Lowerer {
                         name: f.name.clone(),
                         ty: Some(self.to_ty(&f.ty, 0)?),
                         mode: VariantMode::Unsafe,
+                        span: span_at(0),
                     });
                 }
-                self.out.push(VariantDefine::new(name, fs, Vec::new()));
+                self.out
+                    .push(VariantDefine::new(name, fs, Vec::new(), span_at(0)));
             }
             CDef::Enum { name, members } => {
                 for (i, (m, v)) in members.iter().enumerate() {
@@ -190,9 +202,10 @@ impl Lowerer {
                 }
                 let fs = members
                     .into_iter()
-                    .map(|(m, _)| VariantField::typeless_new(m))
+                    .map(|(m, _)| VariantField::typeless_new(m, span_at(0)))
                     .collect();
-                self.out.push(VariantDefine::new(name, fs, Vec::new()));
+                self.out
+                    .push(VariantDefine::new(name, fs, Vec::new(), span_at(0)));
             }
         }
         Ok(())
@@ -224,6 +237,7 @@ impl Lowerer {
                 } else {
                     VarMutAttr::Var
                 },
+                span: span_at(f.line),
             });
         }
         let ret_ty = self.to_ty(&f.ret, f.line)?;
@@ -236,7 +250,11 @@ impl Lowerer {
         // void関数の末尾の`return;`は不要
         if is_void {
             if let Some(Group2Info {
-                node: Group2Node::Stmt(StmtNode::Return(Expr::Number(n))),
+                node:
+                    Group2Node::Stmt(StmtNode::Return(Expr {
+                        node: ExprNode::Number(n),
+                        ..
+                    })),
                 ..
             }) = body.last()
             {
@@ -246,7 +264,7 @@ impl Lowerer {
             }
         }
 
-        let mut node = FuncDefine::new(f.name, params, ret_ty, !f.is_static);
+        let mut node = FuncDefine::new(f.name, params, ret_ty, !f.is_static, span_at(f.line));
         if let Group1Node::FuncDefine(fd) = &mut node {
             for b in body {
                 fd.add(b);
@@ -297,7 +315,7 @@ impl Lowerer {
     // ---------------------------------------------------------------
 
     fn info(&self, line: usize, node: Group2Node) -> Group2Info {
-        node.gen_group_info(line)
+        node.gen_group_info(line, span_at(line))
     }
 
     /// 新しい`Body`を作って、中で`s`を変換する
@@ -387,7 +405,7 @@ impl Lowerer {
             CStmtKind::Return(e) => {
                 let v = match e {
                     Some(e) => self.lower_expr(e, true)?,
-                    None => void_value(),
+                    None => void_value(line),
                 };
                 out.push(self.info(line, Group2Node::Stmt(StmtNode::Return(v))));
             }
@@ -466,26 +484,32 @@ impl Lowerer {
         } else {
             VarMutAttr::Var
         };
-        Ok(DefineVar::new(&name, value, &tynode, var_attr).wrap())
+        Ok(DefineVar::new(&name, value, &tynode, var_attr).wrap(span_at(line)))
     }
 
     fn lower_init(&mut self, ty: &CType, init: Option<&CInit>, line: usize) -> PResult<Expr> {
         match init {
             None => Ok(match ty {
-                CType::Array { .. } => Expr::Array(Vec::new()),
+                CType::Array { .. } => expr_at(ExprNode::Array(Vec::new()), line),
                 _ => match self.tag_kind(ty) {
-                    Some(TagKind::Struct) => Expr::InitStruct {
-                        is_self: false,
-                        name: type_name(ty),
-                        fields: HashMap::new(),
-                    },
-                    Some(TagKind::Union) => Expr::InitVariant {
-                        is_self: false,
-                        name: type_name(ty),
-                        fields: HashMap::new(),
-                    },
+                    Some(TagKind::Struct) => expr_at(
+                        ExprNode::InitStruct {
+                            is_self: false,
+                            name: type_name(ty),
+                            fields: HashMap::new(),
+                        },
+                        line,
+                    ),
+                    Some(TagKind::Union) => expr_at(
+                        ExprNode::InitVariant {
+                            is_self: false,
+                            name: type_name(ty),
+                            fields: HashMap::new(),
+                        },
+                        line,
+                    ),
                     // スカラ・ポインタ・列挙型は0で初期化(Cでは不定値だが、0にしても矛盾しない)
-                    _ => Expr::Number("0".to_string()),
+                    _ => expr_at(ExprNode::Number("0".to_string()), line),
                 },
             }),
             Some(CInit::Expr(e)) => self.lower_expr(e, true),
@@ -511,7 +535,7 @@ impl Lowerer {
                     }
                     v.push(self.lower_init(inner, Some(it), line)?);
                 }
-                Ok(Expr::Array(v))
+                Ok(expr_at(ExprNode::Array(v), line))
             }
             _ => match self.tag_kind(ty) {
                 Some(kind @ (TagKind::Struct | TagKind::Union)) => {
@@ -564,17 +588,23 @@ impl Lowerer {
                         }
                     }
                     Ok(if kind == TagKind::Struct {
-                        Expr::InitStruct {
-                            is_self: false,
-                            name,
-                            fields,
-                        }
+                        expr_at(
+                            ExprNode::InitStruct {
+                                is_self: false,
+                                name,
+                                fields,
+                            },
+                            line,
+                        )
                     } else {
-                        Expr::InitVariant {
-                            is_self: false,
-                            name,
-                            fields,
-                        }
+                        expr_at(
+                            ExprNode::InitVariant {
+                                is_self: false,
+                                name,
+                                fields,
+                            },
+                            line,
+                        )
                     })
                 }
                 _ => {
@@ -606,6 +636,7 @@ impl Lowerer {
             arms.push(MatchArm {
                 pattern: Box::new(pat),
                 body,
+                span: span_at(cond.line),
             });
             match els {
                 None => break,
@@ -623,11 +654,14 @@ impl Lowerer {
                 }
             }
         }
-        Ok(Expr::Match {
-            pattern: None,
-            arms,
-            arm_else,
-        })
+        Ok(expr_at(
+            ExprNode::Match {
+                pattern: None,
+                arms,
+                arm_else,
+            },
+            c.line,
+        ))
     }
 
     fn guard_break(&mut self, cond: &CExpr, line: usize) -> PResult<Option<Group2Info>> {
@@ -635,16 +669,20 @@ impl Lowerer {
             return Ok(None);
         }
         let (e, is_bool) = self.lower_expr_ex(cond, true)?;
-        let neg = negate(e, is_bool);
+        let neg = negate(e, is_bool, line);
         let brk = self.info(line, Group2Node::Stmt(StmtNode::Break));
-        let m = Expr::Match {
-            pattern: None,
-            arms: vec![MatchArm {
-                pattern: Box::new(neg),
-                body: vec![brk],
-            }],
-            arm_else: None,
-        };
+        let m = expr_at(
+            ExprNode::Match {
+                pattern: None,
+                arms: vec![MatchArm {
+                    pattern: Box::new(neg),
+                    body: vec![brk],
+                    span: span_at(line),
+                }],
+                arm_else: None,
+            },
+            line,
+        );
         Ok(Some(self.info(line, Group2Node::Expr(m))))
     }
 
@@ -657,10 +695,13 @@ impl Lowerer {
             Vec::new(),
         );
         self.frames.pop();
-        Ok(Expr::Loop {
-            pattern: None,
-            body: b?,
-        })
+        Ok(expr_at(
+            ExprNode::Loop {
+                pattern: None,
+                body: b?,
+            },
+            line,
+        ))
     }
 
     fn lower_do_while(&mut self, body: &CStmt, c: &CExpr, line: usize) -> PResult<Expr> {
@@ -670,10 +711,13 @@ impl Lowerer {
         });
         let b = self.lower_body_with(std::slice::from_ref(body), Vec::new(), guard);
         self.frames.pop();
-        Ok(Expr::Loop {
-            pattern: None,
-            body: b?,
-        })
+        Ok(expr_at(
+            ExprNode::Loop {
+                pattern: None,
+                body: b?,
+            },
+            line,
+        ))
     }
 
     fn lower_for(
@@ -706,10 +750,13 @@ impl Lowerer {
             self.frames.pop();
             out.push(self.info(
                 line,
-                Group2Node::Expr(Expr::Loop {
-                    pattern: None,
-                    body: b?,
-                }),
+                Group2Node::Expr(expr_at(
+                    ExprNode::Loop {
+                        pattern: None,
+                        body: b?,
+                    },
+                    line,
+                )),
             ));
             Ok(())
         })();
@@ -795,17 +842,21 @@ impl Lowerer {
                         arms.push(MatchArm {
                             pattern: Box::new(p),
                             body: lowered.clone(),
+                            span: span_at(e.line),
                         });
                     }
                     Label::Default => arm_else = Some(lowered.clone()),
                 }
             }
         }
-        Ok(Expr::Match {
-            pattern: Some(Box::new(pattern)),
-            arms,
-            arm_else,
-        })
+        Ok(expr_at(
+            ExprNode::Match {
+                pattern: Some(Box::new(pattern)),
+                arms,
+                arm_else,
+            },
+            line,
+        ))
     }
 
     // ---------------------------------------------------------------
@@ -831,7 +882,7 @@ impl Lowerer {
     /// 条件として使う式(0/1の値になる形にする)
     fn lower_cond(&mut self, e: &CExpr) -> PResult<Expr> {
         let (x, is_bool) = self.lower_expr_ex(e, true)?;
-        Ok(to_bool(x, is_bool))
+        Ok(to_bool(x, is_bool, e.line))
     }
 
     fn bin(&mut self, a: &CExpr, b: &CExpr) -> PResult<(Box<Expr>, Box<Expr>)> {
@@ -845,17 +896,18 @@ impl Lowerer {
     fn lower_expr_ex(&mut self, e: &CExpr, used: bool) -> PResult<(Expr, bool)> {
         let line = e.line;
         let r = match &e.kind {
-            CExprKind::Ident(n) => Expr::Var(self.resolve(n)),
-            CExprKind::EnumConst { ename, variant } => Expr::EnumVariant {
+            CExprKind::Ident(n) => ExprNode::Var(self.resolve(n)),
+            CExprKind::EnumConst { ename, variant } => ExprNode::EnumVariant {
                 name: ename.clone(),
                 variant: variant.clone(),
             },
-            CExprKind::Int(s) => Expr::Number(s.clone()),
-            CExprKind::Float(s) => Expr::Float(s.clone()),
-            CExprKind::Char(v) => Expr::Number(v.to_string()),
-            CExprKind::Str(s) => Expr::Str(s.clone()),
+            CExprKind::Int(s) => ExprNode::Number(s.clone()),
+            CExprKind::Float(s) => ExprNode::Float(s.clone()),
+            CExprKind::Char(v) => ExprNode::Number(v.to_string()),
+            CExprKind::Str(s) => ExprNode::Str(s.clone()),
             CExprKind::Unary(op, a) => return self.lower_unary(*op, a, used, line),
             CExprKind::Binary(op, a, b) => return self.lower_binary(*op, a, b, line),
+            CExprKind::Member(..) => return Ok((self.lower_member(e)?, false)),
             CExprKind::Assign(op, l, r) => {
                 let dst = self.lower_expr(l, true)?;
                 let name = self.root_name(l);
@@ -869,10 +921,14 @@ impl Lowerer {
                             );
                         }
                         let (a, b) = self.bin(l, r)?;
-                        make_bin(*op, a, b)
+                        make_bin(*op, a, b, line)
                     }
                 };
-                AssignVar::new(&name, dst, value)
+                ExprNode::Assign(AssignVar {
+                    name,
+                    dst: Box::new(dst),
+                    value: Box::new(value),
+                })
             }
             CExprKind::Cond(c, a, b) => {
                 let pat = self.lower_cond(c)?;
@@ -880,11 +936,12 @@ impl Lowerer {
                 let vb = self.lower_expr(b, true)?;
                 let ba = vec![self.info(line, Group2Node::Expr(va))];
                 let bb = vec![self.info(line, Group2Node::Expr(vb))];
-                Expr::Match {
+                ExprNode::Match {
                     pattern: None,
                     arms: vec![MatchArm {
                         pattern: Box::new(pat),
                         body: ba,
+                        span: span_at(line),
                     }],
                     arm_else: Some(bb),
                 }
@@ -897,7 +954,7 @@ impl Lowerer {
                 for x in args {
                     a.push(self.lower_expr(x, true)?);
                 }
-                Expr::CallFunc(CallInfo {
+                ExprNode::CallFunc(CallInfo {
                     name: name.clone(),
                     temp_ty: Vec::new(),
                     args: a,
@@ -906,17 +963,16 @@ impl Lowerer {
             CExprKind::Index(base, idx) => {
                 let dst = self.lower_expr(base, true)?;
                 let index = self.lower_expr(idx, true)?;
-                Expr::RefArray {
+                ExprNode::RefArray {
                     name: self.root_name(base),
                     dst: Box::new(dst),
                     index: Box::new(index),
                     else_idx: None,
                 }
             }
-            CExprKind::Member(..) => self.lower_member(e)?,
             CExprKind::Cast(t, a) => {
                 let ty = self.to_ty(t, line)?;
-                Expr::Cast((ty, Box::new(self.lower_expr(a, true)?)))
+                ExprNode::Cast((ty, Box::new(self.lower_expr(a, true)?)))
             }
             CExprKind::SizeofType(_) | CExprKind::SizeofExpr(_) => {
                 return unsup(
@@ -931,7 +987,7 @@ impl Lowerer {
                 );
             }
         };
-        Ok((r, false))
+        Ok((expr_at(r, line), false))
     }
 
     fn lower_unary(
@@ -944,34 +1000,55 @@ impl Lowerer {
         Ok(match op {
             UnOp::Plus => (self.lower_expr(a, true)?, false),
             UnOp::Neg => match &a.kind {
-                CExprKind::Int(s) => (Expr::Number(format!("-{}", s)), false),
-                CExprKind::Float(s) => (Expr::Float(format!("-{}", s)), false),
+                CExprKind::Int(s) => (expr_at(ExprNode::Number(format!("-{}", s)), line), false),
+                CExprKind::Float(s) => (expr_at(ExprNode::Float(format!("-{}", s)), line), false),
                 _ => (
-                    Expr::Sub(Expr::wrap(
-                        Expr::Number("0".into()),
-                        self.lower_expr(a, true)?,
-                    )),
+                    expr_at(
+                        ExprNode::Sub(Expr::wrap(
+                            expr_at(ExprNode::Number("0".into()), line),
+                            self.lower_expr(a, true)?,
+                        )),
+                        line,
+                    ),
                     false,
                 ),
             },
             UnOp::Not => {
                 let (x, is_bool) = self.lower_expr_ex(a, true)?;
-                (negate(x, is_bool), true)
+                (negate(x, is_bool, line), true)
             }
             UnOp::BitNot => (
-                Expr::XorCalcul(Expr::wrap(
-                    self.lower_expr(a, true)?,
-                    Expr::Number("-1".into()),
-                )),
+                expr_at(
+                    ExprNode::XorCalcul(Expr::wrap(
+                        self.lower_expr(a, true)?,
+                        expr_at(ExprNode::Number("-1".into()), line),
+                    )),
+                    line,
+                ),
                 false,
             ),
             UnOp::Deref => (
-                Expr::ConnectAddr(Box::new(self.lower_expr(a, true)?)),
+                expr_at(
+                    ExprNode::ConnectAddr(Box::new(self.lower_expr(a, true)?)),
+                    line,
+                ),
                 false,
             ),
-            UnOp::Addr => (Expr::GetAddress(Box::new(self.lower_expr(a, true)?)), false),
-            UnOp::PreInc => (Expr::Inc(Box::new(self.lower_expr(a, true)?)), false),
-            UnOp::PreDec => (Expr::Dec(Box::new(self.lower_expr(a, true)?)), false),
+            UnOp::Addr => (
+                expr_at(
+                    ExprNode::GetAddress(Box::new(self.lower_expr(a, true)?)),
+                    line,
+                ),
+                false,
+            ),
+            UnOp::PreInc => (
+                expr_at(ExprNode::Inc(Box::new(self.lower_expr(a, true)?)), line),
+                false,
+            ),
+            UnOp::PreDec => (
+                expr_at(ExprNode::Dec(Box::new(self.lower_expr(a, true)?)), line),
+                false,
+            ),
             UnOp::PostInc | UnOp::PostDec => {
                 if used {
                     return unsup(
@@ -982,9 +1059,9 @@ impl Lowerer {
                 let x = Box::new(self.lower_expr(a, true)?);
                 (
                     if op == UnOp::PostInc {
-                        Expr::Inc(x)
+                        expr_at(ExprNode::Inc(x), line)
                     } else {
-                        Expr::Dec(x)
+                        expr_at(ExprNode::Dec(x), line)
                     },
                     false,
                 )
@@ -1007,27 +1084,31 @@ impl Lowerer {
                     // 右辺に副作用も異常終了もないので、短絡評価しなくても結果は同じ
                     let pair = Expr::wrap(l, r);
                     if op == BinOp::LogAnd {
-                        Expr::AndCalcul(pair)
+                        expr_at(ExprNode::AndCalcul(pair), line)
                     } else {
-                        Expr::OrCalcul(pair)
+                        expr_at(ExprNode::OrCalcul(pair), line)
                     }
                 } else {
                     // 短絡評価を保つため、Matchで書く(`a && b` = `a ? b : 0`)
                     let (then_v, else_v) = if op == BinOp::LogAnd {
-                        (r, Expr::Number("0".into()))
+                        (r, expr_at(ExprNode::Number("0".into()), line))
                     } else {
-                        (Expr::Number("1".into()), r)
+                        (expr_at(ExprNode::Number("1".into()), line), r)
                     };
                     let tb = vec![self.info(line, Group2Node::Expr(then_v))];
                     let eb = vec![self.info(line, Group2Node::Expr(else_v))];
-                    Expr::Match {
-                        pattern: None,
-                        arms: vec![MatchArm {
-                            pattern: Box::new(l),
-                            body: tb,
-                        }],
-                        arm_else: Some(eb),
-                    }
+                    expr_at(
+                        ExprNode::Match {
+                            pattern: None,
+                            arms: vec![MatchArm {
+                                pattern: Box::new(l),
+                                body: tb,
+                                span: span_at(line),
+                            }],
+                            arm_else: Some(eb),
+                        },
+                        line,
+                    )
                 };
                 Ok((e, true))
             }
@@ -1037,7 +1118,7 @@ impl Lowerer {
                     op,
                     BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne
                 );
-                Ok((make_bin(op, x, y), is_bool))
+                Ok((make_bin(op, x, y, line), is_bool))
             }
         }
     }
@@ -1071,23 +1152,32 @@ impl Lowerer {
         fields.reverse();
         let target = |fields: &[String]| -> Expr {
             if fields.len() == 1 {
-                Expr::Var(fields[0].clone())
+                expr_at(ExprNode::Var(fields[0].clone()), line)
             } else {
-                Expr::Member {
-                    scope: fields[..fields.len() - 1].to_vec(),
-                    target: Box::new(Expr::Var(fields[fields.len() - 1].clone())),
-                }
+                expr_at(
+                    ExprNode::Member {
+                        scope: fields[..fields.len() - 1].to_vec(),
+                        target: Box::new(expr_at(
+                            ExprNode::Var(fields[fields.len() - 1].clone()),
+                            line,
+                        )),
+                    },
+                    line,
+                )
             }
         };
         if arrow_base.is_some() {
             // `p->m...`: pは変数名
             return match &dot_base.kind {
-                CExprKind::Ident(p) => Ok(Expr::PtrMember {
-                    name: self.resolve(p),
-                    index: None,
-                    else_idx: None,
-                    target: Box::new(target(&fields)),
-                }),
+                CExprKind::Ident(p) => Ok(expr_at(
+                    ExprNode::PtrMember {
+                        name: self.resolve(p),
+                        index: None,
+                        else_idx: None,
+                        target: Box::new(target(&fields)),
+                    },
+                    line,
+                )),
                 CExprKind::Unary(UnOp::Deref, _) => {
                     unsup(line, "`(*pp)->m`(ポインタのポインタ経由のメンバー参照)")
                 }
@@ -1101,19 +1191,28 @@ impl Lowerer {
             CExprKind::Ident(s) => {
                 let mut scope = vec![self.resolve(s)];
                 scope.extend_from_slice(&fields[..fields.len() - 1]);
-                Ok(Expr::Member {
-                    scope,
-                    target: Box::new(Expr::Var(fields[fields.len() - 1].clone())),
-                })
+                Ok(expr_at(
+                    ExprNode::Member {
+                        scope,
+                        target: Box::new(expr_at(
+                            ExprNode::Var(fields[fields.len() - 1].clone()),
+                            line,
+                        )),
+                    },
+                    line,
+                ))
             }
             // `a[i].m`
             CExprKind::Index(base, idx) => match &base.kind {
-                CExprKind::Ident(p) => Ok(Expr::PtrMember {
-                    name: self.resolve(p),
-                    index: Some(Box::new(self.lower_expr(idx, true)?)),
-                    else_idx: None,
-                    target: Box::new(target(&fields)),
-                }),
+                CExprKind::Ident(p) => Ok(expr_at(
+                    ExprNode::PtrMember {
+                        name: self.resolve(p),
+                        index: Some(Box::new(self.lower_expr(idx, true)?)),
+                        else_idx: None,
+                        target: Box::new(target(&fields)),
+                    },
+                    line,
+                )),
                 _ => unsup(
                     line,
                     "変数名以外を添字アクセスしてからメンバーを参照する式(`a[i][j].m`など)",
@@ -1121,12 +1220,15 @@ impl Lowerer {
             },
             // `(*p).m`
             CExprKind::Unary(UnOp::Deref, inner) => match &inner.kind {
-                CExprKind::Ident(p) => Ok(Expr::PtrMember {
-                    name: self.resolve(p),
-                    index: None,
-                    else_idx: None,
-                    target: Box::new(target(&fields)),
-                }),
+                CExprKind::Ident(p) => Ok(expr_at(
+                    ExprNode::PtrMember {
+                        name: self.resolve(p),
+                        index: None,
+                        else_idx: None,
+                        target: Box::new(target(&fields)),
+                    },
+                    line,
+                )),
                 _ => unsup(line, "`(*式).m`(変数名以外のポインタ)"),
             },
             _ => unsup(
@@ -1160,8 +1262,8 @@ fn type_name(t: &CType) -> String {
 }
 
 /// `return;`に使う値。nodeのReturnは必ず式を取るので0で代用する(NOTE.md)
-fn void_value() -> Expr {
-    Expr::Number("0".to_string())
+fn void_value(line: usize) -> Expr {
+    expr_at(ExprNode::Number("0".to_string()), line)
 }
 
 fn ends_with_bare_return(body: &[CStmt]) -> bool {
@@ -1179,53 +1281,64 @@ fn is_const_true(e: &CExpr) -> bool {
         || matches!(&e.kind, CExprKind::Char(v) if *v != 0)
 }
 
-fn make_bin(op: BinOp, a: Box<Expr>, b: Box<Expr>) -> Expr {
+fn make_bin(op: BinOp, a: Box<Expr>, b: Box<Expr>, line: usize) -> Expr {
     let p = (a, b);
-    match op {
-        BinOp::Mul => Expr::Mul(p),
-        BinOp::Div => Expr::Div(p),
-        BinOp::Mod => Expr::Surplus(p),
-        BinOp::Add => Expr::Add(p),
-        BinOp::Sub => Expr::Sub(p),
-        BinOp::Shl => Expr::LShift(p),
-        BinOp::Shr => Expr::RShift(p),
-        BinOp::Lt => Expr::LessThen(p),
-        BinOp::Gt => Expr::GreaterThen(p),
-        BinOp::Le => Expr::LessThenEq(p),
-        BinOp::Ge => Expr::GreaterThenEq(p),
-        BinOp::Eq => Expr::Equal(p),
-        BinOp::Ne => Expr::NotEq(p),
-        BinOp::BitAnd => Expr::AndCalcul(p),
-        BinOp::BitXor => Expr::XorCalcul(p),
-        BinOp::BitOr => Expr::OrCalcul(p),
-        BinOp::LogAnd => Expr::AndCalcul(p),
-        BinOp::LogOr => Expr::OrCalcul(p),
-    }
+    let node = match op {
+        BinOp::Mul => ExprNode::Mul(p),
+        BinOp::Div => ExprNode::Div(p),
+        BinOp::Mod => ExprNode::Surplus(p),
+        BinOp::Add => ExprNode::Add(p),
+        BinOp::Sub => ExprNode::Sub(p),
+        BinOp::Shl => ExprNode::LShift(p),
+        BinOp::Shr => ExprNode::RShift(p),
+        BinOp::Lt => ExprNode::LessThen(p),
+        BinOp::Gt => ExprNode::GreaterThen(p),
+        BinOp::Le => ExprNode::LessThenEq(p),
+        BinOp::Ge => ExprNode::GreaterThenEq(p),
+        BinOp::Eq => ExprNode::Equal(p),
+        BinOp::Ne => ExprNode::NotEq(p),
+        BinOp::BitAnd => ExprNode::AndCalcul(p),
+        BinOp::BitXor => ExprNode::XorCalcul(p),
+        BinOp::BitOr => ExprNode::OrCalcul(p),
+        BinOp::LogAnd => ExprNode::CmpAnd(p),
+        BinOp::LogOr => ExprNode::CmpOr(p),
+    };
+    expr_at(node, line)
 }
 
 /// 値を0/1にする(既に0/1ならそのまま)
-fn to_bool(e: Expr, is_bool: bool) -> Expr {
+fn to_bool(e: Expr, is_bool: bool, line: usize) -> Expr {
     if is_bool {
         e
     } else {
-        Expr::NotEq(Expr::wrap(e, Expr::Number("0".to_string())))
+        expr_at(
+            ExprNode::NotEq(Expr::wrap(
+                e,
+                expr_at(ExprNode::Number("0".to_string()), line),
+            )),
+            line,
+        )
     }
 }
 
 /// 条件の否定
-fn negate(e: Expr, is_bool: bool) -> Expr {
-    match e {
-        Expr::Equal(p) => Expr::NotEq(p),
-        Expr::NotEq(p) => Expr::Equal(p),
-        Expr::LessThen(p) => Expr::GreaterThenEq(p),
-        Expr::GreaterThenEq(p) => Expr::LessThen(p),
-        Expr::GreaterThen(p) => Expr::LessThenEq(p),
-        Expr::LessThenEq(p) => Expr::GreaterThen(p),
+fn negate(e: Expr, is_bool: bool, line: usize) -> Expr {
+    let node = match e.node {
+        ExprNode::Equal(p) => ExprNode::NotEq(p),
+        ExprNode::NotEq(p) => ExprNode::Equal(p),
+        ExprNode::LessThen(p) => ExprNode::GreaterThenEq(p),
+        ExprNode::GreaterThenEq(p) => ExprNode::LessThen(p),
+        ExprNode::GreaterThen(p) => ExprNode::LessThenEq(p),
+        ExprNode::LessThenEq(p) => ExprNode::GreaterThen(p),
         other => {
             let _ = is_bool;
-            Expr::Equal(Expr::wrap(other, Expr::Number("0".to_string())))
+            ExprNode::Equal(Expr::wrap(
+                Expr::new(other, e.span),
+                expr_at(ExprNode::Number("0".to_string()), line),
+            ))
         }
-    }
+    };
+    expr_at(node, line)
 }
 
 /// 評価しても副作用(代入・関数呼び出し・++/--)が無い

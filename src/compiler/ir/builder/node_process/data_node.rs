@@ -4,9 +4,9 @@ use super::*;
 
 impl IR {
     fn get_ast_len(&self, ast: &node::Expr) -> Option<usize> {
-        match ast {
-            node::Expr::Str(value) => Some(value.len()),
-            node::Expr::Array(values) => Some(values.len()),
+        match &ast.node {
+            node::ExprNode::Str(value) => Some(value.len()),
+            node::ExprNode::Array(values) => Some(values.len()),
             _ => None,
         }
     }
@@ -110,12 +110,16 @@ impl IR {
                 } else {
                     let array_ty = self.size_of(&var.ty);
                     self.stack_counter(&var.ty);
-                    let init_values = match *var.value {
-                        node::Expr::Array(values) => values,
-                        value => vec![value],
+                    let node::Expr {
+                        node: value_node,
+                        span,
+                    } = *var.value;
+                    let init_values = match value_node {
+                        node::ExprNode::Array(values) => values,
+                        value_node => vec![node::Expr::new(value_node, std::rc::Rc::clone(&span))],
                     };
-                    let value_idx =
-                        self.gen_expr_ir::<M>(node::Expr::Array(init_values), Some(&array_ty))?;
+                    let array = node::Expr::new(node::ExprNode::Array(init_values), span);
+                    let value_idx = self.gen_expr_ir::<M>(&array, Some(&array_ty))?;
                     let ty_to_register = register_ty.as_ref().unwrap_or(&var.ty);
                     self.var_tree.push::<'l'>(
                         &var.name,

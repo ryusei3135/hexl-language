@@ -94,9 +94,9 @@ mod test {
 
     #[test]
     fn check_ptr_range_node() {
-        let mut p = parse::Parser::new();
+        let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int[* 1..10] = [b] }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -119,9 +119,9 @@ mod test {
 
     #[test]
     fn check_mut_ptr_range_node() {
-        let mut p = parse::Parser::new();
+        let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int[*mut 1..10] = [b] }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -144,8 +144,8 @@ mod test {
 
     #[test]
     fn check_invalid_ptr_range_node() {
-        let mut p = parse::Parser::new();
+        let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int[* 1..10 = [b] }");
-        assert!(p.parser(&tkns).is_err());
+        assert!(p.parser_for_test(&tkns).is_err());
     }
 }

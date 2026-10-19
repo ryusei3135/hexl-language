@@ -502,8 +502,8 @@ mod generic_type_tests {
     fn try_build(src: &str) -> Result<Vec<node::Group1Node>, ()> {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
-        let mut p = parse::Parser::new();
-        p.parser(&lexer.gen_tkns.clone())
+        let mut p = parse::Parser::new_for_test();
+        p.parser_for_test(&lexer.gen_tkns.clone())
             .map(|nodes| nodes.to_vec())
             .map_err(|_| ())
     }
@@ -514,6 +514,13 @@ mod generic_type_tests {
 
     fn ty(name: &str) -> node::TyNode {
         node::TyNode::Ty(name.to_string())
+    }
+
+    fn expr(node: node::ExprNode) -> node::Expr {
+        node::Expr::new(
+            node,
+            std::rc::Rc::new(crate::compiler::err::Span::unknown()),
+        )
     }
 
     fn structs(nodes: &Vec<node::Group1Node>) -> Vec<&node::StructDefine> {
@@ -752,15 +759,19 @@ mod generic_type_tests {
             ",
         );
         let main = func(&nodes, "main");
-        let node::Group2Node::Expr(node::Expr::DefVar(v)) = main.body[0].get_node() else {
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(v),
+            ..
+        }) = main.body[0].get_node()
+        else {
             panic!("{:?}", main.body[0]);
         };
         assert_eq!(
             *v.value,
-            node::Expr::EnumVariant {
+            expr(node::ExprNode::EnumVariant {
                 name: "Opt$int".to_string(),
                 variant: "None".to_string(),
-            }
+            })
         );
     }
 
@@ -777,21 +788,25 @@ mod generic_type_tests {
             ",
         );
         let main = func(&nodes, "main");
-        let node::Group2Node::Expr(node::Expr::DefVar(var)) = main.body[1].get_node() else {
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(var),
+            ..
+        }) = main.body[1].get_node()
+        else {
             panic!("{:?}", main.body[1]);
         };
         assert_eq!(
             *var.value,
-            node::Expr::InitVariant {
+            expr(node::ExprNode::InitVariant {
                 is_self: false,
                 name: "Option".to_string(),
                 fields: [(
                     "Some".to_string(),
-                    Box::new(node::Expr::Var("value".to_string()))
+                    Box::new(expr(node::ExprNode::Var("value".to_string())))
                 )]
                 .into_iter()
                 .collect(),
-            }
+            })
         );
     }
 

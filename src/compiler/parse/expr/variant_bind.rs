@@ -167,8 +167,8 @@ mod variant_bind_tests {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
-        let mut p = parse::Parser::new();
-        let nodes = p.parser(&tkns).map_err(|_| ())?;
+        let mut p = parse::Parser::new_for_test();
+        let nodes = p.parser_for_test(&tkns).map_err(|_| ())?;
         for n in nodes {
             if let node::Group1Node::FuncDefine(func) = n {
                 if func.name == "main" {

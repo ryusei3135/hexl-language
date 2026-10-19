@@ -558,7 +558,7 @@ mod generic_tests {
 
     /// テストで組み立てるノードに付ける位置
     fn sp() -> Rc<err::Span> {
-        Rc::new(parse::Parser::new().build_err_span())
+        Rc::new(parse::Parser::new_for_test().build_err_span())
     }
 
     fn ex(node: node::ExprNode) -> node::Expr {
@@ -576,8 +576,8 @@ mod generic_tests {
     fn try_build(src: &str) -> Result<Vec<node::Group1Node>, ()> {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
-        let mut p = parse::Parser::new();
-        p.parser(&lexer.gen_tkns.clone())
+        let mut p = parse::Parser::new_for_test();
+        p.parser_for_test(&lexer.gen_tkns.clone())
             .map(|nodes| nodes.to_vec())
             .map_err(|_| ())
     }
@@ -866,7 +866,7 @@ mod generic_tests {
             lexer.analy(&src.to_string()).unwrap();
             lexer.gen_tkns
         };
-        let mut p = parse::Parser::new();
+        let mut p = parse::Parser::new_for_test();
         p.tkns = Some(lex_tkns("func<T>(p: Point): T { ret p.T }"));
         p.collect_generic_funcs().unwrap();
         let generic = p.generic_funcs.get("func").unwrap().clone();

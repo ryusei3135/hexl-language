@@ -85,24 +85,30 @@ mod test {
 
     #[test]
     fn check_constract_must() {
-        let mut p = parse::Parser::new();
+        let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int must=a = 10 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Group2Node::Expr(node::Expr::DefVar(node::DefineVar {
-                name: "a".to_string(),
-                value: Box::new(node::Expr::Number("10".to_string())),
-                ty: node::ConstractTy::new::<{ node::IS_MUST }>(
-                    Some("a".to_string()),
-                    None,
-                    Box::new(node::TyNode::Ty("int".to_string()))
-                ),
-                var_attr: parse::VarMutAttr::Invar,
-            }))
+            &node::Group2Node::Expr(node::Expr::new(
+                node::ExprNode::DefVar(node::DefineVar {
+                    name: "a".to_string(),
+                    value: Box::new(node::Expr::new(
+                        node::ExprNode::Number("10".to_string()),
+                        std::rc::Rc::new(crate::compiler::err::Span::unknown()),
+                    )),
+                    ty: node::ConstractTy::new::<{ node::IS_MUST }>(
+                        Some("a".to_string()),
+                        None,
+                        Box::new(node::TyNode::Ty("int".to_string()))
+                    ),
+                    var_attr: parse::VarMutAttr::Invar,
+                }),
+                std::rc::Rc::new(crate::compiler::err::Span::unknown()),
+            ))
         );
     }
 }

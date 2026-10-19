@@ -109,8 +109,8 @@ mod impl_block_test {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
-        let mut p = parse::Parser::new();
-        p.parser(&tkns).map(|nodes| nodes.to_vec()).map_err(|_| ())
+        let mut p = parse::Parser::new_for_test();
+        p.parser_for_test(&tkns).map(|nodes| nodes.to_vec()).map_err(|_| ())
     }
 
     fn method_names(methods: &[node::Group1Node]) -> Vec<String> {

@@ -129,6 +129,23 @@ impl Parser {
         }
     }
 
+    #[cfg(test)]
+    pub fn new_for_test() -> Self {
+        let file_name = Rc::new("<test>".to_string());
+        Self::new(
+            &file_name,
+            Rc::new(RefCell::new(err_pool::ErrPool::new())),
+        )
+    }
+
+    #[cfg(test)]
+    pub fn parser_for_test(
+        &mut self,
+        tkns: &[lex::LocatedTkn],
+    ) -> Result<&[node::Group1Node], err::ErrKind> {
+        self.parser(tkns, &Vec::<String>::new())
+    }
+
     // 関数の中身などを作成する
     // P は、この関数が公開されるかどうかのbool
     fn build_func<const P: bool>(&mut self, func_name: &str) -> Result<(), err::ErrKind> {

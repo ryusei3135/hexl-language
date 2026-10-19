@@ -376,22 +376,22 @@ mod ty_tests {
 
     /// テストで組み立てるノードに付ける位置
     fn sp() -> Rc<err::Span> {
-        Rc::new(Parser::new().build_err_span())
+        Rc::new(Parser::new_for_test().build_err_span())
     }
 
     fn build(value: &str) -> Vec<node::Group1Node> {
         let mut lex = lex::Lexer::new();
         let _ = lex.analy(&value.to_string()).unwrap();
-        let mut parse = Parser::new();
-        parse.parser(&lex.gen_tkns.clone()).unwrap().to_vec()
+        let mut parse = Parser::new_for_test();
+        parse.parser_for_test(&lex.gen_tkns.clone()).unwrap().to_vec()
     }
 
     /// 構文解析がエラーになるかどうか
     fn build_is_err(value: &str) -> bool {
         let mut lex = lex::Lexer::new();
         let _ = lex.analy(&value.to_string()).unwrap();
-        let mut parse = Parser::new();
-        parse.parser(&lex.gen_tkns.clone()).is_err()
+        let mut parse = Parser::new_for_test();
+        parse.parser_for_test(&lex.gen_tkns.clone()).is_err()
     }
 
     #[test]

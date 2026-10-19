@@ -397,6 +397,12 @@ impl IR {
         // 添字が可変な配列アクセスのときは、範囲外のときの分岐を
         // IRに差し込むためのガードが返る
         let arr_guard = M::handle(self.check_mem_access::<M>(&expr))?;
+        if matches!(
+            &expr.node,
+            node::ExprNode::CmpAnd(..) | node::ExprNode::CmpOr(..)
+        ) {
+            return self.gen_setcc_ir::<M>(&expr);
+        }
         let inst = match &expr.node {
             // ポインタ関係
             node::ExprNode::GetAddress(target) => {
@@ -814,7 +820,13 @@ impl IR {
         //   (真偽値/何も与えないパターン)
         let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
             if let Some(target) = pattern.as_ref() {
-                node::Expr::new(node::ExprNode::Equal((target.clone(), Box::new(arm_pattern.clone()))), Rc::clone(arm_pattern.span))
+                node::Expr::new(
+                    node::ExprNode::Equal((
+                        target.clone(),
+                        Box::new(arm_pattern.clone()),
+                    )),
+                    Rc::clone(&arm_pattern.span),
+                )
             } else {
                 arm_pattern.clone()
             }
@@ -1025,6 +1037,24 @@ impl IR {
 }
 
 #[cfg(test)]
+fn test_span() -> std::rc::Rc<err::Span> {
+    std::rc::Rc::new(err::Span::unknown())
+}
+
+#[cfg(test)]
+fn parse_test_source(src: &str) -> Vec<node::Group1Node> {
+    let mut lexer = crate::compiler::lex::Lexer::new();
+    lexer.analy(&src.to_string()).unwrap();
+    let file_name = std::rc::Rc::new("<test>".to_string());
+    let err_pool = std::rc::Rc::new(std::cell::RefCell::new(crate::err::err_pool::ErrPool::new()));
+    let mut parser = parse::Parser::new(&file_name, err_pool);
+    parser
+        .parser(&lexer.gen_tkns, &Vec::<String>::new())
+        .unwrap()
+        .to_vec()
+}
+
+#[cfg(test)]
 mod self_ty_tests {
     use super::*;
 
@@ -1033,15 +1063,18 @@ mod self_ty_tests {
         params: Vec<node::ArgsNode>,
         ret_ty: node::TyNode,
     ) -> node::FuncDefine {
-        node::FuncDefine {
-            public: false,
-            name: name.to_string(),
-            temp_ty: Vec::new(),
+        let mut func = match node::FuncDefine::new(
+            name.to_string(),
             params,
             ret_ty,
-            body: Vec::new(),
-            module: Some("Name".to_string()),
-        }
+            false,
+            test_span(),
+        ) {
+            node::Group1Node::FuncDefine(func) => func,
+            _ => unreachable!(),
+        };
+        func.module = Some("Name".to_string());
+        func
     }
 
     #[test]
@@ -1056,11 +1089,13 @@ mod self_ty_tests {
                     name: "self".to_string(),
                     ty: node::TyNode::SelfTy("Name".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
+                    span: test_span(),
                 },
                 node::ArgsNode {
                     name: "param".to_string(),
                     ty: node::TyNode::Ty("int".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
+                    span: test_span(),
                 },
             ],
             node::TyNode::Ty("int".to_string()),
@@ -1092,11 +1127,13 @@ mod self_ty_tests {
                     name: "param".to_string(),
                     ty: node::TyNode::Ty("int".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
+                    span: test_span(),
                 },
                 node::ArgsNode {
                     name: "self".to_string(),
                     ty: node::TyNode::SelfTy("Name".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
+                    span: test_span(),
                 },
             ],
             node::TyNode::Ty("int".to_string()),
@@ -1116,6 +1153,7 @@ mod self_ty_tests {
                 name: "self".to_string(),
                 ty: node::TyNode::SelfTy("Name".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
+                span: test_span(),
             }],
             node::TyNode::SelfTy("Name".to_string()),
         );
@@ -1135,13 +1173,9 @@ mod self_ty_tests {
 #[cfg(test)]
 mod mem_var_tests {
     use super::*;
-    use crate::compiler::{lex, parse};
 
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
-        let mut lexer = lex::Lexer::new();
-        lexer.analy(&src.to_string()).unwrap();
-        let mut parser = parse::Parser::new();
-        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let nodes = parse_test_source(src);
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
         ir.test_only_get_func_body("main").to_vec()
@@ -1316,7 +1350,7 @@ mod mem_var_tests {
         let variants = body
             .iter()
             .filter_map(|inst| match inst {
-                inst::Inst::Variant { name, tag, .. } => Some((name.as_str(), *tag)),
+                inst::Inst::Variant { name, tag, .. } => Some((name.as_str(), tag)),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -1385,14 +1419,10 @@ mod mem_var_tests {
 #[cfg(test)]
 mod match_expr_ir_tests {
     use super::*;
-    use crate::compiler::{lex, parse};
     use std::collections::HashSet;
 
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
-        let mut lexer = lex::Lexer::new();
-        lexer.analy(&src.to_string()).unwrap();
-        let mut parser = parse::Parser::new();
-        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let nodes = parse_test_source(src);
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
         ir.test_only_get_func_body("main").to_vec()
@@ -1421,6 +1451,80 @@ mod match_expr_ir_tests {
                 })
             )),
             "`a == 10` の比較命令(Equal)が生成される必要がある: {:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn logical_and_generates_boolean_ir() {
+        let body = build_func_body(
+            "main(): bool {
+                a: int = 1
+                b: int = 2
+                ret a && b
+            }",
+        );
+
+        assert_eq!(
+            body.iter()
+                .filter(|inst| matches!(
+                    inst,
+                    inst::Inst::Expr(inst::ExprInst {
+                        kind: inst::ExprKind::SetNotEq,
+                        ..
+                    })
+                ))
+                .count(),
+            2,
+            "論理演算のオペランドを真偽値に変換する必要がある: {:?}",
+            body
+        );
+        assert!(
+            body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::Expr(inst::ExprInst {
+                    kind: inst::ExprKind::AndCalcul,
+                    ..
+                })
+            )),
+            "&& のIR(AndCalcul)が生成される必要がある: {:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn logical_or_generates_boolean_ir() {
+        let body = build_func_body(
+            "main(): bool {
+                a: int = 1
+                b: int = 2
+                ret a < b || b < a
+            }",
+        );
+
+        assert_eq!(
+            body.iter()
+                .filter(|inst| matches!(
+                    inst,
+                    inst::Inst::Expr(inst::ExprInst {
+                        kind: inst::ExprKind::SetLessThen,
+                        ..
+                    })
+                ))
+                .count(),
+            2,
+            "|| の比較オペランドはそれぞれ真偽値へ変換される必要がある: {:?}",
+            body
+        );
+        assert!(
+            body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::Expr(inst::ExprInst {
+                    kind: inst::ExprKind::OrCalcul,
+                    ..
+                })
+            )),
+            "|| のIR(OrCalcul)が生成される必要がある: {:?}",
             body
         );
     }
@@ -1532,12 +1636,8 @@ mod match_expr_ir_tests {
     fn check_variant_ctor_defined_after_use() {
         // バリアント型が使う関数より後ろに定義されていても、
         // `E::b(10)`は関数呼び出しではなく、バリアント型の初期化になる
-        let mut lexer = lex::Lexer::new();
-        lexer
-            .analy(&"main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }".to_string())
-            .unwrap();
-        let mut parser = parse::Parser::new();
-        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let nodes =
+            parse_test_source("main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }");
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
         let body = ir.test_only_get_func_body("main").to_vec();
@@ -1566,59 +1666,17 @@ mod match_expr_ir_tests {
 
 #[cfg(test)]
 mod struct_method_expand_tests {
-    use crate::compiler::node::{Field, StructDefine};
-
     use super::*;
-
-    /// `self`を第一引数に取るメゾットを持つ構造体`StructDefine`を作る
-    fn make_struct_with_method(
-        struct_name: &str,
-        method_name: &str,
-        method_params: Vec<node::ArgsNode>,
-        method_ret_ty: node::TyNode,
-        method_body: Body,
-    ) -> node::StructDefine {
-        let method = node::FuncDefine {
-            public: true,
-            name: method_name.to_string(),
-            temp_ty: Vec::new(),
-            params: method_params,
-            ret_ty: method_ret_ty,
-            body: method_body,
-            // 展開前は、どのモジュールにも属していない
-            module: None,
-        };
-
-        node::StructDefine {
-            name: struct_name.to_string(),
-            fields: vec![node::StructField::make_field("x", "int")],
-            methods: vec![node::Group1Node::FuncDefine(method)],
-        }
-    }
 
     #[test]
     fn method_is_registered_as_function_with_struct_as_module() {
         // 構造体`Point`のメゾット`get_num`が、モジュール名`Point`を
         // 持つ通常の関数としてIRに展開されることを確認する
-        let struct_def = make_struct_with_method(
-            "Point",
-            "get_num",
-            vec![node::ArgsNode {
-                name: "self".to_string(),
-                ty: node::TyNode::SelfTy("Point".to_string()),
-                var_attr: parse::VarMutAttr::Invar,
-            }],
-            node::TyNode::Ty("int".to_string()),
-            vec![
-                node::StmtNode::Return(node::Expr::Number("1".to_string()))
-                    .wrap()
-                    .gen_group_info(0),
-            ],
-        );
+        let nodes =
+            parse_test_source("struct Point { x: int pub get_num(self: Self): int { ret 1 } }");
 
         let mut ir = IR::new();
-        ir.builder(&vec![node::Group1Node::StructDefine(struct_def)])
-            .unwrap();
+        ir.builder(&nodes).unwrap();
 
         // `Point::get_num`として展開され、呼び出せる状態になっている
         let body = ir.test_only_get_method_body("Point", "get_num");
@@ -1652,43 +1710,9 @@ mod struct_method_expand_tests {
     fn method_can_be_called_via_struct_name_scope() {
         // `self`を取らない、構造体の「静的メゾット」を定義し、
         // `Point::answer()`のように呼び出せることを確認する
-        let struct_def = make_struct_with_method(
-            "Point",
-            "answer",
-            vec![],
-            node::TyNode::Ty("int".to_string()),
-            vec![
-                node::StmtNode::Return(node::Expr::Number("42".to_string()))
-                    .wrap()
-                    .gen_group_info(0),
-            ],
+        let nodes = parse_test_source(
+            "struct Point { pub answer(): int { ret 42 } } main(): int { ret Point::answer() }",
         );
-
-        let main_fn = node::FuncDefine {
-            public: true,
-            name: "main".to_string(),
-            temp_ty: Vec::new(),
-            params: vec![],
-            ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![
-                node::StmtNode::Return(node::Expr::Scope {
-                    scope: vec!["Point".to_string()],
-                    target: Box::new(node::Expr::CallFunc(node::CallInfo {
-                        name: "answer".to_string(),
-                        temp_ty: Vec::new(),
-                        args: vec![],
-                    })),
-                })
-                .wrap()
-                .gen_group_info(0),
-            ],
-            module: None,
-        };
-
-        let nodes = vec![
-            node::Group1Node::StructDefine(struct_def),
-            node::Group1Node::FuncDefine(main_fn),
-        ];
 
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
@@ -1706,87 +1730,15 @@ mod struct_method_expand_tests {
 #[cfg(test)]
 mod method_call_via_member_tests {
     use super::*;
-    use crate::compiler::node::Field;
-    use std::collections::HashMap;
-
-    fn make_ini_struct_node(name: &String, fields: HashMap<String, Box<node::Expr>>) -> node::Expr {
-        node::Expr::InitStruct {
-            name: "Point".to_string(),
-            fields,
-            is_self: false,
-        }
-    }
 
     #[test]
     fn calling_method_via_dot_syntax_passes_implicit_self_pointer() {
         // `p.get_num()`のように、変数のメンバーアクセス経由で
         // メゾットを呼び出すと、暗黙的に`p`のアドレスが
         // 第一引数(`self`)として渡されることを確認する
-        let method = node::FuncDefine {
-            public: true,
-            name: "get_num".to_string(),
-            temp_ty: Vec::new(),
-            params: vec![node::ArgsNode {
-                name: "self".to_string(),
-                ty: node::TyNode::SelfTy("int".to_string()),
-                var_attr: parse::VarMutAttr::Invar,
-            }],
-            ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![
-                node::StmtNode::Return(node::Expr::Number("7".to_string()))
-                    .wrap()
-                    .gen_group_info(0),
-            ],
-            module: None,
-        };
-
-        let struct_def = node::StructDefine {
-            name: "Point".to_string(),
-            fields: vec![node::StructField::make_field("x", "int")],
-            methods: vec![node::Group1Node::FuncDefine(method)],
-        };
-
-        let mut fields = HashMap::new();
-        fields.insert(
-            "x".to_string(),
-            Box::new(node::Expr::Number("1".to_string())),
+        let nodes = parse_test_source(
+            "struct Point { x: int pub get_num(self: Self): int { ret 7 } } main(): int { p: Point = Point { x: 1 } ret p.get_num() }",
         );
-
-        let def_p = node::DefineVar::new(
-            &"p".to_string(),
-            make_ini_struct_node(&"Point".to_string(), fields),
-            &node::TyNode::Ty("Point".to_string()),
-            parse::VarMutAttr::Invar,
-        )
-        .wrap()
-        .wrap_group2()
-        .gen_group_info(0);
-
-        let call_method = node::StmtNode::Return(node::Expr::Member {
-            scope: vec!["p".to_string()],
-            target: Box::new(node::Expr::CallFunc(node::CallInfo {
-                name: "get_num".to_string(),
-                temp_ty: Vec::new(),
-                args: vec![],
-            })),
-        })
-        .wrap()
-        .gen_group_info(0);
-
-        let main_fn = node::FuncDefine {
-            public: true,
-            name: "main".to_string(),
-            temp_ty: Vec::new(),
-            params: vec![],
-            ret_ty: node::TyNode::Ty("int".to_string()),
-            body: vec![def_p, call_method],
-            module: None,
-        };
-
-        let nodes = vec![
-            node::Group1Node::StructDefine(struct_def),
-            node::Group1Node::FuncDefine(main_fn),
-        ];
 
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
@@ -1815,13 +1767,9 @@ mod method_call_via_member_tests {
 #[cfg(test)]
 mod unary_expr_ir_tests {
     use super::*;
-    use crate::compiler::{lex, parse};
 
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
-        let mut lexer = lex::Lexer::new();
-        lexer.analy(&src.to_string()).unwrap();
-        let mut parser = parse::Parser::new();
-        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let nodes = parse_test_source(src);
         let mut ir = IR::new();
         ir.builder(&nodes).unwrap();
         ir.test_only_get_func_body("main").to_vec()

@@ -1,7 +1,9 @@
 use super::*;
+use crate::compiler::err::Span;
 use crate::compiler::node::*;
 use crate::compiler::parse::VarMutAttr;
 use crate::preproc::Preprocessor;
+use std::rc::Rc;
 
 fn parse(src: &str) -> Vec<Group1Node> {
     let toks = Preprocessor::new()
@@ -29,10 +31,19 @@ fn func(nodes: &[Group1Node], name: &str) -> FuncDefine {
 }
 
 fn num(s: &str) -> Box<Expr> {
-    Box::new(Expr::Number(s.to_string()))
+    Box::new(expr(ExprNode::Number(s.to_string())))
 }
 fn var(s: &str) -> Box<Expr> {
-    Box::new(Expr::Var(s.to_string()))
+    Box::new(expr(ExprNode::Var(s.to_string())))
+}
+fn span() -> Rc<Span> {
+    Rc::new(Span::unknown())
+}
+fn expr(node: ExprNode) -> Expr {
+    Expr::new(node, span())
+}
+fn defvar(name: &str, value: Expr, ty: &TyNode, var_attr: VarMutAttr) -> ExprNode {
+    ExprNode::DefVar(DefineVar::new(&name.to_string(), value, ty, var_attr))
 }
 fn ty(s: &str) -> TyNode {
     TyNode::Ty(s.to_string())
@@ -43,7 +54,7 @@ fn exprs(f: &FuncDefine) -> Vec<Expr> {
         .map(|g| match &g.node {
             Group2Node::Expr(e) => e.clone(),
             Group2Node::Stmt(StmtNode::Return(e)) => {
-                Expr::Cast((ty("RETURN"), Box::new(e.clone())))
+                expr(ExprNode::Cast((ty("RETURN"), Box::new(e.clone()))))
             }
             other => panic!("{:?}", other),
         })
@@ -61,7 +72,7 @@ fn simple_function() {
     assert_eq!(f.params[0].var_attr, VarMutAttr::Var);
     assert_eq!(
         f.body[0].node,
-        Group2Node::Stmt(StmtNode::Return(Expr::Add((var("a"), var("b")))))
+        Group2Node::Stmt(StmtNode::Return(expr(ExprNode::Add((var("a"), var("b"))))))
     );
     assert_eq!(f.body[0].line, 1);
 }
@@ -111,59 +122,59 @@ fn local_variables() {
     );
     let e = exprs(&func(&n, "f"));
     assert_eq!(
-        e[0],
-        Expr::DefVar(DefineVar::new(
-            &"x".into(),
-            Expr::Number("5".into()),
+        e[0].node,
+        defvar(
+            "x",
+            expr(ExprNode::Number("5".into())),
             &ty("int"),
             VarMutAttr::Var
-        ))
+        )
     );
     assert_eq!(
-        e[1],
-        Expr::DefVar(DefineVar::new(
-            &"y".into(),
-            Expr::Number("0".into()),
+        e[1].node,
+        defvar(
+            "y",
+            expr(ExprNode::Number("0".into())),
             &ty("int"),
             VarMutAttr::Var
-        ))
+        )
     );
     assert_eq!(
-        e[2],
-        Expr::DefVar(DefineVar::new(
-            &"z".into(),
-            Expr::Number("1".into()),
+        e[2].node,
+        defvar(
+            "z",
+            expr(ExprNode::Number("1".into())),
             &ty("int"),
             VarMutAttr::Invar
-        ))
+        )
     );
     assert_eq!(
-        e[3],
-        Expr::DefVar(DefineVar::new(
-            &"c".into(),
-            Expr::Number("0".into()),
+        e[3].node,
+        defvar(
+            "c",
+            expr(ExprNode::Number("0".into())),
             &TyNode::Static {
                 name: Box::new(ty("int")),
                 len: 1
             },
             VarMutAttr::Var
-        ))
+        )
     );
     assert_eq!(
-        e[4],
-        Expr::DefVar(DefineVar::new(
-            &"a".into(),
-            Expr::Array(vec![
-                Expr::Number("1".into()),
-                Expr::Number("2".into()),
-                Expr::Number("3".into())
-            ]),
+        e[4].node,
+        defvar(
+            "a",
+            expr(ExprNode::Array(vec![
+                expr(ExprNode::Number("1".into())),
+                expr(ExprNode::Number("2".into())),
+                expr(ExprNode::Number("3".into()))
+            ])),
             &TyNode::Stack {
                 name: Box::new(ty("int")),
                 len: 3
             },
             VarMutAttr::Var
-        ))
+        )
     );
 }
 
@@ -171,7 +182,9 @@ fn local_variables() {
 fn array_len_from_initializer() {
     let n = parse("void f() { char s[] = \"ab\"; }");
     let e = exprs(&func(&n, "f"));
-    let Expr::DefVar(d) = &e[0] else { panic!() };
+    let ExprNode::DefVar(d) = &e[0].node else {
+        panic!()
+    };
     assert_eq!(
         d.ty,
         TyNode::Stack {
@@ -179,7 +192,7 @@ fn array_len_from_initializer() {
             len: 3
         }
     );
-    assert_eq!(*d.value, Expr::Str("ab".into()));
+    assert_eq!(d.value.node, ExprNode::Str("ab".into()));
 }
 
 #[test]
@@ -192,7 +205,7 @@ fn operators() {
         panic!()
     };
     // 一番外側は最後の `|`
-    assert!(matches!(e, Expr::Add(..)));
+    assert!(matches!(e.node, ExprNode::Add(..)));
 }
 
 #[test]
@@ -201,16 +214,16 @@ fn unary_ops_are_desugared() {
         "void f(int a) { int b = -a; int c = !a; int d = ~a; int e = -5; int *p = &a; int g = *p; }",
     );
     let e = exprs(&func(&n, "f"));
-    let val = |i: usize| match &e[i] {
-        Expr::DefVar(d) => (*d.value).clone(),
+    let val = |i: usize| match &e[i].node {
+        ExprNode::DefVar(d) => (*d.value).clone(),
         _ => panic!(),
     };
-    assert_eq!(val(0), Expr::Sub((num("0"), var("a"))));
-    assert_eq!(val(1), Expr::Equal((var("a"), num("0"))));
-    assert_eq!(val(2), Expr::XorCalcul((var("a"), num("-1"))));
-    assert_eq!(val(3), Expr::Number("-5".into()));
-    assert_eq!(val(4), Expr::GetAddress(var("a")));
-    assert_eq!(val(5), Expr::ConnectAddr(var("p")));
+    assert_eq!(val(0).node, ExprNode::Sub((num("0"), var("a"))));
+    assert_eq!(val(1).node, ExprNode::Equal((var("a"), num("0"))));
+    assert_eq!(val(2).node, ExprNode::XorCalcul((var("a"), num("-1"))));
+    assert_eq!(val(3).node, ExprNode::Number("-5".into()));
+    assert_eq!(val(4).node, ExprNode::GetAddress(var("a")));
+    assert_eq!(val(5).node, ExprNode::ConnectAddr(var("p")));
 }
 
 #[test]
@@ -219,18 +232,21 @@ fn if_else_chain_becomes_match() {
         "int f(int a) { if (a < 1) return 1; else if (a == 2) { return 2; } else return 3; }",
     );
     let e = exprs(&func(&n, "f"));
-    let Expr::Match {
+    let ExprNode::Match {
         pattern,
         arms,
         arm_else,
-    } = &e[0]
+    } = &e[0].node
     else {
         panic!()
     };
     assert!(pattern.is_none());
     assert_eq!(arms.len(), 2);
-    assert_eq!(*arms[0].pattern, Expr::LessThen((var("a"), num("1"))));
-    assert_eq!(*arms[1].pattern, Expr::Equal((var("a"), num("2"))));
+    assert_eq!(
+        arms[0].pattern.node,
+        ExprNode::LessThen((var("a"), num("1")))
+    );
+    assert_eq!(arms[1].pattern.node, ExprNode::Equal((var("a"), num("2"))));
     assert!(arm_else.is_some());
 }
 
@@ -238,27 +254,37 @@ fn if_else_chain_becomes_match() {
 fn non_bool_condition_gets_ne_zero() {
     let n = parse("void f(int a) { if (a) { a = 1; } }");
     let e = exprs(&func(&n, "f"));
-    let Expr::Match { arms, .. } = &e[0] else {
+    let ExprNode::Match { arms, .. } = &e[0].node else {
         panic!()
     };
-    assert_eq!(*arms[0].pattern, Expr::NotEq((var("a"), num("0"))));
+    assert_eq!(arms[0].pattern.node, ExprNode::NotEq((var("a"), num("0"))));
 }
 
 #[test]
 fn while_loop() {
     let n = parse("void f(int i) { while (i < 10) { i++; } }");
     let e = exprs(&func(&n, "f"));
-    let Expr::Loop { pattern, body } = &e[0] else {
+    let ExprNode::Loop { pattern, body } = &e[0].node else {
         panic!()
     };
     assert!(pattern.is_none());
     // 先頭は「条件の否定ならbreak」
-    let Group2Node::Expr(Expr::Match { arms, .. }) = &body[0].node else {
+    let Group2Node::Expr(Expr {
+        node: ExprNode::Match { arms, .. },
+        ..
+    }) = &body[0].node
+    else {
         panic!()
     };
-    assert_eq!(*arms[0].pattern, Expr::GreaterThenEq((var("i"), num("10"))));
+    assert_eq!(
+        arms[0].pattern.node,
+        ExprNode::GreaterThenEq((var("i"), num("10")))
+    );
     assert_eq!(arms[0].body[0].node, Group2Node::Stmt(StmtNode::Break));
-    assert_eq!(body[1].node, Group2Node::Expr(Expr::Inc(var("i"))));
+    assert_eq!(
+        body[1].node,
+        Group2Node::Expr(expr(ExprNode::Inc(var("i"))))
+    );
 }
 
 #[test]
@@ -266,7 +292,13 @@ fn infinite_loop_has_no_guard() {
     let n = parse("void f() { while (1) { break; } for (;;) { break; } }");
     let e = exprs(&func(&n, "f"));
     for x in e {
-        let Expr::Loop { body, .. } = x else { panic!() };
+        let Expr {
+            node: ExprNode::Loop { body, .. },
+            ..
+        } = x
+        else {
+            panic!()
+        };
         assert_eq!(body.len(), 1);
     }
 }
@@ -276,19 +308,29 @@ fn for_loop_and_continue() {
     let n = parse("void f(int n) { for (int i = 0; i < n; i++) { if (i == 3) continue; g(i); } }");
     let e = exprs(&func(&n, "f"));
     // 初期化 + Loop
-    assert!(matches!(e[0], Expr::DefVar(_)));
-    let Expr::Loop { body, .. } = &e[1] else {
+    assert!(matches!(e[0].node, ExprNode::DefVar(_)));
+    let ExprNode::Loop { body, .. } = &e[1].node else {
         panic!()
     };
     // guard, if(continue), g(i), i++
     assert_eq!(body.len(), 4);
-    assert_eq!(body[3].node, Group2Node::Expr(Expr::Inc(var("i"))));
+    assert_eq!(
+        body[3].node,
+        Group2Node::Expr(expr(ExprNode::Inc(var("i"))))
+    );
     // continueの前に更新式が入る
-    let Group2Node::Expr(Expr::Match { arms, .. }) = &body[1].node else {
+    let Group2Node::Expr(Expr {
+        node: ExprNode::Match { arms, .. },
+        ..
+    }) = &body[1].node
+    else {
         panic!()
     };
     assert_eq!(arms[0].body.len(), 2);
-    assert_eq!(arms[0].body[0].node, Group2Node::Expr(Expr::Inc(var("i"))));
+    assert_eq!(
+        arms[0].body[0].node,
+        Group2Node::Expr(expr(ExprNode::Inc(var("i"))))
+    );
     assert_eq!(arms[0].body[1].node, Group2Node::Stmt(StmtNode::Continue));
 }
 
@@ -299,7 +341,7 @@ fn two_for_loops_with_same_var_get_renamed() {
     let names: Vec<String> = e
         .iter()
         .filter_map(|x| {
-            if let Expr::DefVar(d) = x {
+            if let ExprNode::DefVar(d) = &x.node {
                 Some(d.name.clone())
             } else {
                 None
@@ -309,15 +351,19 @@ fn two_for_loops_with_same_var_get_renamed() {
     assert_eq!(names.len(), 2);
     assert_ne!(names[0], names[1]);
     // 2つ目のループ内の`i`も改名後の名前を指す
-    let Expr::Loop { body, .. } = &e[3] else {
+    let ExprNode::Loop { body, .. } = &e[3].node else {
         panic!()
     };
-    let Group2Node::Expr(Expr::Match { arms, .. }) = &body[0].node else {
+    let Group2Node::Expr(Expr {
+        node: ExprNode::Match { arms, .. },
+        ..
+    }) = &body[0].node
+    else {
         panic!()
     };
     assert_eq!(
-        *arms[0].pattern,
-        Expr::GreaterThenEq((var(&names[1]), num("3")))
+        arms[0].pattern.node,
+        ExprNode::GreaterThenEq((var(&names[1]), num("3")))
     );
 }
 
@@ -325,14 +371,24 @@ fn two_for_loops_with_same_var_get_renamed() {
 fn do_while() {
     let n = parse("void f(int i) { do { i--; } while (i > 0); }");
     let e = exprs(&func(&n, "f"));
-    let Expr::Loop { body, .. } = &e[0] else {
+    let ExprNode::Loop { body, .. } = &e[0].node else {
         panic!()
     };
-    assert_eq!(body[0].node, Group2Node::Expr(Expr::Dec(var("i"))));
-    let Group2Node::Expr(Expr::Match { arms, .. }) = &body[1].node else {
+    assert_eq!(
+        body[0].node,
+        Group2Node::Expr(expr(ExprNode::Dec(var("i"))))
+    );
+    let Group2Node::Expr(Expr {
+        node: ExprNode::Match { arms, .. },
+        ..
+    }) = &body[1].node
+    else {
         panic!()
     };
-    assert_eq!(*arms[0].pattern, Expr::LessThenEq((var("i"), num("0"))));
+    assert_eq!(
+        arms[0].pattern.node,
+        ExprNode::LessThenEq((var("i"), num("0")))
+    );
 }
 
 #[test]
@@ -341,15 +397,18 @@ fn switch_with_fallthrough_and_default() {
         "int f(int a) { int r = 0; switch (a) { case 1: case 2: r = 1; break; case 3: r = 2; default: r = 3; break; } return r; }",
     );
     let e = exprs(&func(&n, "f"));
-    let Expr::Match {
+    let ExprNode::Match {
         pattern,
         arms,
         arm_else,
-    } = &e[1]
+    } = &e[1].node
     else {
         panic!()
     };
-    assert_eq!(**pattern.as_ref().unwrap(), *var("a"));
+    assert_eq!(
+        pattern.as_ref().unwrap().node,
+        ExprNode::Var("a".to_string())
+    );
     // case 1 / case 2 / case 3
     assert_eq!(arms.len(), 3);
     assert_eq!(*arms[0].pattern, *num("1"));
@@ -372,20 +431,20 @@ fn logical_ops() {
         "int f(int a, int b, int *p) { int x = a < 1 && b < 2; int y = p != 0 && *p > 1; int z = a || b; return 0; }",
     );
     let e = exprs(&func(&n, "f"));
-    let val = |i: usize| match &e[i] {
-        Expr::DefVar(d) => (*d.value).clone(),
+    let val = |i: usize| match &e[i].node {
+        ExprNode::DefVar(d) => (*d.value).clone(),
         _ => panic!(),
     };
     // 右辺が安全 -> ビット演算
-    assert!(matches!(val(0), Expr::AndCalcul(_)));
+    assert!(matches!(val(0).node, ExprNode::AndCalcul(_)));
     // 右辺が`*p` -> 短絡評価を保つためMatch
-    assert!(matches!(val(1), Expr::Match { .. }));
+    assert!(matches!(val(1).node, ExprNode::Match { .. }));
     // 整数は`!= 0`に直して or
     assert_eq!(
-        val(2),
-        Expr::OrCalcul((
-            Box::new(Expr::NotEq((var("a"), num("0")))),
-            Box::new(Expr::NotEq((var("b"), num("0"))))
+        val(2).node,
+        ExprNode::OrCalcul((
+            Box::new(expr(ExprNode::NotEq((var("a"), num("0"))))),
+            Box::new(expr(ExprNode::NotEq((var("b"), num("0")))))
         ))
     );
 }
@@ -394,7 +453,10 @@ fn logical_ops() {
 fn ternary() {
     let n = parse("int f(int a) { return a > 0 ? 1 : 2; }");
     let f = func(&n, "f");
-    let Group2Node::Stmt(StmtNode::Return(Expr::Match { arms, arm_else, .. })) = &f.body[0].node
+    let Group2Node::Stmt(StmtNode::Return(Expr {
+        node: ExprNode::Match { arms, arm_else, .. },
+        ..
+    })) = &f.body[0].node
     else {
         panic!()
     };
@@ -406,18 +468,35 @@ fn ternary() {
 fn assignment_and_compound() {
     let n = parse("void f(int a, int *p, int *q) { a = 1; a += 2; *p = 3; q[1] = 4; p[a] <<= 1; }");
     let e = exprs(&func(&n, "f"));
-    assert_eq!(e[0], AssignVar::new("a", *var("a"), *num("1")));
     assert_eq!(
-        e[1],
-        AssignVar::new("a", *var("a"), Expr::Add((var("a"), num("2"))))
+        e[0].node,
+        ExprNode::Assign(AssignVar {
+            name: "a".into(),
+            dst: var("a"),
+            value: num("1"),
+        })
     );
     assert_eq!(
-        e[2],
-        AssignVar::new("p", Expr::ConnectAddr(var("p")), *num("3"))
+        e[1].node,
+        ExprNode::Assign(AssignVar {
+            name: "a".into(),
+            dst: var("a"),
+            value: Box::new(expr(ExprNode::Add((var("a"), num("2"))))),
+        })
     );
-    let Expr::Assign(a) = &e[3] else { panic!() };
+    assert_eq!(
+        e[2].node,
+        ExprNode::Assign(AssignVar {
+            name: "p".into(),
+            dst: Box::new(expr(ExprNode::ConnectAddr(var("p")))),
+            value: num("3"),
+        })
+    );
+    let ExprNode::Assign(a) = &e[3].node else {
+        panic!()
+    };
     assert_eq!(a.name, "q");
-    assert!(matches!(*a.dst, Expr::RefArray { .. }));
+    assert!(matches!(a.dst.node, ExprNode::RefArray { .. }));
 }
 
 #[test]
@@ -432,15 +511,15 @@ fn calls_and_literals() {
     let n = parse("void f() { g(1, 2.5, 'a', \"hi\\n\"); }");
     let e = exprs(&func(&n, "f"));
     assert_eq!(
-        e[0],
-        Expr::CallFunc(CallInfo {
+        e[0].node,
+        ExprNode::CallFunc(CallInfo {
             name: "g".into(),
             temp_ty: vec![],
             args: vec![
-                Expr::Number("1".into()),
-                Expr::Float("2.5".into()),
-                Expr::Number("97".into()),
-                Expr::Str("hi\n".into())
+                expr(ExprNode::Number("1".into())),
+                expr(ExprNode::Float("2.5".into())),
+                expr(ExprNode::Number("97".into())),
+                expr(ExprNode::Str("hi\n".into()))
             ]
         })
     );
@@ -452,7 +531,10 @@ fn cast() {
     let f = func(&n, "f");
     assert_eq!(
         f.body[0].node,
-        Group2Node::Stmt(StmtNode::Return(Expr::Cast((ty("long"), var("a")))))
+        Group2Node::Stmt(StmtNode::Return(expr(ExprNode::Cast((
+            ty("long"),
+            var("a")
+        )))))
     );
 }
 
@@ -484,31 +566,37 @@ fn struct_definition_and_member_access() {
         }
     );
     let es = exprs(&f);
-    let Expr::Assign(a) = &es[0] else { panic!() };
+    let ExprNode::Assign(a) = &es[0].node else {
+        panic!()
+    };
     assert_eq!(
-        *a.dst,
-        Expr::Member {
+        a.dst.node,
+        ExprNode::Member {
             scope: vec!["q".into()],
             target: var("x")
         }
     );
-    let Expr::Assign(a) = &es[1] else { panic!() };
+    let ExprNode::Assign(a) = &es[1].node else {
+        panic!()
+    };
     assert_eq!(
-        *a.dst,
-        Expr::PtrMember {
+        a.dst.node,
+        ExprNode::PtrMember {
             name: "p".into(),
             index: None,
             else_idx: None,
             target: var("y")
         }
     );
-    let Expr::Cast((_, ret)) = &es[2] else {
+    let ExprNode::Cast((_, ret)) = &es[2].node else {
         panic!()
     };
-    let Expr::Add((l, _)) = &**ret else { panic!() };
+    let ExprNode::Add((l, _)) = &ret.node else {
+        panic!()
+    };
     assert_eq!(
-        **l,
-        Expr::PtrMember {
+        l.node,
+        ExprNode::PtrMember {
             name: "arr".into(),
             index: Some(num("3")),
             else_idx: None,
@@ -523,26 +611,30 @@ fn nested_member_access() {
         "struct A { int v; }; struct B { struct A a; }; int f(struct B b, struct B *p) { return b.a.v + p->a.v; }",
     );
     let f = func(&n, "f");
-    let Group2Node::Stmt(StmtNode::Return(Expr::Add((l, r)))) = &f.body[0].node else {
+    let Group2Node::Stmt(StmtNode::Return(Expr {
+        node: ExprNode::Add((l, r)),
+        ..
+    })) = &f.body[0].node
+    else {
         panic!()
     };
     assert_eq!(
-        **l,
-        Expr::Member {
+        l.node,
+        ExprNode::Member {
             scope: vec!["b".into(), "a".into()],
             target: var("v")
         }
     );
     assert_eq!(
-        **r,
-        Expr::PtrMember {
+        r.node,
+        ExprNode::PtrMember {
             name: "p".into(),
             index: None,
             else_idx: None,
-            target: Box::new(Expr::Member {
+            target: Box::new(expr(ExprNode::Member {
                 scope: vec!["a".into()],
                 target: var("v")
-            })
+            }))
         }
     );
 }
@@ -575,17 +667,17 @@ fn typedef_struct_and_enum() {
     assert_eq!(f.params[0].ty, ty("Pt"));
     assert_eq!(f.params[1].ty, ty("Color"));
     let es = exprs(&f);
-    let Expr::Match { arms, .. } = &es[0] else {
+    let ExprNode::Match { arms, .. } = &es[0].node else {
         panic!()
     };
     assert_eq!(
-        *arms[0].pattern,
-        Expr::Equal((
+        arms[0].pattern.node,
+        ExprNode::Equal((
             var("c"),
-            Box::new(Expr::EnumVariant {
+            Box::new(expr(ExprNode::EnumVariant {
                 name: "Color".into(),
                 variant: "GREEN".into()
-            })
+            }))
         ))
     );
 }
@@ -615,20 +707,26 @@ fn struct_initializer() {
         "struct P { int x; int y; }; void f() { struct P a = {1, 2}; struct P b = {.y = 5}; struct P c; }",
     );
     let es = exprs(&func(&n, "f"));
-    let Expr::DefVar(d) = &es[0] else { panic!() };
-    let Expr::InitStruct { name, fields, .. } = &*d.value else {
+    let ExprNode::DefVar(d) = &es[0].node else {
+        panic!()
+    };
+    let ExprNode::InitStruct { name, fields, .. } = &d.value.node else {
         panic!()
     };
     assert_eq!(name, "P");
-    assert_eq!(*fields["x"], Expr::Number("1".into()));
-    assert_eq!(*fields["y"], Expr::Number("2".into()));
-    let Expr::DefVar(d) = &es[1] else { panic!() };
-    let Expr::InitStruct { fields, .. } = &*d.value else {
+    assert_eq!(fields["x"].node, ExprNode::Number("1".into()));
+    assert_eq!(fields["y"].node, ExprNode::Number("2".into()));
+    let ExprNode::DefVar(d) = &es[1].node else {
+        panic!()
+    };
+    let ExprNode::InitStruct { fields, .. } = &d.value.node else {
         panic!()
     };
     assert_eq!(fields.len(), 1);
-    let Expr::DefVar(d) = &es[2] else { panic!() };
-    assert!(matches!(&*d.value, Expr::InitStruct { fields, .. } if fields.is_empty()));
+    let ExprNode::DefVar(d) = &es[2].node else {
+        panic!()
+    };
+    assert!(matches!(&d.value.node, ExprNode::InitStruct { fields, .. } if fields.is_empty()));
 }
 
 #[test]
@@ -668,7 +766,9 @@ fn syntax_errors() {
 fn macro_and_include_expansion_works_before_parse() {
     let n = parse("#define N 4\nint f() { int a[N]; return N; }");
     let es = exprs(&func(&n, "f"));
-    let Expr::DefVar(d) = &es[0] else { panic!() };
+    let ExprNode::DefVar(d) = &es[0].node else {
+        panic!()
+    };
     assert_eq!(
         d.ty,
         TyNode::Stack {
@@ -689,7 +789,9 @@ fn local_struct_is_hoisted_before_function() {
 fn array_of_arrays_and_pointer_to_array() {
     let n = parse("void f() { int m[2][3]; }");
     let es = exprs(&func(&n, "f"));
-    let Expr::DefVar(d) = &es[0] else { panic!() };
+    let ExprNode::DefVar(d) = &es[0].node else {
+        panic!()
+    };
     assert_eq!(
         d.ty,
         TyNode::Stack {

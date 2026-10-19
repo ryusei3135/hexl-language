@@ -65,9 +65,17 @@ impl IR {
         let struct_name = self.var_tree.get_ty_name(&var_name)?;
 
         let mut call_info = call_func_info.clone();
+        let self_span = std::rc::Rc::new(self.current_span.clone());
+        let self_var = node::Expr::new(
+            node::ExprNode::Var(var_name.to_owned()),
+            std::rc::Rc::clone(&self_span),
+        );
         call_info.args.insert(
             0,
-            node::Expr::GetAddress(Box::new(node::Expr::Var(var_name.to_owned()))),
+            node::Expr::new(
+                node::ExprNode::GetAddress(Box::new(self_var)),
+                self_span,
+            ),
         );
 
         let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;
@@ -114,9 +122,13 @@ impl IR {
         let struct_name = self.var_tree.get_ty_name(ptr_name)?;
 
         let mut call_info = call_func_info.clone();
-        call_info
-            .args
-            .insert(0, node::Expr::Var(ptr_name.to_owned()));
+        call_info.args.insert(
+            0,
+            node::Expr::new(
+                node::ExprNode::Var(ptr_name.to_owned()),
+                std::rc::Rc::new(self.current_span.clone()),
+            ),
+        );
 
         let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;
         Ok(r)
@@ -151,8 +163,8 @@ impl IR {
 
         // 添字は数字リテラルとしてのみ許可されているので、
         // ここでそのまま定数として解決する
-        let index_num = match &**index {
-            node::Expr::Number(val) => {
+        let index_num = match &index.node {
+            node::ExprNode::Number(val) => {
                 if let Ok(num) = val.parse::<usize>() {
                     num
                 } else {

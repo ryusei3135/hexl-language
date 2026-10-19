@@ -210,8 +210,15 @@ g(v: int must=d) { d(v) }
     fn compile(src: &str) -> Result<(), String> {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&src.to_string()).unwrap();
-        let mut parser = parse::Parser::new();
-        let nodes = parser.parser(&lexer.gen_tkns.clone()).unwrap().clone();
+        let file_name = std::rc::Rc::new("<test>".to_string());
+        let err_pool = std::rc::Rc::new(std::cell::RefCell::new(
+            crate::err::err_pool::ErrPool::new(),
+        ));
+        let mut parser = parse::Parser::new(&file_name, err_pool);
+        let nodes = parser
+            .parser(&lexer.gen_tkns, &Vec::<String>::new())
+            .unwrap()
+            .to_vec();
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut ir = IR::new();
