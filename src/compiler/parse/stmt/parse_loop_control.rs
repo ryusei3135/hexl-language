@@ -12,6 +12,7 @@ pub(in crate::compiler::parse::stmt) trait ParseLoopControl {
 }
 
 
+/// でバック用
 pub(in crate::compiler::parse) struct ParseLoopPanic {}
 
 impl ParseLoopControl for ParseLoopPanic {
@@ -30,6 +31,8 @@ impl ParseLoopControl for ParseLoopPanic {
     }
 }
 
+
+/// 表準でこっちを使う
 pub(in crate::compiler::parse) struct ParseLoopPushPool {}
 
 /// エラーをエラープールに挿入する

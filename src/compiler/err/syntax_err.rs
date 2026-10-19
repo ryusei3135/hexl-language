@@ -151,7 +151,12 @@ impl fmt::Display for SyntaxErrKind {
                 "`of`の後には名前が必要ですが、`{:?}`が見つかりました",
                 found
             ),
-            t => panic!("{:?}", t),
+            Self::OptionIsNotFound { found, context } => write!(
+                f,
+                "`{:?}`の後に`{}`は指定できません",
+                context, found
+            ),
+            Self::GenericsNotSupportedYet => write!(f, "ジェネリクスはまだ実装されていません"),
         }
     }
 }
