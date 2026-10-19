@@ -1,3 +1,5 @@
+use crate::compiler::err::Span;
+
 use super::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,24 +46,28 @@ pub enum ImportKind {
 pub struct ModPath {
     pub path: ImportPath,
     pub kind: ImportKind,
+    /// `#include`の位置
+    pub span: Span,
 }
 
 impl ModPath {
     /// 従来の書き方(`mod::file`)用の空の`ModPath`を作る
     #[inline(always)]
-    pub fn new_segments() -> Self {
+    pub fn new_segments(span: Span) -> Self {
         Self {
             path: ImportPath::Segments(Vec::new()),
             kind: ImportKind::Auto,
+            span,
         }
     }
 
     /// 新しい書き方(`"mod/file.hexl"`)用の`ModPath`を作る
     #[inline(always)]
-    pub fn new_literal(literal: &str, kind: ImportKind) -> Self {
+    pub fn new_literal(literal: &str, kind: ImportKind, span: Span) -> Self {
         Self {
             path: ImportPath::Literal(literal.to_string()),
             kind,
+            span,
         }
     }
 
@@ -171,8 +177,8 @@ impl DefineVar {
         }
     }
 
-    pub fn wrap(self) -> Expr {
-        Expr::DefVar(self)
+    pub fn wrap(self, span: Span) -> Expr {
+        Expr::new(ExprNode::DefVar(self), span)
     }
 }
 
@@ -226,8 +232,8 @@ impl VariantBind {
         self
     }
 
-    pub fn wrap(self) -> Expr {
-        Expr::VariantBind(self)
+    pub fn wrap(self, span: Span) -> Expr {
+        Expr::new(ExprNode::VariantBind(self), span)
     }
 }
 
@@ -241,17 +247,40 @@ pub struct AssignVar {
 
 impl AssignVar {
     #[inline(always)]
-    pub fn new(name: &str, dst: Expr, value: Expr) -> Expr {
-        Expr::Assign(Self {
-            name: name.to_string(),
-            dst: Box::new(dst),
-            value: Box::new(value),
-        })
+    pub fn new(name: &str, dst: Expr, value: Expr, span: Span) -> Expr {
+        Expr::new(
+            ExprNode::Assign(Self {
+                name: name.to_string(),
+                dst: Box::new(dst),
+                value: Box::new(value),
+            }),
+            span,
+        )
     }
 }
 
+/// 式の位置(`span`)と、式の種類(`node`)
+///
+/// 子の式も`Expr`なので、すべての式が位置を持つ。
+/// `PartialEq`/`Eq`は`node`だけを比較し、`span`は無視する
+/// (同じ式なら、書かれた位置が違っても等しい)
+#[derive(Clone, Debug)]
+pub struct Expr {
+    pub node: ExprNode,
+    pub span: Span,
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.node == other.node
+    }
+}
+
+impl Eq for Expr {}
+
+/// 式の種類
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Expr {
+pub enum ExprNode {
     RangeNode((String, String)),
     /// ポインタ関係
     GetAddress(Box<Expr>),
@@ -373,7 +402,20 @@ pub enum Expr {
     },
 }
 
+impl ExprNode {
+    /// 位置を付けて`Expr`にする
+    #[inline(always)]
+    pub fn with_span(self, span: Span) -> Expr {
+        Expr::new(self, span)
+    }
+}
+
 impl Expr {
+    #[inline(always)]
+    pub fn new(node: ExprNode, span: Span) -> Self {
+        Self { node, span }
+    }
+
     pub fn wrap(left: Expr, right: Expr) -> (Box<Expr>, Box<Expr>) {
         (Box::new(left), Box::new(right))
     }

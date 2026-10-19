@@ -341,6 +341,7 @@ impl Lexer {
                     "await" => Tkn::KeyWordAwait,
                     "move" => Tkn::KeyWordMove,
                     "allow" => Tkn::KeyWordAllow,
+                    "type" => Tkn::KeyWordType,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),

@@ -6,6 +6,7 @@ pub mod stmt_node;
 pub mod test_utils;
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub(in crate::compiler) use data_node::*;
 pub(in crate::compiler) use expr_node::*;

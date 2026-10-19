@@ -1,6 +1,10 @@
 use crate::compiler::node::FuncDefInfo::{AllDef, DefOnly};
 
 use super::*;
+use std::rc::Rc;
+
+/// 各ノードが持つ、ソース上の位置
+type NodeSpan = Rc<crate::compiler::err::Span>;
 
 /// 関数のノードが中身まで定義されているか
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -15,6 +19,7 @@ pub struct ArgsNode {
     pub name: String,
     pub ty: TyNode,
     pub var_attr: VarMutAttr,
+    pub span: NodeSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,10 +35,17 @@ pub struct FuncDefine {
     pub body: Vec<Group2Info>,
     pub module: Option<String>,
     def_info: FuncDefInfo,
+    pub span: NodeSpan,
 }
 
 impl FuncDefine {
-    pub fn new(name: String, args: Vec<ArgsNode>, ret_ty: TyNode, public: bool) -> Group1Node {
+    pub fn new(
+        name: String,
+        args: Vec<ArgsNode>,
+        ret_ty: TyNode,
+        public: bool,
+        span: NodeSpan,
+    ) -> Group1Node {
         Group1Node::FuncDefine(Self {
             public,
             name: name,
@@ -43,6 +55,7 @@ impl FuncDefine {
             body: Vec::new(),
             module: None,
             def_info: FuncDefInfo::DefOnly,
+            span,
         })
     }
 
@@ -82,6 +95,7 @@ impl StmtNode {
 pub struct MatchArm {
     pub pattern: Box<Expr>,
     pub body: Body,
+    pub span: NodeSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,6 +105,7 @@ pub struct InlineAsm {
     pub asm: String,
     /// プレースホルダーに対応する式(出現順、`{n}` <-> `operands[n]`)
     pub operands: Vec<Expr>,
+    pub span: NodeSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,6 +121,7 @@ pub enum Group2Node {
 pub struct Group2Info {
     pub line: usize,
     pub node: Group2Node,
+    pub span: NodeSpan,
 }
 
 impl Group2Info {
@@ -119,10 +135,11 @@ impl Group2Info {
 impl Group2Node {
     /// ノードに、何行目かの情報を入れる
     #[inline(always)]
-    pub fn gen_group_info(self, line: usize) -> Group2Info {
+    pub fn gen_group_info(self, line: usize, span: NodeSpan) -> Group2Info {
         Group2Info {
             line: line,
             node: self,
+            span,
         }
     }
 

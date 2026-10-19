@@ -2,13 +2,15 @@
 
 // use crate::compiler::node::VariantMode::EnumMode;
 
+use crate::compiler::err;
+
 use super::*;
 
 pub(in crate::compiler) trait Field {
     /// 所有権で渡す
-    fn new(name: String, ty: TyNode) -> Self;
+    fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Self;
 
-    fn make_field(name: &str, ty: &str) -> Self;
+    fn make_field(name: &str, ty: &str, span: Rc<err::Span>) -> Self;
 }
 
 // === 構造体 =====
@@ -17,17 +19,19 @@ pub(in crate::compiler) trait Field {
 pub struct StructField {
     pub name: String,
     pub ty: TyNode,
+    pub span: Rc<err::Span>,
 }
 
 impl Field for StructField {
-    fn new(name: String, ty: TyNode) -> Self {
-        Self { name, ty }
+    fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Self {
+        Self { name, ty, span }
     }
 
-    fn make_field(name: &str, ty: &str) -> Self {
+    fn make_field(name: &str, ty: &str, span: Rc<err::Span>) -> Self {
         Self {
             name: name.to_string(),
             ty: TyNode::Ty(ty.to_string()),
+            span,
         }
     }
 }
@@ -37,6 +41,8 @@ pub struct StructDefine {
     pub name: String,
     pub fields: Vec<StructField>,
     pub methods: Vec<Group1Node>,
+    /// `struct Name`の位置
+    pub span: Rc<err::Span>,
 }
 
 impl StructDefine {
@@ -45,11 +51,13 @@ impl StructDefine {
         name: String,
         fields: Vec<StructField>,
         methods: Vec<Group1Node>,
+        span: Rc<err::Span>,
     ) -> Group1Node {
         Group1Node::StructDefine(Self {
             name,
             fields,
             methods,
+            span,
         })
     }
 }
@@ -74,22 +82,25 @@ pub struct VariantField {
     pub name: String,
     pub ty: Option<TyNode>,
     pub mode: VariantMode,
+    pub span: Rc<err::Span>,
 }
 
 impl Field for VariantField {
-    fn new(name: String, ty: TyNode) -> Self {
+    fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Self {
         Self {
             name,
             ty: Some(ty),
             mode: VariantMode::Normal,
+            span,
         }
     }
 
-    fn make_field(name: &str, ty: &str) -> Self {
+    fn make_field(name: &str, ty: &str, span: Rc<err::Span>) -> Self {
         Self {
             name: name.to_string(),
             ty: Some(TyNode::Ty(ty.to_string())),
             mode: VariantMode::Normal,
+            span,
         }
     }
 }
@@ -102,20 +113,22 @@ impl VariantField {
     ///     Name1(int)
     /// }
     /// ```
-    pub fn typeless_new(name: String) -> Self {
+    pub fn typeless_new(name: String, span: Rc<err::Span>) -> Self {
         Self {
             name,
             ty: None,
             mode: VariantMode::Normal,
+            span,
         }
     }
 
     // /// `Unsafe`モードのフィールドを作る
-    // pub fn unsafe_new(name: String, ty: TyNode) -> Self {
+    // pub fn unsafe_new(name: String, ty: TyNode, span: Rc<err::Span>) -> Self {
     //     Self {
     //         name,
     //         ty: Some(ty),
     //         mode: VariantMode::Unsafe,
+    //         span,
     //     }
     // }
 
@@ -129,6 +142,8 @@ pub struct VariantDefine {
     pub name: String,
     pub fields: Vec<VariantField>,
     pub methods: Vec<Group1Node>,
+    /// `variant Name`の位置
+    pub span: Rc<err::Span>,
 }
 
 impl VariantDefine {
@@ -137,11 +152,13 @@ impl VariantDefine {
         name: String,
         fields: Vec<VariantField>,
         methods: Vec<Group1Node>,
+        span: Rc<err::Span>,
     ) -> Group1Node {
         Group1Node::VariantDefine(Self {
             name,
             fields,
             methods,
+            span,
         })
     }
 
