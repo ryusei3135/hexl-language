@@ -17,6 +17,8 @@ macro_rules! push_jmp_code {
 #[macro_export]
 macro_rules! scope_node {
     ($self:tt, $target:ident, $result:ident, $start:expr) => {
+        // `::`(`.`)の位置。作るノード全体の位置にする
+        let scope_span = std::rc::Rc::new($self.build_err_span());
         // "::"をスキップ
         let _ = $self.next_tkn(&[])?;
         let mut path_node = Vec::<String>::new();
@@ -42,15 +44,25 @@ macro_rules! scope_node {
             if !matches!(after_name, lex::Tkn::$target) {
                 let expr = match after_name {
                     lex::Tkn::Equal => {
+                        // 代入先の名前の位置
+                        let target_span = std::rc::Rc::new($self.build_err_span());
                         $self.next_tkn(&["="])?;
                         let value = $self.expr_branch()?;
 
                         let target_name = path_node.pop().unwrap();
-                        let node = node::Expr::$result {
+                        let node = node::ExprNode::$result {
                             scope: path_node.clone(),
-                            target: Box::new(node::Expr::Var(target_name)),
-                        };
-                        return Ok(node::AssignVar::new($start, node, value));
+                            target: Box::new(
+                                node::ExprNode::Var(target_name).with_span(target_span),
+                            ),
+                        }
+                        .with_span(std::rc::Rc::clone(&scope_span));
+                        return Ok(node::AssignVar::new(
+                            $start,
+                            node,
+                            value,
+                            std::rc::Rc::clone(&scope_span),
+                        ));
                     }
 
                     lex::Tkn::Colon
@@ -71,17 +83,18 @@ macro_rules! scope_node {
                     // 自身は消費せず、呼び出し元がそれを見て処理を続けられる
                     // ように、名前の次のトークンまでだけ進める
                     _ => {
+                        let var_span = std::rc::Rc::new($self.build_err_span());
                         let _ = $self.next_tkn(&[])?;
-                        node::Expr::Var(path_node.last().unwrap().to_string())
+                        node::ExprNode::Var(path_node.last().unwrap().to_string())
+                            .with_span(var_span)
                     }
                 };
                 path_node.pop().unwrap();
-                let node = node::Expr::$result {
+                let node = node::ExprNode::$result {
                     scope: path_node.clone(),
-                    target: Box::new(
-                        expr
-                    )
-                };
+                    target: Box::new(expr),
+                }
+                .with_span(std::rc::Rc::clone(&scope_span));
                 return Ok(node);
             }
             let _ = $self.next_tkn(&[])?;

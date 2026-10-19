@@ -1,4 +1,5 @@
 use crate::compiler::err::Span;
+use std::rc::Rc;
 
 use super::*;
 
@@ -47,13 +48,13 @@ pub struct ModPath {
     pub path: ImportPath,
     pub kind: ImportKind,
     /// `#include`の位置
-    pub span: Span,
+    pub span: Rc<Span>,
 }
 
 impl ModPath {
     /// 従来の書き方(`mod::file`)用の空の`ModPath`を作る
     #[inline(always)]
-    pub fn new_segments(span: Span) -> Self {
+    pub fn new_segments(span: Rc<Span>) -> Self {
         Self {
             path: ImportPath::Segments(Vec::new()),
             kind: ImportKind::Auto,
@@ -63,7 +64,7 @@ impl ModPath {
 
     /// 新しい書き方(`"mod/file.hexl"`)用の`ModPath`を作る
     #[inline(always)]
-    pub fn new_literal(literal: &str, kind: ImportKind, span: Span) -> Self {
+    pub fn new_literal(literal: &str, kind: ImportKind, span: Rc<Span>) -> Self {
         Self {
             path: ImportPath::Literal(literal.to_string()),
             kind,
@@ -177,7 +178,7 @@ impl DefineVar {
         }
     }
 
-    pub fn wrap(self, span: Span) -> Expr {
+    pub fn wrap(self, span: Rc<Span>) -> Expr {
         Expr::new(ExprNode::DefVar(self), span)
     }
 }
@@ -232,7 +233,7 @@ impl VariantBind {
         self
     }
 
-    pub fn wrap(self, span: Span) -> Expr {
+    pub fn wrap(self, span: Rc<Span>) -> Expr {
         Expr::new(ExprNode::VariantBind(self), span)
     }
 }
@@ -247,7 +248,7 @@ pub struct AssignVar {
 
 impl AssignVar {
     #[inline(always)]
-    pub fn new(name: &str, dst: Expr, value: Expr, span: Span) -> Expr {
+    pub fn new(name: &str, dst: Expr, value: Expr, span: Rc<Span>) -> Expr {
         Expr::new(
             ExprNode::Assign(Self {
                 name: name.to_string(),
@@ -267,7 +268,7 @@ impl AssignVar {
 #[derive(Clone, Debug)]
 pub struct Expr {
     pub node: ExprNode,
-    pub span: Span,
+    pub span: Rc<Span>,
 }
 
 impl PartialEq for Expr {
@@ -405,14 +406,14 @@ pub enum ExprNode {
 impl ExprNode {
     /// 位置を付けて`Expr`にする
     #[inline(always)]
-    pub fn with_span(self, span: Span) -> Expr {
+    pub fn with_span(self, span: Rc<Span>) -> Expr {
         Expr::new(self, span)
     }
 }
 
 impl Expr {
     #[inline(always)]
-    pub fn new(node: ExprNode, span: Span) -> Self {
+    pub fn new(node: ExprNode, span: Rc<Span>) -> Self {
         Self { node, span }
     }
 

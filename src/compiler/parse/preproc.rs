@@ -36,14 +36,18 @@ impl Parser {
     /// - `#include "mod/file.hexl"::*`    公開関数を全て、そのまま取り込む
     /// - `#include mod::file`             従来通りの書き方(下位互換)
     fn build_include_path(&mut self) -> Result<node::ModPath, err::ErrKind> {
+        // `#include`の位置
+        let span = self.build_err_span();
         // `Name "=" ...`の形なら、エイリアス指定として読み取る
         let alias = self.try_take_include_alias()?;
 
         // match の結果を直接 return する形に統一
         match self.next_tkn(&["string", "name"])? {
-            lex::Tkn::Str(literal) => self.finish_literal_include(&literal, alias),
+            lex::Tkn::Str(literal) => self.finish_literal_include(&literal, alias, span),
             // match のガード条件 `if` は Rust らしくて非常に綺麗です！
-            lex::Tkn::Name(first_seg) if alias.is_none() => self.build_mod_path_segments(first_seg),
+            lex::Tkn::Name(first_seg) if alias.is_none() => {
+                self.build_mod_path_segments(first_seg, span)
+            }
             _ => {
                 return crate::err_at!(self.expected_path_segment());
             }
@@ -76,6 +80,7 @@ impl Parser {
         &mut self,
         literal: &str,
         alias: Option<String>,
+        span: err::Span,
     ) -> Result<node::ModPath, err::ErrKind> {
         // `::`が続いていなければ、ファイル全体をモジュールとして
         // 取り込む(エイリアスが無ければファイル名からモジュール名を
@@ -84,6 +89,7 @@ impl Parser {
             return Ok(node::ModPath::new_literal(
                 literal,
                 node::ImportKind::Module(alias),
+                Rc::new(span),
             ));
         }
         // `::`を読み飛ばす
@@ -97,7 +103,7 @@ impl Parser {
             }
         };
 
-        Ok(node::ModPath::new_literal(literal, kind))
+        Ok(node::ModPath::new_literal(literal, kind, Rc::new(span)))
     }
 
     /// 従来通りの書き方(`mod::file`)を解析する。
@@ -105,8 +111,9 @@ impl Parser {
     fn build_mod_path_segments(
         &mut self,
         first_seg: String,
+        span: err::Span,
     ) -> Result<node::ModPath, err::ErrKind> {
-        let mut mod_path = node::ModPath::new_segments();
+        let mut mod_path = node::ModPath::new_segments(Rc::new(span));
         mod_path.add_path(&first_seg)?;
 
         while self.peek_tkn()? == lex::Tkn::ModPathTkn {
@@ -186,6 +193,8 @@ impl Parser {
     /// 同じ行に複数の`${...}`があっても、すべて取り込む
     /// (以前の実装は最後の1つしか保持できなかった)。
     fn gen_asm_line(&mut self, value: &str) -> Result<node::InlineAsm, err::ErrKind> {
+        // この行(文字列)の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         // 正規表現は定数なので失敗しないが、失敗した場合も`Err`で返す
         let inline_var = Regex::new(r"\$\{([^}]+)\}").map_err(|_| err::ErrKind::UnexpectedToken)?;
 
@@ -219,13 +228,24 @@ impl Parser {
         Ok(node::InlineAsm {
             asm: asm.to_string(),
             operands,
+            span,
         })
     }
 }
 
 #[cfg(test)]
 mod inline_asm_tests {
-    use crate::compiler::{lex, node, parse};
+    use crate::compiler::{err, lex, node, parse};
+
+    /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
+    fn sp() -> std::rc::Rc<err::Span> {
+        std::rc::Rc::new(err::Span::new(&0, &0))
+    }
+
+    /// 位置を付けて`Expr`にする
+    fn ex(n: node::ExprNode) -> node::Expr {
+        node::Expr::new(n, sp())
+    }
 
     /// テスト用に、関数の中に`#asm(...)`ブロックを1つ持つ
     /// プログラムを解析し、`InlineAsm`の一覧を取り出す
@@ -257,8 +277,8 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                node::Expr::Var("a".to_string()),
-                node::Expr::Var("b".to_string()),
+                ex(node::ExprNode::Var("a".to_string())),
+                ex(node::ExprNode::Var("b".to_string())),
             ]
         );
     }
@@ -271,14 +291,14 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                node::Expr::Member {
+                ex(node::ExprNode::Member{
                     scope: vec!["p".to_string()],
-                    target: Box::new(node::Expr::Var("x".to_string())),
-                },
-                node::Expr::Member {
+                    target: Box::new(ex(node::ExprNode::Var("x".to_string()))),
+                }),
+                ex(node::ExprNode::Member{
                     scope: vec!["p".to_string()],
-                    target: Box::new(node::Expr::Var("y".to_string())),
-                },
+                    target: Box::new(ex(node::ExprNode::Var("y".to_string()))),
+                }),
             ]
         );
     }
@@ -291,8 +311,8 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                node::Expr::ConnectAddr(Box::new(node::Expr::Var("p".to_string()))),
-                node::Expr::GetAddress(Box::new(node::Expr::Var("p".to_string()))),
+                ex(node::ExprNode::ConnectAddr(Box::new(ex(node::ExprNode::Var("p".to_string()))))),
+                ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var("p".to_string()))))),
             ]
         );
     }
@@ -304,17 +324,17 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                node::Expr::Add((
-                    Box::new(node::Expr::Var("a".to_string())),
-                    Box::new(node::Expr::Number("1".to_string())),
-                )),
-                node::Expr::Mul((
-                    Box::new(node::Expr::Member {
+                ex(node::ExprNode::Add((
+                    Box::new(ex(node::ExprNode::Var("a".to_string()))),
+                    Box::new(ex(node::ExprNode::Number("1".to_string()))),
+                ))),
+                ex(node::ExprNode::Mul((
+                    Box::new(ex(node::ExprNode::Member{
                         scope: vec!["p".to_string()],
-                        target: Box::new(node::Expr::Var("x".to_string())),
-                    }),
-                    Box::new(node::Expr::Number("2".to_string())),
-                )),
+                        target: Box::new(ex(node::ExprNode::Var("x".to_string()))),
+                    })),
+                    Box::new(ex(node::ExprNode::Number("2".to_string()))),
+                ))),
             ]
         );
     }
@@ -328,8 +348,8 @@ mod inline_asm_tests {
         assert_eq!(
             lines[1].operands,
             vec![
-                node::Expr::Var("c".to_string()),
-                node::Expr::Var("d".to_string()),
+                ex(node::ExprNode::Var("c".to_string())),
+                ex(node::ExprNode::Var("d".to_string())),
             ]
         );
     }

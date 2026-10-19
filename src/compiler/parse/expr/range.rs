@@ -74,7 +74,17 @@ impl Parser {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::compiler::parse;
+    use crate::compiler::{err, parse};
+
+    /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
+    fn sp() -> std::rc::Rc<err::Span> {
+        std::rc::Rc::new(err::Span::new(&0, &0))
+    }
+
+    /// 位置を付けて`Expr`にする
+    fn ex(n: node::ExprNode) -> node::Expr {
+        node::Expr::new(n, sp())
+    }
 
     fn gen_nodes(content: &str) -> Vec<lex::LocatedTkn> {
         let mut lexer = lex::Lexer::new();
@@ -91,20 +101,19 @@ mod test {
             panic!("not func");
         };
         assert_eq!(
-            &node.body[0],
-            &node::Group2Node::Expr(node::Expr::DefVar(node::DefineVar {
+            node.body[0].get_node(),
+            &node::Group2Node::Expr(ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var(
                     "b".to_string()
-                )))),
+                )))))),
                 ty: node::TyNode::Pointer {
                     is_const: true,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: Some((1, 10)),
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            }))
-            .gen_group_info(1)
+            })))
         );
     }
 
@@ -117,20 +126,19 @@ mod test {
             panic!("not func");
         };
         assert_eq!(
-            &node.body[0],
-            &node::Group2Node::Expr(node::Expr::DefVar(node::DefineVar {
+            node.body[0].get_node(),
+            &node::Group2Node::Expr(ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var(
                     "b".to_string()
-                )))),
+                )))))),
                 ty: node::TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: Some((1, 10)),
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            }))
-            .gen_group_info(1)
+            })))
         );
     }
 

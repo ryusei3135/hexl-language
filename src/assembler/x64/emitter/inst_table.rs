@@ -11,6 +11,7 @@
 //!    サフィックス違い (`addq` / `addl` ...) は `|` で並べて同じ行に書く。
 //!    条件付きジャンプ (`jl` / `jne` など) と条件付き移動 (`cmovl` / `cmovne` など) は
 //!    下の `JCC_TABLE` (ニーモニック -> 条件) で管理する。
+//!    条件付きバイトセット (`sete` / `setl` / `setb` など) も同じ表を使う。
 //!
 //! 2. 呼び出す `emit_xxx` を、このファイル下部の `impl Emitter` に書く
 //!    (`emit_nop` が最小の見本)。`emit_u8` / `emit_rex` /
@@ -332,6 +333,18 @@ fn cmov_spec(name: &str) -> Option<(Condition, Option<u32>)> {
     condition(condition_name).map(|condition| (condition, Some(bits)))
 }
 
+/// 条件付きバイトセット (`setcc`) のニーモニックから条件を求める (`setcc` でなければ `None`)
+///
+/// `JCC_TABLE` の `j` を `set` に置き換えたニーモニック (`setl` / `setnge` / `setz` ...) が対象。
+/// `setcc` にサイズ接尾辞は無い (オペランドは常に8bit)。
+fn setcc_condition(name: &str) -> Option<Condition> {
+    let name = name.strip_prefix("set")?;
+    JCC_TABLE
+        .iter()
+        .find(|(names, _)| names.iter().any(|jcc| jcc.strip_prefix('j') == Some(name)))
+        .map(|&(_, condition)| condition)
+}
+
 /// ニーモニックに対応する処理を呼び出す
 pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String> {
     let name = inst.mnemonic.as_str();
@@ -356,6 +369,10 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
     if let Some((condition, suffix_bits)) = cmov_spec(name) {
         return e.emit_cmov(condition, suffix_bits, &inst.operands);
+    }
+
+    if let Some(condition) = setcc_condition(name) {
+        return e.emit_setcc(name, condition, &inst.operands);
     }
 
     match name {
@@ -545,6 +562,57 @@ impl Emitter {
             }
             (None, Some(mem)) => self.emit_memory_modrm(dst.id(), mem),
             _ => unreachable!(),
+        }
+    }
+
+    // --------------------------------------------------------
+    // setcc  (条件が真なら1、偽なら0を8bitのレジスタ/メモリへ書く)
+    //
+    //   sete  %al          -> 0F 94 /0
+    //   setl  %cl          -> 0F 9C C1
+    //   setb  %sil         -> 40 0F 92 C6     (%spl/%bpl/%sil/%dil は空の REX が必要)
+    //   setne %r8b         -> 41 0F 95 C0
+    //   setle 8(%r12)      -> 41 0F 9E 44 24 08
+    //
+    // オペコードは `0F 90+cc`、ModRM の reg は使わない (0)。
+    // --------------------------------------------------------
+    fn emit_setcc(
+        &mut self,
+        name: &str,
+        condition: Condition,
+        operands: &[Operand],
+    ) -> Result<(), String> {
+        let [operand] = operands else {
+            return Err(format!("{} requires one operand", name));
+        };
+
+        match operand {
+            Operand::Register(reg) => {
+                if reg.bits() != 8 {
+                    return Err(format!("{}: operand must be an 8-bit register", name));
+                }
+                self.emit_sized_prefix(8, false, false, reg.id() >= 8, needs_empty_rex(*reg));
+                self.emit_u8(0x0F);
+                self.emit_u8(0x90 | condition as u8);
+                self.emit_u8(0b11_000_000 | (reg.id() & 7));
+                Ok(())
+            }
+            Operand::Memory(mem) => {
+                self.emit_sized_prefix(
+                    8,
+                    false,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    false,
+                );
+                self.emit_u8(0x0F);
+                self.emit_u8(0x90 | condition as u8);
+                self.emit_memory_modrm(0, mem)
+            }
+            operand => Err(format!(
+                "{}: expected an 8-bit register or memory operand, got {:?}",
+                name, operand
+            )),
         }
     }
 
@@ -1881,6 +1949,94 @@ mod cmov_tests {
             "cmovb %al, %cl",
             "cmovlq %eax, %ecx",
             "cmovl %eax",
+        ] {
+            assert!(assemble(&format!("{}\n", source)).is_err(), "{}", source);
+        }
+    }
+}
+
+#[cfg(test)]
+mod setcc_tests {
+    use crate::assembler::x64::{Lexer, Parser, convert};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize();
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        emitter.finish()?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// 期待値は GNU as (`as` + `objdump -d`) の出力
+    #[test]
+    fn setcc_encodes_register_and_memory_operands() {
+        let cases: &[(&str, &str)] = &[
+            ("sete %al", "0f94c0"),
+            ("setl %cl", "0f9cc1"),
+            ("setg %dl", "0f9fc2"),
+            ("setb %sil", "400f92c6"),
+            ("setne %r8b", "410f95c0"),
+            ("sete %r15b", "410f94c7"),
+            ("setle (%rax)", "0f9e00"),
+            ("setae 8(%r12)", "410f93442408"),
+            ("seta %dil", "400f97c7"),
+            ("setnae %bl", "0f92c3"),
+            ("setz -4(%rbp)", "0f9445fc"),
+            ("setp %spl", "400f9ac4"),
+            ("sets %bpl", "400f98c5"),
+            ("setnle (%rax,%rcx,4)", "0f9f0488"),
+        ];
+
+        for (source, expected) in cases {
+            assert_eq!(
+                hex(&assemble(&format!("{}\n", source)).unwrap()),
+                *expected,
+                "{}",
+                source
+            );
+        }
+    }
+
+    #[test]
+    fn setcc_supports_all_condition_codes_and_aliases() {
+        let names = [
+            "o", "no", "b", "c", "nae", "ae", "nb", "nc", "e", "z", "ne", "nz", "be", "na", "a",
+            "nbe", "s", "ns", "p", "pe", "np", "po", "l", "nge", "ge", "nl", "le", "ng", "g",
+            "nle",
+        ];
+        let codes = [
+            0x90, 0x91, 0x92, 0x92, 0x92, 0x93, 0x93, 0x93, 0x94, 0x94, 0x95, 0x95, 0x96, 0x96,
+            0x97, 0x97, 0x98, 0x99, 0x9a, 0x9a, 0x9b, 0x9b, 0x9c, 0x9c, 0x9d, 0x9d, 0x9e, 0x9e,
+            0x9f, 0x9f,
+        ];
+
+        for (name, code) in names.iter().zip(codes) {
+            let source = format!("set{} %al\n", name);
+            let expected = format!("0f{:02x}c0", code);
+            assert_eq!(hex(&assemble(&source).unwrap()), expected, "{}", source);
+        }
+    }
+
+    #[test]
+    fn setcc_rejects_invalid_operands() {
+        for source in [
+            "sete %eax",
+            "sete %ax",
+            "sete %rax",
+            "sete $1",
+            "sete",
+            "sete %al, %cl",
+            "sete %xmm0",
+            "setq %al",
+            "setl %eax",
         ] {
             assert!(assemble(&format!("{}\n", source)).is_err(), "{}", source);
         }

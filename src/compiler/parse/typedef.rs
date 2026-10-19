@@ -5,6 +5,7 @@ mod variant_field;
 
 use super::{Parser, *};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// 構造体、バリアント型(共用体と列挙型を統合したもの)を定義するノードの生成
 impl Parser {
@@ -34,7 +35,7 @@ impl Parser {
         if let Some(reserved) = self.reserved_impls.remove(&name) {
             methods.extend(reserved);
         }
-        let r = node::StructDefine::new(name, fields, methods);
+        let r = node::StructDefine::new(name, fields, methods, Rc::new(self.build_err_span()));
         Ok(r)
     }
 
@@ -85,7 +86,7 @@ impl Parser {
         if let Some(reserved) = self.reserved_impls.remove(&name) {
             methods.extend(reserved);
         }
-        Ok(node::VariantDefine::new(name, fields, methods))
+        Ok(node::VariantDefine::new(name, fields, methods, Rc::new(self.build_err_span())))
     }
 
     /// 構造体を初期化する式を生成
@@ -130,11 +131,11 @@ impl Parser {
                 }
             }
         }
-        Ok(node::Expr::InitStruct {
+        Ok(node::Expr::new(node::ExprNode::InitStruct {
             is_self: T,
             name: name.to_string(),
             fields: fields.clone(),
-        })
+        }, Rc::new(self.build_err_span())))
     }
 
     /// バリアント型を初期化する式を生成
@@ -158,10 +159,13 @@ impl Parser {
 
         // `(`が続かなければ、データなしのメンバー(`Variant::Name`)
         if self.peek_tkn()? != lex::Tkn::LParen {
-            return Ok(node::Expr::EnumVariant {
-                name: name.to_string(),
-                variant: member,
-            });
+            return Ok(node::Expr::new(
+                node::ExprNode::EnumVariant {
+                    name: name.to_string(),
+                    variant: member,
+                },
+                Rc::new(self.build_err_span()),
+            ));
         }
 
         // `(`へ進み、さらに値の先頭のトークンへ進む
@@ -175,11 +179,11 @@ impl Parser {
 
         let mut fields = HashMap::<String, Box<node::Expr>>::new();
         fields.insert(member, value);
-        Ok(node::Expr::InitVariant {
+        Ok(node::Expr::new(node::ExprNode::InitVariant {
             is_self: T,
             name: name.to_string(),
             fields,
-        })
+        }, Rc::new(self.build_err_span())))
     }
 
     fn ptr_ty_node(&mut self, ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
@@ -368,6 +372,12 @@ mod ty_tests {
     use super::*;
     use crate::compiler::node::Field;
     use std::collections::HashMap;
+    use std::rc::Rc;
+
+    /// テストで組み立てるノードに付ける位置
+    fn sp() -> Rc<err::Span> {
+        Rc::new(Parser::new().build_err_span())
+    }
 
     fn build(value: &str) -> Vec<node::Group1Node> {
         let mut lex = lex::Lexer::new();
@@ -391,10 +401,11 @@ mod ty_tests {
             &vec![node::StructDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::StructField::make_field("name", "ty"),
-                    node::StructField::make_field("name2", "ty")
+                    node::StructField::make_field("name", "ty", sp()),
+                    node::StructField::make_field("name2", "ty", sp())
                 ],
-                Vec::new()
+                Vec::new(),
+                sp()
             )]
         );
     }
@@ -406,15 +417,16 @@ mod ty_tests {
             Vec::new(),
             node::TyNode::Ty("int".to_string()),
             false,
+            sp(),
         );
         let map: HashMap<String, Box<node::Expr>> = [
             (
                 "name".to_string(),
-                Box::new(node::Expr::Number("1".to_string())),
+                Box::new(node::ExprNode::Number("1".to_string()).with_span(sp())),
             ),
             (
                 "name2".to_string(),
-                Box::new(node::Expr::Number("1".to_string())),
+                Box::new(node::ExprNode::Number("1".to_string()).with_span(sp())),
             ),
         ]
         .into_iter()
@@ -423,12 +435,15 @@ mod ty_tests {
             panic!();
         };
         f.add(
-            node::Group2Node::Expr(node::Expr::InitStruct {
-                is_self: false,
-                name: "Name".to_string(),
-                fields: map,
-            })
-            .gen_group_info(1),
+            node::Group2Node::Expr(
+                node::ExprNode::InitStruct {
+                    is_self: false,
+                    name: "Name".to_string(),
+                    fields: map,
+                }
+                .with_span(sp()),
+            )
+            .gen_group_info(1, sp()),
         );
         assert_eq!(
             &build("main(): int { Name { name: 1 name2: 1 } }"),
@@ -443,6 +458,7 @@ mod ty_tests {
             Vec::new(),
             node::TyNode::Ty("ty".to_string()),
             false,
+            sp(),
         )];
         let node::Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
@@ -452,8 +468,9 @@ mod ty_tests {
             &build("struct Name { a: int new(): ty {}}"),
             &vec![node::StructDefine::new(
                 "Name".to_string(),
-                vec![node::StructField::make_field("a", "int"),],
-                f
+                vec![node::StructField::make_field("a", "int", sp()),],
+                f,
+                sp()
             )]
         );
     }
@@ -496,10 +513,11 @@ mod ty_tests {
             &vec![node::VariantDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::VariantField::typeless_new("A".to_string()),
-                    node::VariantField::make_field("B", "ty"),
+                    node::VariantField::typeless_new("A".to_string(), sp()),
+                    node::VariantField::make_field("B", "ty", sp()),
                 ],
-                Vec::new()
+                Vec::new(),
+                sp()
             )]
         );
     }
@@ -511,8 +529,9 @@ mod ty_tests {
             &build("variant Name { A }"),
             &vec![node::VariantDefine::new(
                 "Name".to_string(),
-                vec![node::VariantField::typeless_new("A".to_string())],
-                Vec::new()
+                vec![node::VariantField::typeless_new("A".to_string(), sp())],
+                Vec::new(),
+                sp()
             )]
         );
     }
@@ -524,10 +543,19 @@ mod ty_tests {
             &vec![node::VariantDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::VariantField::new("a".to_string(), node::TyNode::Ty("int".to_string())),
-                    node::VariantField::new("b".to_string(), node::TyNode::Ty("i64".to_string())),
+                    node::VariantField::new(
+                        "a".to_string(),
+                        node::TyNode::Ty("int".to_string()),
+                        sp(),
+                    ),
+                    node::VariantField::new(
+                        "b".to_string(),
+                        node::TyNode::Ty("i64".to_string()),
+                        sp(),
+                    ),
                 ],
-                Vec::new()
+                Vec::new(),
+                sp()
             )]
         );
     }
@@ -539,6 +567,7 @@ mod ty_tests {
             Vec::new(),
             node::TyNode::Ty("ty".to_string()),
             false,
+            sp(),
         )];
         let node::Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
@@ -548,8 +577,9 @@ mod ty_tests {
             &build("variant Name { A(int) new(): ty {}}"),
             &vec![node::VariantDefine::new(
                 "Name".to_string(),
-                vec![node::VariantField::make_field("A", "int")],
-                f
+                vec![node::VariantField::make_field("A", "int", sp())],
+                f,
+                sp()
             )]
         );
     }
@@ -602,10 +632,11 @@ mod ty_tests {
             &vec![node::VariantDefine::new(
                 "Name".to_string(),
                 vec![
-                    node::VariantField::typeless_new("A".to_string()),
-                    node::VariantField::typeless_new("B".to_string()),
+                    node::VariantField::typeless_new("A".to_string(), sp()),
+                    node::VariantField::typeless_new("B".to_string(), sp()),
                 ],
-                Vec::new()
+                Vec::new(),
+                sp()
             )]
         );
     }

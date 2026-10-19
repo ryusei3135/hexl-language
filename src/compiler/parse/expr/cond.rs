@@ -8,6 +8,8 @@ impl Parser {
         if self.current_tkn() != &lex::Tkn::KeyWordCond {
             return crate::err_at!(self.cond_keyword_not_found());
         }
+        // `cond`の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         // match の対象式
         let cond_expr = if self.peek_tkn()? == lex::Tkn::LBrace {
             self.next_tkn(&[])?;
@@ -25,7 +27,7 @@ impl Parser {
         // `cond a == 10 { .. } else { .. }`
         if cond_expr.as_ref().is_some_and(|e| Self::is_bool_expr(e)) {
             if let Some(cond) = cond_expr {
-                return self.expr_match_bool(*cond);
+                return self.expr_match_bool(*cond, span);
             }
         }
 
@@ -44,7 +46,7 @@ impl Parser {
             // elseのノードを作成する
             if self.peek_tkn()? == lex::Tkn::KeyWordElse {
                 self.next_tkn(&[])?;
-                return self.build_else_arm_node(&cond_expr, arms);
+                return self.build_else_arm_node(&cond_expr, arms, span);
             }
             // if
             let pattern = if self.is_variant_bind_ahead() {
@@ -75,20 +77,26 @@ impl Parser {
             if matches!(self.next_tkn_ref(&[])?, lex::Tkn::RBrace) {
                 break;
             }
+            // アームの位置は、パターンの位置
+            let arm_span = pattern.span.clone();
             arms.push(node::MatchArm {
                 pattern: Box::new(pattern),
                 body,
+                span: arm_span,
             });
         }
 
         // 式の終了
         self.next_tkn(&["}"])?; //}
 
-        let node = node::Expr::Match {
-            pattern: cond_expr,
-            arms,
-            arm_else: None,
-        };
+        let node = node::Expr::new(
+            node::ExprNode::Match {
+                pattern: cond_expr,
+                arms,
+                arm_else: None,
+            },
+            span,
+        );
         Ok(node)
     }
 
@@ -97,6 +105,7 @@ impl Parser {
         &mut self,
         cond_expr: &Option<Box<node::Expr>>,
         cond_arms: Vec<node::MatchArm>,
+        span: std::rc::Rc<err::Span>,
     ) -> Result<node::Expr, err::ErrKind> {
         // =>
         // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
@@ -116,11 +125,14 @@ impl Parser {
         crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(Some(lex::Tkn::KeyWordCond))?;
         //}
         self.next_tkn(&[])?;
-        let node = node::Expr::Match {
-            pattern: cond_expr.clone(),
-            arms: cond_arms,
-            arm_else: Some(body),
-        };
+        let node = node::Expr::new(
+            node::ExprNode::Match {
+                pattern: cond_expr.clone(),
+                arms: cond_arms,
+                arm_else: Some(body),
+            },
+            span,
+        );
         return Ok(node);
     }
 
@@ -131,12 +143,12 @@ impl Parser {
     /// 「真偽値を与える」形式(単純なif/else)として扱う
     fn is_bool_expr(expr: &node::Expr) -> bool {
         matches!(
-            expr,
-            node::Expr::LessThen(_)
-                | node::Expr::GreaterThen(_)
-                | node::Expr::Equal(_)
-                | node::Expr::NotEq(_)
-                | node::Expr::VariantBind(_)
+            expr.node,
+            node::ExprNode::LessThen(_)
+                | node::ExprNode::GreaterThen(_)
+                | node::ExprNode::Equal(_)
+                | node::ExprNode::NotEq(_)
+                | node::ExprNode::VariantBind(_)
         )
     }
 
@@ -149,7 +161,11 @@ impl Parser {
     /// }
     /// ```
     /// これは `if` / `else` と同じ意味を持つ
-    fn expr_match_bool(&mut self, cond: node::Expr) -> Result<node::Expr, err::ErrKind> {
+    fn expr_match_bool(
+        &mut self,
+        cond: node::Expr,
+        span: std::rc::Rc<err::Span>,
+    ) -> Result<node::Expr, err::ErrKind> {
         // match expr {
         // {
         if self.current_tkn() != &lex::Tkn::LBrace {
@@ -177,13 +193,19 @@ impl Parser {
         // 式の終了
         self.next_tkn(&[])?;
 
-        Ok(node::Expr::Match {
-            pattern: None,
-            arms: vec![node::MatchArm {
-                pattern: Box::new(cond),
-                body,
-            }],
-            arm_else: Some(else_body),
-        })
+        // アームの位置は、条件式の位置
+        let arm_span = cond.span.clone();
+        Ok(node::Expr::new(
+            node::ExprNode::Match {
+                pattern: None,
+                arms: vec![node::MatchArm {
+                    pattern: Box::new(cond),
+                    body,
+                    span: arm_span,
+                }],
+                arm_else: Some(else_body),
+            },
+            span,
+        ))
     }
 }

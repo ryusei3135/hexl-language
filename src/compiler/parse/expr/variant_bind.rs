@@ -76,6 +76,8 @@ impl Parser {
                 self.variant_bind_unexpected("name", self.current_tkn().clone())
             );
         };
+        // 束縛の位置(`M`か`Type`の位置)
+        let span = std::rc::Rc::new(self.build_err_span());
         let (variant_ty, variant) = if self.peek_tkn()? == lex::Tkn::ModPathTkn {
             // `::`
             self.next_tkn(&["::"])?;
@@ -139,17 +141,27 @@ impl Parser {
         Ok(node::VariantBind::new(&variant, &bind, ty, value)
             .with_variant_ty(variant_ty)
             .with_var_attr(var_attr)
-            .wrap())
+            .wrap(span))
     }
 }
 
 #[cfg(test)]
 mod variant_bind_tests {
     use crate::compiler::{
-        lex,
+        err, lex,
         node::{self, *},
         parse,
     };
+
+    /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
+    fn sp() -> std::rc::Rc<err::Span> {
+        std::rc::Rc::new(err::Span::new(&0, &0))
+    }
+
+    /// 位置を付けて`Expr`にする
+    fn ex(n: node::ExprNode) -> node::Expr {
+        node::Expr::new(n, sp())
+    }
 
     fn gen_main_body(content: &str) -> Result<Vec<node::Group2Info>, ()> {
         let mut lexer = lex::Lexer::new();
@@ -169,10 +181,14 @@ mod variant_bind_tests {
 
     /// `main`の最初の文の`Match`のアームの条件式を取り出す
     fn first_arm_patterns(body: &[node::Group2Info]) -> (Option<Box<Expr>>, Vec<Expr>, bool) {
-        let node::Group2Node::Expr(Expr::Match {
-            pattern,
-            arms,
-            arm_else,
+        let node::Group2Node::Expr(Expr {
+            node:
+                ExprNode::Match {
+                    pattern,
+                    arms,
+                    arm_else,
+                },
+            ..
         }) = body[0].get_node()
         else {
             panic!("not match");
@@ -204,7 +220,7 @@ mod variant_bind_tests {
         assert_eq!(target, None);
         assert_eq!(
             patterns,
-            vec![VariantBind::new("M", "val", None, Expr::Var("a".to_string())).wrap()]
+            vec![VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string()))).wrap(sp())]
         );
         assert!(has_else);
     }
@@ -233,9 +249,9 @@ mod variant_bind_tests {
                     "M",
                     "val",
                     Some(TyNode::Ty("int".to_string())),
-                    Expr::Var("a".to_string())
+                    ex(node::ExprNode::Var("a".to_string()))
                 )
-                .wrap()
+                .wrap(sp())
             ]
         );
     }
@@ -263,7 +279,7 @@ mod variant_bind_tests {
         assert_eq!(target, None);
         assert_eq!(
             patterns,
-            vec![VariantBind::new("M", "val", None, Expr::Var("a".to_string())).wrap()]
+            vec![VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string()))).wrap(sp())]
         );
         assert!(has_else);
     }
@@ -284,7 +300,7 @@ mod variant_bind_tests {
         )
         .expect("node is err");
         let (_, patterns, _) = first_arm_patterns(&body);
-        assert!(matches!(patterns[0], Expr::Equal(_)));
+        assert!(matches!(patterns[0].node, ExprNode::Equal(_)));
     }
 
     #[test]
@@ -336,9 +352,9 @@ mod variant_bind_tests {
         assert_eq!(
             patterns,
             vec![
-                VariantBind::new("M", "val", None, Expr::Var("a".to_string()))
+                VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string())))
                     .with_variant_ty(Some("A".to_string()))
-                    .wrap()
+                    .wrap(sp())
             ]
         );
     }
@@ -362,7 +378,7 @@ mod variant_bind_tests {
             ))
             .expect("node is err");
             let (_, patterns, _) = first_arm_patterns(&body);
-            let Expr::VariantBind(bind) = &patterns[0] else {
+            let ExprNode::VariantBind(bind) = &patterns[0].node else {
                 panic!("not bind");
             };
             assert_eq!(bind.var_attr, parse::VarMutAttr::Var);

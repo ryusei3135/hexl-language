@@ -21,6 +21,9 @@ impl Parser {
         // 呼び出す前にでた、変数や関数などの名前
         name: String,
     ) -> Result<node::Expr, err::ErrKind> {
+        // この式(名前)の位置。内側のノードも同じ位置を使う
+        let start = std::rc::Rc::new(self.build_err_span());
+        let mk = |n: node::ExprNode| node::Expr::new(n, start.clone());
         let node = if self
             .next_tkn(&[
                 "(", "{", ",", "[", ":", "=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=",
@@ -32,23 +35,29 @@ impl Parser {
                 lex::Tkn::Inc | lex::Tkn::Dec => {
                     let postfix = self.current_tkn().clone();
                     self.advance_tkn_checked()?;
+                    let var = mk(node::ExprNode::Var(name));
                     return Ok(if postfix == lex::Tkn::Inc {
-                        node::Expr::Inc(Box::new(node::Expr::Var(name)))
+                        mk(node::ExprNode::Inc(Box::new(var)))
                     } else {
-                        node::Expr::Dec(Box::new(node::Expr::Var(name)))
+                        mk(node::ExprNode::Dec(Box::new(var)))
                     });
                 }
                 lex::Tkn::Dot | lex::Tkn::ModPathTkn => {
                     let dst = self.build_scope_node(&name)?;
                     println!("{:?}", self.next_tkn_ref(&[]));
                     if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
-                        return Ok(node::AssignVar::new(&name, dst, self.expr_branch()?));
+                        return Ok(node::AssignVar::new(
+                            &name,
+                            dst,
+                            self.expr_branch()?,
+                            start.clone(),
+                        ));
                     } else {
                         return Ok(dst);
                     }
                 }
                 lex::Tkn::RBrace => {
-                    return Ok(node::Expr::Var(name));
+                    return Ok(mk(node::ExprNode::Var(name)));
                 }
                 lex::Tkn::LParen => {
                     // 関数の呼び出しノードを生成
@@ -70,20 +79,22 @@ impl Parser {
                     return self.struct_init_node::<false>(&name);
                 }
                 lex::Tkn::Comma => {
-                    return Ok(node::Expr::Var(name));
+                    return Ok(mk(node::ExprNode::Var(name)));
                 }
                 // ポインタ参照
                 lex::Tkn::RBracket => {
                     // ポインタ参照なので、次のトークンに進めずに
                     // ノードを返す
                     if !matches!(self.next_tkn_ref(&["="])?, lex::Tkn::Equal) {
-                        return Ok(node::Expr::Var(name));
+                        return Ok(mk(node::ExprNode::Var(name)));
                     }
                     self.next_tkn(&["="])?;
+                    let var = mk(node::ExprNode::Var(name.to_string()));
                     return Ok(node::AssignVar::new(
                         &name,
-                        node::Expr::GetAddress(Box::new(node::Expr::Var(name.to_string()))),
+                        mk(node::ExprNode::GetAddress(Box::new(var))),
                         self.expr_branch()?,
+                        start.clone(),
                     ));
                 }
                 _ => {}
@@ -99,18 +110,16 @@ impl Parser {
 
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
                 if matches!(self.next_tkn(&["="])?, lex::Tkn::Equal) {
-                    return Ok(node::DefineVar::new(
-                        &name,
-                        node::Expr::ConnectAddr(Box::new(self.expr_branch()?)),
-                        &ty_node,
-                        var_attr,
-                    )
-                    .wrap());
+                    let value = mk(node::ExprNode::ConnectAddr(Box::new(self.expr_branch()?)));
+                    return Ok(
+                        node::DefineVar::new(&name, value, &ty_node, var_attr).wrap(start.clone())
+                    );
                 }
             }
 
             if self.current_tkn() == &lex::Tkn::Equal {
-                node::DefineVar::new(&name, self.expr_branch()?, &ty_node, var_attr).wrap()
+                node::DefineVar::new(&name, self.expr_branch()?, &ty_node, var_attr)
+                    .wrap(start.clone())
             } else {
                 return crate::err_at!(self.unexpect_tkn_in_expr());
             }
@@ -119,6 +128,16 @@ impl Parser {
         };
 
         Ok(node)
+    }
+
+    /// 二項演算のノードを作る。位置は、左のオペランドの先頭
+    fn binary_expr(
+        ctor: fn((Box<node::Expr>, Box<node::Expr>)) -> node::ExprNode,
+        left: node::Expr,
+        right: node::Expr,
+    ) -> node::Expr {
+        let span = left.span.clone();
+        node::Expr::new(ctor(node::Expr::wrap(left, right)), span)
     }
 
     /// 式に代入する物が、構文の式 例(match)かどうかで
@@ -154,11 +173,12 @@ impl Parser {
         // 現在のトークンは`:`。`else`は`:`の次から読む
         let els = self.expr_or(init_struct)?;
 
-        Ok(node::Expr::Ternary((
-            Box::new(cond),
-            Box::new(then),
-            Box::new(els),
-        )))
+        // 位置は、条件式の先頭
+        let span = cond.span.clone();
+        Ok(node::Expr::new(
+            node::ExprNode::Ternary((Box::new(cond), Box::new(then), Box::new(els))),
+            span,
+        ))
     }
 
     /// `||`
@@ -168,7 +188,7 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::CmpOr => {
-                    node::Expr::CmpOr(node::Expr::wrap(left, self.expr_cmp_and(init_struct)?))
+                    Self::binary_expr(node::ExprNode::CmpOr, left, self.expr_cmp_and(init_struct)?)
                 }
                 _ => break,
             };
@@ -184,7 +204,7 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::CmpAnd => {
-                    node::Expr::CmpAnd(node::Expr::wrap(left, self.expr_bit_or(init_struct)?))
+                    Self::binary_expr(node::ExprNode::CmpAnd, left, self.expr_bit_or(init_struct)?)
                 }
                 _ => break,
             };
@@ -200,7 +220,7 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Or => {
-                    node::Expr::OrCalcul(node::Expr::wrap(left, self.expr_xor(init_struct)?))
+                    Self::binary_expr(node::ExprNode::OrCalcul, left, self.expr_xor(init_struct)?)
                 }
                 _ => break,
             };
@@ -215,7 +235,7 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Xor => {
-                    node::Expr::XorCalcul(node::Expr::wrap(left, self.expr_and(init_struct)?))
+                    Self::binary_expr(node::ExprNode::XorCalcul, left, self.expr_and(init_struct)?)
                 }
                 _ => break,
             };
@@ -230,7 +250,7 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::And => {
-                    node::Expr::AndCalcul(node::Expr::wrap(left, self.expr_eq(init_struct)?))
+                    Self::binary_expr(node::ExprNode::AndCalcul, left, self.expr_eq(init_struct)?)
                 }
                 _ => break,
             };
@@ -245,10 +265,10 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::EqEq => {
-                    node::Expr::Equal(node::Expr::wrap(left, self.expr_cmp(init_struct)?))
+                    Self::binary_expr(node::ExprNode::Equal, left, self.expr_cmp(init_struct)?)
                 }
                 lex::Tkn::NotEq => {
-                    node::Expr::NotEq(node::Expr::wrap(left, self.expr_cmp(init_struct)?))
+                    Self::binary_expr(node::ExprNode::NotEq, left, self.expr_cmp(init_struct)?)
                 }
                 _ => break,
             };
@@ -263,16 +283,16 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::LAngleBracket => {
-                    node::Expr::LessThen(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::LessThen, left, self.expr_shift(ini_struct)?)
                 }
                 lex::Tkn::RAngleBracket => {
-                    node::Expr::GreaterThen(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::GreaterThen, left, self.expr_shift(ini_struct)?)
                 }
                 lex::Tkn::LessThanEq => {
-                    node::Expr::LessThenEq(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::LessThenEq, left, self.expr_shift(ini_struct)?)
                 }
                 lex::Tkn::GreaterThanEq => {
-                    node::Expr::GreaterThenEq(node::Expr::wrap(left, self.expr_shift(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::GreaterThenEq, left, self.expr_shift(ini_struct)?)
                 }
                 _ => break,
             };
@@ -287,10 +307,10 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::LShift => {
-                    node::Expr::LShift(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                    Self::binary_expr(node::ExprNode::LShift, left, self.expr_add(init_struct)?)
                 }
                 lex::Tkn::RShift => {
-                    node::Expr::RShift(node::Expr::wrap(left, self.expr_add(init_struct)?))
+                    Self::binary_expr(node::ExprNode::RShift, left, self.expr_add(init_struct)?)
                 }
                 _ => break,
             };
@@ -309,10 +329,10 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Add => {
-                    node::Expr::Add(node::Expr::wrap(left, self.expr_mul(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::Add, left, self.expr_mul(ini_struct)?)
                 }
                 lex::Tkn::Sub => {
-                    node::Expr::Sub(node::Expr::wrap(left, self.expr_mul(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::Sub, left, self.expr_mul(ini_struct)?)
                 }
                 _ => break,
             };
@@ -326,13 +346,13 @@ impl Parser {
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Mul => {
-                    node::Expr::Mul(node::Expr::wrap(left, self.expr_unary(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::Mul, left, self.expr_unary(ini_struct)?)
                 }
                 lex::Tkn::Div => {
-                    node::Expr::Div(node::Expr::wrap(left, self.expr_unary(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::Div, left, self.expr_unary(ini_struct)?)
                 }
                 lex::Tkn::Surplus => {
-                    node::Expr::Surplus(node::Expr::wrap(left, self.expr_unary(ini_struct)?))
+                    Self::binary_expr(node::ExprNode::Surplus, left, self.expr_unary(ini_struct)?)
                 }
                 _ => break,
             };
@@ -368,21 +388,26 @@ impl Parser {
 
         // 演算子を現在のトークンにする。オペランドは次のトークンから始まる
         self.next_tkn(&[])?;
+        // 位置は、演算子
+        let span = std::rc::Rc::new(self.build_err_span());
         let operand = Box::new(self.expr_unary(ini_struct)?);
-        Ok(match op {
-            lex::Tkn::Inc => node::Expr::LeftInc(operand),
-            lex::Tkn::Dec => node::Expr::LeftDec(operand),
-            lex::Tkn::Add => node::Expr::Sign((true, operand)),
-            lex::Tkn::Sub => node::Expr::Sign((false, operand)),
-            lex::Tkn::Not => node::Expr::CmpNot(operand),
-            _ => node::Expr::Inversion(operand),
-        })
+        let node = match op {
+            lex::Tkn::Inc => node::ExprNode::LeftInc(operand),
+            lex::Tkn::Dec => node::ExprNode::LeftDec(operand),
+            lex::Tkn::Add => node::ExprNode::Sign((true, operand)),
+            lex::Tkn::Sub => node::ExprNode::Sign((false, operand)),
+            lex::Tkn::Not => node::ExprNode::CmpNot(operand),
+            _ => node::ExprNode::Inversion(operand),
+        };
+        Ok(node::Expr::new(node, span))
     }
 
     fn expr_value(&mut self, init_struct: bool) -> Result<node::Expr, err::ErrKind> {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
+            // 名前の位置
+            let name_span = std::rc::Rc::new(self.build_err_span());
             match self.next_tkn_ref(&[])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
@@ -395,16 +420,16 @@ impl Parser {
                 }
                 lex::Tkn::RParen => {
                     self.next_tkn(&[])?;
-                    return Ok(node::Expr::Var(name));
+                    return Ok(node::Expr::new(node::ExprNode::Var(name), name_span));
                 }
                 lex::Tkn::Inc | lex::Tkn::Dec => {
                     let postfix = self.next_tkn(&[])?;
                     self.advance_tkn_checked()?;
                     let var = self.gen_name_node::<false>(name, init_struct)?;
                     return Ok(if postfix == lex::Tkn::Inc {
-                        node::Expr::Inc(Box::new(var))
+                        node::Expr::new(node::ExprNode::Inc(Box::new(var)), name_span)
                     } else {
-                        node::Expr::Dec(Box::new(var))
+                        node::Expr::new(node::ExprNode::Dec(Box::new(var)), name_span)
                     });
                 }
                 // データ付きバリアントなど
@@ -431,13 +456,20 @@ impl Parser {
         }
 
         // 配列の中の処理は`src/parse/expr_value.rs`にある
-        let v = match self.next_tkn(&["[", "*", "number", "float", "string", "name", "(", "{"])? {
+        let value_tkn =
+            self.next_tkn(&["[", "*", "number", "float", "string", "name", "(", "{"])?;
+        // 値の先頭のトークン(`next_tkn`で進めた後の現在のトークン)の位置
+        let span = std::rc::Rc::new(self.build_err_span());
+        let v = match value_tkn {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
-            lex::Tkn::Mul => node::Expr::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
-            lex::Tkn::Number(value) => node::Expr::Number(value),
-            lex::Tkn::Float(value) => node::Expr::Float(value),
+            lex::Tkn::Mul => node::Expr::new(
+                node::ExprNode::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
+                span,
+            ),
+            lex::Tkn::Number(value) => node::Expr::new(node::ExprNode::Number(value), span),
+            lex::Tkn::Float(value) => node::Expr::new(node::ExprNode::Float(value), span),
             lex::Tkn::KeyWordSelf => {
                 let Some(self_name) = self.struct_self_name.clone() else {
                     return crate::err_at!(self.self_outside_of_type());
@@ -445,17 +477,17 @@ impl Parser {
                 // `expr/value_api.rs`
                 self.gen_name_node::<true>(self_name, init_struct)?
             }
-            lex::Tkn::Str(value) => node::Expr::Str(value),
+            lex::Tkn::Str(value) => node::Expr::new(node::ExprNode::Str(value), span),
             lex::Tkn::Name(name) => {
                 let var = self.gen_name_node::<false>(name, init_struct)?;
                 match self.current_tkn() {
                     lex::Tkn::Inc => {
                         self.advance_tkn();
-                        return Ok(node::Expr::Inc(Box::new(var)));
+                        return Ok(node::Expr::new(node::ExprNode::Inc(Box::new(var)), span));
                     }
                     lex::Tkn::Dec => {
                         self.advance_tkn();
-                        return Ok(node::Expr::Dec(Box::new(var)));
+                        return Ok(node::Expr::new(node::ExprNode::Dec(Box::new(var)), span));
                     }
                     _ => {}
                 }
@@ -478,7 +510,10 @@ impl Parser {
                     };
                     self.next_tkn(&[")"])?;
                     let var = self.expr_value(init_struct)?;
-                    return Ok(node::Expr::Cast((node::TyNode::Ty(ty_name), Box::new(var))));
+                    return Ok(node::Expr::new(
+                        node::ExprNode::Cast((node::TyNode::Ty(ty_name), Box::new(var))),
+                        span,
+                    ));
                 }
 
                 let result = self.expr_or(init_struct)?;
@@ -508,10 +543,10 @@ impl Parser {
         // 呼び出し式の「次」を正しく指しており、ここでさらに
         // 読み進めてはいけない
         fn already_positioned_after_call(v: &node::Expr) -> bool {
-            match v {
-                node::Expr::CallFunc(..) | node::Expr::Scope { .. } => true,
-                node::Expr::Member { target, .. } | node::Expr::PtrMember { target, .. } => {
-                    matches!(**target, node::Expr::CallFunc(..))
+            match &v.node {
+                node::ExprNode::CallFunc(..) | node::ExprNode::Scope { .. } => true,
+                node::ExprNode::Member { target, .. } | node::ExprNode::PtrMember { target, .. } => {
+                    matches!(target.node, node::ExprNode::CallFunc(..))
                 }
                 _ => false,
             }
@@ -535,10 +570,10 @@ impl Parser {
                 // 閉じるトークンなので、消費せずそのまま残す
                 lex::Tkn::RBrace
                     if matches!(
-                        v,
-                        node::Expr::InitStruct { .. }
-                            | node::Expr::InitVariant { .. }
-                            | node::Expr::Array(..)
+                        v.node,
+                        node::ExprNode::InitStruct { .. }
+                            | node::ExprNode::InitVariant { .. }
+                            | node::ExprNode::Array(..)
                     ) =>
                 {
                     self.next_tkn(&[])?;
@@ -572,6 +607,8 @@ impl Parser {
         if self.current_tkn() != &lex::Tkn::LParen {
             return crate::err_at!(self.expected_at_current("("));
         }
+        // 関数呼び出しの位置(`(`)
+        let span = std::rc::Rc::new(self.build_err_span());
         // 引数
         let mut args = Vec::<node::Expr>::new();
 
@@ -603,23 +640,36 @@ impl Parser {
 
         // ')'をスキップ
         self.next_tkn(&[])?;
-        Ok(node::Expr::CallFunc(node::CallInfo {
-            name: name.to_owned(),
-            // ジェネリクス関数の場合は、呼び出し元(`generic_call_expr`)が
-            // `<>`の中身を入れる
-            temp_ty: Vec::new(),
-            args,
-        }))
+        Ok(node::Expr::new(
+            node::ExprNode::CallFunc(node::CallInfo {
+                name: name.to_owned(),
+                // ジェネリクス関数の場合は、呼び出し元(`generic_call_expr`)が
+                // `<>`の中身を入れる
+                temp_ty: Vec::new(),
+                args,
+            }),
+            span,
+        ))
     }
 }
 
 #[cfg(test)]
 mod expr_tests {
     use crate::compiler::{
-        lex,
+        err, lex,
         node::{self, *},
         parse,
     };
+
+    /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
+    fn sp() -> std::rc::Rc<err::Span> {
+        std::rc::Rc::new(err::Span::new(&0, &0))
+    }
+
+    /// 位置を付けて`Expr`にする
+    fn ex(n: node::ExprNode) -> node::Expr {
+        node::Expr::new(n, sp())
+    }
 
     fn gen_nodes(content: &str) -> Vec<lex::LocatedTkn> {
         let mut lexer = lex::Lexer::new();
@@ -637,18 +687,18 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var(
                     "b".to_string()
-                )))),
+                )))))),
                 ty: node::TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: None,
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -663,14 +713,14 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::CallFunc(node::CallInfo {
+            &ex(node::ExprNode::CallFunc(node::CallInfo {
                 name: "a".to_string(),
                 temp_ty: Vec::new(),
                 args: vec![
-                    node::Expr::Number("10".to_string()),
-                    node::Expr::Var("a".to_string()),
+                    ex(node::ExprNode::Number("10".to_string())),
+                    ex(node::ExprNode::Var("a".to_string())),
                 ]
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -685,14 +735,14 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::CallFunc(node::CallInfo {
+            &ex(node::ExprNode::CallFunc(node::CallInfo {
                 name: "a".to_string(),
                 temp_ty: Vec::new(),
                 args: vec![
-                    node::Expr::Float("1.5".to_string()),
-                    node::Expr::Number("2".to_string()),
+                    ex(node::ExprNode::Float("1.5".to_string())),
+                    ex(node::ExprNode::Number("2".to_string())),
                 ]
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -705,20 +755,22 @@ mod expr_tests {
         else {
             panic!("not func");
         };
-        let node::Group2Node::Expr(node::Expr::DefVar(var)) = function.body[0].get_node() else {
+        let node::Group2Node::Expr(node::Expr { node: node::ExprNode::DefVar(var), .. }) =
+            function.body[0].get_node()
+        else {
             panic!("not variable definition");
         };
 
-        let expected = node::Expr::OrCalcul(node::Expr::wrap(
-            node::Expr::Number("1".to_string()),
-            node::Expr::XorCalcul(node::Expr::wrap(
-                node::Expr::Number("2".to_string()),
-                node::Expr::AndCalcul(node::Expr::wrap(
-                    node::Expr::Number("3".to_string()),
-                    node::Expr::Number("4".to_string()),
-                )),
-            )),
-        ));
+        let expected = ex(node::ExprNode::OrCalcul(node::Expr::wrap(
+            ex(node::ExprNode::Number("1".to_string())),
+            ex(node::ExprNode::XorCalcul(node::Expr::wrap(
+                ex(node::ExprNode::Number("2".to_string())),
+                ex(node::ExprNode::AndCalcul(node::Expr::wrap(
+                    ex(node::ExprNode::Number("3".to_string())),
+                    ex(node::ExprNode::Number("4".to_string())),
+                ))),
+            ))),
+        )));
         assert_eq!(var.value.as_ref(), &expected);
     }
 
@@ -731,10 +783,10 @@ mod expr_tests {
             panic!("not func");
         };
 
-        let expected = node::StmtNode::Return(node::Expr::AndCalcul(node::Expr::wrap(
-            node::Expr::Number("1".to_string()),
-            node::Expr::Number("2".to_string()),
-        )))
+        let expected = node::StmtNode::Return(ex(node::ExprNode::AndCalcul(node::Expr::wrap(
+            ex(node::ExprNode::Number("1".to_string())),
+            ex(node::ExprNode::Number("2".to_string())),
+        ))))
         .wrap();
         assert_eq!(function.body[0].get_node(), &expected);
     }
@@ -749,15 +801,15 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::Number("100".to_string())),
+                value: Box::new(ex(node::ExprNode::Number("100".to_string()))),
                 ty: node::TyNode::Stack {
                     name: "int".to_string(),
                     len: 1
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -772,20 +824,20 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::Array(vec![
-                    node::Expr::Number("100".to_string()),
-                    node::Expr::Number("100".to_string()),
-                    node::Expr::Number("100".to_string()),
-                    node::Expr::Number("100".to_string()),
-                ])),
+                value: Box::new(ex(node::ExprNode::Array(vec![
+                    ex(node::ExprNode::Number("100".to_string())),
+                    ex(node::ExprNode::Number("100".to_string())),
+                    ex(node::ExprNode::Number("100".to_string())),
+                    ex(node::ExprNode::Number("100".to_string())),
+                ]))),
                 ty: node::TyNode::Stack {
                     name: "int".to_string(),
                     len: 4
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -800,15 +852,15 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::Number("100".to_string())),
+                value: Box::new(ex(node::ExprNode::Number("100".to_string()))),
                 ty: node::TyNode::Static {
                     name: "int".to_string(),
                     len: 1
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -836,14 +888,14 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::Match {
+            &ex(node::ExprNode::Match{
                 pattern: None,
                 arms: vec![node::MatchArm {
                     pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
                     body: vec![gen_var_node("hh", "100", "b1", 5),],
                 }],
                 arm_else: Some(vec![gen_var_node("a", "10", "b1", 8),]),
-            }
+            })
             .wrap_group2()
         );
     }
@@ -869,17 +921,17 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::Match {
+            &ex(node::ExprNode::Match{
                 pattern: None,
                 arms: vec![node::MatchArm {
-                    pattern: Box::new(node::Expr::Equal((
-                        Box::new(node::Expr::Var("a".to_string())),
-                        Box::new(node::Expr::Number("10".to_string())),
-                    ))),
+                    pattern: Box::new(ex(node::ExprNode::Equal((
+                        Box::new(ex(node::ExprNode::Var("a".to_string()))),
+                        Box::new(ex(node::ExprNode::Number("10".to_string()))),
+                    )))),
                     body: vec![gen_var_node("hh", "100", "int", 4),],
                 }],
                 arm_else: Some(vec![gen_var_node("a", "10", "int", 6),]),
-            }
+            })
             .wrap_group2()
         );
     }
@@ -911,20 +963,20 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::Match {
-                pattern: Some(Box::new(node::Expr::Var("a".to_string()))),
+            &ex(node::ExprNode::Match{
+                pattern: Some(Box::new(ex(node::ExprNode::Var("a".to_string())))),
                 arms: vec![
                     node::MatchArm {
-                        pattern: Box::new(node::Expr::Number("10".to_string())),
+                        pattern: Box::new(ex(node::ExprNode::Number("10".to_string()))),
                         body: vec![gen_var_node("hh", "100", "int", 5),],
                     },
                     node::MatchArm {
-                        pattern: Box::new(node::Expr::Number("20".to_string())),
+                        pattern: Box::new(ex(node::ExprNode::Number("20".to_string()))),
                         body: vec![gen_var_node("hh", "200", "int", 8),],
                     }
                 ],
                 arm_else: Some(vec![gen_var_node("a", "10", "int", 11)]),
-            }
+            })
             .wrap_group2()
         );
     }
@@ -940,16 +992,16 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::Assign(node::AssignVar {
+            &ex(node::ExprNode::Assign(node::AssignVar {
                 name: "ptr".to_string(),
-                dst: Box::new(node::Expr::PtrMember {
+                dst: Box::new(ex(node::ExprNode::PtrMember{
                     name: "ptr".to_string(),
                     index: None,
                     else_idx: None,
-                    target: Box::new(node::Expr::Var("name".to_string())),
-                }),
-                value: Box::new(node::Expr::Number("10".to_string())),
-            })
+                    target: Box::new(ex(node::ExprNode::Var("name".to_string()))),
+                })),
+                value: Box::new(ex(node::ExprNode::Number("10".to_string()))),
+            }))
             .wrap_group2()
         );
     }
@@ -965,16 +1017,16 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::PtrMember {
+            &ex(node::ExprNode::PtrMember{
                 name: "ptr".to_string(),
                 index: None,
                 else_idx: None,
-                target: Box::new(node::Expr::CallFunc(node::CallInfo {
+                target: Box::new(ex(node::ExprNode::CallFunc(node::CallInfo {
                     name: "f".to_string(),
                     temp_ty: Vec::new(),
                     args: Vec::new(),
-                })),
-            }
+                }))),
+            })
             .wrap_group2()
         );
     }
@@ -991,17 +1043,17 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::PtrMember {
+                value: Box::new(ex(node::ExprNode::PtrMember{
                     name: "ptr".to_string(),
                     index: None,
                     else_idx: None,
-                    target: Box::new(node::Expr::Var("name".to_string())),
-                }),
+                    target: Box::new(ex(node::ExprNode::Var("name".to_string()))),
+                })),
                 ty: node::TyNode::Ty("int".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -1017,15 +1069,15 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::Cast((
+                value: Box::new(ex(node::ExprNode::Cast((
                     node::TyNode::Ty("i64".to_string()),
-                    Box::new(node::Expr::Var("b".to_string())),
-                ))),
+                    Box::new(ex(node::ExprNode::Var("b".to_string()))),
+                )))),
                 ty: node::TyNode::Ty("i64".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -1040,15 +1092,15 @@ mod expr_tests {
         };
         assert_eq!(
             node.body[0].get_node(),
-            &node::Expr::DefVar(node::DefineVar {
+            &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::EnumVariant {
+                value: Box::new(ex(node::ExprNode::EnumVariant{
                     name: "Color".to_string(),
                     variant: "Green".to_string(),
-                }),
+                })),
                 ty: node::TyNode::Ty("Color".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -1063,7 +1115,7 @@ mod expr_tests {
         };
         assert_eq!(
             func.body[0].get_node(),
-            &node::Expr::Inc(Box::new(node::Expr::Var("a".to_string()))).wrap_group2()
+            &ex(node::ExprNode::Inc(Box::new(ex(node::ExprNode::Var("a".to_string()))))).wrap_group2()
         );
     }
 
@@ -1077,7 +1129,7 @@ mod expr_tests {
         };
         assert_eq!(
             func.body[0].get_node(),
-            &node::Expr::Dec(Box::new(node::Expr::Var("a".to_string()))).wrap_group2()
+            &ex(node::ExprNode::Dec(Box::new(ex(node::ExprNode::Var("a".to_string()))))).wrap_group2()
         );
     }
 
@@ -1097,25 +1149,27 @@ mod expr_tests {
         else {
             panic!("not func");
         };
-        let node::Group2Node::Expr(node::Expr::DefVar(var)) = func.body[0].get_node() else {
+        let node::Group2Node::Expr(node::Expr { node: node::ExprNode::DefVar(var), .. }) =
+            func.body[0].get_node()
+        else {
             panic!("not variable definition");
         };
         *var.value.clone()
     }
 
     fn var(name: &str) -> Box<node::Expr> {
-        Box::new(node::Expr::Var(name.to_string()))
+        Box::new(ex(node::ExprNode::Var(name.to_string())))
     }
 
     #[test]
     fn check_unary_sign() {
         assert_eq!(
             parse_value_of("main(): int { a: int = -b }"),
-            node::Expr::Sign((false, var("b")))
+            ex(node::ExprNode::Sign((false, var("b"))))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = +b }"),
-            node::Expr::Sign((true, var("b")))
+            ex(node::ExprNode::Sign((true, var("b"))))
         );
     }
 
@@ -1123,11 +1177,11 @@ mod expr_tests {
     fn check_unary_not_and_inversion() {
         assert_eq!(
             parse_value_of("main(): int { a: int = !b }"),
-            node::Expr::CmpNot(var("b"))
+            ex(node::ExprNode::CmpNot(var("b")))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = ~b }"),
-            node::Expr::Inversion(var("b"))
+            ex(node::ExprNode::Inversion(var("b")))
         );
     }
 
@@ -1135,11 +1189,11 @@ mod expr_tests {
     fn check_unary_prefix_inc_dec() {
         assert_eq!(
             parse_value_of("main(): int { a: int = ++b }"),
-            node::Expr::LeftInc(var("b"))
+            ex(node::ExprNode::LeftInc(var("b")))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = --b }"),
-            node::Expr::LeftDec(var("b"))
+            ex(node::ExprNode::LeftDec(var("b")))
         );
     }
 
@@ -1148,11 +1202,11 @@ mod expr_tests {
         // `!~b` / `- -b`
         assert_eq!(
             parse_value_of("main(): int { a: int = !~b }"),
-            node::Expr::CmpNot(Box::new(node::Expr::Inversion(var("b"))))
+            ex(node::ExprNode::CmpNot(Box::new(ex(node::ExprNode::Inversion(var("b"))))))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = - -b }"),
-            node::Expr::Sign((false, Box::new(node::Expr::Sign((false, var("b"))))))
+            ex(node::ExprNode::Sign((false, Box::new(ex(node::ExprNode::Sign((false, var("b"))))))))
         );
     }
 
@@ -1161,17 +1215,17 @@ mod expr_tests {
         // `-b * c` は `(-b) * c`
         assert_eq!(
             parse_value_of("main(): int { a: int = -b * c }"),
-            node::Expr::Mul((Box::new(node::Expr::Sign((false, var("b")))), var("c")))
+            ex(node::ExprNode::Mul((Box::new(ex(node::ExprNode::Sign((false, var("b"))))), var("c"))))
         );
         // `b - -c` は 二項の`-`と単項の`-`
         assert_eq!(
             parse_value_of("main(): int { a: int = b - -c }"),
-            node::Expr::Sub((var("b"), Box::new(node::Expr::Sign((false, var("c"))))))
+            ex(node::ExprNode::Sub((var("b"), Box::new(ex(node::ExprNode::Sign((false, var("c"))))))))
         );
         // `-(b + c)`
         assert_eq!(
             parse_value_of("main(): int { a: int = -(b + c) }"),
-            node::Expr::Sign((false, Box::new(node::Expr::Add((var("b"), var("c"))))))
+            ex(node::ExprNode::Sign((false, Box::new(ex(node::ExprNode::Add((var("b"), var("c"))))))))
         );
     }
 
@@ -1179,11 +1233,11 @@ mod expr_tests {
     fn check_logical_and_or() {
         assert_eq!(
             parse_value_of("main(): int { a: int = b && c }"),
-            node::Expr::CmpAnd((var("b"), var("c")))
+            ex(node::ExprNode::CmpAnd((var("b"), var("c"))))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = b || c }"),
-            node::Expr::CmpOr((var("b"), var("c")))
+            ex(node::ExprNode::CmpOr((var("b"), var("c"))))
         );
     }
 
@@ -1192,25 +1246,25 @@ mod expr_tests {
         // `b || c && d` は `b || (c && d)`
         assert_eq!(
             parse_value_of("main(): int { a: int = b || c && d }"),
-            node::Expr::CmpOr((var("b"), Box::new(node::Expr::CmpAnd((var("c"), var("d"))))))
+            ex(node::ExprNode::CmpOr((var("b"), Box::new(ex(node::ExprNode::CmpAnd((var("c"), var("d"))))))))
         );
         // `b && c | d` は `b && (c | d)`(ビット演算の方が優先)
         assert_eq!(
             parse_value_of("main(): int { a: int = b && c | d }"),
-            node::Expr::CmpAnd((
+            ex(node::ExprNode::CmpAnd((
                 var("b"),
-                Box::new(node::Expr::OrCalcul((var("c"), var("d"))))
-            ))
+                Box::new(ex(node::ExprNode::OrCalcul((var("c"), var("d")))))
+            )))
         );
         // `!b && c` は `(!b) && c`
         assert_eq!(
             parse_value_of("main(): int { a: int = !b && c }"),
-            node::Expr::CmpAnd((Box::new(node::Expr::CmpNot(var("b"))), var("c")))
+            ex(node::ExprNode::CmpAnd((Box::new(ex(node::ExprNode::CmpNot(var("b")))), var("c"))))
         );
         // 左結合: `b && c && d` は `(b && c) && d`
         assert_eq!(
             parse_value_of("main(): int { a: int = b && c && d }"),
-            node::Expr::CmpAnd((Box::new(node::Expr::CmpAnd((var("b"), var("c")))), var("d")))
+            ex(node::ExprNode::CmpAnd((Box::new(ex(node::ExprNode::CmpAnd((var("b"), var("c"))))), var("d"))))
         );
     }
 
@@ -1218,7 +1272,7 @@ mod expr_tests {
     fn check_ternary() {
         assert_eq!(
             parse_value_of("main(): int { a: int = b ? c : d }"),
-            node::Expr::Ternary((var("b"), var("c"), var("d")))
+            ex(node::ExprNode::Ternary((var("b"), var("c"), var("d"))))
         );
     }
 
@@ -1227,37 +1281,37 @@ mod expr_tests {
         // 条件部は`||`より低い: `b || c ? d : e` は `(b || c) ? d : e`
         assert_eq!(
             parse_value_of("main(): int { a: int = b || c ? d : e }"),
-            node::Expr::Ternary((
-                Box::new(node::Expr::CmpOr((var("b"), var("c")))),
+            ex(node::ExprNode::Ternary((
+                Box::new(ex(node::ExprNode::CmpOr((var("b"), var("c"))))),
                 var("d"),
                 var("e")
-            ))
+            )))
         );
         // 右結合: `b ? c : d ? e : f` は `b ? c : (d ? e : f)`
         assert_eq!(
             parse_value_of("main(): int { a: int = b ? c : d ? e : f }"),
-            node::Expr::Ternary((
+            ex(node::ExprNode::Ternary((
                 var("b"),
                 var("c"),
-                Box::new(node::Expr::Ternary((var("d"), var("e"), var("f"))))
-            ))
+                Box::new(ex(node::ExprNode::Ternary((var("d"), var("e"), var("f")))))
+            )))
         );
         // then側のネスト: `b ? c ? d : e : f`
         assert_eq!(
             parse_value_of("main(): int { a: int = b ? c ? d : e : f }"),
-            node::Expr::Ternary((
+            ex(node::ExprNode::Ternary((
                 var("b"),
-                Box::new(node::Expr::Ternary((var("c"), var("d"), var("e")))),
+                Box::new(ex(node::ExprNode::Ternary((var("c"), var("d"), var("e"))))),
                 var("f")
-            ))
+            )))
         );
         // 括弧内でも使える
         assert_eq!(
             parse_value_of("main(): int { a: int = (b ? c : d) + e }"),
-            node::Expr::Add((
-                Box::new(node::Expr::Ternary((var("b"), var("c"), var("d")))),
+            ex(node::ExprNode::Add((
+                Box::new(ex(node::ExprNode::Ternary((var("b"), var("c"), var("d"))))),
                 var("e")
-            ))
+            )))
         );
     }
 }

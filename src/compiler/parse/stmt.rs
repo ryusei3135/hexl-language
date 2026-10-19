@@ -260,10 +260,12 @@ impl Parser {
                         continue;
                     }
 
+                    // 文の先頭の位置
+                    let span = Rc::new(self.build_err_span());
                     let line_node = self.one_line_node();
                     let node: Group2Info =
                         C::handle_ty::<node::Group2Node>(&self.err_pool, line_node)?
-                            .gen_group_info(self.build_err_span().line);
+                            .gen_group_info(self.build_err_span().line, span);
 
                     // `Group2`のノードは常に直前に生成された関数定義に
                     // 追加されるはずなので、そうでない場合はパーサー自体の
@@ -373,6 +375,8 @@ impl Parser {
 
     /// 反復処理のノードを作成する関数
     fn make_loop_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
+        // `loop`の位置
+        let span = Rc::new(self.build_err_span());
         // 反復処理の条件式
         let pattern = match self.next_tkn_ref(&["{", ".."])? {
             // "{"の場合は条件無し
@@ -400,7 +404,10 @@ impl Parser {
         let body = body_result?;
         self.next_tkn(&["expr"])?;
 
-        let node = node::Group2Node::Expr(node::Expr::Loop { pattern, body });
+        let node = node::Group2Node::Expr(node::Expr::new(
+            node::ExprNode::Loop { pattern, body },
+            span,
+        ));
         Ok(node)
     }
 
@@ -415,8 +422,10 @@ impl Parser {
         }
 
         loop {
+            // 文の先頭の位置
+            let span = Rc::new(self.build_err_span());
             let node = self.one_line_node()?;
-            block.push(node.gen_group_info(self.build_err_span().line));
+            block.push(node.gen_group_info(self.build_err_span().line, span));
             if matches!(self.current_tkn(), lex::Tkn::RBrace) {
                 break;
             }
@@ -449,7 +458,7 @@ impl Parser {
 
         // メゾット呼び出しの場合、`ptr_member_node`の時点ですでに
         // 呼び出し式の次のトークンまで進んでいるので、そのまま式として返す
-        if matches!(&member_node, node::Expr::PtrMember { target, .. } if matches!(**target, node::Expr::CallFunc(..)))
+        if matches!(&member_node.node, node::ExprNode::PtrMember { target, .. } if matches!(target.node, node::ExprNode::CallFunc(..)))
         {
             return Ok(member_node.wrap_group2());
         }
@@ -459,7 +468,9 @@ impl Parser {
         if matches!(self.peek_tkn(), Ok(lex::Tkn::Equal)) {
             self.next_tkn(&["="])?;
             let value = self.expr_branch()?;
-            Ok(node::AssignVar::new(name, member_node, value).wrap_group2())
+            // 代入の位置は、代入先(メンバー)の位置
+            let span = member_node.span.clone();
+            Ok(node::AssignVar::new(name, member_node, value, span).wrap_group2())
         } else {
             Ok(member_node.wrap_group2())
         }
@@ -478,6 +489,8 @@ impl Parser {
     /// `lex::Tkn::Name(name)`まで読み進めた状態で呼び出す。
     /// つまり`current_tkn()`が`name`を指している必要がある。
     fn ptr_stmt_node(&mut self, name: &String) -> Result<node::Group2Node, err::ErrKind> {
+        // `[name]`の`name`の位置
+        let span = Rc::new(self.build_err_span());
         // `]`まで進める
         self.next_tkn(&["]"])?;
 
@@ -489,13 +502,10 @@ impl Parser {
         // 既存通り: ポインタが指す値そのものへの代入 `[name] = value`
         self.next_tkn(&["="])?;
         let value = self.expr_branch()?;
-        Ok(node::AssignVar::new(
-            name,
-            node::Expr::ConnectAddr(Box::new(node::Expr::GetAddress(Box::new(node::Expr::Var(
-                name.to_string(),
-            ))))),
-            value,
-        )
-        .wrap_group2())
+        let mk = |n: node::ExprNode| node::Expr::new(n, span.clone());
+        let var = mk(node::ExprNode::Var(name.to_string()));
+        let addr = mk(node::ExprNode::GetAddress(Box::new(var)));
+        let dst = mk(node::ExprNode::ConnectAddr(Box::new(addr)));
+        Ok(node::AssignVar::new(name, dst, value, span.clone()).wrap_group2())
     }
 }

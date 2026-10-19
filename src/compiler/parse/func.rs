@@ -1,4 +1,5 @@
 use super::{Parser, *};
+use std::rc::Rc;
 
 /// 関数を定義するノードの生成
 impl Parser {
@@ -15,6 +16,8 @@ impl Parser {
         func_name: String,
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
+        // 関数の位置(関数名)
+        let span = Rc::new(self.build_err_span());
         let arg = match self.next_tkn(&["(", "<"])? {
             lex::Tkn::LParen => self.define_arg_node()?,
             lex::Tkn::LAngleBracket => {
@@ -38,6 +41,7 @@ impl Parser {
                         arg,
                         ret_ty,
                         is_public,
+                        span,
                     ))
                 } else {
                     crate::err_at!(self.fn_lbrace_not_found())
@@ -50,6 +54,7 @@ impl Parser {
                 arg,
                 node::TyNode::Ty("int".to_string()),
                 is_public,
+                span,
             )),
             t => crate::err_at!(self.fn_colon_or_lbrace_not_found(t.clone())),
         }
@@ -90,6 +95,8 @@ impl Parser {
             }
             match self.next_tkn(&["name", ")"])? {
                 lex::Tkn::Name(name) => {
+                    // 引数の位置(引数の名前)
+                    let span = Rc::new(self.build_err_span());
                     let var_attr: VarMutAttr = self.args_is_mut(&name)?;
                     // 直前の`if !can_create_param`のチェックを通過して
                     // いるため、ここでは常に`true`(同上、パーサー自体の
@@ -105,6 +112,7 @@ impl Parser {
                         name: name.clone(),
                         ty,
                         var_attr,
+                        span,
                     });
                     can_create_param = false;
                 }
@@ -459,7 +467,7 @@ impl Parser {
         self.instantiate_generic_func(name, &ty_args, &ty_tkns)?;
 
         let mut call = self.call_func_expr(name, ini_struct)?;
-        if let node::Expr::CallFunc(ref mut info) = call {
+        if let node::ExprNode::CallFunc(ref mut info) = call.node {
             info.temp_ty = ty_args;
         }
         Ok(call)
@@ -545,7 +553,25 @@ impl Parser {
 
 #[cfg(test)]
 mod generic_tests {
-    use crate::compiler::{lex, node, parse};
+    use crate::compiler::{err, lex, node, parse};
+    use std::rc::Rc;
+
+    /// テストで組み立てるノードに付ける位置
+    fn sp() -> Rc<err::Span> {
+        Rc::new(parse::Parser::new().build_err_span())
+    }
+
+    fn ex(node: node::ExprNode) -> node::Expr {
+        node.with_span(sp())
+    }
+
+    fn num(value: &str) -> node::Expr {
+        ex(node::ExprNode::Number(value.to_string()))
+    }
+
+    fn var(name: &str) -> node::Expr {
+        ex(node::ExprNode::Var(name.to_string()))
+    }
 
     fn try_build(src: &str) -> Result<Vec<node::Group1Node>, ()> {
         let mut lexer = lex::Lexer::new();
@@ -587,11 +613,11 @@ mod generic_tests {
     }
 
     fn call(name: &str, temp_ty: Vec<node::TyNode>, args: Vec<node::Expr>) -> node::Expr {
-        node::Expr::CallFunc(node::CallInfo {
+        ex(node::ExprNode::CallFunc(node::CallInfo {
             name: name.to_string(),
             temp_ty,
             args,
-        })
+        }))
     }
 
     // ---- 仕様のサンプル ----
@@ -635,7 +661,7 @@ mod generic_tests {
             );
             assert_eq!(
                 f.body[1].get_node(),
-                &node::StmtNode::Return(node::Expr::Var("var".to_string())).wrap()
+                &node::StmtNode::Return(var("var")).wrap()
             );
             assert!(!f.public);
         }
@@ -653,7 +679,10 @@ mod generic_tests {
             ",
         );
         let main = find(&nodes, "main", vec![]);
-        let node::Group2Node::Expr(node::Expr::DefVar(v)) = main.body[0].get_node() else {
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(v),
+            ..
+        }) = main.body[0].get_node() else {
             panic!("{:?}", main.body[0]);
         };
         assert_eq!(
@@ -661,10 +690,13 @@ mod generic_tests {
             call(
                 "func",
                 vec![ty("int")],
-                vec![node::Expr::Number("10".to_string())]
+                vec![num("10")]
             )
         );
-        let node::Group2Node::Expr(node::Expr::DefVar(v)) = main.body[1].get_node() else {
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(v),
+            ..
+        }) = main.body[1].get_node() else {
             panic!("{:?}", main.body[1]);
         };
         assert_eq!(
@@ -672,7 +704,7 @@ mod generic_tests {
             call(
                 "func",
                 vec![ty("byte")],
-                vec![node::Expr::Var("var".to_string())]
+                vec![var("var")]
             )
         );
     }
@@ -740,7 +772,7 @@ mod generic_tests {
             &call(
                 "func",
                 vec![ty("int")],
-                vec![node::Expr::Number("10".to_string())]
+                vec![num("10")]
             )
             .wrap_group2()
         );
@@ -749,7 +781,7 @@ mod generic_tests {
             &node::StmtNode::Return(call(
                 "func",
                 vec![ty("byte")],
-                vec![node::Expr::Number("1".to_string())]
+                vec![num("1")]
             ))
             .wrap()
         );
@@ -882,7 +914,7 @@ mod generic_tests {
             &node::StmtNode::Return(call(
                 "inner",
                 vec![ty("byte")],
-                vec![node::Expr::Var("a".to_string())]
+                vec![var("a")]
             ))
             .wrap()
         );
@@ -934,15 +966,18 @@ mod generic_tests {
         // 呼び出しが無いので、`func`の関数は作られない
         assert_eq!(nodes.len(), 1);
         let main = find(&nodes, "main", vec![]);
-        let node::Group2Node::Expr(node::Expr::DefVar(v)) = main.body[1].get_node() else {
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(v),
+            ..
+        }) = main.body[1].get_node() else {
             panic!("{:?}", main.body[1]);
         };
         assert_eq!(
             *v.value,
-            node::Expr::LessThen((
-                Box::new(node::Expr::Var("a".to_string())),
-                Box::new(node::Expr::Number("3".to_string())),
-            ))
+            ex(node::ExprNode::LessThen((
+                Box::new(var("a")),
+                Box::new(num("3")),
+            )))
         );
     }
 

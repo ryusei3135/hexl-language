@@ -32,7 +32,11 @@ impl Parser {
         let mut parser = Parser::new(&Rc::clone(&self.file_name), Rc::clone(&self.err_pool));
         parser.tkns = Some(lexer.gen_tkns);
 
-        let node = parser.asm_operand_expr()?;
+        // `${}`の中の文字列だけを解析する別のパーサーなので、その中の位置は
+        // 元のソースの位置にならない。そのため、すべてのノードに
+        // この`${}`を含む`#asm`の位置(`self`の現在の位置)を使う
+        let span = Rc::new(self.build_err_span());
+        let node = parser.asm_operand_expr_at(&span)?;
 
         // 式の解析が終わった後もまだトークンが残っている場合は
         // `${...}`の中に、式として解析できない文字列が
@@ -45,22 +49,42 @@ impl Parser {
     }
 
     /// 加算・減算を含む式のエントリーポイント
+    /// ノードの位置には、このパーサーの現在の位置を使う
     pub(super) fn asm_operand_expr(&mut self) -> Result<node::Expr, err::ErrKind> {
-        self.asm_operand_add()
+        let span = Rc::new(self.build_err_span());
+        self.asm_operand_expr_at(&span)
     }
 
-    fn asm_operand_add(&mut self) -> Result<node::Expr, err::ErrKind> {
-        let mut left = self.asm_operand_mul()?;
+    /// `asm_operand_expr`と同じだが、ノードの位置を`span`で指定する
+    pub(super) fn asm_operand_expr_at(
+        &mut self,
+        span: &Rc<err::Span>,
+    ) -> Result<node::Expr, err::ErrKind> {
+        self.asm_operand_add(span)
+    }
+
+    /// 二項演算のノードを作る
+    fn asm_binary(
+        ctor: fn((Box<node::Expr>, Box<node::Expr>)) -> node::ExprNode,
+        left: node::Expr,
+        right: node::Expr,
+        span: &Rc<err::Span>,
+    ) -> node::Expr {
+        node::Expr::new(ctor(node::Expr::wrap(left, right)), span.clone())
+    }
+
+    fn asm_operand_add(&mut self, span: &Rc<err::Span>) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.asm_operand_mul(span)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Add => {
                     self.advance_tkn();
-                    node::Expr::Add(node::Expr::wrap(left, self.asm_operand_mul()?))
+                    Self::asm_binary(node::ExprNode::Add, left, self.asm_operand_mul(span)?, span)
                 }
                 lex::Tkn::Sub => {
                     self.advance_tkn();
-                    node::Expr::Sub(node::Expr::wrap(left, self.asm_operand_mul()?))
+                    Self::asm_binary(node::ExprNode::Sub, left, self.asm_operand_mul(span)?, span)
                 }
                 _ => break,
             };
@@ -69,18 +93,18 @@ impl Parser {
         Ok(left)
     }
 
-    fn asm_operand_mul(&mut self) -> Result<node::Expr, err::ErrKind> {
-        let mut left = self.asm_operand_unary()?;
+    fn asm_operand_mul(&mut self, span: &Rc<err::Span>) -> Result<node::Expr, err::ErrKind> {
+        let mut left = self.asm_operand_unary(span)?;
 
         loop {
             left = match self.current_tkn() {
                 lex::Tkn::Mul => {
                     self.advance_tkn();
-                    node::Expr::Mul(node::Expr::wrap(left, self.asm_operand_unary()?))
+                    Self::asm_binary(node::ExprNode::Mul, left, self.asm_operand_unary(span)?, span)
                 }
                 lex::Tkn::Div => {
                     self.advance_tkn();
-                    node::Expr::Div(node::Expr::wrap(left, self.asm_operand_unary()?))
+                    Self::asm_binary(node::ExprNode::Div, left, self.asm_operand_unary(span)?, span)
                 }
                 _ => break,
             };
@@ -90,46 +114,52 @@ impl Parser {
     }
 
     /// ポインタの参照(`*p`)とアドレス取得(`[p]`)を含む単項式
-    fn asm_operand_unary(&mut self) -> Result<node::Expr, err::ErrKind> {
+    fn asm_operand_unary(&mut self, span: &Rc<err::Span>) -> Result<node::Expr, err::ErrKind> {
         match self.current_tkn().clone() {
             // `*p` ポインタ`p`が指す値を読み取る
             lex::Tkn::Mul => {
                 self.advance_tkn();
-                Ok(node::Expr::ConnectAddr(Box::new(self.asm_operand_unary()?)))
+                Ok(node::Expr::new(
+                    node::ExprNode::ConnectAddr(Box::new(self.asm_operand_unary(span)?)),
+                    span.clone(),
+                ))
             }
             // `[p]` 変数`p`のアドレスを取得する
             lex::Tkn::LBracket => {
                 self.advance_tkn();
-                let inner = self.asm_operand_add()?;
+                let inner = self.asm_operand_add(span)?;
 
                 if !matches!(self.current_tkn(), lex::Tkn::RBracket) {
                     return crate::err_at!(self.expected_rbracket_in_asm_operand());
                 }
                 self.advance_tkn();
 
-                Ok(node::Expr::GetAddress(Box::new(inner)))
+                Ok(node::Expr::new(
+                    node::ExprNode::GetAddress(Box::new(inner)),
+                    span.clone(),
+                ))
             }
-            _ => self.asm_operand_primary(),
+            _ => self.asm_operand_primary(span),
         }
     }
 
-    fn asm_operand_primary(&mut self) -> Result<node::Expr, err::ErrKind> {
+    fn asm_operand_primary(&mut self, span: &Rc<err::Span>) -> Result<node::Expr, err::ErrKind> {
         match self.current_tkn().clone() {
             lex::Tkn::Number(value) => {
                 self.advance_tkn();
-                Ok(node::Expr::Number(value))
+                Ok(node::Expr::new(node::ExprNode::Number(value), span.clone()))
             }
             lex::Tkn::Str(value) => {
                 self.advance_tkn();
-                Ok(node::Expr::Str(value))
+                Ok(node::Expr::new(node::ExprNode::Str(value), span.clone()))
             }
             lex::Tkn::Name(name) => {
                 self.advance_tkn();
-                self.asm_operand_name_tail(name)
+                self.asm_operand_name_tail(name, span)
             }
             lex::Tkn::LParen => {
                 self.advance_tkn();
-                let inner = self.asm_operand_add()?;
+                let inner = self.asm_operand_add(span)?;
 
                 if !matches!(self.current_tkn(), lex::Tkn::RParen) {
                     return crate::err_at!(self.expected_rparen_in_asm_operand());
@@ -147,7 +177,11 @@ impl Parser {
     /// 変数名の後に続く、構造体のメンバーアクセス(`.field`)を解析する
     /// - `x`   -> 通常の変数の参照
     /// - `x.y` -> 構造体`x`のメンバー`y`への参照
-    fn asm_operand_name_tail(&mut self, name: String) -> Result<node::Expr, err::ErrKind> {
+    fn asm_operand_name_tail(
+        &mut self,
+        name: String,
+        span: &Rc<err::Span>,
+    ) -> Result<node::Expr, err::ErrKind> {
         if matches!(self.current_tkn(), lex::Tkn::Dot) {
             self.advance_tkn_checked()?;
 
@@ -156,12 +190,15 @@ impl Parser {
             };
             self.advance_tkn_checked()?;
 
-            Ok(node::Expr::Member {
-                scope: vec![name],
-                target: Box::new(node::Expr::Var(field)),
-            })
+            Ok(node::Expr::new(
+                node::ExprNode::Member {
+                    scope: vec![name],
+                    target: Box::new(node::Expr::new(node::ExprNode::Var(field), span.clone())),
+                },
+                span.clone(),
+            ))
         } else {
-            Ok(node::Expr::Var(name))
+            Ok(node::Expr::new(node::ExprNode::Var(name), span.clone()))
         }
     }
 }

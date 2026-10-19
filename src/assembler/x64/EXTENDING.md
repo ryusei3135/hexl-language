@@ -108,3 +108,15 @@ AT&T 構文で `op 元, 先` の順に書きます。サフィックス (`b` / `
 ## 数値リテラル
 
 10進数に加えて、16進数 (`0xff` / `0XFF`) を書けます。`-0x10` のように前に `-` を付けられます。
+
+## 条件付き命令 (`jcc` / `cmovcc` / `setcc`)
+
+条件 (`o` / `b` / `e` / `l` / `g` ... と別名 `z` / `nz` / `nae` など) は `emitter/inst_table.rs` の
+`JCC_TABLE` に一括で定義されており、`jcc` / `cmovcc` / `setcc` が共有します。
+
+- `setcc` (`sete` / `setne` / `setl` / `setg` / `setb` / `seta` ...) は `emit_setcc` が担当します。
+  オペランドは8bitのレジスタ (`%al` ... `%r15b`) またはメモリ (サフィックスなし) です。
+  `%spl` / `%bpl` / `%sil` / `%dil` には空の REX (`40`) を付けます (`needs_empty_rex`)。
+  8bit以外のレジスタ、即値、オペランド数の違いはエラーです。
+- `cmovcc` は16/32/64bitのレジスタ宛てで、`cmovl` / `cmovnel` のようにサフィックスを付けられます。
+- 符号化は GNU as の出力と一致することをテスト (`jcc_tests` / `cmov_tests` / `setcc_tests`) で確認しています。

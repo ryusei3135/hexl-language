@@ -11,9 +11,11 @@ impl Parser {
         name: String,
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
+        // 名前の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す
         if init_struct == false {
-            return Ok(node::Expr::Var(name));
+            return Ok(node::Expr::new(node::ExprNode::Var(name), span));
         }
         let node = match self.next_tkn_ref(&[".", "(", "`", "::"])? {
             lex::Tkn::Dot => {
@@ -48,7 +50,7 @@ impl Parser {
             }
             // 列挙型のメンバへのアクセス: `Name::Mem`
             lex::Tkn::ModPathTkn => self.scope_member_node(name, init_struct)?,
-            _ => node::Expr::Var(name),
+            _ => node::Expr::new(node::ExprNode::Var(name), span),
         };
         Ok(node)
     }
@@ -61,6 +63,8 @@ impl Parser {
         name: String,
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
+        // 型の名前の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         self.next_tkn(&["name"])?;
         let found = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(mem_name) = found.clone() else {
@@ -78,15 +82,21 @@ impl Parser {
         }
         if matches!(self.next_tkn_ref(&[])?, lex::Tkn::LParen) {
             self.next_tkn(&["("])?;
-            Ok(node::Expr::Scope {
-                scope: vec![name],
-                target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
-            })
+            Ok(node::Expr::new(
+                node::ExprNode::Scope {
+                    scope: vec![name],
+                    target: Box::new(self.call_func_expr(&mem_name, init_struct)?),
+                },
+                span,
+            ))
         } else {
-            Ok(node::Expr::EnumVariant {
-                name,
-                variant: mem_name,
-            })
+            Ok(node::Expr::new(
+                node::ExprNode::EnumVariant {
+                    name,
+                    variant: mem_name,
+                },
+                span,
+            ))
         }
     }
 
@@ -142,9 +152,11 @@ impl Parser {
         name: String,
         mem_name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
-        let node::Expr::InitStruct {
+        let init = self.struct_init_node::<false>(&name)?;
+        let span = init.span.clone();
+        let node::ExprNode::InitStruct {
             is_self, fields, ..
-        } = self.struct_init_node::<false>(&name)?
+        } = init.node
         else {
             return crate::err_at!(self.internal_state_err("struct init"));
         };
@@ -154,16 +166,21 @@ impl Parser {
                 self.expected_tkn("exactly one field matching the member", found)
             );
         }
-        Ok(node::Expr::InitVariant {
-            is_self,
-            name,
-            fields,
-        })
+        Ok(node::Expr::new(
+            node::ExprNode::InitVariant {
+                is_self,
+                name,
+                fields,
+            },
+            span,
+        ))
     }
 
     /// 配列リテラルのノードを作成する
     /// これは配列を初期化するノード
     pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
+        // `{`の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         let mut items = Vec::<node::Expr>::new();
 
         if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {
@@ -178,6 +195,6 @@ impl Parser {
                 }
             }
         }
-        Ok(node::Expr::Array(items))
+        Ok(node::Expr::new(node::ExprNode::Array(items), span))
     }
 }

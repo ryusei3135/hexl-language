@@ -4,6 +4,8 @@ use crate::compiler::node::{
     Field, Group1Node, StructField, VariantField, VariantFieldKind, VariantMode,
 };
 
+use std::rc::Rc;
+
 use super::*;
 
 const LOOP_BRAEK: bool = true;
@@ -167,10 +169,12 @@ impl Parser {
         fields: &mut Vec<T>,
         name: String,
     ) -> Result<bool, err::ErrKind> {
+        // フィールドの位置(`name:`の`:`)
+        let span = Rc::new(self.build_err_span());
         self.next_tkn(&[])?;
         let ty = self.define_ty_node()?;
 
-        fields.push(T::new(name, ty));
+        fields.push(T::new(name, ty, span));
 
         match self.current_tkn() {
             lex::Tkn::Comma => {}
@@ -213,10 +217,9 @@ impl Parser {
         if self.current_tkn() != &lex::Tkn::RBrace {
             loop {
                 if let node::Group1Node::FuncDefine(func) = method {
-                    func.body.push(
-                        self.one_line_node()?
-                            .gen_group_info(self.build_err_span().line),
-                    );
+                    let node = self.one_line_node()?;
+                    let span = self.build_err_span();
+                    func.body.push(node.gen_group_info(span.line, Rc::new(span)));
                 }
 
                 if self.current_tkn() == &lex::Tkn::RBrace {

@@ -1,5 +1,7 @@
 use crate::compiler::node::{Field, VariantField, VariantFieldKind};
 
+use std::rc::Rc;
+
 use super::*;
 
 /// メゾットかを調べる時に使う
@@ -18,6 +20,8 @@ impl Parser {
         field_name: String,
         pub_flag: bool,
     ) -> Result<VariantFieldKind, err::ErrKind> {
+        // メンバーの位置(メンバーの名前)
+        let span = Rc::new(self.build_err_span());
         match self.peek_tkn()? {
             lex::Tkn::LParen => {
                 // 現在のトークンを`(`にする
@@ -29,12 +33,12 @@ impl Parser {
                 } else {
                     // 型を持つメンバーとして処理
                     let ty = self.make_ty_variant_field()?;
-                    Ok(VariantField::new(field_name, ty).wrap_variant_field_kind())
+                    Ok(VariantField::new(field_name, ty, span).wrap_variant_field_kind())
                 }
             }
             // 型なしのメンバー: 次に続くのは別のメンバー・`,`・`}`
             lex::Tkn::Name(..) | lex::Tkn::KeyWordPub | lex::Tkn::Comma | lex::Tkn::RBrace => {
-                Ok(VariantField::typeless_new(field_name).wrap_variant_field_kind())
+                Ok(VariantField::typeless_new(field_name, span).wrap_variant_field_kind())
             }
             t => crate::err_at!(self.variant_member_unexpected_tkn(t)),
         }
@@ -137,14 +141,18 @@ mod variant_node_test {
 
     #[test]
     fn check_typeless_variant_node() {
-        assert_eq!(
-            gen_variant("variant A {A}"),
-            VariantDefine {
-                name: "A".to_string(),
-                fields: vec![node::VariantField::typeless_new("A".to_string())],
-                methods: Vec::new(),
-            }
-        );
+        let actual = gen_variant("variant A {A}");
+        // 位置は比較の対象ではないので、パース結果の位置をそのまま使う
+        let expected = VariantDefine {
+            name: "A".to_string(),
+            fields: vec![node::VariantField::typeless_new(
+                "A".to_string(),
+                actual.fields[0].span.clone(),
+            )],
+            methods: Vec::new(),
+            span: actual.span.clone(),
+        };
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -152,7 +160,10 @@ mod variant_node_test {
         let variant_node = gen_variant("variant A {A func(a: int) {ret 1}}");
         assert_eq!(
             variant_node.fields,
-            vec![node::VariantField::typeless_new("A".to_string())]
+            vec![node::VariantField::typeless_new(
+                "A".to_string(),
+                variant_node.fields[0].span.clone()
+            )]
         );
         assert_eq!(variant_node.methods.len(), 1);
         let node::Group1Node::FuncDefine(func) = &variant_node.methods[0] else {

@@ -12,6 +12,8 @@ impl Parser {
     pub(in crate::compiler::parse::expr) fn get_var_addr_node(
         &mut self,
     ) -> Result<node::Expr, err::ErrKind> {
+        // `[`の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         let next = self.next_tkn_ref(&["name"])?;
         let lex::Tkn::Name(name) = next.clone() else {
             return crate::err_at!(self.expected_tkn("name", next));
@@ -38,7 +40,7 @@ impl Parser {
                 self.next_tkn(&["."])?;
                 self.ptr_member_node(&name, None, None)?
             }
-            _ => node::Expr::GetAddress(Box::new(result)),
+            _ => node::Expr::new(node::ExprNode::GetAddress(Box::new(result)), span),
         };
         Ok(node)
     }
@@ -64,6 +66,8 @@ impl Parser {
     /// `current_tkn()`が`[`を指している必要がある。
     /// 終了時、`current_tkn()`は`]`を指す。
     fn ref_array_expr(&mut self, name: String) -> Result<node::Expr, err::ErrKind> {
+        // `[`の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         // `[`から配列の名前まで進める
         self.next_tkn(&["name"])?;
         let index = self.arr_access_index()?;
@@ -77,12 +81,16 @@ impl Parser {
             return self.ptr_member_node(&name, Some(Box::new(index)), else_idx);
         }
 
-        Ok(node::Expr::RefArray {
-            dst: Box::new(node::Expr::Var(name.clone())),
-            name,
-            index: Box::new(index),
-            else_idx,
-        })
+        let dst = node::Expr::new(node::ExprNode::Var(name.clone()), span.clone());
+        Ok(node::Expr::new(
+            node::ExprNode::RefArray {
+                dst: Box::new(dst),
+                name,
+                index: Box::new(index),
+                else_idx,
+            },
+            span,
+        ))
     }
 
     /// 構造体の配列メンバーの要素にアクセス、または代入するノードを作成する
@@ -104,6 +112,9 @@ impl Parser {
         &mut self,
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
+        // `[`の位置(メンバーアクセス全体の位置として使う)
+        let span = std::rc::Rc::new(self.build_err_span());
+        let mk = |n: node::ExprNode| node::Expr::new(n, span.clone());
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::err_at!(self.arr_member_name_not_found(member_tkn));
@@ -117,22 +128,27 @@ impl Parser {
         // "]"まで進める(current_tkn()は"]"を指す)
         let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
 
-        let member_node = node::Expr::Member {
+        let member_node = mk(node::ExprNode::Member {
             scope: vec![name.to_string()],
-            target: Box::new(node::Expr::RefArray {
+            target: Box::new(mk(node::ExprNode::RefArray {
                 name: member.clone(),
-                dst: Box::new(node::Expr::Var(member)),
-                index: Box::new(node::Expr::Number(index)),
+                dst: Box::new(mk(node::ExprNode::Var(member))),
+                index: Box::new(mk(node::ExprNode::Number(index))),
                 else_idx,
-            }),
-        };
+            })),
+        });
 
         // `a.[c 0] = 10`のように代入の場合、"="の後に続く値を
         // 読み取り、代入のノードとして返す
         if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
             self.next_tkn(&["="])?;
             let value = self.expr_branch()?;
-            return Ok(node::AssignVar::new(name, member_node, value));
+            return Ok(node::AssignVar::new(
+                name,
+                member_node,
+                value,
+                span.clone(),
+            ));
         }
 
         // 代入ではなく値の参照なので、"]"を消費せずに返す
@@ -163,6 +179,8 @@ impl Parser {
         &mut self,
         name: &str,
     ) -> Result<node::Group2Node, err::ErrKind> {
+        // 配列の名前の位置
+        let span = std::rc::Rc::new(self.build_err_span());
         let index = self.arr_access_index()?;
         let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
 
@@ -180,17 +198,17 @@ impl Parser {
         }
         let value = self.expr_branch()?;
 
-        Ok(node::AssignVar::new(
-            name,
-            node::Expr::RefArray {
+        let dst = node::Expr::new(node::ExprNode::Var(name.to_string()), span.clone());
+        let arr = node::Expr::new(
+            node::ExprNode::RefArray {
                 name: name.to_string(),
-                dst: Box::new(node::Expr::Var(name.to_string())),
+                dst: Box::new(dst),
                 index: Box::new(index),
                 else_idx,
             },
-            value,
-        )
-        .wrap_group2())
+            span.clone(),
+        );
+        Ok(node::AssignVar::new(name, arr, value, span).wrap_group2())
     }
 
     /// `[arr index ..]`の添字(`index`)の式を読み取る
@@ -236,6 +254,16 @@ mod test_access_arr_node {
     use super::*;
     use crate::compiler::parse;
 
+    /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
+    fn sp() -> std::rc::Rc<err::Span> {
+        std::rc::Rc::new(err::Span::new(&0, &0))
+    }
+
+    /// 位置を付けて`Expr`にする
+    fn ex(n: node::ExprNode) -> node::Expr {
+        node::Expr::new(n, sp())
+    }
+
     fn gen_nodes(content: &str) -> Vec<lex::LocatedTkn> {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
@@ -254,28 +282,28 @@ mod test_access_arr_node {
     }
 
     fn num(n: &str) -> node::Expr {
-        node::Expr::Number(n.to_string())
+        ex(node::ExprNode::Number(n.to_string()))
     }
 
     fn var(name: &str) -> node::Expr {
-        node::Expr::Var(name.to_string())
+        ex(node::ExprNode::Var(name.to_string()))
     }
 
     /// `[name index else else_idx]`のノード
     fn ref_arr(name: &str, index: node::Expr, else_idx: Option<node::Expr>) -> node::Expr {
-        node::Expr::RefArray {
+        ex(node::ExprNode::RefArray{
             name: name.to_string(),
             dst: Box::new(var(name)),
             index: Box::new(index),
             else_idx: else_idx.map(Box::new),
-        }
+        })
     }
 
     #[test]
     fn check_arr_node() {
         assert_eq!(
             first_stmt("[arr 0 else 10] = 10"),
-            node::AssignVar::new("arr", ref_arr("arr", num("0"), Some(num("10"))), num("10"))
+            node::AssignVar::new("arr", ref_arr("arr", num("0"), Some(num("10"))), num("10"), sp())
                 .wrap_group2()
         );
     }
@@ -284,20 +312,20 @@ mod test_access_arr_node {
     fn check_arr_node_without_else() {
         assert_eq!(
             first_stmt("[arr 0] = 10"),
-            node::AssignVar::new("arr", ref_arr("arr", num("0"), None), num("10")).wrap_group2()
+            node::AssignVar::new("arr", ref_arr("arr", num("0"), None), num("10"), sp()).wrap_group2()
         );
     }
 
     /// `[arr a.a else 0] = 0`: 添字が構造体のメンバー
     #[test]
     fn check_arr_node_member_index() {
-        let index = node::Expr::Member {
+        let index = ex(node::ExprNode::Member{
             scope: vec!["a".to_string()],
             target: Box::new(var("a")),
-        };
+        });
         assert_eq!(
             first_stmt("[arr a.a else 0] = 0"),
-            node::AssignVar::new("arr", ref_arr("arr", index, Some(num("0"))), num("0"))
+            node::AssignVar::new("arr", ref_arr("arr", index, Some(num("0"))), num("0"), sp())
                 .wrap_group2()
         );
     }
@@ -306,17 +334,17 @@ mod test_access_arr_node {
     fn check_arr_node_var_index() {
         assert_eq!(
             first_stmt("[arr i else 0] = 1"),
-            node::AssignVar::new("arr", ref_arr("arr", var("i"), Some(num("0"))), num("1"))
+            node::AssignVar::new("arr", ref_arr("arr", var("i"), Some(num("0"))), num("1"), sp())
                 .wrap_group2()
         );
     }
 
     #[test]
     fn check_arr_node_calc_index() {
-        let index = node::Expr::Add((Box::new(var("i")), Box::new(num("1"))));
+        let index = ex(node::ExprNode::Add((Box::new(var("i")), Box::new(num("1")))));
         assert_eq!(
             first_stmt("[arr i + 1 else 0] = 1"),
-            node::AssignVar::new("arr", ref_arr("arr", index, Some(num("0"))), num("1"))
+            node::AssignVar::new("arr", ref_arr("arr", index, Some(num("0"))), num("1"), sp())
                 .wrap_group2()
         );
     }
@@ -324,18 +352,18 @@ mod test_access_arr_node {
     /// 代入ではなく、式として値を読み取る
     #[test]
     fn check_arr_node_as_value() {
-        let index = node::Expr::Member {
+        let index = ex(node::ExprNode::Member{
             scope: vec!["a".to_string()],
             target: Box::new(var("a")),
-        };
+        });
         assert_eq!(
             first_stmt("x: int = [arr a.a else 0]"),
-            node::Expr::DefVar(node::DefineVar {
+            ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "x".to_string(),
                 value: Box::new(ref_arr("arr", index, Some(num("0")))),
                 ty: node::TyNode::Ty("int".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -345,16 +373,16 @@ mod test_access_arr_node {
     fn check_ptr_is_not_arr_node() {
         assert_eq!(
             first_stmt("a: int* = [b]"),
-            node::Expr::DefVar(node::DefineVar {
+            ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(node::Expr::GetAddress(Box::new(var("b")))),
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(var("b"))))),
                 ty: node::TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
                     range: None,
                 },
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -365,12 +393,12 @@ mod test_access_arr_node {
         else_idx: Option<node::Expr>,
         target: node::Expr,
     ) -> node::Expr {
-        node::Expr::PtrMember {
+        ex(node::ExprNode::PtrMember{
             name: "ptr".to_string(),
             index: Some(Box::new(index)),
             else_idx: else_idx.map(Box::new),
             target: Box::new(target),
-        }
+        })
     }
 
     /// `[ptr 1 else 0].name = 10`: 添字付きポインタのメンバーへ代入
@@ -381,8 +409,7 @@ mod test_access_arr_node {
             node::AssignVar::new(
                 "ptr",
                 ptr_member(num("1"), Some(num("0")), var("name")),
-                num("10")
-            )
+                num("10"), sp())
             .wrap_group2()
         );
     }
@@ -392,12 +419,12 @@ mod test_access_arr_node {
     fn check_ptr_member_index_value() {
         assert_eq!(
             first_stmt("x: int = [ptr i else 0].name"),
-            node::Expr::DefVar(node::DefineVar {
+            ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "x".to_string(),
                 value: Box::new(ptr_member(var("i"), Some(num("0")), var("name"))),
                 ty: node::TyNode::Ty("int".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
-            })
+            }))
             .wrap_group2()
         );
     }
@@ -407,7 +434,7 @@ mod test_access_arr_node {
     fn check_ptr_member_index_without_else() {
         assert_eq!(
             first_stmt("[ptr 1].name = 10"),
-            node::AssignVar::new("ptr", ptr_member(num("1"), None, var("name")), num("10"))
+            node::AssignVar::new("ptr", ptr_member(num("1"), None, var("name")), num("10"), sp())
                 .wrap_group2()
         );
     }
@@ -415,11 +442,11 @@ mod test_access_arr_node {
     /// `[ptr 1 else 0].f()`: 添字付きポインタのメゾット呼び出し
     #[test]
     fn check_ptr_member_index_call() {
-        let call = node::Expr::CallFunc(node::CallInfo {
+        let call = ex(node::ExprNode::CallFunc(node::CallInfo {
             name: "f".to_string(),
             temp_ty: Vec::new(),
             args: Vec::new(),
-        });
+        }));
         assert_eq!(
             first_stmt("[ptr 1 else 0].f()"),
             ptr_member(num("1"), Some(num("0")), call).wrap_group2()
@@ -433,12 +460,11 @@ mod test_access_arr_node {
             first_stmt("me.[arr 0 else 10] = 10"),
             node::AssignVar::new(
                 "me",
-                node::Expr::Member {
+                ex(node::ExprNode::Member{
                     scope: vec!["me".to_string()],
                     target: Box::new(ref_arr("arr", num("0"), Some(num("10")))),
-                },
-                num("10"),
-            )
+                }),
+                num("10"), sp())
             .wrap_group2()
         );
     }
