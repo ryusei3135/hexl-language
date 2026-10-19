@@ -285,15 +285,21 @@ impl Parser {
                 lex::Tkn::LAngleBracket => {
                     Self::binary_expr(node::ExprNode::LessThen, left, self.expr_shift(ini_struct)?)
                 }
-                lex::Tkn::RAngleBracket => {
-                    Self::binary_expr(node::ExprNode::GreaterThen, left, self.expr_shift(ini_struct)?)
-                }
-                lex::Tkn::LessThanEq => {
-                    Self::binary_expr(node::ExprNode::LessThenEq, left, self.expr_shift(ini_struct)?)
-                }
-                lex::Tkn::GreaterThanEq => {
-                    Self::binary_expr(node::ExprNode::GreaterThenEq, left, self.expr_shift(ini_struct)?)
-                }
+                lex::Tkn::RAngleBracket => Self::binary_expr(
+                    node::ExprNode::GreaterThen,
+                    left,
+                    self.expr_shift(ini_struct)?,
+                ),
+                lex::Tkn::LessThanEq => Self::binary_expr(
+                    node::ExprNode::LessThenEq,
+                    left,
+                    self.expr_shift(ini_struct)?,
+                ),
+                lex::Tkn::GreaterThanEq => Self::binary_expr(
+                    node::ExprNode::GreaterThenEq,
+                    left,
+                    self.expr_shift(ini_struct)?,
+                ),
                 _ => break,
             };
         }
@@ -545,7 +551,8 @@ impl Parser {
         fn already_positioned_after_call(v: &node::Expr) -> bool {
             match &v.node {
                 node::ExprNode::CallFunc(..) | node::ExprNode::Scope { .. } => true,
-                node::ExprNode::Member { target, .. } | node::ExprNode::PtrMember { target, .. } => {
+                node::ExprNode::Member { target, .. }
+                | node::ExprNode::PtrMember { target, .. } => {
                     matches!(target.node, node::ExprNode::CallFunc(..))
                 }
                 _ => false,
@@ -681,7 +688,8 @@ mod expr_tests {
     fn check_get_address_var() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int* = [b] }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -689,9 +697,9 @@ mod expr_tests {
             node.body[0].get_node(),
             &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var(
-                    "b".to_string()
-                )))))),
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(
+                    node::ExprNode::Var("b".to_string())
+                ))))),
                 ty: node::TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
@@ -707,7 +715,8 @@ mod expr_tests {
     fn check_call_func_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a(10, a) }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -729,7 +738,8 @@ mod expr_tests {
     fn check_float_literal_arg() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a(1.5, 2) }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -751,12 +761,15 @@ mod expr_tests {
     fn check_bitwise_operator_precedence() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: int = 1 | 2 ^ 3 & 4 }");
-        let node::Group1Node::FuncDefine(ref function) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref function) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
-        let node::Group2Node::Expr(node::Expr { node: node::ExprNode::DefVar(var), .. }) =
-            function.body[0].get_node()
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(var),
+            ..
+        }) = function.body[0].get_node()
         else {
             panic!("not variable definition");
         };
@@ -778,7 +791,8 @@ mod expr_tests {
     fn check_bitwise_operator_in_return() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { ret 1 & 2 }");
-        let node::Group1Node::FuncDefine(ref function) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref function) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -795,7 +809,8 @@ mod expr_tests {
     fn check_stack_var_single() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: [int] = 100 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -818,7 +833,8 @@ mod expr_tests {
     fn check_stack_var_array() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: [int 4] = {100, 100, 100, 100} }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -846,7 +862,8 @@ mod expr_tests {
     fn check_static_var_single() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: static[int] = 100 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -882,13 +899,14 @@ mod expr_tests {
             }
             ",
         );
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             node.body[0].get_node(),
-            &ex(node::ExprNode::Match{
+            &ex(node::ExprNode::Match {
                 pattern: None,
                 arms: vec![node::MatchArm {
                     pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
@@ -915,13 +933,14 @@ mod expr_tests {
             }
             ",
         );
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             node.body[0].get_node(),
-            &ex(node::ExprNode::Match{
+            &ex(node::ExprNode::Match {
                 pattern: None,
                 arms: vec![node::MatchArm {
                     pattern: Box::new(ex(node::ExprNode::Equal((
@@ -957,13 +976,14 @@ mod expr_tests {
             }
             ",
         );
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             node.body[0].get_node(),
-            &ex(node::ExprNode::Match{
+            &ex(node::ExprNode::Match {
                 pattern: Some(Box::new(ex(node::ExprNode::Var("a".to_string())))),
                 arms: vec![
                     node::MatchArm {
@@ -986,7 +1006,8 @@ mod expr_tests {
         // ポインタが指す構造体のメンバーへの代入: `[ptr].name = 10`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { [ptr].name = 10 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -994,7 +1015,7 @@ mod expr_tests {
             node.body[0].get_node(),
             &ex(node::ExprNode::Assign(node::AssignVar {
                 name: "ptr".to_string(),
-                dst: Box::new(ex(node::ExprNode::PtrMember{
+                dst: Box::new(ex(node::ExprNode::PtrMember {
                     name: "ptr".to_string(),
                     index: None,
                     else_idx: None,
@@ -1011,13 +1032,14 @@ mod expr_tests {
         // ポインタが指す構造体のメゾットの呼び出し: `[ptr].f()`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { [ptr].f() }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             node.body[0].get_node(),
-            &ex(node::ExprNode::PtrMember{
+            &ex(node::ExprNode::PtrMember {
                 name: "ptr".to_string(),
                 index: None,
                 else_idx: None,
@@ -1037,7 +1059,8 @@ mod expr_tests {
         // `a: int = [ptr].name`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int = [ptr].name }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -1045,7 +1068,7 @@ mod expr_tests {
             node.body[0].get_node(),
             &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(ex(node::ExprNode::PtrMember{
+                value: Box::new(ex(node::ExprNode::PtrMember {
                     name: "ptr".to_string(),
                     index: None,
                     else_idx: None,
@@ -1063,7 +1086,8 @@ mod expr_tests {
         // キャスト: `(T)var` -> `Cast((T, Box(var)))`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: i64 = (i64)b ret 1 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -1086,7 +1110,8 @@ mod expr_tests {
     fn check_enum_variant_expr() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: Color = Color::Green }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -1094,7 +1119,7 @@ mod expr_tests {
             node.body[0].get_node(),
             &ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(ex(node::ExprNode::EnumVariant{
+                value: Box::new(ex(node::ExprNode::EnumVariant {
                     name: "Color".to_string(),
                     variant: "Green".to_string(),
                 })),
@@ -1109,13 +1134,17 @@ mod expr_tests {
     fn check_postfix_increment_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a++ }");
-        let node::Group1Node::FuncDefine(ref func) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref func) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             func.body[0].get_node(),
-            &ex(node::ExprNode::Inc(Box::new(ex(node::ExprNode::Var("a".to_string()))))).wrap_group2()
+            &ex(node::ExprNode::Inc(Box::new(ex(node::ExprNode::Var(
+                "a".to_string()
+            )))))
+            .wrap_group2()
         );
     }
 
@@ -1123,13 +1152,17 @@ mod expr_tests {
     fn check_postfix_decrement_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a-- }");
-        let node::Group1Node::FuncDefine(ref func) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref func) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             func.body[0].get_node(),
-            &ex(node::ExprNode::Dec(Box::new(ex(node::ExprNode::Var("a".to_string()))))).wrap_group2()
+            &ex(node::ExprNode::Dec(Box::new(ex(node::ExprNode::Var(
+                "a".to_string()
+            )))))
+            .wrap_group2()
         );
     }
 
@@ -1145,12 +1178,15 @@ mod expr_tests {
     fn parse_value_of(src: &str) -> node::Expr {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes(src);
-        let node::Group1Node::FuncDefine(ref func) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref func) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
-        let node::Group2Node::Expr(node::Expr { node: node::ExprNode::DefVar(var), .. }) =
-            func.body[0].get_node()
+        let node::Group2Node::Expr(node::Expr {
+            node: node::ExprNode::DefVar(var),
+            ..
+        }) = func.body[0].get_node()
         else {
             panic!("not variable definition");
         };
@@ -1202,11 +1238,16 @@ mod expr_tests {
         // `!~b` / `- -b`
         assert_eq!(
             parse_value_of("main(): int { a: int = !~b }"),
-            ex(node::ExprNode::CmpNot(Box::new(ex(node::ExprNode::Inversion(var("b"))))))
+            ex(node::ExprNode::CmpNot(Box::new(ex(
+                node::ExprNode::Inversion(var("b"))
+            ))))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = - -b }"),
-            ex(node::ExprNode::Sign((false, Box::new(ex(node::ExprNode::Sign((false, var("b"))))))))
+            ex(node::ExprNode::Sign((
+                false,
+                Box::new(ex(node::ExprNode::Sign((false, var("b")))))
+            )))
         );
     }
 
@@ -1215,17 +1256,26 @@ mod expr_tests {
         // `-b * c` は `(-b) * c`
         assert_eq!(
             parse_value_of("main(): int { a: int = -b * c }"),
-            ex(node::ExprNode::Mul((Box::new(ex(node::ExprNode::Sign((false, var("b"))))), var("c"))))
+            ex(node::ExprNode::Mul((
+                Box::new(ex(node::ExprNode::Sign((false, var("b"))))),
+                var("c")
+            )))
         );
         // `b - -c` は 二項の`-`と単項の`-`
         assert_eq!(
             parse_value_of("main(): int { a: int = b - -c }"),
-            ex(node::ExprNode::Sub((var("b"), Box::new(ex(node::ExprNode::Sign((false, var("c"))))))))
+            ex(node::ExprNode::Sub((
+                var("b"),
+                Box::new(ex(node::ExprNode::Sign((false, var("c")))))
+            )))
         );
         // `-(b + c)`
         assert_eq!(
             parse_value_of("main(): int { a: int = -(b + c) }"),
-            ex(node::ExprNode::Sign((false, Box::new(ex(node::ExprNode::Add((var("b"), var("c"))))))))
+            ex(node::ExprNode::Sign((
+                false,
+                Box::new(ex(node::ExprNode::Add((var("b"), var("c")))))
+            )))
         );
     }
 
@@ -1246,7 +1296,10 @@ mod expr_tests {
         // `b || c && d` は `b || (c && d)`
         assert_eq!(
             parse_value_of("main(): int { a: int = b || c && d }"),
-            ex(node::ExprNode::CmpOr((var("b"), Box::new(ex(node::ExprNode::CmpAnd((var("c"), var("d"))))))))
+            ex(node::ExprNode::CmpOr((
+                var("b"),
+                Box::new(ex(node::ExprNode::CmpAnd((var("c"), var("d")))))
+            )))
         );
         // `b && c | d` は `b && (c | d)`(ビット演算の方が優先)
         assert_eq!(
@@ -1259,12 +1312,18 @@ mod expr_tests {
         // `!b && c` は `(!b) && c`
         assert_eq!(
             parse_value_of("main(): int { a: int = !b && c }"),
-            ex(node::ExprNode::CmpAnd((Box::new(ex(node::ExprNode::CmpNot(var("b")))), var("c"))))
+            ex(node::ExprNode::CmpAnd((
+                Box::new(ex(node::ExprNode::CmpNot(var("b")))),
+                var("c")
+            )))
         );
         // 左結合: `b && c && d` は `(b && c) && d`
         assert_eq!(
             parse_value_of("main(): int { a: int = b && c && d }"),
-            ex(node::ExprNode::CmpAnd((Box::new(ex(node::ExprNode::CmpAnd((var("b"), var("c"))))), var("d"))))
+            ex(node::ExprNode::CmpAnd((
+                Box::new(ex(node::ExprNode::CmpAnd((var("b"), var("c"))))),
+                var("d")
+            )))
         );
     }
 

@@ -306,7 +306,7 @@ impl IR {
                 )
             });
 
-            let value_idx = self.gen_expr_ir::<M>(field_expr, Some(&field_size))?;
+            let value_idx = self.gen_expr_ir::<M>(&field_expr, Some(&field_size))?;
             mem_insts.push(inst::MemoryInst::Member {
                 parent: field.name.clone(),
                 value_idx: value_idx,
@@ -387,7 +387,7 @@ impl IR {
         let value = match field_ty {
             Some(ty) => {
                 let field_size = self.size_of(&ty);
-                let value_idx = self.gen_expr_ir::<M>(field_expr, Some(&field_size))?;
+                let value_idx = self.gen_expr_ir::<M>(&field_expr, Some(&field_size))?;
                 Some(inst::MemoryInst::Member {
                     parent: field_name,
                     value_idx,

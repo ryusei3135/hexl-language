@@ -9,7 +9,11 @@ impl IR {
     /// 反復処理(`node::Expr::Loop`)の追跡
     /// (ループの中で定義した変数は、ループを抜けると追跡をやめる)
     pub(super) fn walk_loop(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
-        let node::ExprNode::Loop { ref pattern, ref body } = expr.node else {
+        let node::ExprNode::Loop {
+            ref pattern,
+            ref body,
+        } = expr.node
+        else {
             return;
         };
         let scope_start = must_vars.len();

@@ -72,10 +72,7 @@ impl IR {
         );
         call_info.args.insert(
             0,
-            node::Expr::new(
-                node::ExprNode::GetAddress(Box::new(self_var)),
-                self_span,
-            ),
+            node::Expr::new(node::ExprNode::GetAddress(Box::new(self_var)), self_span),
         );
 
         let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;

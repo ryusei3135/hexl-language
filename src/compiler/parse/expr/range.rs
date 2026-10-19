@@ -96,7 +96,8 @@ mod test {
     fn check_ptr_range_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int[* 1..10] = [b] }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -104,9 +105,9 @@ mod test {
             node.body[0].get_node(),
             &node::Group2Node::Expr(ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var(
-                    "b".to_string()
-                )))))),
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(
+                    node::ExprNode::Var("b".to_string())
+                ))))),
                 ty: node::TyNode::Pointer {
                     is_const: true,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),
@@ -121,7 +122,8 @@ mod test {
     fn check_mut_ptr_range_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int[*mut 1..10] = [b] }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -129,9 +131,9 @@ mod test {
             node.body[0].get_node(),
             &node::Group2Node::Expr(ex(node::ExprNode::DefVar(node::DefineVar {
                 name: "a".to_string(),
-                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var(
-                    "b".to_string()
-                )))))),
+                value: Box::new(ex(node::ExprNode::GetAddress(Box::new(ex(
+                    node::ExprNode::Var("b".to_string())
+                ))))),
                 ty: node::TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(node::TyNode::Ty("int".to_string())),

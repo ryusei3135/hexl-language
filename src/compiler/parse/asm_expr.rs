@@ -100,11 +100,21 @@ impl Parser {
             left = match self.current_tkn() {
                 lex::Tkn::Mul => {
                     self.advance_tkn();
-                    Self::asm_binary(node::ExprNode::Mul, left, self.asm_operand_unary(span)?, span)
+                    Self::asm_binary(
+                        node::ExprNode::Mul,
+                        left,
+                        self.asm_operand_unary(span)?,
+                        span,
+                    )
                 }
                 lex::Tkn::Div => {
                     self.advance_tkn();
-                    Self::asm_binary(node::ExprNode::Div, left, self.asm_operand_unary(span)?, span)
+                    Self::asm_binary(
+                        node::ExprNode::Div,
+                        left,
+                        self.asm_operand_unary(span)?,
+                        span,
+                    )
                 }
                 _ => break,
             };

@@ -6,6 +6,8 @@ mod proc_fn_info;
 mod scope;
 mod variant_bind;
 
+use std::rc::Rc;
+
 use super::*;
 use crate::compiler::ir::types::*;
 use crate::compiler::{err::*, models::Body, parse};
@@ -417,8 +419,12 @@ impl IR {
             // `(ty)expr`: 組み込み型へのキャスト
             // `src/ir/builder/expr_node.rs`
             node::ExprNode::Cast((ty, target)) => self.build_cast_inst::<M>(&ty, &*target)?,
-            node::ExprNode::Inc(var) => self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Inc)?,
-            node::ExprNode::Dec(var) => self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Dec)?,
+            node::ExprNode::Inc(var) => {
+                self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Inc)?
+            }
+            node::ExprNode::Dec(var) => {
+                self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Dec)?
+            }
 
             node::ExprNode::Add(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Add)?
@@ -468,7 +474,9 @@ impl IR {
             node::ExprNode::RShift(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::RShift)?
             }
-            node::ExprNode::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
+            node::ExprNode::Number(value) => {
+                inst::Inst::gen_num(&value, &expect_byte, self.id_counter)
+            }
             node::ExprNode::Float(value) => {
                 inst::Inst::gen_float(&value, &expect_byte, self.id_counter)
             }
@@ -596,10 +604,11 @@ impl IR {
             }
             // 構造体の初期化: `Name { field: value, .. }`
             node::ExprNode::InitStruct {
-                ref is_self,
-                ref name,
-                ref mut fields,
+                is_self,
+                name,
+                fields,
             } => {
+                let mut fields_c = fields.clone();
                 // パーサーは`Name { .. }`が構造体かバリアント型かを区別できないので、
                 // バリアント型の名前だった場合はここでバリアント型の初期化として扱う
                 let is_variant = self.variant_tree.contains_key(&name)
@@ -611,22 +620,22 @@ impl IR {
                             .map_or(false, |n| self.variant_tree.contains_key(&n)));
                 if is_variant {
                     // `src/ir/builder/expr_node.rs`
-                    let result =
-                        self.init_variant_node::<M>(*is_self, &name, fields, &expect_byte);
+                    let result = self.init_variant_node::<M>(*is_self, &name, &mut fields_c, &expect_byte);
                     M::handle(result)?
                 } else {
                     // `src/ir/builder/expr_node.rs`
-                    M::handle(self.init_struct_node::<M>(&name, fields))?
+                    M::handle(self.init_struct_node::<M>(&name, &mut fields_c))?
                 }
             }
             // バリアント型の初期化: `Name { field: value }`
             node::ExprNode::InitVariant {
-                ref is_self,
-                ref name,
-                ref mut fields,
+                is_self,
+                name,
+                fields,
             } => {
+                let mut fields_c = fields.clone();
                 // `src/ir/builder/expr_node.rs`
-                let result = self.init_variant_node::<M>(*is_self, &name, fields, &expect_byte);
+                let result = self.init_variant_node::<M>(*is_self, &name, &mut fields_c, &expect_byte);
                 M::handle(result)?
             }
             // ここでは対応する「元の変数名」が分からない文脈
@@ -821,10 +830,7 @@ impl IR {
         let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
             if let Some(target) = pattern.as_ref() {
                 node::Expr::new(
-                    node::ExprNode::Equal((
-                        target.clone(),
-                        Box::new(arm_pattern.clone()),
-                    )),
+                    node::ExprNode::Equal((target.clone(), Box::new(arm_pattern.clone()))),
                     Rc::clone(&arm_pattern.span),
                 )
             } else {
@@ -915,7 +921,9 @@ impl IR {
             | node::ExprNode::RShift(n)
             | node::ExprNode::AndCalcul(n)
             | node::ExprNode::XorCalcul(n)
-            | node::ExprNode::OrCalcul(n) => Self::is_number_only(&n.0) && Self::is_number_only(&n.1),
+            | node::ExprNode::OrCalcul(n) => {
+                Self::is_number_only(&n.0) && Self::is_number_only(&n.1)
+            }
             node::ExprNode::Sign((_, target))
             | node::ExprNode::Inversion(target)
             | node::ExprNode::CmpNot(target) => Self::is_number_only(target),
@@ -1063,16 +1071,11 @@ mod self_ty_tests {
         params: Vec<node::ArgsNode>,
         ret_ty: node::TyNode,
     ) -> node::FuncDefine {
-        let mut func = match node::FuncDefine::new(
-            name.to_string(),
-            params,
-            ret_ty,
-            false,
-            test_span(),
-        ) {
-            node::Group1Node::FuncDefine(func) => func,
-            _ => unreachable!(),
-        };
+        let mut func =
+            match node::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span()) {
+                node::Group1Node::FuncDefine(func) => func,
+                _ => unreachable!(),
+            };
         func.module = Some("Name".to_string());
         func
     }

@@ -87,8 +87,7 @@ impl IR {
         // 範囲外: 添字を`else`の値にする
         crate::push_jmp_code!(self, Block, &else_label);
         let else_ty = self.index_expect_ty(&guard.else_idx, expect_byte);
-        let else_idx =
-            M::handle::<usize>(self.gen_expr_ir::<M>(&guard.else_idx, Some(&else_ty)))?;
+        let else_idx = M::handle::<usize>(self.gen_expr_ir::<M>(&guard.else_idx, Some(&else_ty)))?;
         self.push_inst(inst::Inst::AssignVar {
             name: tmp_name,
             dst: tmp_idx,

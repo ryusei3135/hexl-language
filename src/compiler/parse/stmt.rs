@@ -132,10 +132,7 @@ impl Parser {
     #[cfg(test)]
     pub fn new_for_test() -> Self {
         let file_name = Rc::new("<test>".to_string());
-        Self::new(
-            &file_name,
-            Rc::new(RefCell::new(err_pool::ErrPool::new())),
-        )
+        Self::new(&file_name, Rc::new(RefCell::new(err_pool::ErrPool::new())))
     }
 
     #[cfg(test)]

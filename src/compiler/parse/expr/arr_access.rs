@@ -143,12 +143,7 @@ impl Parser {
         if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
             self.next_tkn(&["="])?;
             let value = self.expr_branch()?;
-            return Ok(node::AssignVar::new(
-                name,
-                member_node,
-                value,
-                span.clone(),
-            ));
+            return Ok(node::AssignVar::new(name, member_node, value, span.clone()));
         }
 
         // 代入ではなく値の参照なので、"]"を消費せずに返す
@@ -274,7 +269,8 @@ mod test_access_arr_node {
     fn first_stmt(stmt: &str) -> node::Group2Node {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes(&format!("main(): int {{ {} }}", stmt));
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -291,7 +287,7 @@ mod test_access_arr_node {
 
     /// `[name index else else_idx]`のノード
     fn ref_arr(name: &str, index: node::Expr, else_idx: Option<node::Expr>) -> node::Expr {
-        ex(node::ExprNode::RefArray{
+        ex(node::ExprNode::RefArray {
             name: name.to_string(),
             dst: Box::new(var(name)),
             index: Box::new(index),
@@ -303,8 +299,13 @@ mod test_access_arr_node {
     fn check_arr_node() {
         assert_eq!(
             first_stmt("[arr 0 else 10] = 10"),
-            node::AssignVar::new("arr", ref_arr("arr", num("0"), Some(num("10"))), num("10"), sp())
-                .wrap_group2()
+            node::AssignVar::new(
+                "arr",
+                ref_arr("arr", num("0"), Some(num("10"))),
+                num("10"),
+                sp()
+            )
+            .wrap_group2()
         );
     }
 
@@ -312,14 +313,15 @@ mod test_access_arr_node {
     fn check_arr_node_without_else() {
         assert_eq!(
             first_stmt("[arr 0] = 10"),
-            node::AssignVar::new("arr", ref_arr("arr", num("0"), None), num("10"), sp()).wrap_group2()
+            node::AssignVar::new("arr", ref_arr("arr", num("0"), None), num("10"), sp())
+                .wrap_group2()
         );
     }
 
     /// `[arr a.a else 0] = 0`: 添字が構造体のメンバー
     #[test]
     fn check_arr_node_member_index() {
-        let index = ex(node::ExprNode::Member{
+        let index = ex(node::ExprNode::Member {
             scope: vec!["a".to_string()],
             target: Box::new(var("a")),
         });
@@ -334,14 +336,22 @@ mod test_access_arr_node {
     fn check_arr_node_var_index() {
         assert_eq!(
             first_stmt("[arr i else 0] = 1"),
-            node::AssignVar::new("arr", ref_arr("arr", var("i"), Some(num("0"))), num("1"), sp())
-                .wrap_group2()
+            node::AssignVar::new(
+                "arr",
+                ref_arr("arr", var("i"), Some(num("0"))),
+                num("1"),
+                sp()
+            )
+            .wrap_group2()
         );
     }
 
     #[test]
     fn check_arr_node_calc_index() {
-        let index = ex(node::ExprNode::Add((Box::new(var("i")), Box::new(num("1")))));
+        let index = ex(node::ExprNode::Add((
+            Box::new(var("i")),
+            Box::new(num("1")),
+        )));
         assert_eq!(
             first_stmt("[arr i + 1 else 0] = 1"),
             node::AssignVar::new("arr", ref_arr("arr", index, Some(num("0"))), num("1"), sp())
@@ -352,7 +362,7 @@ mod test_access_arr_node {
     /// 代入ではなく、式として値を読み取る
     #[test]
     fn check_arr_node_as_value() {
-        let index = ex(node::ExprNode::Member{
+        let index = ex(node::ExprNode::Member {
             scope: vec!["a".to_string()],
             target: Box::new(var("a")),
         });
@@ -393,7 +403,7 @@ mod test_access_arr_node {
         else_idx: Option<node::Expr>,
         target: node::Expr,
     ) -> node::Expr {
-        ex(node::ExprNode::PtrMember{
+        ex(node::ExprNode::PtrMember {
             name: "ptr".to_string(),
             index: Some(Box::new(index)),
             else_idx: else_idx.map(Box::new),
@@ -409,7 +419,9 @@ mod test_access_arr_node {
             node::AssignVar::new(
                 "ptr",
                 ptr_member(num("1"), Some(num("0")), var("name")),
-                num("10"), sp())
+                num("10"),
+                sp()
+            )
             .wrap_group2()
         );
     }
@@ -434,8 +446,13 @@ mod test_access_arr_node {
     fn check_ptr_member_index_without_else() {
         assert_eq!(
             first_stmt("[ptr 1].name = 10"),
-            node::AssignVar::new("ptr", ptr_member(num("1"), None, var("name")), num("10"), sp())
-                .wrap_group2()
+            node::AssignVar::new(
+                "ptr",
+                ptr_member(num("1"), None, var("name")),
+                num("10"),
+                sp()
+            )
+            .wrap_group2()
         );
     }
 
@@ -460,11 +477,13 @@ mod test_access_arr_node {
             first_stmt("me.[arr 0 else 10] = 10"),
             node::AssignVar::new(
                 "me",
-                ex(node::ExprNode::Member{
+                ex(node::ExprNode::Member {
                     scope: vec!["me".to_string()],
                     target: Box::new(ref_arr("arr", num("0"), Some(num("10")))),
                 }),
-                num("10"), sp())
+                num("10"),
+                sp()
+            )
             .wrap_group2()
         );
     }

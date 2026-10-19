@@ -86,7 +86,12 @@ impl Parser {
         if let Some(reserved) = self.reserved_impls.remove(&name) {
             methods.extend(reserved);
         }
-        Ok(node::VariantDefine::new(name, fields, methods, Rc::new(self.build_err_span())))
+        Ok(node::VariantDefine::new(
+            name,
+            fields,
+            methods,
+            Rc::new(self.build_err_span()),
+        ))
     }
 
     /// 構造体を初期化する式を生成
@@ -131,11 +136,14 @@ impl Parser {
                 }
             }
         }
-        Ok(node::Expr::new(node::ExprNode::InitStruct {
-            is_self: T,
-            name: name.to_string(),
-            fields: fields.clone(),
-        }, Rc::new(self.build_err_span())))
+        Ok(node::Expr::new(
+            node::ExprNode::InitStruct {
+                is_self: T,
+                name: name.to_string(),
+                fields: fields.clone(),
+            },
+            Rc::new(self.build_err_span()),
+        ))
     }
 
     /// バリアント型を初期化する式を生成
@@ -179,11 +187,14 @@ impl Parser {
 
         let mut fields = HashMap::<String, Box<node::Expr>>::new();
         fields.insert(member, value);
-        Ok(node::Expr::new(node::ExprNode::InitVariant {
-            is_self: T,
-            name: name.to_string(),
-            fields,
-        }, Rc::new(self.build_err_span())))
+        Ok(node::Expr::new(
+            node::ExprNode::InitVariant {
+                is_self: T,
+                name: name.to_string(),
+                fields,
+            },
+            Rc::new(self.build_err_span()),
+        ))
     }
 
     fn ptr_ty_node(&mut self, ty: node::TyNode) -> Result<node::TyNode, err::ErrKind> {
@@ -383,7 +394,10 @@ mod ty_tests {
         let mut lex = lex::Lexer::new();
         let _ = lex.analy(&value.to_string()).unwrap();
         let mut parse = Parser::new_for_test();
-        parse.parser_for_test(&lex.gen_tkns.clone()).unwrap().to_vec()
+        parse
+            .parser_for_test(&lex.gen_tkns.clone())
+            .unwrap()
+            .to_vec()
     }
 
     /// 構文解析がエラーになるかどうか

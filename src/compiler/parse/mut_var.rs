@@ -1,4 +1,5 @@
 //! 変数や引数が不変か可変を判定するパーサーのモジュール
+use std::rc::Rc;
 
 use super::*;
 
@@ -55,7 +56,7 @@ impl Parser {
     ) -> Result<node::Expr, err::ErrKind> {
         // 代入演算子(`+=`など)の位置
         let span = Rc::new(self.build_err_span());
-        let value = self.compound_assign_value(name, op, Rc::new(span))?;
+        let value = self.compound_assign_value(name, op, Rc::clone(&span))?;
         let dst = node::Expr::new(node::ExprNode::Var(name.to_string()), Rc::clone(&span));
         Ok(node::AssignVar::new(name, dst, value, Rc::clone(&span)))
     }

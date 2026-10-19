@@ -87,7 +87,8 @@ mod test {
     fn check_constract_must() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int must=a = 10 }");
-        let node::Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        let node::Group1Node::FuncDefine(ref node) =
+            p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };

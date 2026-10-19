@@ -211,7 +211,8 @@ impl IR {
         let node::ExprNode::Scope { scope, target } = &expr.node else {
             return expr.clone();
         };
-        let (Some(type_name), node::ExprNode::CallFunc(call)) = (scope.last(), &(**target).node) else {
+        let (Some(type_name), node::ExprNode::CallFunc(call)) = (scope.last(), &(**target).node)
+        else {
             return expr.clone();
         };
         let is_ctor = scope.len() == 1
@@ -226,10 +227,13 @@ impl IR {
         }
         let mut fields = HashMap::new();
         fields.insert(call.name.clone(), Box::new(call.args[0].clone()));
-        node::Expr::new(node::ExprNode::InitVariant {
-            is_self: false,
-            name: type_name.clone(),
-            fields,
-        },Rc::clone(&expr.span))
+        node::Expr::new(
+            node::ExprNode::InitVariant {
+                is_self: false,
+                name: type_name.clone(),
+                fields,
+            },
+            Rc::clone(&expr.span),
+        )
     }
 }

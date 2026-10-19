@@ -220,7 +220,10 @@ mod variant_bind_tests {
         assert_eq!(target, None);
         assert_eq!(
             patterns,
-            vec![VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string()))).wrap(sp())]
+            vec![
+                VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string())))
+                    .wrap(sp())
+            ]
         );
         assert!(has_else);
     }
@@ -279,7 +282,10 @@ mod variant_bind_tests {
         assert_eq!(target, None);
         assert_eq!(
             patterns,
-            vec![VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string()))).wrap(sp())]
+            vec![
+                VariantBind::new("M", "val", None, ex(node::ExprNode::Var("a".to_string())))
+                    .wrap(sp())
+            ]
         );
         assert!(has_else);
     }

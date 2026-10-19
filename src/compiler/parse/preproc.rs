@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::*;
 use regex::{Captures, Regex};
 
@@ -291,11 +293,11 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                ex(node::ExprNode::Member{
+                ex(node::ExprNode::Member {
                     scope: vec!["p".to_string()],
                     target: Box::new(ex(node::ExprNode::Var("x".to_string()))),
                 }),
-                ex(node::ExprNode::Member{
+                ex(node::ExprNode::Member {
                     scope: vec!["p".to_string()],
                     target: Box::new(ex(node::ExprNode::Var("y".to_string()))),
                 }),
@@ -311,8 +313,12 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                ex(node::ExprNode::ConnectAddr(Box::new(ex(node::ExprNode::Var("p".to_string()))))),
-                ex(node::ExprNode::GetAddress(Box::new(ex(node::ExprNode::Var("p".to_string()))))),
+                ex(node::ExprNode::ConnectAddr(Box::new(ex(
+                    node::ExprNode::Var("p".to_string())
+                )))),
+                ex(node::ExprNode::GetAddress(Box::new(ex(
+                    node::ExprNode::Var("p".to_string())
+                )))),
             ]
         );
     }
@@ -329,7 +335,7 @@ mod inline_asm_tests {
                     Box::new(ex(node::ExprNode::Number("1".to_string()))),
                 ))),
                 ex(node::ExprNode::Mul((
-                    Box::new(ex(node::ExprNode::Member{
+                    Box::new(ex(node::ExprNode::Member {
                         scope: vec!["p".to_string()],
                         target: Box::new(ex(node::ExprNode::Var("x".to_string()))),
                     })),

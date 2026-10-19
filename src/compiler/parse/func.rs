@@ -682,31 +682,19 @@ mod generic_tests {
         let node::Group2Node::Expr(node::Expr {
             node: node::ExprNode::DefVar(v),
             ..
-        }) = main.body[0].get_node() else {
+        }) = main.body[0].get_node()
+        else {
             panic!("{:?}", main.body[0]);
         };
-        assert_eq!(
-            *v.value,
-            call(
-                "func",
-                vec![ty("int")],
-                vec![num("10")]
-            )
-        );
+        assert_eq!(*v.value, call("func", vec![ty("int")], vec![num("10")]));
         let node::Group2Node::Expr(node::Expr {
             node: node::ExprNode::DefVar(v),
             ..
-        }) = main.body[1].get_node() else {
+        }) = main.body[1].get_node()
+        else {
             panic!("{:?}", main.body[1]);
         };
-        assert_eq!(
-            *v.value,
-            call(
-                "func",
-                vec![ty("byte")],
-                vec![var("var")]
-            )
-        );
+        assert_eq!(*v.value, call("func", vec![ty("byte")], vec![var("var")]));
     }
 
     // ---- 作られる関数の数 ----
@@ -769,21 +757,11 @@ mod generic_tests {
         let main = find(&nodes, "main", vec![]);
         assert_eq!(
             main.body[0].get_node(),
-            &call(
-                "func",
-                vec![ty("int")],
-                vec![num("10")]
-            )
-            .wrap_group2()
+            &call("func", vec![ty("int")], vec![num("10")]).wrap_group2()
         );
         assert_eq!(
             main.body[1].get_node(),
-            &node::StmtNode::Return(call(
-                "func",
-                vec![ty("byte")],
-                vec![num("1")]
-            ))
-            .wrap()
+            &node::StmtNode::Return(call("func", vec![ty("byte")], vec![num("1")])).wrap()
         );
         find(&nodes, "func", vec![ty("int")]);
         find(&nodes, "func", vec![ty("byte")]);
@@ -911,12 +889,7 @@ mod generic_tests {
         let outer = find(&nodes, "outer", vec![ty("byte")]);
         assert_eq!(
             outer.body[0].get_node(),
-            &node::StmtNode::Return(call(
-                "inner",
-                vec![ty("byte")],
-                vec![var("a")]
-            ))
-            .wrap()
+            &node::StmtNode::Return(call("inner", vec![ty("byte")], vec![var("a")])).wrap()
         );
         let inner = find(&nodes, "inner", vec![ty("byte")]);
         assert_eq!(inner.params[0].ty, ty("byte"));
@@ -969,7 +942,8 @@ mod generic_tests {
         let node::Group2Node::Expr(node::Expr {
             node: node::ExprNode::DefVar(v),
             ..
-        }) = main.body[1].get_node() else {
+        }) = main.body[1].get_node()
+        else {
             panic!("{:?}", main.body[1]);
         };
         assert_eq!(

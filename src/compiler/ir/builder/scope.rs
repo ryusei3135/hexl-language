@@ -76,7 +76,7 @@ impl IR {
         var_name: Option<&String>,
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
-        if let node::ExprNode::CallFunc(mut call_func_node) = (**target).node {
+        if let node::ExprNode::CallFunc(mut call_func_node) = (**target).node.clone() {
             let struct_name: &str = scope.last().unwrap();
 
             let needs_self_area = self
@@ -139,7 +139,13 @@ impl IR {
                     // スタックへのポインタを暗黙的に先頭へ渡す
                     call_func_node.args.insert(
                         0,
-                        node::ExprNode::GetAddress(Box::new(node::ExprNode::Var(tmp_name))),
+                        node::Expr::new(
+                            node::ExprNode::GetAddress(Box::new(node::Expr::new(
+                                node::ExprNode::Var(tmp_name),
+                                Rc::clone(&(*target).span),
+                            ))),
+                            Rc::clone(&(*target).span),
+                        ),
                     );
                 }
             }
