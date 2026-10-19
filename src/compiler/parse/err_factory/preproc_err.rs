@@ -53,7 +53,11 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, UnexpectedTrailingTokenInAsmOperand, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self,
+            UnexpectedTrailingTokenInAsmOperand,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `${[p}`のように、`]`で閉じられていなかった
@@ -61,7 +65,11 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, ExpectedRBracketInAsmOperand, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self,
+            ExpectedRBracketInAsmOperand,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `${(a}`のように、`)`で閉じられていなかった
@@ -77,7 +85,11 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, UnexpectedTokenInAsmOperand, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self,
+            UnexpectedTokenInAsmOperand,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `${x.}`のように、`.`の次がメンバーの名前ではなかった
@@ -85,6 +97,10 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, ExpectedMemberNameInAsmOperand, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self,
+            ExpectedMemberNameInAsmOperand,
+            Rc::clone(&self.file_name)
+        )
     }
 }

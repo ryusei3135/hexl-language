@@ -151,11 +151,9 @@ impl fmt::Display for SyntaxErrKind {
                 "`of`の後には名前が必要ですが、`{:?}`が見つかりました",
                 found
             ),
-            Self::OptionIsNotFound { found, context } => write!(
-                f,
-                "`{:?}`の後に`{}`は指定できません",
-                context, found
-            ),
+            Self::OptionIsNotFound { found, context } => {
+                write!(f, "`{:?}`の後に`{}`は指定できません", context, found)
+            }
             Self::GenericsNotSupportedYet => write!(f, "ジェネリクスはまだ実装されていません"),
         }
     }
@@ -197,7 +195,7 @@ macro_rules! syntax_err {
             $crate::compiler::err::SyntaxErr {
                 kind: $kind,
                 loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
-                file_name: $file_name
+                file_name: $file_name,
             },
         )))
     };

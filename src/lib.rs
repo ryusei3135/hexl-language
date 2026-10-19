@@ -2,8 +2,8 @@
 //!
 //! `main.rs` は `run()` を呼ぶだけにして、モジュール宣言・コマンドライン
 //! オプションの解釈・ビルド処理・終了コードの決定はすべてここに置く。
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 mod asm_setting;
 mod assembler;
@@ -201,10 +201,12 @@ fn print_binaries() {
 /// - アセンブリ言語ファイルの書き込みに失敗した場合
 pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>, Box<dyn Error>> {
     // 初期化
-    let file_name = Rc::new(settings
-        .file_name
-        .clone()
-        .ok_or_else(|| "ファイル名が指定されていません".to_string())?);
+    let file_name = Rc::new(
+        settings
+            .file_name
+            .clone()
+            .ok_or_else(|| "ファイル名が指定されていません".to_string())?,
+    );
 
     let content = fs::read_to_string((*file_name).as_str())
         .map_err(|e| format!("ファイル`{}`を読み込めません: {}", file_name, e))?;

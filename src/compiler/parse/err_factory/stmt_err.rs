@@ -45,7 +45,7 @@ impl Parser {
                 self.build_err_span(),
                 "parse::stmt::loop_control_node".to_string(),
             ),
-            file_name: Rc::clone(&self.file_name)
+            file_name: Rc::clone(&self.file_name),
         })))
     }
 

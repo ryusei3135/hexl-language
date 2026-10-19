@@ -19,7 +19,7 @@ impl Parser {
     pub(in crate::compiler::parse) fn tkn_is_eof_in_expr<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
-            self.build_err_span(), 
+            self.build_err_span(),
             err::SyntaxErrKind::TknIsEofInExpr,
             Rc::clone(&self.file_name)
         )

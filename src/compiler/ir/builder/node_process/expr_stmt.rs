@@ -389,7 +389,7 @@ impl IR {
 
     /// 三項演算子を処理する
     /// 中身の式によって普通の条件分岐に展開する
-    /// 
+    ///
     /// ## Tarnaryノードに変換する条件
     /// - 中身が数字か数字のみの式
     /// - 条件式がメモリにアクセスしていない
@@ -397,7 +397,7 @@ impl IR {
     pub(in super::super) fn ternary_expr<M: ResultMod>(
         &mut self,
         cond: Box<Expr>,
-        left_expr: Box<Expr>, 
+        left_expr: Box<Expr>,
         right_expr: Box<Expr>,
         expect_byte: &types::Size,
     ) -> Result<(usize, usize, usize), err::ErrKind> {
@@ -576,31 +576,55 @@ impl IR {
 
         match cond {
             // 比較が1つだけ
-            node::Expr::LessThen(n) => self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryLessThen),
-            node::Expr::GreaterThen(n) => self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryGreaterThen),
-            node::Expr::LessThenEq(n) => self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryLessThenEq),
-            node::Expr::GreaterThenEq(n) => self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryGreaterThenEq),
-            node::Expr::Equal(n) => self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryEqual),
-            node::Expr::NotEq(n) => self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryNotEq),
+            node::Expr::LessThen(n) => {
+                self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryLessThen)
+            }
+            node::Expr::GreaterThen(n) => {
+                self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryGreaterThen)
+            }
+            node::Expr::LessThenEq(n) => {
+                self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryLessThenEq)
+            }
+            node::Expr::GreaterThenEq(n) => {
+                self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryGreaterThenEq)
+            }
+            node::Expr::Equal(n) => {
+                self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryEqual)
+            }
+            node::Expr::NotEq(n) => {
+                self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryNotEq)
+            }
 
             // `&&` / `||`: 結果(0/1)が0でないか
             and_or @ (node::Expr::CmpAnd(..) | node::Expr::CmpOr(..)) => {
                 let value = self.gen_setcc_ir::<M>(and_or)?;
-                let zero = self.push_ternary_inst(inst::Inst::gen_num(&"0".to_string(), &size, self.id_counter));
+                let zero = self.push_ternary_inst(inst::Inst::gen_num(
+                    &"0".to_string(),
+                    &size,
+                    self.id_counter,
+                ));
                 Ok(self.push_ternary_cmp(inst::ExprKind::TernaryNotEq, value, zero))
             }
 
             // `!(..)`: 結果(0/1)が0か
             node::Expr::CmpNot(target) => {
                 let value = self.gen_setcc_ir::<M>(*target)?;
-                let zero = self.push_ternary_inst(inst::Inst::gen_num(&"0".to_string(), &size, self.id_counter));
+                let zero = self.push_ternary_inst(inst::Inst::gen_num(
+                    &"0".to_string(),
+                    &size,
+                    self.id_counter,
+                ));
                 Ok(self.push_ternary_cmp(inst::ExprKind::TernaryEqual, value, zero))
             }
 
             // 比較ではない式: 0でないか
             other => {
                 let value = self.gen_expr_ir::<M>(other, Some(&size))?;
-                let zero = self.push_ternary_inst(inst::Inst::gen_num(&"0".to_string(), &size, self.id_counter));
+                let zero = self.push_ternary_inst(inst::Inst::gen_num(
+                    &"0".to_string(),
+                    &size,
+                    self.id_counter,
+                ));
                 Ok(self.push_ternary_cmp(inst::ExprKind::TernaryNotEq, value, zero))
             }
         }
@@ -719,7 +743,8 @@ impl IR {
             node::Expr::CmpNot(target) => {
                 let value = self.gen_setcc_ir::<M>(*target)?;
                 let bool_ty = types::Size::Bool;
-                let zero = self.push_ternary_inst(inst::Inst::gen_num("0", &bool_ty, self.id_counter));
+                let zero =
+                    self.push_ternary_inst(inst::Inst::gen_num("0", &bool_ty, self.id_counter));
                 Ok(self.push_ternary_cmp(K::SetEqual, value, zero))
             }
             // 比較ではない式

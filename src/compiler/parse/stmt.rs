@@ -2,9 +2,9 @@
 //! group2は変数の定義や条件分岐など
 pub(in crate::compiler::parse) mod parse_loop_control;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 pub(in crate::compiler::parse) use parse_loop_control::*;
 
@@ -102,7 +102,7 @@ pub struct Parser {
     pub(super) reserved_impls: HashMap<String, Vec<node::Group1Node>>,
     pub(super) file_name: Rc<String>,
     /// エラーログをためる
-    pub(super) err_pool: Rc<RefCell<err_pool::ErrPool>>
+    pub(super) err_pool: Rc<RefCell<err_pool::ErrPool>>,
 }
 
 impl Parser {
@@ -210,9 +210,11 @@ impl Parser {
                         }
                         lex::Tkn::CompleSyn => {
                             let syntax_result = self.comple_syntax();
-                            let node = C::handle_ty::<node::Group2Node>(&self.err_pool, syntax_result)?;
+                            let node =
+                                C::handle_ty::<node::Group2Node>(&self.err_pool, syntax_result)?;
                             let result = node.change_group1();
-                            self.gen_nodes.push(C::handle_ty::<node::Group1Node>(&self.err_pool, result)?);
+                            self.gen_nodes
+                                .push(C::handle_ty::<node::Group1Node>(&self.err_pool, result)?);
                         }
                         lex::Tkn::KeyWordStruct => {
                             // ジェネリクス(`struct Name<T> {..}`)は、使われるまで
@@ -220,7 +222,8 @@ impl Parser {
                             let binding = self.skip_generic_type_def();
                             if !C::handle_ty::<bool>(&self.err_pool, binding)? {
                                 let struct_node = self.struct_node();
-                                let node = C::handle_ty::<node::Group1Node>(&self.err_pool, struct_node)?;
+                                let node =
+                                    C::handle_ty::<node::Group1Node>(&self.err_pool, struct_node)?;
                                 self.gen_nodes.push(node);
                             }
                         }
@@ -228,7 +231,8 @@ impl Parser {
                             let binding = self.skip_generic_type_def();
                             if !C::handle_ty::<bool>(&self.err_pool, binding)? {
                                 let binding = self.variant_node();
-                                let node = C::handle_ty::<node::Group1Node>(&self.err_pool, binding)?;
+                                let node =
+                                    C::handle_ty::<node::Group1Node>(&self.err_pool, binding)?;
                                 self.gen_nodes.push(node);
                             }
                         }
@@ -257,9 +261,9 @@ impl Parser {
                     }
 
                     let line_node = self.one_line_node();
-                    let node: Group2Info = C::handle_ty::<node::Group2Node>(
-                        &self.err_pool, line_node)?
-                        .gen_group_info(self.build_err_span().line);
+                    let node: Group2Info =
+                        C::handle_ty::<node::Group2Node>(&self.err_pool, line_node)?
+                            .gen_group_info(self.build_err_span().line);
 
                     // `Group2`のノードは常に直前に生成された関数定義に
                     // 追加されるはずなので、そうでない場合はパーサー自体の

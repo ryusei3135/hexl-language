@@ -53,7 +53,8 @@ impl ErrPool {
     ///
     /// `file_name`は、`SyntaxErr::file_name`と同じ文字列にする
     pub fn add_source(&mut self, file_name: &str, source: &str) {
-        self.sources.insert(file_name.to_string(), source.to_string());
+        self.sources
+            .insert(file_name.to_string(), source.to_string());
     }
 
     /// 集めたエラーを標準エラー出力に表示する
@@ -84,7 +85,11 @@ impl ErrPool {
             } else {
                 format!("aborting due to {} previous errors", count)
             };
-            out.push_str(&format!("{}: {}\n", paint("error", RED_BOLD, color), bold(&msg, color)));
+            out.push_str(&format!(
+                "{}: {}\n",
+                paint("error", RED_BOLD, color),
+                bold(&msg, color)
+            ));
         }
         out
     }
@@ -127,7 +132,11 @@ impl ErrPool {
                 out.push_str(&format!("{} {}\n", pad, bar));
                 out.push_str(&format!(
                     "{} {} {}\n",
-                    paint(&format!("{:>width$}", line_no, width = width), BLUE_BOLD, color),
+                    paint(
+                        &format!("{:>width$}", line_no, width = width),
+                        BLUE_BOLD,
+                        color
+                    ),
                     bar,
                     shown
                 ));
@@ -173,22 +182,27 @@ impl ErrPool {
 
     /// 登録されたソースコードの`line_no`行目(1始まり)
     fn source_line(&self, file: &str, line_no: usize) -> Option<&str> {
-        self.sources
-            .get(file)?
-            .lines()
-            .nth(line_no.checked_sub(1)?)
+        self.sources.get(file)?.lines().nth(line_no.checked_sub(1)?)
     }
 
     /// `^`の横に表示する短い説明
     fn label(kind: &err::SyntaxErrKind) -> String {
         use err::SyntaxErrKind as K;
         match kind {
-            K::TknIsEof { expected } => format!("ここで終了しています(期待: {})", expected.join(" / ")),
-            K::UnexpectedTkn { found, expected, .. } => {
+            K::TknIsEof { expected } => {
+                format!("ここで終了しています(期待: {})", expected.join(" / "))
+            }
+            K::UnexpectedTkn {
+                found, expected, ..
+            } => {
                 format!("`{:?}`が必要ですが、`{:?}`があります", expected, found)
             }
             K::OptionIsNotFound { found, .. } => format!("`{}`は使えません", found),
-            K::UnexpectTknAfterKeyword { keyword, expected, found } => format!(
+            K::UnexpectTknAfterKeyword {
+                keyword,
+                expected,
+                found,
+            } => format!(
                 "`{:?}`の後には{}が必要ですが、`{:?}`があります",
                 keyword,
                 expected.join(" / "),
@@ -204,8 +218,12 @@ impl ErrPool {
                 format!("{}が必要ですが、`{:?}`があります", expected, found)
             }
             K::NotImplemented { feature } => format!("`{}`は未対応です", feature),
-            K::MissingEqualsAfterMust { found } => format!("`=`が必要ですが、`{:?}`があります", found),
-            K::MissingIdentAfterOf { found } => format!("名前が必要ですが、`{:?}`があります", found),
+            K::MissingEqualsAfterMust { found } => {
+                format!("`=`が必要ですが、`{:?}`があります", found)
+            }
+            K::MissingIdentAfterOf { found } => {
+                format!("名前が必要ですが、`{:?}`があります", found)
+            }
             K::GenericsNotSupportedYet => "ジェネリクスは未対応です".to_string(),
         }
     }
@@ -218,7 +236,9 @@ impl ErrPool {
                 Some("式や文が途中で終わっていないか、括弧が閉じられているか確認してください")
             }
             K::UnenclosedScope { .. } => Some("対応する`{`に合わせて、`}`を追加してください"),
-            K::UnexpectTknInExpr { .. } => Some("演算子やオペランドが抜けていないか確認してください"),
+            K::UnexpectTknInExpr { .. } => {
+                Some("演算子やオペランドが抜けていないか確認してください")
+            }
             K::UnexpectTknInStmt { .. } => Some("前の文が正しく終わっているか確認してください"),
             K::Cond(_) => Some("`cond`は`cond { 条件 { .. } | { .. } }`の形で書きます"),
             K::NotImplemented { .. } | K::GenericsNotSupportedYet => {

@@ -15,7 +15,6 @@ pub mod err_pool;
 // 位置情報
 // --------------------------------------------------------------------
 
-
 /// 解析対象のソースコード上の位置(何行目の何文字目か)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
