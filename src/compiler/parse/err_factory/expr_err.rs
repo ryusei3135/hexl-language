@@ -10,14 +10,19 @@ impl Parser {
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectTknInExpr {
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
     /// 式の途中でトークンが終わった
     pub(in crate::compiler::parse) fn tkn_is_eof_in_expr<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::syntax_err!(self.build_err_span(), err::SyntaxErrKind::TknIsEofInExpr)
+        crate::syntax_err!(
+            self.build_err_span(), 
+            err::SyntaxErrKind::TknIsEofInExpr,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `[name].member`の`.`の次に、メンバーの名前が来なかった
@@ -31,7 +36,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "name",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -56,7 +62,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "name",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -71,7 +78,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "number",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -86,7 +94,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "=",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -101,7 +110,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "`else` or `]`",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -113,7 +123,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "]",
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -136,7 +147,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "number or `const`/`mut`",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -167,7 +179,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "number",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -181,7 +194,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "]",
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -197,7 +211,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "`cond` condition (`Variant(name) := expr` can only be used in a cond condition)",
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -210,7 +225,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::ExpectedKind { expected, found }
+            err::SyntaxErrKind::ExpectedKind { expected, found },
+            Rc::clone(&self.file_name)
         )
     }
 }

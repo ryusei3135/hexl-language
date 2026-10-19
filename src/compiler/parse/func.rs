@@ -519,7 +519,7 @@ impl Parser {
         let saved_nodes = std::mem::take(&mut self.gen_nodes);
         self.generic_depth += 1;
 
-        let result = self.parse_loop();
+        let result = self.parse_loop::<stmt::ParseLoopPushPool>();
 
         // エラーでも、必ず状態を元に戻してから返す
         self.generic_depth -= 1;

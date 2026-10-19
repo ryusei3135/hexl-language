@@ -76,8 +76,8 @@ pub struct StaticAsmFormat {
 pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = StaticAsmFormat {
     reg: StaticReg {
         db: &[
-            "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b",
-            "r12b", "r13b", "r14b", "r15b",
+            "al", "cl", "dl", "bl", "sil", "dil", "r8b", "r9b", "r10b", "r11b", "r12b", "r13b",
+            "r14b", "r15b",
         ],
         dw: &[
             "ax", "cx", "dx", "bx", "si", "di", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w",
@@ -361,6 +361,87 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
             StaticOperandInfo {
                 len: 2,
                 template: "{space}cmovae {src1}, {dst}\n",
+            },
+        ),
+        // ===== setcc(`asm_emitter/set_cc.rs`) =====
+        // 直前の`tcmp`のフラグで、`{dst}`(8bitのレジスタ)へ0/1を書く。
+        // `set_b`/`set_a`/`set_b_e`/`set_a_e`は符号なし整数の比較(`<`はbelow, `>`はabove)
+        (
+            "set_l",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setl {dst}\n",
+            },
+        ),
+        (
+            "set_g",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setg {dst}\n",
+            },
+        ),
+        (
+            "set_l_e",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setle {dst}\n",
+            },
+        ),
+        (
+            "set_g_e",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setge {dst}\n",
+            },
+        ),
+        (
+            "set_e",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}sete {dst}\n",
+            },
+        ),
+        (
+            "set_ne",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setne {dst}\n",
+            },
+        ),
+        (
+            "set_b",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setb {dst}\n",
+            },
+        ),
+        (
+            "set_a",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}seta {dst}\n",
+            },
+        ),
+        (
+            "set_b_e",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setbe {dst}\n",
+            },
+        ),
+        (
+            "set_a_e",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}setae {dst}\n",
+            },
+        ),
+        // 8bitの値(`setcc`の結果)を32bitへゼロ拡張する(上位32bitも0になる)
+        (
+            "movzbl",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movzbl {src1}, {dst}\n",
             },
         ),
         // 符号なし整数の比較(`<`はbelow, `>`はabove)

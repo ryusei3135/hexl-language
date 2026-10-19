@@ -262,6 +262,25 @@ impl MngAsmFmt {
         }
     }
 
+    /// 符号なし整数の比較に対応する、`setcc`のテンプレートを返す
+    /// (`set_l`/`set_g`/`set_l_e`/`set_g_e`のみ。それ以外は同じキーのテンプレート)
+    ///
+    /// フォーマットに符号なし用のキー(`set_b`など)が無い場合は、
+    /// 符号付き用のテンプレートの`setl`などを`setb`などに置き換える
+    pub(in crate::compiler::asm_gen) fn get_unsigned_set_tmpl(&self, key: &str) -> String {
+        let (unsigned_key, from, to) = match key {
+            "set_l" => ("set_b", "setl", "setb"),
+            "set_g" => ("set_a", "setg", "seta"),
+            "set_l_e" => ("set_b_e", "setle", "setbe"),
+            "set_g_e" => ("set_a_e", "setge", "setae"),
+            _ => return self.get_opcode_tmpl(key),
+        };
+        match self.opcode_fmt.get(unsigned_key) {
+            Some(o) => o.template.clone(),
+            None => self.get_opcode_tmpl(key).replace(from, to),
+        }
+    }
+
     /// オフセット無しのメモリ参照(AT&T構文なら`(%rbx)`)を作る。
     ///
     /// `ref_stack`のテンプレート(`-{size}({src})`など)から、オフセット部分

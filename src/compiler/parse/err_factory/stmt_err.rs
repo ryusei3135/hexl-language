@@ -11,7 +11,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::UnexpectTknInStmt { found }
+            err::SyntaxErrKind::UnexpectTknInStmt { found },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -26,7 +27,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "name",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -43,6 +45,7 @@ impl Parser {
                 self.build_err_span(),
                 "parse::stmt::loop_control_node".to_string(),
             ),
+            file_name: Rc::clone(&self.file_name)
         })))
     }
 
@@ -58,7 +61,8 @@ impl Parser {
                 keyword: lex::Tkn::KeyWordPub,
                 expected: vec!["struct", "variant", "name"],
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -70,7 +74,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "{",
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -85,7 +90,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "name",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 }

@@ -2,6 +2,8 @@
 //!
 //! `main.rs` は `run()` を呼ぶだけにして、モジュール宣言・コマンドライン
 //! オプションの解釈・ビルド処理・終了コードの決定はすべてここに置く。
+use std::rc::Rc;
+use std::cell::RefCell;
 
 mod asm_setting;
 mod assembler;
@@ -199,12 +201,12 @@ fn print_binaries() {
 /// - アセンブリ言語ファイルの書き込みに失敗した場合
 pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>, Box<dyn Error>> {
     // 初期化
-    let file_name = settings
+    let file_name = Rc::new(settings
         .file_name
-        .as_ref()
-        .ok_or_else(|| "ファイル名が指定されていません".to_string())?;
+        .clone()
+        .ok_or_else(|| "ファイル名が指定されていません".to_string())?);
 
-    let content = fs::read_to_string(file_name)
+    let content = fs::read_to_string((*file_name).as_str())
         .map_err(|e| format!("ファイル`{}`を読み込めません: {}", file_name, e))?;
 
     // `--linux` / `--windows` で選んだOS(未指定なら実行環境のOS)
@@ -214,14 +216,15 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         DEFAULT.to_string()
     };
 
+    let mut err_pool = Rc::new(RefCell::new(err::err_pool::ErrPool::new()));
     // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
     // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
     let mut lexer = lex::Lexer::with_os(&os);
-    let mut parser = parse::Parser::new();
+    let mut parser = parse::Parser::new(&file_name, Rc::clone(&err_pool));
     let mut ir_builder = ir::IR::new();
 
     // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準
-    lexer.set_source_file(file_name);
+    lexer.set_source_file(Rc::clone(&file_name));
 
     // アセンブリ言語のデータを作成
     lexer.analy(&content)?;

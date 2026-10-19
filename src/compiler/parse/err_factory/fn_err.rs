@@ -9,7 +9,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: lex::Tkn::LBrace,
                 context: lex::Tkn::KeyWordStruct
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -20,7 +21,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "(",
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -34,7 +36,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "name or `)`",
                 found: tkn,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -46,7 +49,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::NotImplemented { feature }
+            err::SyntaxErrKind::NotImplemented { feature },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -61,7 +65,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "( or <",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -90,7 +95,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: ": or `{`",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -104,7 +110,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "name",
                 found: lex::Tkn::Comma,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -119,7 +126,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: ", or `)`",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -144,7 +152,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected,
                 found: t.tkn.clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -159,7 +168,8 @@ impl Parser {
         };
         crate::syntax_err!(
             err::Span::new(t.line, t.pos),
-            err::SyntaxErrKind::TknIsEof { expected }
+            err::SyntaxErrKind::TknIsEof { expected },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -173,7 +183,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "`>`",
                 found: lex::Tkn::Comma,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -187,7 +198,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "`,`",
                 found: lex::Tkn::RAngleBracket,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -202,7 +214,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: ", or `>`",
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 }

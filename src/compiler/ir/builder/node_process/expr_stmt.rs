@@ -585,14 +585,14 @@ impl IR {
 
             // `&&` / `||`: 結果(0/1)が0でないか
             and_or @ (node::Expr::CmpAnd(..) | node::Expr::CmpOr(..)) => {
-                let value = self.gen_ternary_bool_ir::<M>(and_or, &size)?;
+                let value = self.gen_setcc_ir::<M>(and_or)?;
                 let zero = self.push_ternary_inst(inst::Inst::gen_num(&"0".to_string(), &size, self.id_counter));
                 Ok(self.push_ternary_cmp(inst::ExprKind::TernaryNotEq, value, zero))
             }
 
             // `!(..)`: 結果(0/1)が0か
             node::Expr::CmpNot(target) => {
-                let value = self.gen_ternary_bool_ir::<M>(*target, &size)?;
+                let value = self.gen_setcc_ir::<M>(*target)?;
                 let zero = self.push_ternary_inst(inst::Inst::gen_num(&"0".to_string(), &size, self.id_counter));
                 Ok(self.push_ternary_cmp(inst::ExprKind::TernaryEqual, value, zero))
             }
@@ -618,27 +618,128 @@ impl IR {
         Ok(self.push_ternary_cmp(kind, ls, rs))
     }
 
-    /// `&&` / `||` / `!` / 比較を、0か1の値を作る通常の命令へ展開して、その値の番号を返す
-    /// (`Ternary*`は使わない。`gen_ternary_cond_ir`が最後に1回だけ生成する)
-    fn gen_ternary_bool_ir<M: ResultMod>(
+    /// `Set*`(setcc)命令で、`expr`を0か1の値にする必要があるか
+    ///
+    /// 次の場合に`true`になる
+    /// - `bool`型への代入・引数・戻り値など、期待する型が`bool`の比較(`b: bool = a < c`)
+    /// - 条件式が複雑な場合: `&&` / `||`、または`!`の中が比較・`&&` / `||` / `!`
+    /// - 三項演算子の複雑な条件式(`gen_ternary_cond_ir`)
+    ///
+    /// それ以外の単純な比較(`if a < b`や三項演算子の`a < b ? x : y`)は、
+    /// 今までどおり`LessThen`や`Ternary*`を使う
+    pub(in crate::compiler::ir) fn needs_setcc(
+        expr: &node::Expr,
+        expect_byte: Option<&types::Size>,
+    ) -> bool {
+        let is_bool = matches!(expect_byte, Some(types::Size::Bool));
+        match expr {
+            node::Expr::CmpAnd(..) | node::Expr::CmpOr(..) => true,
+            node::Expr::CmpNot(target) => {
+                is_bool || Self::is_cmp_expr(target) || Self::is_logic_expr(target)
+            }
+            other => is_bool && Self::is_cmp_expr(other),
+        }
+    }
+
+    /// 比較(`<` `>` `<=` `>=` `==` `!=`)か
+    fn is_cmp_expr(expr: &node::Expr) -> bool {
+        matches!(
+            expr,
+            node::Expr::LessThen(..)
+                | node::Expr::GreaterThen(..)
+                | node::Expr::LessThenEq(..)
+                | node::Expr::GreaterThenEq(..)
+                | node::Expr::Equal(..)
+                | node::Expr::NotEq(..)
+        )
+    }
+
+    /// `&&` / `||` / `!`か
+    fn is_logic_expr(expr: &node::Expr) -> bool {
+        matches!(
+            expr,
+            node::Expr::CmpAnd(..) | node::Expr::CmpOr(..) | node::Expr::CmpNot(..)
+        )
+    }
+
+    /// 比較のオペランドの型(`Set*`の両辺に渡す、期待する型)
+    ///
+    /// 変数などオペランドの型が分かればその型、分からなければ`DD`。
+    /// `bool`への代入でも、オペランドの型は`bool`にならない(`check_var_ty`で弾かれる)
+    fn set_cmp_operand_ty(&self, node: &(Box<node::Expr>, Box<node::Expr>)) -> types::Size {
+        self.infer_expr_ty(&node.0)
+            .or_else(|| self.infer_expr_ty(&node.1))
+            .unwrap_or(types::Size::DD)
+    }
+
+    /// 比較1つ分の`Set*`命令(結果は0か1)
+    fn gen_set_cmp_ir<M: ResultMod>(
+        &mut self,
+        node: (Box<node::Expr>, Box<node::Expr>),
+        kind: inst::ExprKind,
+    ) -> Result<usize, err::ErrKind> {
+        let size = self.set_cmp_operand_ty(&node);
+        let (ls, rs) = self.left_right_pair::<M>(node, &size)?;
+        Ok(self.push_ternary_cmp(kind, ls, rs))
+    }
+
+    /// 比較・`&&` / `||` / `!`を、0か1の値を作る`Set*`命令へ展開して、その値の番号を返す
+    ///
+    /// - `a < b`  -> `SetLessThen(a, b)`(`>` `<=` `>=` `==` `!=`も同様に`Set*`)
+    /// - `x && y` -> `AndCalcul(<x>, <y>)`
+    /// - `x || y` -> `OrCalcul(<x>, <y>)`
+    /// - `!x`     -> `SetEqual(<x>, 0)`
+    /// - 比較ではない式`x` -> `SetNotEq(x, 0)`(`bool`型の変数は0/1なのでそのまま使う)
+    ///
+    /// `&&` / `||`は、両辺を必ず評価する(短絡評価はしない)。
+    /// 右辺に副作用やメモリアクセスがあるときは、分岐で展開する必要がある
+    pub(in crate::compiler::ir) fn gen_setcc_ir<M: ResultMod>(
         &mut self,
         expr: node::Expr,
-        size: &types::Size,
     ) -> Result<usize, err::ErrKind> {
+        use inst::ExprKind as K;
+        self.expr_counter += 1;
         match expr {
+            node::Expr::LessThen(n) => self.gen_set_cmp_ir::<M>(n, K::SetLessThen),
+            node::Expr::GreaterThen(n) => self.gen_set_cmp_ir::<M>(n, K::SetGreaterThen),
+            node::Expr::LessThenEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetLessThenEq),
+            node::Expr::GreaterThenEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetGreaterThenEq),
+            node::Expr::Equal(n) => self.gen_set_cmp_ir::<M>(n, K::SetEqual),
+            node::Expr::NotEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetNotEq),
             node::Expr::CmpAnd((l, r)) => {
-                let ls = self.gen_ternary_bool_ir::<M>(*l, size)?;
-                let rs = self.gen_ternary_bool_ir::<M>(*r, size)?;
-                Ok(self.push_ternary_cmp(inst::ExprKind::AndCalcul, ls, rs))
+                let ls = self.gen_setcc_ir::<M>(*l)?;
+                let rs = self.gen_setcc_ir::<M>(*r)?;
+                Ok(self.push_ternary_cmp(K::AndCalcul, ls, rs))
             }
             node::Expr::CmpOr((l, r)) => {
-                let ls = self.gen_ternary_bool_ir::<M>(*l, size)?;
-                let rs = self.gen_ternary_bool_ir::<M>(*r, size)?;
-                Ok(self.push_ternary_cmp(inst::ExprKind::OrCalcul, ls, rs))
+                let ls = self.gen_setcc_ir::<M>(*l)?;
+                let rs = self.gen_setcc_ir::<M>(*r)?;
+                Ok(self.push_ternary_cmp(K::OrCalcul, ls, rs))
             }
-            // `!x`は、既存の単項演算子の展開(`== 0`)に任せる
-            // 比較は通常の`LessThen`などが0/1を作る
-            other => self.gen_expr_ir::<M>(other, Some(size)),
+            node::Expr::CmpNot(target) => {
+                let value = self.gen_setcc_ir::<M>(*target)?;
+                let bool_ty = types::Size::Bool;
+                let zero = self.push_ternary_inst(inst::Inst::gen_num("0", &bool_ty, self.id_counter));
+                Ok(self.push_ternary_cmp(K::SetEqual, value, zero))
+            }
+            // 比較ではない式
+            other => {
+                // `bool`型の変数は、すでに0か1
+                if let node::Expr::Var(name) = &other {
+                    let is_bool = self
+                        .var_tree
+                        .get_ty_node(name)
+                        .and_then(|ty| self.try_size_or_emit_struct(&ty).ok())
+                        .is_some_and(|ty| ty == types::Size::Bool);
+                    if is_bool {
+                        return self.gen_expr_ir::<M>(other, Some(&types::Size::Bool));
+                    }
+                }
+                let size = self.infer_expr_ty(&other).unwrap_or(types::Size::DD);
+                let value = self.gen_expr_ir::<M>(other, Some(&size))?;
+                let zero = self.push_ternary_inst(inst::Inst::gen_num("0", &size, self.id_counter));
+                Ok(self.push_ternary_cmp(K::SetNotEq, value, zero))
+            }
         }
     }
 }

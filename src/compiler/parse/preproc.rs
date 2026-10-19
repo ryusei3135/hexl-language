@@ -199,7 +199,7 @@ impl Parser {
 
             let inner = &caps[1];
 
-            match Parser::parse_asm_operand(inner) {
+            match self.parse_asm_operand(inner) {
                 Ok(expr) => {
                     let index = operands.len();
                     operands.push(expr);

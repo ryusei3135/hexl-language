@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::*;
 use crate::compiler::{err, lex::preprocessor::Preprocessor};
 
@@ -119,12 +121,12 @@ impl Lexer {
 
     /// これから解析するソースファイルのパスを教える。
     /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
-    pub fn set_source_file(&mut self, file: &str) {
-        if file.ends_with(".c") || file.ends_with(".h") {
+    pub fn set_source_file(&mut self, file: Rc<String>) {
+        if (*file).ends_with(".c") || (*file).ends_with(".h") {
             self.include_c_file_list.push(file.to_string());
         } else {
             self.preproc_table
-                .set_source_file(std::path::Path::new(file));
+                .set_source_file(std::path::Path::new((*file).as_str()));
         }
     }
 

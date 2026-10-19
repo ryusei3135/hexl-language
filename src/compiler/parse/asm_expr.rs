@@ -10,7 +10,7 @@
 //! そのため`${...}`の内容をそれらにそのまま渡すと、
 //! 先読みした瞬間にトークンが無く(EOF)、エラーとして
 //! 伝播してしまう。
-
+use std::rc::Rc;
 use super::*;
 
 impl Parser {
@@ -18,7 +18,7 @@ impl Parser {
     ///
     /// ## 引数
     /// - src `${}`の中に書かれていた文字列(例: `"x.y"`, `"*p"`)
-    pub(super) fn parse_asm_operand(src: &str) -> Result<node::Expr, err::ErrKind> {
+    pub(super) fn parse_asm_operand(&self, src: &str) -> Result<node::Expr, err::ErrKind> {
         let mut lexer = lex::Lexer::new();
         // 字句解析のエラーは、`${}`の中の文字列が不正ということ
         lexer
@@ -29,7 +29,7 @@ impl Parser {
             return crate::err_at!(Parser::empty_asm_operand());
         }
 
-        let mut parser = Parser::new();
+        let mut parser = Parser::new(&Rc::clone(&self.file_name), Rc::clone(&self.err_pool));
         parser.tkns = Some(lexer.gen_tkns);
 
         let node = parser.asm_operand_expr()?;

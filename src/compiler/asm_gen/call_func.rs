@@ -719,6 +719,10 @@ impl AsmEmitter {
         if expr.kind == inst::ExprKind::Ternary {
             return self.gen_ternary_select_asm(expr);
         }
+        // `Set<比較>`: `cmp` + `setcc`で0/1を結果のレジスタへ置く(`asm_emitter/set_cc.rs`)
+        if Self::is_set_cc_kind(&expr.kind) {
+            return self.gen_set_cc_asm(expr);
+        }
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
         // (以前は`reg_idx`を進めるだけだったため、引数の`%rdi`などまで

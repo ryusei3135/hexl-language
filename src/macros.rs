@@ -1,4 +1,5 @@
 //use crate::ir::inst;
+use std::rc::Rc;
 
 /// ブロックやラベルなどジャンプ系のノードを生成する
 /// ときに使うマクロ
@@ -31,7 +32,8 @@ macro_rules! scope_node {
                     crate::compiler::err::SyntaxErrKind::ExpectedKind {
                         expected: "name",
                         found: scope_tkn,
-                    }
+                    },
+                    Rc::clone(&$self.file_name)
                 );
             }
 

@@ -28,6 +28,13 @@ pub enum ExprKind {
     TernaryGreaterThenEq,
     TernaryEqual,
     TernaryNotEq,
+
+    SetLessThen,
+    SetGreaterThen,
+    SetLessThenEq,
+    SetGreaterThenEq,
+    SetEqual,
+    SetNotEq,
 }
 
 pub type ValueId = usize;

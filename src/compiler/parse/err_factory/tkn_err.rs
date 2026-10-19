@@ -14,7 +14,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::TknIsEof { expected }
+            err::SyntaxErrKind::TknIsEof { expected },
+            Rc::clone(&self.file_name)
         )
     }
 }

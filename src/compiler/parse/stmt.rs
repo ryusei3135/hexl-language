@@ -1,9 +1,18 @@
 //! group1は、関数や構造体など
 //! group2は変数の定義や条件分岐など
+pub(in crate::compiler::parse) mod parse_loop_control;
 
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+pub(in crate::compiler::parse) use parse_loop_control::*;
+
+use crate::compiler::parse::stmt::parse_loop_control::ParseLoopControl;
+use crate::err::err_pool;
 
 use crate::compiler::{c_frontend, models::Body, node::Group2Info};
+use crate::syntax_err;
 
 use super::*;
 
@@ -91,10 +100,13 @@ pub struct Parser {
     /// 解析済みのメゾットを予約しておく場所(型名 -> メゾット)。
     /// `Name`の`struct`/`variant`の定義が終わったときに、その型へ追加する
     pub(super) reserved_impls: HashMap<String, Vec<node::Group1Node>>,
+    pub(super) file_name: Rc<String>,
+    /// エラーログをためる
+    pub(super) err_pool: Rc<RefCell<err_pool::ErrPool>>
 }
 
 impl Parser {
-    pub fn new() -> Self {
+    pub fn new(file_name_ref: &Rc<String>, err_pool: Rc<RefCell<err_pool::ErrPool>>) -> Self {
         Self {
             gen_nodes: Vec::new(),
             tkns: None,
@@ -112,6 +124,8 @@ impl Parser {
             generated_types: Vec::new(),
             pending_types: Vec::new(),
             reserved_impls: HashMap::new(),
+            file_name: Rc::clone(&file_name_ref),
+            err_pool,
         }
     }
 
@@ -161,7 +175,7 @@ impl Parser {
         // 型の定義を先に集める
         self.collect_generic_types()?;
         self.collect_generic_funcs()?;
-        self.parse_loop()?;
+        self.parse_loop::<stmt::ParseLoopPushPool>()?;
 
         // `impl Name { .. }`の`Name`が、最後まで定義されなかった
         if let Some(name) = self.reserved_impls.keys().min().cloned() {
@@ -181,39 +195,48 @@ impl Parser {
     /// `self.tkns`の先頭から順に、関数などのノードを`gen_nodes`へ作る。
     /// ジェネリクス関数の呼び出しで、型ごとの関数を作る際にも
     /// (トークン列を差し替えて)この関数が使われる
-    pub(super) fn parse_loop(&mut self) -> Result<(), err::ErrKind> {
+    pub(super) fn parse_loop<C: ParseLoopControl>(&mut self) -> Result<(), err::ErrKind> {
         loop {
             match &self.gen_flag {
                 GenFlag::Group1 => {
                     match self.current_tkn().clone() {
                         lex::Tkn::KeyWordPub => {
-                            self.pub_keyword_node()?;
+                            let binding = self.pub_keyword_node();
+                            C::handle(&self.err_pool, binding)?;
                         }
                         lex::Tkn::Name(name) => {
-                            self.build_func::<false>(&name)?;
+                            let binding = self.build_func::<false>(&name);
+                            C::handle(&self.err_pool, binding)?;
                         }
                         lex::Tkn::CompleSyn => {
-                            let node = self.comple_syntax()?;
-                            self.gen_nodes.push(node.change_group1()?);
+                            let syntax_result = self.comple_syntax();
+                            let node = C::handle_ty::<node::Group2Node>(&self.err_pool, syntax_result)?;
+                            let result = node.change_group1();
+                            self.gen_nodes.push(C::handle_ty::<node::Group1Node>(&self.err_pool, result)?);
                         }
                         lex::Tkn::KeyWordStruct => {
                             // ジェネリクス(`struct Name<T> {..}`)は、使われるまで
                             // ノードを作らないので、読み飛ばす
-                            if !self.skip_generic_type_def()? {
-                                let node = self.struct_node()?;
+                            let binding = self.skip_generic_type_def();
+                            if !C::handle_ty::<bool>(&self.err_pool, binding)? {
+                                let struct_node = self.struct_node();
+                                let node = C::handle_ty::<node::Group1Node>(&self.err_pool, struct_node)?;
                                 self.gen_nodes.push(node);
                             }
                         }
                         lex::Tkn::KeyWordVariant => {
-                            if !self.skip_generic_type_def()? {
-                                let node = self.variant_node()?;
+                            let binding = self.skip_generic_type_def();
+                            if !C::handle_ty::<bool>(&self.err_pool, binding)? {
+                                let binding = self.variant_node();
+                                let node = C::handle_ty::<node::Group1Node>(&self.err_pool, binding)?;
                                 self.gen_nodes.push(node);
                             }
                         }
                         // `impl Name { func() {..} }`
                         // (終了時は`impl`を閉じる`}`を指す。`struct`と同じ)
                         lex::Tkn::KeyWordImpl => {
-                            self.impl_node()?;
+                            let impl_node = self.impl_node();
+                            C::handle(&self.err_pool, impl_node)?;
                         }
                         t => {
                             return crate::err_at!(self.unexpect_tkn_in_stmt(t));
@@ -233,8 +256,9 @@ impl Parser {
                         continue;
                     }
 
-                    let node: Group2Info = self
-                        .one_line_node()?
+                    let line_node = self.one_line_node();
+                    let node: Group2Info = C::handle_ty::<node::Group2Node>(
+                        &self.err_pool, line_node)?
                         .gen_group_info(self.build_err_span().line);
 
                     // `Group2`のノードは常に直前に生成された関数定義に

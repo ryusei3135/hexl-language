@@ -19,7 +19,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::ExpectedKind { expected, found }
+            err::SyntaxErrKind::ExpectedKind { expected, found },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -34,7 +35,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected,
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -49,7 +51,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: "number",
                 found: lex::Tkn::Number(num),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -60,7 +63,8 @@ impl Parser {
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectTknInExpr {
                 found: lex::Tkn::KeyWordSelf,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -78,7 +82,8 @@ impl Parser {
             err::SyntaxErrKind::ExpectedKind {
                 expected: what,
                 found: self.current_tkn().clone(),
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 }

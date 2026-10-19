@@ -11,7 +11,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::MissingEqualsAfterMust { found }
+            err::SyntaxErrKind::MissingEqualsAfterMust { found },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -22,7 +23,8 @@ impl Parser {
             self.build_err_span(),
             err::SyntaxErrKind::TknIsEof {
                 expected: vec!["Name"]
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -34,7 +36,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::MissingIdentAfterOf { found }
+            err::SyntaxErrKind::MissingIdentAfterOf { found },
+            Rc::clone(&self.file_name)
         )
     }
 }

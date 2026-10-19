@@ -12,4 +12,6 @@ pub(in crate::compiler::parse) mod tkn_err;
 /// エラーの発生元を`println!`する仕組み(`err_at!`など)
 pub mod trace;
 
+use std::rc::Rc;
+
 use super::*;

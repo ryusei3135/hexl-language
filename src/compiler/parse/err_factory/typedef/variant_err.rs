@@ -16,7 +16,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: lex::Tkn::KeyWordVariant,
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -32,7 +33,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: lex::Tkn::Name("name".to_string()),
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -51,7 +53,8 @@ impl Parser {
                 found: tkn,
                 expected: lex::Tkn::LBrace,
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -72,7 +75,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: expect,
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -95,7 +99,8 @@ impl Parser {
             err::SyntaxErrKind::OptionIsNotFound {
                 found: option_name,
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -110,7 +115,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: lex::Tkn::Name("variant_name".to_string()),
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -126,7 +132,8 @@ impl Parser {
                 found,
                 expected: lex::Tkn::Name("variant member".to_string()),
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -142,7 +149,8 @@ impl Parser {
                 found,
                 expected: lex::Tkn::Name("variant member".to_string()),
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -158,7 +166,8 @@ impl Parser {
                 found,
                 expected: lex::Tkn::RBrace,
                 context: lex::Tkn::KeyWordVariant
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 }

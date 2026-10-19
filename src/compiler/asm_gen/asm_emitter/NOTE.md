@@ -108,3 +108,20 @@ IRの並び(`gen_ternary_select_ir` / `gen_ternary_cond_ir`)
 - 未使用の変数の初期値が三項演算子のときは、条件(`n-1`)も一緒に生成しない(`reg_mnger.rs`の`collect_pure_expr_vars`)。
 - フォーマット(`asm_fmt/x64.rs`)のキー: `tcmp`(`cmp`のみ)、`cmov_l`/`cmov_g`/`cmov_l_e`/`cmov_g_e`/`cmov_e`/`cmov_ne`、符号なし用の`cmov_b`/`cmov_a`/`cmov_b_e`/`cmov_a_e`。
   以前の`cmov_*`は`mov`+`cmov`の2行で、`cmp`が無くフラグが未設定のまま`cmov`していたため、`cmov`の1行にした。
+
+## setcc(2026-10-19)
+`ExprKind::SetLessThen` / `SetGreaterThen` / `SetLessThenEq` / `SetGreaterThenEq` / `SetEqual` / `SetNotEq`は、
+比較の結果(0/1)をレジスタへ置く。生成は`asm_emitter/set_cc.rs`(`gen_expr_asm`が`Set<比較>`を振り分ける)。
+
+```text
+cmp    rs, ls          # tcmp
+setcc  dst8            # set_l / set_g / set_l_e / set_g_e / set_e / set_ne
+movzbl dst8, dst32     # movzbl(上位32bitも0になる)
+```
+
+- 結果のレジスタは`ls`/`rs`のレジスタとは別に確保する。`ls`が即値なら、結果のレジスタへ`mov`してから`cmp`する。
+- どちらかのオペランドが符号なしの`<` `>` `<=` `>=`は`setb`/`seta`/`setbe`/`setae`(`get_unsigned_set_tmpl`。`set_b`などのキーがあればそれを使う)。
+- `setcc`/`movzbl`にはサイズ接尾辞を付けない。小数は使えない(panic)。
+- フォーマット(`asm_fmt/x64.rs`)のキー: `set_l`/`set_g`/`set_l_e`/`set_g_e`/`set_e`/`set_ne`、符号なし用の`set_b`/`set_a`/`set_b_e`/`set_a_e`、`movzbl`。
+- `asm_fmt/x64.rs`の8bitレジスタ(`db`)の並びが、他(`dw`/`dd`/`dq`)と1つずれていた(`spl`/`bpl`が入っていて、`db[4]`が`sil`ではなく`spl`だった)。
+  `setcc`で8bitレジスタ名を使うため`spl`/`bpl`を除いた。`asm_fmts/gcc_x64.yaml`に同じ並びがあれば直す。

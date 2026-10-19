@@ -67,6 +67,13 @@ impl AsmEmitter {
                 | inst::ExprKind::TernaryNotEq => "tcmp",
                 // 選ぶ側は`format_expr_inst`を通らない(`gen_ternary_select_asm`)
                 inst::ExprKind::Ternary => unreachable!("`Ternary`は`ternary.rs`で生成する"),
+                // `Set<比較>`も`format_expr_inst`を通らない(`gen_set_cc_asm`)
+                inst::ExprKind::SetLessThen
+                | inst::ExprKind::SetGreaterThen
+                | inst::ExprKind::SetLessThenEq
+                | inst::ExprKind::SetGreaterThenEq
+                | inst::ExprKind::SetEqual
+                | inst::ExprKind::SetNotEq => unreachable!("`Set<比較>`は`set_cc.rs`で生成する"),
             }
         }
     }
@@ -101,6 +108,12 @@ impl AsmEmitter {
             | inst::ExprKind::TernaryEqual
             | inst::ExprKind::TernaryNotEq => "cmp",
             inst::ExprKind::Ternary => unreachable!("`Ternary`は`ternary.rs`で生成する"),
+            inst::ExprKind::SetLessThen
+            | inst::ExprKind::SetGreaterThen
+            | inst::ExprKind::SetLessThenEq
+            | inst::ExprKind::SetGreaterThenEq
+            | inst::ExprKind::SetEqual
+            | inst::ExprKind::SetNotEq => unreachable!("`Set<比較>`は`set_cc.rs`で生成する"),
         }
     }
 }

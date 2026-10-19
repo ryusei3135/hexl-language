@@ -11,7 +11,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: lex::Tkn::Name("struct name".to_string()),
                 context: lex::Tkn::KeyWordStruct
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -26,7 +27,8 @@ impl Parser {
                 found: tkn,
                 expected: lex::Tkn::LBrace,
                 context: lex::Tkn::KeyWordStruct
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -41,7 +43,8 @@ impl Parser {
                 found: self.current_tkn().clone(),
                 expected: expect,
                 context: lex::Tkn::KeyWordStruct
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -57,7 +60,8 @@ impl Parser {
                 found,
                 expected: lex::Tkn::Name("struct init".to_string()),
                 context: lex::Tkn::KeyWordStruct
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -93,7 +97,8 @@ impl Parser {
                 keyword: lex::Tkn::Colon,
                 expected: vec![",", "}"],
                 found,
-            }
+            },
+            Rc::clone(&self.file_name)
         )
     }
 
@@ -104,7 +109,8 @@ impl Parser {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
-            err::SyntaxErrKind::GenericsNotSupportedYet
+            err::SyntaxErrKind::GenericsNotSupportedYet,
+            Rc::clone(&self.file_name)
         )
     }
 }

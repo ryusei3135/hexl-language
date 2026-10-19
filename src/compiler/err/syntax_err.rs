@@ -12,6 +12,7 @@ use super::*;
 
 use crate::compiler::lex;
 use std::fmt;
+use std::rc::Rc;
 // ---------------------------------------------------------------------
 // 構文全般(トークン管理・式)のエラー
 // ---------------------------------------------------------------------
@@ -163,6 +164,7 @@ impl fmt::Display for SyntaxErrKind {
 pub struct SyntaxErr {
     pub kind: SyntaxErrKind,
     pub loc: ErrLoc,
+    pub file_name: Rc<String>,
 }
 
 /// `SyntaxErr`の別名。式まわりの解析関数(`expr.rs`など)では
@@ -185,11 +187,12 @@ impl fmt::Display for SyntaxErr {
 /// 文脈から推論される。
 #[macro_export]
 macro_rules! syntax_err {
-    ($span:expr, $kind:expr) => {
+    ($span:expr, $kind:expr, $file_name:expr) => {
         Err::<_, $crate::compiler::err::ErrKind>($crate::compiler::err::ErrKind::Syntax(Box::new(
             $crate::compiler::err::SyntaxErr {
                 kind: $kind,
                 loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
+                file_name: $file_name
             },
         )))
     };
@@ -232,10 +235,11 @@ impl fmt::Display for CondErrKinds {
 /// ```
 #[macro_export]
 macro_rules! cond_err {
-    ($span:expr, $kind:ident) => {
+    ($span:expr, $kind:ident, $file_name:expr) => {
         $crate::syntax_err!(
             $span,
-            $crate::compiler::err::SyntaxErrKind::Cond($crate::compiler::err::CondErrKinds::$kind)
+            $crate::compiler::err::SyntaxErrKind::Cond($crate::compiler::err::CondErrKinds::$kind),
+            $file_name
         )
     };
 }
@@ -312,7 +316,7 @@ impl fmt::Display for PreprocErrDetail {
 /// ```
 #[macro_export]
 macro_rules! preproc_err {
-    ($parser:expr, $kind:ident) => {
+    ($parser:expr, $kind:ident, $file_name:expr) => {
         return Err($crate::compiler::err::ErrKind::Preproc(Box::new(
             $crate::compiler::err::PreprocErrDetail {
                 kind: $crate::compiler::err::PreprocErrs::$kind,
