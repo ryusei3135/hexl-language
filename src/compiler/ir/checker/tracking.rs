@@ -13,18 +13,18 @@ impl IR {
     /// 呼び出し前に`is_const_index`で評価可能かどうかを確認しておくこと
     /// (記録の無い変数を評価しようとした場合はここで`panic`する)
     pub(in crate::compiler::ir) fn eval_expr(&self, n: &node::Expr) -> usize {
-        match n {
-            node::Expr::Number(val) => val.parse::<usize>().unwrap(),
-            node::Expr::Var(name) => self.var_tree.get_value(name).unwrap_or_else(|| {
+        match &n.node {
+            node::ExprNode::Number(val) => val.parse::<usize>().unwrap(),
+            node::ExprNode::Var(name) => self.var_tree.get_value(name).unwrap_or_else(|| {
                 panic!(
                     "変数 `{}` の値が記録されておらず、静的に評価できません",
                     name
                 )
             }),
-            node::Expr::Add((l, r)) => self.eval_expr(l) + self.eval_expr(r),
-            node::Expr::Sub((l, r)) => self.eval_expr(l) - self.eval_expr(r),
-            node::Expr::Mul((l, r)) => self.eval_expr(l) * self.eval_expr(r),
-            node::Expr::Div((l, r)) => self.eval_expr(l) / self.eval_expr(r),
+            node::ExprNode::Add((l, r)) => self.eval_expr(l) + self.eval_expr(r),
+            node::ExprNode::Sub((l, r)) => self.eval_expr(l) - self.eval_expr(r),
+            node::ExprNode::Mul((l, r)) => self.eval_expr(l) * self.eval_expr(r),
+            node::ExprNode::Div((l, r)) => self.eval_expr(l) / self.eval_expr(r),
             _ => panic!(),
         }
     }
@@ -38,13 +38,13 @@ impl IR {
     /// 変数や、一度も記録されていない変数)を含む場合は、実行時にしか
     /// 値が分からないため、ここでの静的な範囲チェックの対象外として扱う
     pub(in crate::compiler::ir) fn is_const_index(&self, n: &node::Expr) -> bool {
-        match n {
-            node::Expr::Number(_) => true,
-            node::Expr::Var(name) => self.var_tree.get_value(name).is_some(),
-            node::Expr::Add((l, r))
-            | node::Expr::Sub((l, r))
-            | node::Expr::Mul((l, r))
-            | node::Expr::Div((l, r)) => self.is_const_index(l) && self.is_const_index(r),
+        match &n.node {
+            node::ExprNode::Number(_) => true,
+            node::ExprNode::Var(name) => self.var_tree.get_value(name).is_some(),
+            node::ExprNode::Add((l, r))
+            | node::ExprNode::Sub((l, r))
+            | node::ExprNode::Mul((l, r))
+            | node::ExprNode::Div((l, r)) => self.is_const_index(l) && self.is_const_index(r),
             _ => false,
         }
     }

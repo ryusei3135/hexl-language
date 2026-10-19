@@ -259,7 +259,7 @@ impl IR {
             self.constract_flag.reset();
             match stmt.get_node().clone() {
                 node::Group2Node::Expr(expr) => {
-                    let _ = self.gen_expr_ir::<M>(expr, None)?;
+                    let _ = self.gen_expr_ir::<M>(&expr, None)?;
                 }
                 node::Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir::<M>(stmt)?;
@@ -288,7 +288,7 @@ impl IR {
                     crate::GenUndefErrResult!(UndefFuncRetTy, "none".to_string(), None)
                 })?;
                 let ret_size = self.size_of(&func_ret_ty);
-                let idx = self.gen_expr_ir::<M>(expr, Some(&ret_size))?;
+                let idx = self.gen_expr_ir::<M>(&expr, Some(&ret_size))?;
                 inst::Inst::Ret(idx)
             }
             node::StmtNode::Continue => {
@@ -317,14 +317,14 @@ impl IR {
     #[inline(always)]
     fn left_right_pair<M: ResultMod>(
         &mut self,
-        node: (Box<node::Expr>, Box<node::Expr>),
+        node: &(Box<node::Expr>, Box<node::Expr>),
         expect_byte: &types::Size,
     ) -> Result<(usize, usize), err::ErrKind> {
         // 型が決まっていない即値は、もう片方のオペランドの型(定義元の型)にする
         let (ls_ty, rs_ty) = self.operand_expect_tys(&node.0, &node.1, expect_byte);
         Ok((
-            self.gen_expr_ir::<M>(*node.0, Some(&ls_ty))?,
-            self.gen_expr_ir::<M>(*node.1, Some(&rs_ty))?,
+            self.gen_expr_ir::<M>(&node.0, Some(&ls_ty))?,
+            self.gen_expr_ir::<M>(&node.1, Some(&rs_ty))?,
         ))
     }
 
@@ -353,7 +353,7 @@ impl IR {
     #[inline(always)]
     fn build_expr_inst<M: ResultMod>(
         &mut self,
-        node: (Box<node::Expr>, Box<node::Expr>),
+        node: &(Box<node::Expr>, Box<node::Expr>),
         expect_byte: &types::Size,
         kind: inst::ExprKind,
     ) -> Result<inst::Inst, err::ErrKind> {
@@ -376,14 +376,14 @@ impl IR {
     /// - `PanicErr`: その場でpanicする
     pub(in crate::compiler::ir) fn gen_expr_ir<M: ResultMod>(
         &mut self,
-        expr: node::Expr,
+        expr: &node::Expr,
         expect_byte: Option<&types::Size>,
     ) -> Result<usize, err::ErrKind> {
         // 前置の単項演算子(`+a` `-a` `!a` `~a` `++a` `--a`)は、
         // 既存のノードに展開してから生成し直す
         // (`src/ir/builder/expr_node.rs`の`desugar_unary`)
         if let Some(expanded) = self.desugar_unary::<M>(&expr, expect_byte)? {
-            return self.gen_expr_ir::<M>(expanded, expect_byte);
+            return self.gen_expr_ir::<M>(&expanded, expect_byte);
         }
         // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
         // (`src/ir/builder/variant_bind.rs`)
@@ -397,95 +397,95 @@ impl IR {
         // 添字が可変な配列アクセスのときは、範囲外のときの分岐を
         // IRに差し込むためのガードが返る
         let arr_guard = M::handle(self.check_mem_access::<M>(&expr))?;
-        let inst = match expr {
+        let inst = match &expr.node {
             // ポインタ関係
-            node::Expr::GetAddress(target) => {
+            node::ExprNode::GetAddress(target) => {
                 self.expr_is_ptr_val = NEXT_VAR_NODE_IS_GET_ADDR;
-                let idx = self.gen_expr_ir::<M>(*target, Some(&expect_byte))?;
+                let idx = self.gen_expr_ir::<M>(target, Some(&expect_byte))?;
                 inst::Inst::GetAddress(idx)
             }
-            node::Expr::ConnectAddr(target) => {
-                let idx = self.gen_expr_ir::<M>(*target, Some(&expect_byte))?;
+            node::ExprNode::ConnectAddr(target) => {
+                let idx = self.gen_expr_ir::<M>(target, Some(&expect_byte))?;
                 inst::Inst::Pointer(idx)
             }
             // `(ty)expr`: 組み込み型へのキャスト
             // `src/ir/builder/expr_node.rs`
-            node::Expr::Cast((ty, target)) => self.build_cast_inst::<M>(&ty, *target)?,
-            node::Expr::Inc(var) => self.build_inc_dec_expr::<M>(*var, inst::ExprKind::Inc)?,
-            node::Expr::Dec(var) => self.build_inc_dec_expr::<M>(*var, inst::ExprKind::Dec)?,
+            node::ExprNode::Cast((ty, target)) => self.build_cast_inst::<M>(&ty, &*target)?,
+            node::ExprNode::Inc(var) => self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Inc)?,
+            node::ExprNode::Dec(var) => self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Dec)?,
 
-            node::Expr::Add(node) => {
+            node::ExprNode::Add(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Add)?
             }
-            node::Expr::Sub(node) => {
+            node::ExprNode::Sub(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Sub)?
             }
-            node::Expr::Mul(node) => {
+            node::ExprNode::Mul(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Mul)?
             }
-            node::Expr::Div(node) => {
+            node::ExprNode::Div(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Div)?
             }
-            node::Expr::Surplus(node) => {
+            node::ExprNode::Surplus(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Surplus)?
             }
-            node::Expr::LessThen(node) => {
+            node::ExprNode::LessThen(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::LessThen)?
             }
-            node::Expr::GreaterThen(node) => {
+            node::ExprNode::GreaterThen(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::GreaterThen)?
             }
-            node::Expr::LessThenEq(node) => {
+            node::ExprNode::LessThenEq(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::LessThenEq)?
             }
-            node::Expr::GreaterThenEq(node) => {
+            node::ExprNode::GreaterThenEq(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::GreaterThenEq)?
             }
-            node::Expr::Equal(node) => {
+            node::ExprNode::Equal(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Equal)?
             }
-            node::Expr::NotEq(node) => {
+            node::ExprNode::NotEq(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::NotEq)?
             }
-            node::Expr::AndCalcul(node) => {
+            node::ExprNode::AndCalcul(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::AndCalcul)?
             }
-            node::Expr::XorCalcul(node) => {
+            node::ExprNode::XorCalcul(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::XorCalcul)?
             }
-            node::Expr::OrCalcul(node) => {
+            node::ExprNode::OrCalcul(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::OrCalcul)?
             }
-            node::Expr::LShift(node) => {
+            node::ExprNode::LShift(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::LShift)?
             }
-            node::Expr::RShift(node) => {
+            node::ExprNode::RShift(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::RShift)?
             }
-            node::Expr::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
-            node::Expr::Float(value) => {
+            node::ExprNode::Number(value) => inst::Inst::gen_num(&value, &expect_byte, self.id_counter),
+            node::ExprNode::Float(value) => {
                 inst::Inst::gen_float(&value, &expect_byte, self.id_counter)
             }
-            node::Expr::Assign(assign_node) => {
+            node::ExprNode::Assign(assign_node) => {
                 let var_attr = self.var_tree.is_mut(&assign_node.name);
                 // `src/ir/builder/expr_node.rs`
                 let result = self.assign_expr_node::<M>(assign_node, &expect_byte, &var_attr);
                 M::handle(result)?
             }
-            node::Expr::Str(value) => inst::Inst::Str {
+            node::ExprNode::Str(value) => inst::Inst::Str {
                 dst: self.id_counter,
-                value,
+                value: value.to_string(),
             },
             // `cond ? left : right`
             // 条件式がメモリに触れず、両辺が数字のみの式なら`ExprKind::Ternary`の1命令にする。
             // それ以外は、副作用やメモリアクセスを選ばれた側でだけ実行するため、
             // `cond`と同じ形の条件分岐(ラベルとジャンプ)に展開する
-            node::Expr::Ternary(node) => {
+            node::ExprNode::Ternary(node) => {
                 let (cond, left, right) = node;
                 // この条件がtrueなら必ず三項演算子
                 if Self::ternary_is_select(&cond, &left, &right) {
                     // `ternary_expr`が`self.ternatry = Some(true)`にして、(cond, left, right)を生成する
-                    let idxs = self.ternary_expr::<M>(cond, left, right, expect_byte)?;
+                    let idxs = self.ternary_expr::<M>(&cond, &left, &right, expect_byte)?;
                     inst::ExprInst {
                         dst: idxs.0,
                         ls: idxs.1,
@@ -499,13 +499,13 @@ impl IR {
                 }
             }
             // 配列を初期化する
-            node::Expr::Array(init_nodes) => {
+            node::ExprNode::Array(init_nodes) => {
                 // `src/ir/builder/expr_node.rs`
-                self.init_array_node::<M>(init_nodes, &expect_byte)?
+                self.init_array_node::<M>(init_nodes.to_vec(), &expect_byte)?
             }
             // 配列にアクセスする
             // else_idxはchecker/access_mem.rsでチェック済み
-            node::Expr::RefArray {
+            node::ExprNode::RefArray {
                 name, dst, index, ..
             } => {
                 // 配列変数を使ったことを記録(`src/ir/counter_mnger.rs`)
@@ -514,24 +514,24 @@ impl IR {
                 // の条件分岐を差し込む
                 // `src/ir/insert/array_guard.rs`
                 if let Some(guard) = arr_guard {
-                    return self.insert_arr_guard::<M>(guard, *dst, &expect_byte);
+                    return self.insert_arr_guard::<M>(guard, &*dst, &expect_byte);
                 }
                 // 添字が`const`/即値: 静的検査済みなのでそのまま
                 // `src/ir/builder/expr_node.rs`
-                self.ref_array_node::<M>(*dst, *index, &name, &expect_byte)?
+                self.ref_array_node::<M>(&*dst, &*index, &name, &expect_byte)?
             }
             // ポインタの中身
-            node::Expr::DefVar(var) => {
+            node::ExprNode::DefVar(var) => {
                 let var_attr: parse::VarMutAttr = var.var_attr.clone();
                 // `src/ir/builder/expr_node.rs`
-                let result = self.def_var_node::<M>(var, &expect_byte, &var_attr);
+                let result = self.def_var_node::<M>(var.clone(), &expect_byte, &var_attr);
                 M::handle(result)?
             }
-            node::Expr::CallFunc(meta_data) => {
+            node::ExprNode::CallFunc(meta_data) => {
                 let result = self.gen_call_fn_ir::<M>(None, &meta_data, None);
                 M::handle(result)?
             }
-            node::Expr::Var(var_name) => {
+            node::ExprNode::Var(var_name) => {
                 // 変数(ローカル変数/引数)を使ったことを記録
                 // (`src/ir/counter_mnger.rs`)
                 self.count_var_use(&var_name);
@@ -564,19 +564,19 @@ impl IR {
                     }
                 });
             }
-            node::Expr::Match {
+            node::ExprNode::Match {
                 pattern,
                 arms,
                 arm_else,
             } => {
                 return self.gen_match_expr_ir::<M>(&pattern, &arms, &arm_else);
             }
-            node::Expr::Loop { pattern, body } => {
+            node::ExprNode::Loop { pattern, body } => {
                 return self.gen_loop_expr_ir::<M>(pattern, &body);
             }
             // `M(val) := value`は、`cond`の条件式の中でだけ使える
             // (`gen_match_expr_ir`が展開するので、ここには来ない)
-            node::Expr::VariantBind(bind) => panic!(
+            node::ExprNode::VariantBind(bind) => panic!(
                 "`{}({}) := ..`は`cond`の条件式の中でのみ使えます",
                 bind.variant, bind.bind
             ),
@@ -584,20 +584,20 @@ impl IR {
             // - 全メンバーが型なしの(旧列挙型相当)場合は、定義順に基いた
             //   タグ(整数値)として展開する
             // - データ付きメンバーを持つ場合は、タグ付きの値として展開する
-            node::Expr::EnumVariant { name, variant } => {
+            node::ExprNode::EnumVariant { name, variant } => {
                 // `src/ir/builder/expr_node.rs`
                 *M::handle(self.enum_variant_node(&name, &variant, &expect_byte))?
             }
             // 構造体の初期化: `Name { field: value, .. }`
-            node::Expr::InitStruct {
-                is_self,
-                name,
-                mut fields,
+            node::ExprNode::InitStruct {
+                ref is_self,
+                ref name,
+                ref mut fields,
             } => {
                 // パーサーは`Name { .. }`が構造体かバリアント型かを区別できないので、
                 // バリアント型の名前だった場合はここでバリアント型の初期化として扱う
                 let is_variant = self.variant_tree.contains_key(&name)
-                    || (is_self
+                    || (*is_self
                         && self.this_is_self
                         && self
                             .var_tree
@@ -606,21 +606,21 @@ impl IR {
                 if is_variant {
                     // `src/ir/builder/expr_node.rs`
                     let result =
-                        self.init_variant_node::<M>(is_self, &name, &mut fields, &expect_byte);
+                        self.init_variant_node::<M>(*is_self, &name, fields, &expect_byte);
                     M::handle(result)?
                 } else {
                     // `src/ir/builder/expr_node.rs`
-                    M::handle(self.init_struct_node::<M>(&name, &mut fields))?
+                    M::handle(self.init_struct_node::<M>(&name, fields))?
                 }
             }
             // バリアント型の初期化: `Name { field: value }`
-            node::Expr::InitVariant {
-                is_self,
-                name,
-                mut fields,
+            node::ExprNode::InitVariant {
+                ref is_self,
+                ref name,
+                ref mut fields,
             } => {
                 // `src/ir/builder/expr_node.rs`
-                let result = self.init_variant_node::<M>(is_self, &name, &mut fields, &expect_byte);
+                let result = self.init_variant_node::<M>(*is_self, &name, fields, &expect_byte);
                 M::handle(result)?
             }
             // ここでは対応する「元の変数名」が分からない文脈
@@ -629,25 +629,25 @@ impl IR {
             // 場合は`def_var_node`/`assign_expr_node`が
             // `gen_named_expr_ir`経由で`scope_node`を直接呼び出し、
             // 変数名を渡している(`src/ir/builder/expr_node.rs`)
-            node::Expr::Scope { scope, target } => {
-                let result = self.scope_node::<M>(&scope, target, None, &parse::VarMutAttr::Invar);
+            node::ExprNode::Scope { scope, target } => {
+                let result = self.scope_node::<M>(&scope, &target, None, &parse::VarMutAttr::Invar);
                 M::handle(result)?
             }
-            node::Expr::Member { scope, target } => {
+            node::ExprNode::Member { scope, target } => {
                 let scope_n_ref: Vec<&str> = scope.iter().map(|s| s.as_str()).collect();
-                match &*target {
-                    node::Expr::Var(name) => {
+                match &(*target).node {
+                    node::ExprNode::Var(name) => {
                         // `src/ir/builder/member.rs`
                         let result = self.member_is_var(&scope_n_ref, &name);
                         M::handle(result)?
                     }
-                    node::Expr::CallFunc(call_func_info) => {
+                    node::ExprNode::CallFunc(call_func_info) => {
                         // `src/ir/builder/member.rs`
                         let result = self.member_is_fn::<M>(&scope_n_ref, &call_func_info);
                         M::handle(result)?
                     }
                     // `変数名.[メンバー名 添字]`
-                    node::Expr::RefArray { name, index, .. } => {
+                    node::ExprNode::RefArray { name, index, .. } => {
                         // `src/ir/builder/member.rs`
                         M::handle(self.member_is_arr_ref(&scope_n_ref, &name, &index))?
                     }
@@ -656,24 +656,24 @@ impl IR {
             }
             // ポインタが指す構造体のメンバー/メゾットへのアクセス
             // `[name].member` / `[name].method(..)`
-            node::Expr::PtrMember { name, target, .. } => match &*target {
-                node::Expr::Var(member) => {
+            node::ExprNode::PtrMember { name, target, .. } => match &(*target).node {
+                node::ExprNode::Var(member) => {
                     let result = self.member_is_var_via_ptr(&name, &member);
                     M::handle(result)?
                 }
-                node::Expr::CallFunc(call_func_info) => {
+                node::ExprNode::CallFunc(call_func_info) => {
                     let result = self.member_is_fn_via_ptr::<M>(&name, &call_func_info);
                     M::handle(result)?
                 }
                 t => panic!("{:?}", t),
             },
-            node::Expr::RangeNode(..) => panic!(),
+            node::ExprNode::RangeNode(..) => panic!(),
             // 単項演算子は、この`match`の前の`desugar_unary`で展開済み
-            node::Expr::Sign(..)
-            | node::Expr::Inversion(..)
-            | node::Expr::CmpNot(..)
-            | node::Expr::LeftInc(..)
-            | node::Expr::LeftDec(..) => {
+            node::ExprNode::Sign(..)
+            | node::ExprNode::Inversion(..)
+            | node::ExprNode::CmpNot(..)
+            | node::ExprNode::LeftInc(..)
+            | node::ExprNode::LeftDec(..) => {
                 unreachable!("単項演算子は`desugar_unary`で展開されている")
             }
             // `&&` `||` `? :`など、IRの生成が未対応のノード
@@ -717,14 +717,14 @@ impl IR {
         let elem_size = self.size_of(&ty_name);
 
         // 配列リテラルなら要素ごとに展開し、単一の値ならそのまま1要素として扱う
-        let values = match *var.value {
-            node::Expr::Array(items) => items,
-            other => vec![other],
+        let values = match (*var.value).node {
+            node::ExprNode::Array(items) => items,
+            _ => vec![(*var.value).clone()],
         };
 
         let mut value_idx = Vec::new();
         for value in values {
-            value_idx.push(M::handle(self.gen_expr_ir::<M>(value, Some(&elem_size)))?);
+            value_idx.push(M::handle(self.gen_expr_ir::<M>(&value, Some(&elem_size)))?);
         }
 
         // メモリ領域の情報を作成
@@ -767,7 +767,7 @@ impl IR {
     #[inline(always)]
     fn gen_loop_expr_ir<M: ResultMod>(
         &mut self,
-        pattern: Option<Box<node::Expr>>,
+        pattern: &Option<Box<node::Expr>>,
         body: &Body,
     ) -> Result<usize, err::ErrKind> {
         // 反復処理が始まる場所を作成
@@ -784,7 +784,7 @@ impl IR {
             let condition = self.pattern_labels;
             self.pattern_labels += 1;
             crate::push_jmp_code!(self, ExpectJmp, &condition);
-            let _ = self.gen_expr_ir::<M>(*expr, None)?;
+            let _ = self.gen_expr_ir::<M>(expr, None)?;
             // もし条件がfalseならendまでジャンプ
             crate::push_jmp_code!(self, Jmp, &end);
             // 条件がtrueのときジャンプする場所
@@ -814,7 +814,7 @@ impl IR {
         //   (真偽値/何も与えないパターン)
         let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
             if let Some(target) = pattern.as_ref() {
-                node::Expr::Equal((target.clone(), Box::new(arm_pattern.clone())))
+                node::Expr::new(node::ExprNode::Equal((target.clone(), Box::new(arm_pattern.clone()))), Rc::clone(arm_pattern.span))
             } else {
                 arm_pattern.clone()
             }
@@ -841,13 +841,13 @@ impl IR {
         let mut binds: Vec<Option<variant_bind::VariantBindInfo>> = Vec::new();
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
             crate::push_jmp_code!(self, ExpectJmp, label);
-            if let node::Expr::VariantBind(bind) = &*arm.pattern {
+            if let node::ExprNode::VariantBind(bind) = &(*arm.pattern).node {
                 // `src/ir/builder/variant_bind.rs`
                 let result = self.variant_bind_cond(bind);
                 binds.push(Some(self.unwrap_or_report(result)));
             } else {
                 let cond = build_cond(&arm.pattern);
-                self.gen_expr_ir::<M>(cond, None)?;
+                self.gen_expr_ir::<M>(&cond, None)?;
                 binds.push(None);
             }
         }
@@ -892,21 +892,21 @@ impl IR {
 
     /// 数字(整数・小数)と演算子だけでできた式か
     fn is_number_only(expr: &node::Expr) -> bool {
-        match expr {
-            node::Expr::Number(_) | node::Expr::Float(_) => true,
-            node::Expr::Add(n)
-            | node::Expr::Sub(n)
-            | node::Expr::Mul(n)
-            | node::Expr::Div(n)
-            | node::Expr::Surplus(n)
-            | node::Expr::LShift(n)
-            | node::Expr::RShift(n)
-            | node::Expr::AndCalcul(n)
-            | node::Expr::XorCalcul(n)
-            | node::Expr::OrCalcul(n) => Self::is_number_only(&n.0) && Self::is_number_only(&n.1),
-            node::Expr::Sign((_, target))
-            | node::Expr::Inversion(target)
-            | node::Expr::CmpNot(target) => Self::is_number_only(target),
+        match &expr.node {
+            node::ExprNode::Number(_) | node::ExprNode::Float(_) => true,
+            node::ExprNode::Add(n)
+            | node::ExprNode::Sub(n)
+            | node::ExprNode::Mul(n)
+            | node::ExprNode::Div(n)
+            | node::ExprNode::Surplus(n)
+            | node::ExprNode::LShift(n)
+            | node::ExprNode::RShift(n)
+            | node::ExprNode::AndCalcul(n)
+            | node::ExprNode::XorCalcul(n)
+            | node::ExprNode::OrCalcul(n) => Self::is_number_only(&n.0) && Self::is_number_only(&n.1),
+            node::ExprNode::Sign((_, target))
+            | node::ExprNode::Inversion(target)
+            | node::ExprNode::CmpNot(target) => Self::is_number_only(target),
             _ => false,
         }
     }
@@ -916,28 +916,28 @@ impl IR {
     /// 配列・ポインタ・メンバー・関数呼び出し・代入・`++`/`--`などが
     /// 1つでも含まれていれば`false`(安全側に倒す)
     fn is_mem_free(expr: &node::Expr) -> bool {
-        match expr {
-            node::Expr::Var(_) | node::Expr::Number(_) | node::Expr::Float(_) => true,
-            node::Expr::Add(n)
-            | node::Expr::Sub(n)
-            | node::Expr::Mul(n)
-            | node::Expr::Div(n)
-            | node::Expr::Surplus(n)
-            | node::Expr::LShift(n)
-            | node::Expr::RShift(n)
-            | node::Expr::AndCalcul(n)
-            | node::Expr::XorCalcul(n)
-            | node::Expr::OrCalcul(n)
-            | node::Expr::LessThen(n)
-            | node::Expr::GreaterThen(n)
-            | node::Expr::LessThenEq(n)
-            | node::Expr::GreaterThenEq(n)
-            | node::Expr::Equal(n)
-            | node::Expr::NotEq(n) => Self::is_mem_free(&n.0) && Self::is_mem_free(&n.1),
-            node::Expr::Sign((_, target))
-            | node::Expr::Inversion(target)
-            | node::Expr::CmpNot(target) => Self::is_mem_free(target),
-            node::Expr::Cast((_, target)) => Self::is_mem_free(target),
+        match &expr.node {
+            node::ExprNode::Var(_) | node::ExprNode::Number(_) | node::ExprNode::Float(_) => true,
+            node::ExprNode::Add(n)
+            | node::ExprNode::Sub(n)
+            | node::ExprNode::Mul(n)
+            | node::ExprNode::Div(n)
+            | node::ExprNode::Surplus(n)
+            | node::ExprNode::LShift(n)
+            | node::ExprNode::RShift(n)
+            | node::ExprNode::AndCalcul(n)
+            | node::ExprNode::XorCalcul(n)
+            | node::ExprNode::OrCalcul(n)
+            | node::ExprNode::LessThen(n)
+            | node::ExprNode::GreaterThen(n)
+            | node::ExprNode::LessThenEq(n)
+            | node::ExprNode::GreaterThenEq(n)
+            | node::ExprNode::Equal(n)
+            | node::ExprNode::NotEq(n) => Self::is_mem_free(&n.0) && Self::is_mem_free(&n.1),
+            node::ExprNode::Sign((_, target))
+            | node::ExprNode::Inversion(target)
+            | node::ExprNode::CmpNot(target) => Self::is_mem_free(target),
+            node::ExprNode::Cast((_, target)) => Self::is_mem_free(target),
             _ => false,
         }
     }
@@ -958,9 +958,9 @@ impl IR {
     /// 戻り値は、最後に生成した命令の番号
     fn gen_ternary_branch_ir<M: ResultMod>(
         &mut self,
-        cond: Box<node::Expr>,
-        left: Box<node::Expr>,
-        right: Box<node::Expr>,
+        cond: &Box<node::Expr>,
+        left: &Box<node::Expr>,
+        right: &Box<node::Expr>,
         expect_byte: &types::Size,
     ) -> Result<usize, err::ErrKind> {
         // 中の式が発番するラベルと重ならないよう、先にまとめて発番する
@@ -969,18 +969,18 @@ impl IR {
 
         // 条件が真なら`then_label`へ(`ExpectJmp`は条件式より前に置く)
         crate::push_jmp_code!(self, ExpectJmp, &then_label);
-        let _ = self.gen_expr_ir::<M>(*cond, None)?;
+        let _ = self.gen_expr_ir::<M>(cond, None)?;
 
         // 条件が偽のとき
         self.begin_scope();
-        let _ = self.gen_expr_ir::<M>(*right, Some(expect_byte))?;
+        let _ = self.gen_expr_ir::<M>(right, Some(expect_byte))?;
         self.end_block_scope();
         crate::push_jmp_code!(self, Jmp, &end_label);
 
         // 条件が真のとき
         crate::push_jmp_code!(self, Block, &then_label);
         self.begin_scope();
-        let _ = self.gen_expr_ir::<M>(*left, Some(expect_byte))?;
+        let _ = self.gen_expr_ir::<M>(left, Some(expect_byte))?;
         self.end_block_scope();
         crate::push_jmp_code!(self, Jmp, &end_label);
 

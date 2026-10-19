@@ -56,7 +56,7 @@ impl IR {
         &mut self,
         bind: &node::VariantBind,
     ) -> Result<VariantBindInfo, err::ErrKind> {
-        let node::Expr::Var(src) = &*bind.value else {
+        let node::ExprNode::Var(src) = &(*bind.value).node else {
             panic!(
                 "`{}({}) := ..`の`:=`の右辺には、バリアント型の変数を渡してください: {:?}",
                 bind.variant, bind.bind, bind.value
@@ -207,12 +207,12 @@ impl IR {
     /// 渡されてくる。IRはバリアント型の定義を全て集めてから処理するので、ここで直す。
     ///
     /// `Type`がバリアント型で、`Mem`がそのメンバー、かつ引数が1つのときだけ直す
-    pub(super) fn scope_call_to_variant_init(&self, expr: node::Expr) -> node::Expr {
-        let node::Expr::Scope { scope, target } = &expr else {
-            return expr;
+    pub(super) fn scope_call_to_variant_init(&self, expr: &node::Expr) -> node::Expr {
+        let node::ExprNode::Scope { scope, target } = &expr.node else {
+            return expr.clone();
         };
-        let (Some(type_name), node::Expr::CallFunc(call)) = (scope.last(), &**target) else {
-            return expr;
+        let (Some(type_name), node::ExprNode::CallFunc(call)) = (scope.last(), &(**target).node) else {
+            return expr.clone();
         };
         let is_ctor = scope.len() == 1
             && call.temp_ty.is_empty()
@@ -222,14 +222,14 @@ impl IR {
                 .find_by_base_name(type_name)
                 .is_some_and(|def| def.find_field(&call.name).is_some());
         if !is_ctor {
-            return expr;
+            return expr.clone();
         }
         let mut fields = HashMap::new();
         fields.insert(call.name.clone(), Box::new(call.args[0].clone()));
-        node::Expr::InitVariant {
+        node::Expr::new(node::ExprNode::InitVariant {
             is_self: false,
             name: type_name.clone(),
             fields,
-        }
+        },Rc::clone(&expr.span))
     }
 }

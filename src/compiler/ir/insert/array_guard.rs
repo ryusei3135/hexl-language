@@ -25,7 +25,7 @@ impl IR {
     pub(in crate::compiler::ir) fn insert_arr_guard<M: ResultMod>(
         &mut self,
         guard: checker::ArrIdxGuard,
-        dst: node::Expr,
+        dst: &node::Expr,
         expect_byte: &types::Size,
     ) -> Result<usize, err::ErrKind> {
         let name = guard.name.clone();
@@ -58,16 +58,16 @@ impl IR {
     pub(in crate::compiler::ir) fn insert_guarded_store<M: ResultMod>(
         &mut self,
         guard: checker::ArrIdxGuard,
-        dst: node::Expr,
+        dst: &node::Expr,
         expect_byte: &types::Size,
         store: impl Fn(&mut Self, usize, usize),
     ) -> Result<usize, err::ErrKind> {
         let else_label = self.next_pattern_label();
         let end_label = self.next_pattern_label();
 
-        let dst_idx = self.gen_expr_ir::<M>(dst, Some(expect_byte))?;
+        let dst_idx = self.gen_expr_ir::<M>(&dst, Some(expect_byte))?;
         let index_ty = self.index_expect_ty(&guard.index, expect_byte);
-        let src_idx = self.gen_expr_ir::<M>(guard.index.clone(), Some(&index_ty))?;
+        let src_idx = self.gen_expr_ir::<M>(&guard.index, Some(&index_ty))?;
 
         // 添字を一時変数へ写す(`movl %edi, %ecx`)
         let tmp_name = format!("__arr_idx{}", self.id_counter);
@@ -88,7 +88,7 @@ impl IR {
         crate::push_jmp_code!(self, Block, &else_label);
         let else_ty = self.index_expect_ty(&guard.else_idx, expect_byte);
         let else_idx =
-            M::handle::<usize>(self.gen_expr_ir::<M>(guard.else_idx.clone(), Some(&else_ty)))?;
+            M::handle::<usize>(self.gen_expr_ir::<M>(&guard.else_idx, Some(&else_ty)))?;
         self.push_inst(inst::Inst::AssignVar {
             name: tmp_name,
             dst: tmp_idx,

@@ -72,11 +72,11 @@ impl IR {
     pub(super) fn scope_node<M: ResultMod>(
         &mut self,
         scope: &[String],
-        target: Box<node::Expr>,
+        target: &Box<node::Expr>,
         var_name: Option<&String>,
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
-        if let node::Expr::CallFunc(mut call_func_node) = *target {
+        if let node::ExprNode::CallFunc(mut call_func_node) = (**target).node {
             let struct_name: &str = scope.last().unwrap();
 
             let needs_self_area = self
@@ -139,7 +139,7 @@ impl IR {
                     // スタックへのポインタを暗黙的に先頭へ渡す
                     call_func_node.args.insert(
                         0,
-                        node::Expr::GetAddress(Box::new(node::Expr::Var(tmp_name))),
+                        node::ExprNode::GetAddress(Box::new(node::ExprNode::Var(tmp_name))),
                     );
                 }
             }

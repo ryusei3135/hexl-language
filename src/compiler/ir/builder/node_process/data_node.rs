@@ -21,8 +21,8 @@ impl IR {
             _ => panic!("配列の初期化には配列型が必要です"),
         };
         let mut dsts = Vec::new();
-        for node in init_nodes.iter() {
-            let dst = self.gen_expr_ir::<M>(node.clone(), Some(&size))?;
+        for n in init_nodes.iter() {
+            let dst = self.gen_expr_ir::<M>(&n, Some(&size))?;
             dsts.push(dst);
         }
         Ok(inst::Inst::InitArr(dsts))
@@ -31,8 +31,8 @@ impl IR {
     #[inline(always)]
     pub(in super::super) fn ref_array_node<M: ResultMod>(
         &mut self,
-        dst: node::Expr,
-        index: node::Expr,
+        dst: &node::Expr,
+        index: &node::Expr,
         name: &str,
         expect_byte: &types::Size,
     ) -> Result<inst::Inst, err::ErrKind> {
@@ -302,7 +302,7 @@ impl IR {
                 )
             });
 
-            let value_idx = self.gen_expr_ir::<M>(*field_expr, Some(&field_size))?;
+            let value_idx = self.gen_expr_ir::<M>(field_expr, Some(&field_size))?;
             mem_insts.push(inst::MemoryInst::Member {
                 parent: field.name.clone(),
                 value_idx: value_idx,
@@ -383,7 +383,7 @@ impl IR {
         let value = match field_ty {
             Some(ty) => {
                 let field_size = self.size_of(&ty);
-                let value_idx = self.gen_expr_ir::<M>(*field_expr, Some(&field_size))?;
+                let value_idx = self.gen_expr_ir::<M>(field_expr, Some(&field_size))?;
                 Some(inst::MemoryInst::Member {
                     parent: field_name,
                     value_idx,

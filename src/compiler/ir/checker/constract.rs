@@ -117,13 +117,13 @@ impl IR {
     /// 式が変数を指している場合、その変数の型を返す
     /// (`&var`や`*var`のように、間接的に指している場合も辿る)
     fn expr_ty_node(&self, expr: &node::Expr) -> Option<node::TyNode> {
-        match expr {
-            node::Expr::Var(name) => self.var_tree.get_ty_node(name),
-            node::Expr::CallFunc(call) => self
+        match &expr.node {
+            node::ExprNode::Var(name) => self.var_tree.get_ty_node(name),
+            node::ExprNode::CallFunc(call) => self
                 .func_tree
                 .get(&call.name, None)
                 .and_then(|func| func.ret_ty),
-            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
+            node::ExprNode::GetAddress(target) | node::ExprNode::ConnectAddr(target) => {
                 self.expr_ty_node(target)
             }
             _ => None,

@@ -43,8 +43,8 @@ impl IR {
         &mut self,
         expr: &node::Expr,
     ) -> Result<Option<ArrIdxGuard>, err::ErrKind> {
-        match expr {
-            node::Expr::RefArray {
+        match &expr.node {
+            node::ExprNode::RefArray {
                 name,
                 index,
                 else_idx,
@@ -53,13 +53,13 @@ impl IR {
                 self.check_arr_index::<IsUnsigned>(index)?;
                 return M::handle(self.check_ref_array::<M>(name, index, else_idx));
             }
-            node::Expr::ConnectAddr(target) => {
-                if let node::Expr::Var(name) = &**target {
-                    M::handle(self.check_ptr_deref::<M>(name))?;
+            node::ExprNode::ConnectAddr(target) => {
+                if let node::ExprNode::Var(ref name) = (*target).node {
+                    M::handle(self.check_ptr_deref::<M>(&name))?;
                 }
             }
             // `[ptr index else else_idx].member`: 配列(`RefArray`)と同じ検査/ガード
-            node::Expr::PtrMember {
+            node::ExprNode::PtrMember {
                 name,
                 index: Some(index),
                 else_idx,
@@ -69,8 +69,8 @@ impl IR {
                 return M::handle(self.check_ref_array::<M>(name, index, else_idx));
             }
             // `[ptr].member`: ポインタの現在値が範囲内かを確認する
-            node::Expr::PtrMember { name, .. } => M::handle(self.check_ptr_deref::<M>(name))?,
-            node::Expr::Add((l, r)) => M::handle(self.check_ptr_add::<M>(expr, l, r))?,
+            node::ExprNode::PtrMember { name, .. } => M::handle(self.check_ptr_deref::<M>(name))?,
+            node::ExprNode::Add((l, r)) => M::handle(self.check_ptr_add::<M>(expr, l, r))?,
             _ => {}
         }
         Ok(None)
@@ -155,8 +155,8 @@ impl IR {
     ///
     /// 区間が`lo..hi`に収まれば、可変な添字でも実行時ガードなしで通せる。
     fn index_interval(&self, expr: &node::Expr) -> Option<(usize, usize)> {
-        match expr {
-            node::Expr::Number(_) => {
+        match &expr.node {
+            node::ExprNode::Number(_) => {
                 if self.is_const_index(expr) {
                     let v = self.eval_expr(expr);
                     Some((v, v))
@@ -164,21 +164,21 @@ impl IR {
                     None
                 }
             }
-            node::Expr::Var(name) => self.var_tree.get_value(name).map(|v| (v, v)),
-            node::Expr::Add((l, r)) => {
+            node::ExprNode::Var(name) => self.var_tree.get_value(name).map(|v| (v, v)),
+            node::ExprNode::Add((l, r)) => {
                 let (a, b) = (self.index_interval(l)?, self.index_interval(r)?);
                 Some((a.0.checked_add(b.0)?, a.1.checked_add(b.1)?))
             }
-            node::Expr::Sub((l, r)) => {
+            node::ExprNode::Sub((l, r)) => {
                 let (a, b) = (self.index_interval(l)?, self.index_interval(r)?);
                 // 負になりうるなら証明できない
                 Some((a.0.checked_sub(b.1)?, a.1.checked_sub(b.0)?))
             }
-            node::Expr::Mul((l, r)) => {
+            node::ExprNode::Mul((l, r)) => {
                 let (a, b) = (self.index_interval(l)?, self.index_interval(r)?);
                 Some((a.0.checked_mul(b.0)?, a.1.checked_mul(b.1)?))
             }
-            node::Expr::Div((l, r)) => {
+            node::ExprNode::Div((l, r)) => {
                 let (a, b) = (self.index_interval(l)?, self.index_interval(r)?);
                 if b.0 == 0 {
                     return None;
@@ -206,24 +206,24 @@ impl IR {
     /// 配列のindexを調べresultで返す関数
     /// Cで中の処理を変える
     fn check_arr_index<C: IndexCheckList>(&self, expr: &node::Expr) -> Result<(), err::ErrKind> {
-        match expr {
-            node::Expr::Number(v) => C::num_check(v),
-            node::Expr::Var(name) => C::var_check(&self.var_tree, &name),
-            node::Expr::Add((l, r))
-            | node::Expr::Sub((l, r))
-            | node::Expr::Mul((l, r))
-            | node::Expr::Div((l, r)) => {
+        match &expr.node {
+            node::ExprNode::Number(v) => C::num_check(v),
+            node::ExprNode::Var(name) => C::var_check(&self.var_tree, &name),
+            node::ExprNode::Add((l, r))
+            | node::ExprNode::Sub((l, r))
+            | node::ExprNode::Mul((l, r))
+            | node::ExprNode::Div((l, r)) => {
                 self.check_arr_index::<C>(l)?;
                 self.check_arr_index::<C>(r)?;
                 Ok(())
             }
             // 条件分岐は使えない
-            node::Expr::GreaterThen(..)
-            | node::Expr::GreaterThenEq(..)
-            | node::Expr::LessThen(..)
-            | node::Expr::LessThenEq(..) => C::cond_is_invalid(&expr),
+            node::ExprNode::GreaterThen(..)
+            | node::ExprNode::GreaterThenEq(..)
+            | node::ExprNode::LessThen(..)
+            | node::ExprNode::LessThenEq(..) => C::cond_is_invalid(&expr),
             // 関数の呼び出し・メンバーアクセスなど、値を静的に決められない式は`Err`
-            t => C::unsupported_expr(t),
+            _ => C::unsupported_expr(expr),
         }
     }
 
@@ -266,8 +266,8 @@ impl IR {
         l: &'a node::Expr,
         r: &'a node::Expr,
     ) -> Result<(), err::ErrKind> {
-        let ptr_range_of = |e: &'a node::Expr| match e {
-            node::Expr::Var(name) => self.ptr_range(name).map(|range| (name, range)),
+        let ptr_range_of = |e: &'a node::Expr| match &e.node {
+            node::ExprNode::Var(name) => self.ptr_range(name).map(|range| (name, range)),
             _ => None,
         };
         let Some((name, range)) = ptr_range_of(l).or_else(|| ptr_range_of(r)) else {

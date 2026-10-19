@@ -11,11 +11,11 @@ impl IR {
     /// 一つでも契約を終了する分岐があるなら、すべての分岐で
     /// 終了しなければならない
     pub(super) fn walk_match(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
-        let node::Expr::Match {
+        let node::ExprNode::Match {
             pattern,
             arms,
             arm_else,
-        } = expr
+        } = &expr.node
         else {
             return;
         };

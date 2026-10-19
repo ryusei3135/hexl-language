@@ -8,6 +8,8 @@
 mod data_node;
 mod expr_stmt;
 
+use std::rc::Rc;
+
 use crate::compiler::parse::{self, VarMutAttr};
 
 use super::*;

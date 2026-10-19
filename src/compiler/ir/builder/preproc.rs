@@ -196,9 +196,9 @@ impl IR {
         let mut gen_ir = |expr: Expr| {
             let ty: Option<types::Size> =
             // 変数のノードを取得
-            if let node::Expr::Var(
+            if let node::ExprNode::Var(
                 ref var_name
-                ) = expr
+                ) = expr.node
             {
                 let ty_node = self
                     .var_tree
@@ -209,7 +209,7 @@ impl IR {
             } else {
                 None
             };
-            self.gen_expr_ir::<M>(expr, ty.as_ref())
+            self.gen_expr_ir::<M>(&expr, ty.as_ref())
         };
         let asm_lines = lines
             .into_iter()

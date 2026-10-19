@@ -45,9 +45,9 @@ impl IR {
     }
 
     pub(super) fn walk_expr(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
-        match expr {
+        match &expr.node {
             // 変数の定義: `must`の型ならここから追跡を始める
-            node::Expr::DefVar(var) => {
+            node::ExprNode::DefVar(var) => {
                 Self::walk_expr(&var.value, must_vars);
                 if var.ty.is_constract_must() {
                     if must_vars.iter().rev().any(|entry| entry.name == var.name) {
@@ -65,7 +65,7 @@ impl IR {
                 }
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
-            node::Expr::CallFunc(call_info) => {
+            node::ExprNode::CallFunc(call_info) => {
                 call_info.args.iter().for_each(|arg| {
                     if let Some(name) = Self::arg_var_name(arg) {
                         Self::mark_used(name, must_vars);
@@ -73,47 +73,47 @@ impl IR {
                     Self::walk_expr(arg, must_vars);
                 });
             }
-            node::Expr::Scope { target, .. }
-            | node::Expr::Member { target, .. }
-            | node::Expr::PtrMember { target, .. } => {
+            node::ExprNode::Scope { target, .. }
+            | node::ExprNode::Member { target, .. }
+            | node::ExprNode::PtrMember { target, .. } => {
                 Self::walk_expr(target, must_vars);
             }
-            node::Expr::Assign(assign) => {
+            node::ExprNode::Assign(assign) => {
                 Self::walk_expr(&assign.dst, must_vars);
                 Self::walk_expr(&assign.value, must_vars);
             }
-            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
+            node::ExprNode::GetAddress(target) | node::ExprNode::ConnectAddr(target) => {
                 Self::walk_expr(target, must_vars);
             }
-            node::Expr::VariantBind(bind) => {
+            node::ExprNode::VariantBind(bind) => {
                 Self::walk_expr(&bind.value, must_vars);
             }
-            node::Expr::Add(pair)
-            | node::Expr::Sub(pair)
-            | node::Expr::Mul(pair)
-            | node::Expr::Div(pair)
-            | node::Expr::Surplus(pair)
-            | node::Expr::LessThen(pair)
-            | node::Expr::GreaterThen(pair)
-            | node::Expr::Equal(pair)
-            | node::Expr::NotEq(pair) => {
+            node::ExprNode::Add(pair)
+            | node::ExprNode::Sub(pair)
+            | node::ExprNode::Mul(pair)
+            | node::ExprNode::Div(pair)
+            | node::ExprNode::Surplus(pair)
+            | node::ExprNode::LessThen(pair)
+            | node::ExprNode::GreaterThen(pair)
+            | node::ExprNode::Equal(pair)
+            | node::ExprNode::NotEq(pair) => {
                 Self::walk_expr(&pair.0, must_vars);
                 Self::walk_expr(&pair.1, must_vars);
             }
             // 条件分岐は`branch.rs`、反復処理は`loop_check.rs`で扱う
-            node::Expr::Match { .. } => Self::walk_match(expr, must_vars),
-            node::Expr::Loop { .. } => Self::walk_loop(expr, must_vars),
-            node::Expr::InitStruct { fields, .. } => {
+            node::ExprNode::Match { .. } => Self::walk_match(expr, must_vars),
+            node::ExprNode::Loop { .. } => Self::walk_loop(expr, must_vars),
+            node::ExprNode::InitStruct { fields, .. } => {
                 fields
                     .values()
                     .for_each(|val| Self::walk_expr(val, must_vars));
             }
-            node::Expr::Array(values) => {
+            node::ExprNode::Array(values) => {
                 values
                     .iter()
                     .for_each(|val| Self::walk_expr(val, must_vars));
             }
-            node::Expr::RefArray { dst, index, .. } => {
+            node::ExprNode::RefArray { dst, index, .. } => {
                 Self::walk_expr(dst, must_vars);
                 Self::walk_expr(index, must_vars);
             }
@@ -124,10 +124,10 @@ impl IR {
     /// 引数の式が指している変数の名前を返す
     /// (`&var`や`*var`のように包まれていても中身を辿る)
     pub(super) fn arg_var_name(arg: &node::Expr) -> Option<&String> {
-        match arg {
-            node::Expr::Var(name) => Some(name),
-            node::Expr::GetAddress(target) | node::Expr::ConnectAddr(target) => {
-                Self::arg_var_name(target)
+        match &arg.node {
+            node::ExprNode::Var(name) => Some(name),
+            node::ExprNode::GetAddress(target) | node::ExprNode::ConnectAddr(target) => {
+                Self::arg_var_name(&target)
             }
             _ => None,
         }
