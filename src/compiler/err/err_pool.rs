@@ -30,6 +30,22 @@ const POS_BASE: usize = 1;
 /// タブを表示するときの幅
 const TAB_WIDTH: usize = 4;
 
+/// 表示する1件分のエラー(構文エラーとコンパイルエラーで共通)
+struct Diag {
+    /// `E0001`形式のエラーコード(無ければ空)
+    code: String,
+    title: String,
+    file: String,
+    line: usize,
+    pos: usize,
+    /// `^`の横に出す説明(空なら出さない)
+    label: String,
+    /// `= note:`に出す補足
+    notes: Vec<String>,
+    /// `= help:`に出す直し方
+    help: Option<String>,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct ErrPool {
     err_list: Vec<ErrKind>,
@@ -76,6 +92,16 @@ impl ErrPool {
                     out.push('\n');
                     count += 1;
                 }
+                ErrKind::CompileErr(n) => {
+                    out.push_str(&self.render_compile_err(n, color));
+                    out.push('\n');
+                    count += 1;
+                }
+                ErrKind::Undef(n) => {
+                    out.push_str(&self.render_undef_err(n, color));
+                    out.push('\n');
+                    count += 1;
+                }
                 _ => {}
             }
         }
@@ -95,38 +121,101 @@ impl ErrPool {
     }
 
     fn render_syntax_err(&self, n: &err::SyntaxErr, color: bool) -> String {
-        let line = n.loc.span.line as usize;
-        let pos = n.loc.span.pos as usize;
-        let file = n.file_name.as_str();
+        self.render_diag(&Diag {
+            code: String::new(),
+            title: n.kind.to_string(),
+            file: n.file_name.to_string(),
+            line: n.loc.span.line as usize,
+            pos: n.loc.span.pos as usize,
+            label: Self::label(&n.kind),
+            notes: Vec::new(),
+            help: Self::help(&n.kind).map(|h| h.to_string()),
+        }, color)
+    }
 
+    /// `CompileErr`(型・契約・配列の範囲などの意味解析のエラー)を表示する
+    ///
+    /// `Span`にはファイル名が無いので、ソースが1つだけ登録されていればその名前を使う
+    /// (複数あるときは`<unknown>`)
+    fn render_compile_err(&self, n: &err::CompileErr, color: bool) -> String {
+        let file = if self.sources.len() == 1 {
+            self.sources.keys().next().cloned().unwrap_or_default()
+        } else {
+            "<unknown>".to_string()
+        };
+        self.render_diag(&Diag {
+            code: n.kind.code().to_string(),
+            title: n.kind.title(),
+            file,
+            line: n.span.line as usize,
+            pos: n.span.pos as usize,
+            label: String::new(),
+            notes: n.kind.note().into_iter().collect(),
+            help: n.kind.help(),
+        }, color)
+    }
+
+    /// 未定義のエラー(変数・関数・型・メンバーなど)を表示する
+    ///
+    /// `UndefErrs`は位置(`Span`)を持たないので、`-->`とソース行は出さず、
+    /// `= note:`/`= help:`だけを出す
+    fn render_undef_err(&self, n: &err::undef::UndefErrs, color: bool) -> String {
+        self.render_diag(&Diag {
+            code: n.code().to_string(),
+            title: n.title(),
+            file: String::new(),
+            line: 0,
+            pos: 0,
+            label: String::new(),
+            notes: n.note().into_iter().collect(),
+            help: Some(n.help()),
+        }, color)
+    }
+
+    /// 構文エラーとコンパイルエラーに共通の表示
+    fn render_diag(&self, d: &Diag, color: bool) -> String {
+        let file = d.file.as_str();
         let mut out = String::new();
-        // error: メッセージ
+        // error[E0000]: メッセージ(複数行なら2行目以降は字下げ)
+        let title = d.title.replace('\n', "\n  ");
         out.push_str(&format!(
             "{}{}\n",
-            paint("error", RED_BOLD, color),
-            bold(&format!(": {}", n.kind), color)
+            paint(
+                &if d.code.is_empty() {
+                    "error".to_string()
+                } else {
+                    format!("error[{}]", d.code)
+                },
+                RED_BOLD,
+                color
+            ),
+            bold(&format!(": {}", title), color)
         ));
 
-        let line_no = line.saturating_sub(LINE_BASE) + 1; // 表示する行番号(1始まり)
-        let col_no = pos.saturating_sub(POS_BASE) + 1; // 表示する列(1始まり)
+        let line_no = d.line.saturating_sub(LINE_BASE) + 1; // 表示する行番号(1始まり)
+        let col_no = d.pos.saturating_sub(POS_BASE) + 1; // 表示する列(1始まり)
         let width = line_no.to_string().len();
         let pad = " ".repeat(width);
         let bar = paint("|", BLUE_BOLD, color);
+        let eq = paint("=", BLUE_BOLD, color);
 
+        // 位置が無いエラー(`file`が空)は、`-->`とソース行を出さない
+        let has_loc = !file.is_empty();
+        let pad = if has_loc { pad } else { " ".to_string() };
         // --> file:line:col
-        out.push_str(&format!(
-            "{}{} {}:{}:{}\n",
-            pad,
-            paint("-->", BLUE_BOLD, color),
-            file,
-            line_no,
-            col_no
-        ));
+        if has_loc {
+            out.push_str(&format!(
+                "{}{} {}:{}:{}\n",
+                pad,
+                paint("-->", BLUE_BOLD, color),
+                file,
+                line_no,
+                col_no
+            ));
+        }
 
-        let label = Self::label(&n.kind);
-        let help = Self::help(&n.kind);
-
-        match self.source_line(file, line_no) {
+        let has_tail = !d.notes.is_empty() || d.help.is_some();
+        match self.source_line(file, line_no).filter(|_| has_loc) {
             Some(src_line) => {
                 let (shown, caret_col) = expand_line(src_line, col_no - 1);
                 out.push_str(&format!("{} {}\n", pad, bar));
@@ -146,35 +235,47 @@ impl ErrPool {
                     bar,
                     " ".repeat(caret_col),
                     paint("^", RED_BOLD, color),
-                    if label.is_empty() {
+                    if d.label.is_empty() {
                         String::new()
                     } else {
-                        format!(" {}", paint(&label, RED_BOLD, color))
+                        format!(" {}", paint(&d.label, RED_BOLD, color))
                     }
                 ));
-                if help.is_some() {
+                if has_tail {
                     out.push_str(&format!("{} {}\n", pad, bar));
                 }
             }
             None => {
                 // ソースコードが無い場合は、ラベルだけ表示する
-                if !label.is_empty() {
+                if !d.label.is_empty() {
                     out.push_str(&format!(
-                        "{} {} {}\n",
+                        "{} {} {}: {}\n",
                         pad,
-                        paint("=", BLUE_BOLD, color),
-                        format!("{}: {}", bold("note", color), label)
+                        eq,
+                        bold("note", color),
+                        d.label
                     ));
                 }
             }
         }
-        if let Some(help) = help {
+        // 複数行の補足は、2行目以降を`= `の後ろに揃える
+        let cont = format!("\n{}   ", pad);
+        for note in d.notes.iter() {
             out.push_str(&format!(
                 "{} {} {}: {}\n",
                 pad,
-                paint("=", BLUE_BOLD, color),
+                eq,
+                bold("note", color),
+                note.replace("\n   = note: ", &cont).replace('\n', &cont)
+            ));
+        }
+        if let Some(help) = &d.help {
+            out.push_str(&format!(
+                "{} {} {}: {}\n",
+                pad,
+                eq,
                 bold("help", color),
-                help
+                help.replace('\n', &cont)
             ));
         }
         out
