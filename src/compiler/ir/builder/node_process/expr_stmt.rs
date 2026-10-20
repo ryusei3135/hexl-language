@@ -234,6 +234,15 @@ impl IR {
                 // オペランドの型で決める
                 match expr.node {
                     node::ExprNode::Number(_) | node::ExprNode::Float(_) => None,
+                    // 比較(`n % 15 == 0`/`i < 10`)は、結果ではなくオペランドの型で決める
+                    node::ExprNode::LessThen(ref n)
+                    | node::ExprNode::GreaterThen(ref n)
+                    | node::ExprNode::LessThenEq(ref n)
+                    | node::ExprNode::GreaterThenEq(ref n)
+                    | node::ExprNode::Equal(ref n)
+                    | node::ExprNode::NotEq(ref n) => self
+                        .infer_expr_ty(&n.0)
+                        .or_else(|| self.infer_expr_ty(&n.1)),
                     _ => self.infer_expr_ty(expr),
                 }
             })

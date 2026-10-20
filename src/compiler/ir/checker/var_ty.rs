@@ -19,6 +19,8 @@ impl IR {
                     }
                 }
             }
+            // 期待される型が配列のとき、indexが`DQ`(i64)ならそのまま通す
+            types::Size::Array { .. } if matches!(var_ty, types::Size::DQ) => {}
             _ => {
                 // 配列の添字アクセス(`[arr i else 0]`)の基底として配列変数を使うとき、
                 // 期待される型は配列そのものではなく要素の型になる
@@ -28,10 +30,11 @@ impl IR {
                     if elem == expect_ty {
                         return;
                     }
-                }
-                if var_ty != expect_ty {
-                    // let changed_ty: types::Size = ty.clone().try_into().unwrap();
-                    panic!("{:?} fond {:?}", expect_ty, var_ty);
+                } else {
+                    if var_ty != expect_ty {
+                        // let changed_ty: types::Size = ty.clone().try_into().unwrap();
+                        panic!("{:?} fond {:?}", expect_ty, var_ty);
+                    }
                 }
             }
         }

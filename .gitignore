@@ -14,7 +14,7 @@ hexl/
 *.exe
 library
 build.rs
+hexl_d
 *.o
 a
 documents/docs.md
-t.c
