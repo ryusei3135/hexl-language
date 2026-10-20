@@ -65,6 +65,16 @@ impl ErrPool {
         self.err_list.push(err_node);
     }
 
+    /// エラーが1つでもたまっているか
+    pub fn has_err(&self) -> bool {
+        !self.err_list.is_empty()
+    }
+
+    /// たまっているエラーの数
+    pub fn len(&self) -> usize {
+        self.err_list.len()
+    }
+
     /// エラー箇所の表示に使うソースコードを登録する
     ///
     /// `file_name`は、`SyntaxErr::file_name`と同じ文字列にする

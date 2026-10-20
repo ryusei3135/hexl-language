@@ -239,6 +239,8 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         .builder::<ir::PanicErr>(
             &nodes,
             #[cfg(not(test))]
+            Rc::clone(&err_pool),
+            #[cfg(not(test))]
             &settings,
         )
         .map_err(|e| format!("IRの生成に失敗しました: {:?}", e))?;

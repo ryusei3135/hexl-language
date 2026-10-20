@@ -9,6 +9,7 @@ mod variant_bind;
 mod generater;
 
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use super::*;
 use crate::compiler::ir::types::*;
@@ -49,6 +50,7 @@ impl IR {
     pub(crate) fn builder<M: ResultMod>(
         &mut self,
         nodes: &[node::Group1Node],
+        #[cfg(not(test))]err_pool: Rc<RefCell<err::err_pool::ErrPool>>,
         #[cfg(not(test))] settings: &crate::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
         // 構造体・バリアント型は、定義された場所より前で使われる場合があるので
@@ -71,29 +73,40 @@ impl IR {
             }
         }
 
+        // エラーは`err_pool`にためて、次の定義の処理を続ける
+        // (1つ目のエラーで止めず、まとめて表示するため)。
+        // 呼び出し側は、この関数の後に`err_pool.borrow().has_err()`を確認すること
+        macro_rules! pool_err {
+            ($result:expr) => {
+                if let Err(e) = $result {
+                    err_pool.borrow_mut().push_err_node(e);
+                }
+            };
+        }
+
         for node in nodes {
             self.expr_counter = 0;
             match node {
                 node::Group1Node::FuncDefine(info) => {
-                    let _ = self.ini_def_fn_info::<M>(&info)?;
+                    pool_err!(self.ini_def_fn_info::<M>(&info));
                 }
                 #[cfg(not(test))]
                 node::Group1Node::Include(path) => {
-                    self.include_proc(path, settings)?;
+                    pool_err!(self.include_proc(path, settings));
                 }
                 node::Group1Node::StructDefine(info) => {
                     // 構造体の情報を登録
                     self.struct_tree.add(info);
                     // 構造体の中に定義されているメゾットを、
                     // 通常の関数としてIRへ展開する
-                    let _ = self.expand_struct_methods::<M>(info)?;
+                    pool_err!(self.expand_struct_methods::<M>(info));
                 }
                 node::Group1Node::VariantDefine(info) => {
                     // バリアント型の情報を登録
                     self.variant_tree.add(info);
                     // バリアント型の中に定義されているメゾットを、
                     // 通常の関数としてIRへ展開する
-                    let _ = self.expand_variant_methods::<M>(info)?;
+                    pool_err!(self.expand_variant_methods::<M>(info));
                 }
                 _ => {}
             }
