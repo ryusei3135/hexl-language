@@ -4,8 +4,11 @@
 //! `check_mem_access`を一度呼び出す。範囲の判定そのものは
 //! `tracking.rs`のチェッカー群と`var_tree`に記録された値を使う。
 
+use std::rc::Rc;
+
 use super::*;
-use crate::compiler::err::compile::CompileErr;
+use crate::err::Span;
+use crate::compiler::err::compile::{CompileErr, CompileErrKind};
 use crate::compiler::ir::checker::mem::check_list::{IndexCheckList, IsImmOrConst, IsUnsigned};
 
 /// 添字が可変な配列アクセスに挿入する実行時ガード
@@ -55,7 +58,7 @@ impl IR {
             }
             node::ExprNode::ConnectAddr(target) => {
                 if let node::ExprNode::Var(ref name) = (*target).node {
-                    M::handle(self.check_ptr_deref::<M>(&name))?;
+                    M::handle(self.check_ptr_deref::<M>(&name, Rc::clone(&target.span)))?;
                 }
             }
             // `[ptr index else else_idx].member`: 配列(`RefArray`)と同じ検査/ガード
@@ -69,7 +72,9 @@ impl IR {
                 return M::handle(self.check_ref_array::<M>(name, index, else_idx));
             }
             // `[ptr].member`: ポインタの現在値が範囲内かを確認する
-            node::ExprNode::PtrMember { name, .. } => M::handle(self.check_ptr_deref::<M>(name))?,
+            node::ExprNode::PtrMember { name, .. } => {
+                M::handle(self.check_ptr_deref::<M>(name, Rc::clone(&expr.span)))?
+            }
             node::ExprNode::Add((l, r)) => M::handle(self.check_ptr_add::<M>(expr, l, r))?,
             _ => {}
         }
@@ -119,10 +124,11 @@ impl IR {
                         let value = self.eval_expr(else_expr);
                         if value < range.0 || value >= range.1 {
                             M::handle(crate::GenCompileErr2!(
-                                CompileErr::PointerRangeLengthMismatch {
+                                CompileErrKind::PointerRangeLengthMismatch {
                                     range: range,
                                     value_len: value,
-                                }
+                                },
+                                Rc::clone(&index.span)
                             ))?;
                         }
                     }
@@ -207,8 +213,8 @@ impl IR {
     /// Cで中の処理を変える
     fn check_arr_index<C: IndexCheckList>(&self, expr: &node::Expr) -> Result<(), err::ErrKind> {
         match &expr.node {
-            node::ExprNode::Number(v) => C::num_check(v),
-            node::ExprNode::Var(name) => C::var_check(&self.var_tree, &name),
+            node::ExprNode::Number(v) => C::num_check(v, &expr.span),
+            node::ExprNode::Var(name) => C::var_check(&self.var_tree, &name, &expr.span),
             node::ExprNode::Add((l, r))
             | node::ExprNode::Sub((l, r))
             | node::ExprNode::Mul((l, r))
@@ -221,7 +227,7 @@ impl IR {
             node::ExprNode::GreaterThen(..)
             | node::ExprNode::GreaterThenEq(..)
             | node::ExprNode::LessThen(..)
-            | node::ExprNode::LessThenEq(..) => C::cond_is_invalid(&expr),
+            | node::ExprNode::LessThenEq(..) => C::cond_is_invalid(&expr, &expr.span),
             // 関数の呼び出し・メンバーアクセスなど、値を静的に決められない式は`Err`
             _ => C::unsupported_expr(expr),
         }
@@ -242,17 +248,22 @@ impl IR {
 
     /// ポインタの参照(`[name]`/`[name].member`)で、ポインタの現在値が
     /// 範囲内かを確認する
-    fn check_ptr_deref<M: ResultMod>(&self, name: &str) -> Result<(), err::ErrKind> {
+    fn check_ptr_deref<M: ResultMod>(
+        &self,
+        name: &str,
+        span: Rc<Span>,
+    ) -> Result<(), err::ErrKind> {
         let (Some(range), Some(value)) = (self.ptr_range(name), self.var_tree.get_value(name))
         else {
             return Ok(());
         };
         if value < range.0 || value >= range.1 {
             M::handle(crate::GenCompileErr2!(
-                CompileErr::PointerRangeLengthMismatch {
+                CompileErrKind::PointerRangeLengthMismatch {
                     range: range,
                     value_len: value,
-                }
+                },
+                span
             ))
         } else {
             Ok(())
@@ -280,10 +291,11 @@ impl IR {
         let value = self.eval_expr(whole);
         if value < range.0 || value >= range.1 {
             M::handle(crate::GenCompileErr2!(
-                CompileErr::PointerRangeLengthMismatch {
+                CompileErrKind::PointerRangeLengthMismatch {
                     range: range,
                     value_len: value,
-                }
+                },
+                Rc::clone(&whole.span)
             ))
         } else {
             Ok(())
@@ -294,7 +306,7 @@ impl IR {
     fn is_not_const_index_err(e: &err::ErrKind) -> bool {
         matches!(
             e,
-            err::ErrKind::CompileErr(c) if matches!(**c, CompileErr::InvalidIndexIsNotConst(..))
+            err::ErrKind::CompileErr(c) if matches!((**c).kind, CompileErrKind::InvalidIndexIsNotConst(..))
         )
     }
 }

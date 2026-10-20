@@ -1,8 +1,18 @@
-use crate::compiler::err;
+use std::rc::Rc;
+
 use crate::parse::node;
 
+use crate::err::{self, Span, ErrKind};
+
+/// コンパイルエラー本体。発生位置(`span`)を伴う
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CompileErr {
+pub struct CompileErr {
+    pub kind: CompileErrKind,
+    pub span: Rc<Span>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompileErrKind {
     /// 配列の指定しているindexが数字じゃない
     InvalidIndexType {
         val: String,
@@ -54,47 +64,71 @@ pub enum CompileErr {
     ReassignActiveContract(String),
 }
 
+/// `GenCompileErr!(Kind, msg, span)`
 #[macro_export]
 macro_rules! GenCompileErr {
-    ($kind:ident, $msg:expr) => {
-        Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
-            $msg.to_string(),
-        ))))
+    ($kind:ident, $msg:expr, $span:expr) => {
+        Err(err::ErrKind::CompileErr(Box::new(CompileErr {
+            kind: CompileErrKind::$kind($msg.to_string()),
+            span: $span,
+        })))
     };
 }
 
 /// もじれつじゃないエラーノードを生成する
+/// `GenCompileErrNode!(Kind, node, span)`
 #[macro_export]
 macro_rules! GenCompileErrNode {
-    ($kind:ident, $msg:expr) => {
-        Err(err::ErrKind::CompileErr(Box::new(CompileErr::$kind(
-            $msg.clone(),
-        ))))
+    ($kind:ident, $msg:expr, $span:expr) => {
+        Err(err::ErrKind::CompileErr(Box::new(CompileErr {
+            kind: CompileErrKind::$kind($msg.clone()),
+            span: $span,
+        })))
     };
 }
 
-/// 渡されたエラーを直接変換
+/// 渡された`CompileErrKind`と`span`から、直接エラーを生成する
+/// `GenCompileErr2!(CompileErrKind::Xxx { .. }, span)`
 #[macro_export]
 macro_rules! GenCompileErr2 {
-    ($kind:expr) => {
-        Err(err::ErrKind::CompileErr(Box::new($kind)))
+    ($kind:expr, $span:expr) => {
+        Err(err::ErrKind::CompileErr(Box::new(CompileErr {
+            kind: $kind,
+            span: $span,
+        })))
     };
 }
 
 impl CompileErr {
-    pub fn assign_to_imm_var(var_name: &str) -> Result<Self, err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(
-            Self::AssignToImmutableVar(var_name.to_string()),
-        )))
+    pub fn new(kind: CompileErrKind, span: Rc<Span>) -> Self {
+        Self { kind, span }
+    }
+
+    /// エラーの発生位置
+    pub fn span(&self) -> &Rc<Span> {
+        &self.span
+    }
+
+    fn err<T>(kind: CompileErrKind, span: Rc<Span>) -> Result<T, err::ErrKind> {
+        Err(err::ErrKind::CompileErr(Box::new(Self { kind, span })))
+    }
+
+    pub fn assign_to_imm_var(var_name: &str, span: Rc<Span>) -> Result<Self, err::ErrKind> {
+        Self::err(
+            CompileErrKind::AssignToImmutableVar(var_name.to_string()),
+            span,
+        )
     }
 
     pub fn ptr_range_len_mismatch(
         range: (usize, usize),
         value_len: usize,
+        span: Rc<Span>,
     ) -> Result<Self, err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(
-            Self::PointerRangeLengthMismatch { range, value_len },
-        )))
+        Self::err(
+            CompileErrKind::PointerRangeLengthMismatch { range, value_len },
+            span,
+        )
     }
 
     /// `of`の引数に、`must`ではない値が渡された
@@ -102,14 +136,16 @@ impl CompileErr {
         fn_name: &str,
         param_name: &str,
         of_name: &str,
+        span: Rc<Span>,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(
-            Self::ContractOfRequiresMust {
+        Self::err(
+            CompileErrKind::ContractOfRequiresMust {
                 fn_name: fn_name.to_string(),
                 param_name: param_name.to_string(),
                 of_name: of_name.to_string(),
             },
-        )))
+            span,
+        )
     }
 
     /// `must`の値が、`of`ではない引数に渡された
@@ -117,14 +153,16 @@ impl CompileErr {
         fn_name: &str,
         param_name: &str,
         must_name: &str,
+        span: Rc<Span>,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(
-            Self::ContractMustRequiresOf {
+        Self::err(
+            CompileErrKind::ContractMustRequiresOf {
                 fn_name: fn_name.to_string(),
                 param_name: param_name.to_string(),
                 must_name: must_name.to_string(),
             },
-        )))
+            span,
+        )
     }
 
     /// `must`と`of`の名前が一致していない
@@ -133,36 +171,44 @@ impl CompileErr {
         param_name: &str,
         must_name: &str,
         of_name: &str,
+        span: Rc<Span>,
     ) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(
-            Self::ContractNameMismatch {
+        Self::err(
+            CompileErrKind::ContractNameMismatch {
                 fn_name: fn_name.to_string(),
                 param_name: param_name.to_string(),
                 must_name: must_name.to_string(),
                 of_name: of_name.to_string(),
             },
-        )))
+            span,
+        )
     }
 
     /// `must`の値が、一度も関数へ渡されていない
-    pub fn constract_must_not_used(fn_name: &str, var_name: &str) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(
-            Self::ContractMustNotUsed {
+    pub fn constract_must_not_used(
+        fn_name: &str,
+        var_name: &str,
+        span: Rc<Span>,
+    ) -> Result<(), err::ErrKind> {
+        Self::err(
+            CompileErrKind::ContractMustNotUsed {
                 fn_name: fn_name.to_string(),
                 var_name: var_name.to_string(),
             },
-        )))
+            span,
+        )
     }
 
     /// `must`の変数への再代入
-    pub fn assign_to_must_var(var_name: &str) -> Result<(), err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(Self::AssignToMustVar(
-            var_name.to_string(),
-        ))))
+    pub fn assign_to_must_var(var_name: &str, span: Rc<Span>) -> Result<(), err::ErrKind> {
+        Self::err(CompileErrKind::AssignToMustVar(var_name.to_string()), span)
     }
 
-    pub fn inc_dec_requires_integer(var_name: &str) -> err::ErrKind {
-        err::ErrKind::CompileErr(Box::new(Self::IncDecRequiresInteger(var_name.to_string())))
+    pub fn inc_dec_requires_integer(var_name: &str, span: Rc<Span>) -> err::ErrKind {
+        err::ErrKind::CompileErr(Box::new(Self {
+            kind: CompileErrKind::IncDecRequiresInteger(var_name.to_string()),
+            span,
+        }))
     }
 
     /// エラーの内容を表示するための文字列を作る
@@ -170,6 +216,13 @@ impl CompileErr {
     /// 既に`CompileErr`を表示する仕組み(`Display`の実装や
     /// `match`で分岐している関数)がある場合は、この関数は使わずに
     /// そちらへ上の各バリアントの分岐を足してください
+    pub fn message(&self) -> String {
+        self.kind.message()
+    }
+}
+
+impl CompileErrKind {
+    /// エラーの内容を表示するための文字列を作る
     pub fn message(&self) -> String {
         match self {
             Self::AssignToImmutableVar(var_name) => {

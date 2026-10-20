@@ -2,7 +2,7 @@
 //! 探索
 
 use super::*;
-use crate::err::CompileErr;
+use crate::err::compile::{CompileErrKind, CompileErr};
 
 impl IR {
     /// 範囲付きポインタや配列の長さを超えて数を指定しているかを
@@ -82,7 +82,8 @@ impl IR {
                 format!(
                     "配列 `{}` の添字が範囲外です: 添字 {} (配列の長さ {})",
                     name, idx_value, len,
-                )
+                ),
+                Rc::clone(&index.span)
             ))?;
         }
         Ok(true)

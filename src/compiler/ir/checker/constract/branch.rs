@@ -58,7 +58,7 @@ impl IR {
         matches!(
             body.iter().last().map(|n| n.get_node()),
             Some(node::Group2Node::Stmt(
-                node::StmtNode::Return(_) | node::StmtNode::Break
+                node::StmtNode::Return(_) | node::StmtNode::Break(_)
             ))
         )
     }

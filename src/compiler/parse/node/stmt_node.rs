@@ -1,4 +1,4 @@
-use crate::compiler::node::FuncDefInfo::{AllDef, DefOnly};
+use crate::compiler::{err, node::FuncDefInfo::{AllDef, DefOnly}};
 
 use super::*;
 use std::rc::Rc;
@@ -82,7 +82,7 @@ impl FuncDefine {
 pub enum StmtNode {
     Return(Expr),
     Continue,
-    Break,
+    Break(Rc<err::Span>),
 }
 
 impl StmtNode {

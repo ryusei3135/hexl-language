@@ -38,7 +38,7 @@ impl IR {
                 node::Group2Node::Stmt(node::StmtNode::Return(expr)) => {
                     Self::walk_expr(&expr, must_vars);
                 }
-                node::Group2Node::Stmt(node::StmtNode::Continue | node::StmtNode::Break) => {}
+                node::Group2Node::Stmt(node::StmtNode::Continue | node::StmtNode::Break(..)) => {}
                 _ => {}
             }
         }

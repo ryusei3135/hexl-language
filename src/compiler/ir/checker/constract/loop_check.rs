@@ -3,7 +3,10 @@
 //! ループの外で定義した契約を、ループの中で終了するコードは
 //! `ret`/`break`の前にしか置けない
 
+use std::rc::Rc;
+
 use super::*;
+use crate::err::Span;
 
 impl IR {
     /// 反復処理(`node::Expr::Loop`)の追跡
@@ -89,14 +92,14 @@ impl IR {
     /// ループの中で定義した変数は毎周作り直されるので対象外
     fn check_loop_block(func_name: &String, body: &Body, guarded: &mut Vec<String>) {
         let mut locals: Vec<String> = Vec::new();
-        // (この文が終了する変数, `ret`/`break`か)
-        let mut stmts: Vec<(Vec<String>, bool)> = Vec::new();
+        // (この文が終了する変数, `ret`/`break`か, この文の位置)
+        let mut stmts: Vec<(Vec<String>, bool, Rc<Span>)> = Vec::new();
 
         for n in body.iter() {
             let (expr, is_exit) = match n.get_node() {
                 node::Group2Node::Expr(expr) => (Some(expr), false),
                 node::Group2Node::Stmt(node::StmtNode::Return(expr)) => (Some(expr), true),
-                node::Group2Node::Stmt(node::StmtNode::Break) => (None, true),
+                node::Group2Node::Stmt(node::StmtNode::Break(_span)) => (None, true),
                 _ => (None, false),
             };
             let mut ends: Vec<String> = Vec::new();
@@ -131,15 +134,15 @@ impl IR {
                     }
                 }
             }
-            stmts.push((ends, is_exit));
+            stmts.push((ends, is_exit, Rc::clone(&n.span)));
         }
 
-        for (i, (ends, is_exit)) in stmts.iter().enumerate() {
+        for (i, (ends, is_exit, span)) in stmts.iter().enumerate() {
             if ends.is_empty() || *is_exit {
                 continue;
             }
             let mut placed_before_exit = false;
-            for (next_ends, next_exit) in stmts.iter().skip(i + 1) {
+            for (next_ends, next_exit, _) in stmts.iter().skip(i + 1) {
                 if *next_exit {
                     placed_before_exit = true;
                     break;
@@ -150,7 +153,7 @@ impl IR {
             }
             if !placed_before_exit {
                 for name in ends {
-                    CompileErr::constract_must_not_used(func_name, name).unwrap();
+                    CompileErr::constract_must_not_used(func_name, name, Rc::clone(span)).unwrap();
                 }
             }
         }

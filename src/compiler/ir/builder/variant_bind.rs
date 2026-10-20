@@ -185,6 +185,7 @@ impl IR {
             self.id_counter,
             &info.ty,
             &info.var_attr,
+            Rc::clone(&self.current_span),
             || self.constract_flag.put_var_def(&info.ty),
         )?;
         self.push_inst(inst::Inst::Mov {

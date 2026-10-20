@@ -415,7 +415,7 @@ impl Lowerer {
             }
             CStmtKind::Break => match self.frames.last() {
                 Some(Frame::Loop { .. }) => {
-                    out.push(self.info(line, Group2Node::Stmt(StmtNode::Break)));
+                    out.push(self.info(line, Group2Node::Stmt(StmtNode::Break(span_at(line)))));
                 }
                 Some(Frame::Switch) => {
                     return unsup(
@@ -674,7 +674,7 @@ impl Lowerer {
         }
         let (e, is_bool) = self.lower_expr_ex(cond, true)?;
         let neg = negate(e, is_bool, line);
-        let brk = self.info(line, Group2Node::Stmt(StmtNode::Break));
+        let brk = self.info(line, Group2Node::Stmt(StmtNode::Break(span_at(line))));
         let m = expr_at(
             ExprNode::Match {
                 pattern: None,

@@ -280,7 +280,7 @@ fn while_loop() {
         arms[0].pattern.node,
         ExprNode::GreaterThenEq((var("i"), num("10")))
     );
-    assert_eq!(arms[0].body[0].node, Group2Node::Stmt(StmtNode::Break));
+    assert_eq!(arms[0].body[0].node, Group2Node::Stmt(StmtNode::Break(..)));
     assert_eq!(
         body[1].node,
         Group2Node::Expr(expr(ExprNode::Inc(var("i"))))

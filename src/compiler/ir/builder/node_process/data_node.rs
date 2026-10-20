@@ -92,6 +92,7 @@ impl IR {
                     self.id_counter,
                     ty_to_register,
                     &var_attr,
+                    Rc::clone(&self.current_span),
                     || self.constract_flag.put_var_def(ty_to_register),
                 )?;
                 let inst = inst::Inst::Mov {
@@ -126,6 +127,7 @@ impl IR {
                         self.id_counter,
                         ty_to_register,
                         &var_attr,
+                        Rc::clone(&self.current_span),
                         || self.constract_flag.put_var_def(ty_to_register),
                     )?;
                     Ok(inst::Inst::Mov {
@@ -156,6 +158,7 @@ impl IR {
                     self.id_counter,
                     ty_to_register,
                     &var_attr,
+                    Rc::clone(&self.current_span),
                     || self.constract_flag.put_var_def(ty_to_register),
                 )?;
                 let inst = inst::Inst::Mov {
@@ -193,6 +196,7 @@ impl IR {
                     self.id_counter,
                     ty_to_register,
                     &var_attr,
+                    Rc::clone(&self.current_span),
                     || self.constract_flag.put_var_def(ty_to_register),
                 )?;
 
@@ -208,8 +212,11 @@ impl IR {
                 } else {
                     // ポインタの範囲指定がある場合、指定された範囲と初期値の長さが一致するか確認する
                     if r.unwrap() != (0, base_range) {
-                        CompileErr::ptr_range_len_mismatch(r.unwrap(), base_range)
-                            .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
+                        CompileErr::ptr_range_len_mismatch(
+                            r.unwrap(),
+                            base_range,
+                            Rc::clone(&self.current_span),
+                        )?;
                     }
                 }
                 let inst = inst::Inst::Mov {

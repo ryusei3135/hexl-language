@@ -13,6 +13,7 @@ impl IR {
                 index,
                 &param.ty,
                 &param.var_attr,
+                Rc::clone(&param.span),
                 || self.constract_flag.put_var_def(&param.ty),
             )?;
             // 型がポインタの先に構造体がある場合、その構造体のサイズを取得する

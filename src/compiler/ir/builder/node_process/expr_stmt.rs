@@ -12,12 +12,10 @@ impl IR {
     ) -> Result<(), err::ErrKind> {
         // `must`の契約を持つ変数は、値をすり替えられないため再代入できない
         if self.var_tree.is_constract_must(name) {
-            CompileErr::assign_to_must_var(name)
-                .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
+            CompileErr::assign_to_must_var(name, Rc::clone(&self.current_span))?;
         }
         if !matches!(attr, parse::VarMutAttr::Var) {
-            CompileErr::assign_to_imm_var(name)
-                .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
+            CompileErr::assign_to_imm_var(name, Rc::clone(&self.current_span))?;
         }
         Ok(())
     }
@@ -356,9 +354,10 @@ impl IR {
                 | types::Size::DQ
                 | types::Size::UDQ
         ) {
-            return Err(
-                CompileErr::inc_dec_requires_integer(name).with_span(Rc::clone(&self.current_span))
-            );
+            return Err(CompileErr::inc_dec_requires_integer(
+                name,
+                Rc::clone(&self.current_span),
+            ));
         }
         Ok(ty)
     }

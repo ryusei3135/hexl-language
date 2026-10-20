@@ -1,4 +1,10 @@
-use crate::compiler::{err::compile::CompileErr, parse};
+use std::rc::Rc;
+
+use crate::err::Span;
+use crate::compiler::{
+    err::compile::{CompileErr, CompileErrKind},
+    parse,
+};
 
 use super::types::*;
 use super::*;
@@ -70,6 +76,7 @@ impl VarTree {
         var_index: usize,
         var_ty: &node::TyNode,
         var_attr: &parse::VarMutAttr,
+        span: Rc<Span>,
         mut put_flag: impl FnMut(),
     ) -> Result<(), err::ErrKind> {
         let var = match K {
@@ -84,7 +91,8 @@ impl VarTree {
                 VarLife::Constracting if is_constract_ty => {
                     crate::GenCompileErr!(
                         ReassignActiveContract,
-                        format!("{} 契約中の変数klkj", var_name)
+                        format!("{} 契約中の変数klkj", var_name),
+                        span
                     )
                 }
                 VarLife::Constracting | VarLife::EndConstract => {
@@ -156,6 +164,7 @@ impl VarTree {
     pub(in crate::compiler::ir) fn finish_constract_var(
         &mut self,
         var_name: &str,
+        span: Rc<Span>,
     ) -> Result<(), err::ErrKind> {
         if let Some(ref mut var) = self.hash.get_mut(var_name) {
             match var.life {
@@ -165,7 +174,8 @@ impl VarTree {
                 VarLife::EndConstract => {
                     return crate::GenCompileErr!(
                         VariableConstractExpired,
-                        format!("kkkkklljjbkj {var_name}")
+                        format!("kkkkklljjbkj {var_name}"),
+                        span
                     );
                 }
             }
@@ -209,6 +219,7 @@ impl VarTree {
     pub(in crate::compiler::ir) fn all_var_is_end_constract(
         &self,
         state: &VarTree,
+        span: Rc<Span>,
     ) -> Result<(), err::ErrKind> {
         for (name, var) in &self.hash {
             if state.hash.contains_key(name)
@@ -217,7 +228,7 @@ impl VarTree {
             {
                 continue;
             } else {
-                return crate::GenCompileErr!(VariableConstractExpired, name);
+                return crate::GenCompileErr!(VariableConstractExpired, name, span);
             }
         }
         Ok(())

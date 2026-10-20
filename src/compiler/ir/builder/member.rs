@@ -169,7 +169,7 @@ impl IR {
                 if let Ok(num) = val.parse::<usize>() {
                     num
                 } else {
-                    return member::arr_index_is_not_num::<inst::Inst>(&val);
+                    return member::arr_index_is_not_num::<inst::Inst>(&val, &(*index).span);
                 }
             }
             t => panic!("{:?}", t),

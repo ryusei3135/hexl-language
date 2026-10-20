@@ -1,5 +1,8 @@
+use crate::compiler::err::CompileErrKind;
 use crate::compiler::err::compile::CompileErr;
 use crate::compiler::err::{self, undef::UndefKind::*};
+
+use std::rc::Rc;
 
 /// ===================
 /// member_is_arr_ref
@@ -8,10 +11,11 @@ use crate::compiler::err::{self, undef::UndefKind::*};
 /// 配列のしていされたものが数字じゃなかった
 pub(in crate::compiler::ir::builder) fn arr_index_is_not_num<R>(
     val: &str,
+    span: &Rc<err::Span>
 ) -> Result<R, err::ErrKind> {
-    crate::GenCompileErr2!(CompileErr::InvalidIndexType {
+    crate::GenCompileErr2!(CompileErrKind::InvalidIndexType {
         val: val.to_owned()
-    })
+    }, Rc::clone(&span))
 }
 
 /// 構造体が存在しなかった

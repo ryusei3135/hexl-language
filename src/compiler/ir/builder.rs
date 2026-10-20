@@ -300,8 +300,8 @@ impl IR {
                     .expect("continueはloopの中でのみ使用できます");
                 inst::Inst::Jmp(format!("L{}", continue_label))
             }
-            node::StmtNode::Break => {
-                let result = self.end_scope(false);
+            node::StmtNode::Break(span) => {
+                let result = self.end_scope(false, &span);
                 self.unwrap_or_report(result);
                 let (_, break_label) = self
                     .loop_labels
@@ -775,6 +775,7 @@ impl IR {
             var_idx,
             &var.ty,
             &var.var_attr,
+            Rc::clone(&self.current_span),
             || self.constract_flag.put_var_def(&var.ty),
         )?;
 
@@ -787,6 +788,8 @@ impl IR {
         pattern: &Option<Box<node::Expr>>,
         body: &Body,
     ) -> Result<usize, err::ErrKind> {
+        // 本体の処理中に`current_span`が書き換わるので、先に控えておく
+        let scope_span = Rc::clone(&self.current_span);
         // 反復処理が始まる場所を作成
         let start = self.pattern_labels;
         self.pattern_labels += 1;
@@ -810,7 +813,7 @@ impl IR {
         self.loop_labels.push((start.clone(), end.clone()));
         self.begin_scope();
         self.gen_inst::<M>(&body)?;
-        self.end_block_scope();
+        self.end_block_scope(&scope_span);
         self.loop_labels.pop();
         crate::push_jmp_code!(self, Jmp, &start);
         crate::push_jmp_code!(self, Block, &end);
@@ -824,6 +827,9 @@ impl IR {
         arms: &[node::MatchArm],
         arm_else: &Option<Body>,
     ) -> Result<usize, err::ErrKind> {
+        // 本体の処理中に`current_span`が書き換わるので、先に控えておく
+        let scope_span = Rc::clone(&self.current_span);
+
         // 各armの条件式を作成する
         // - `pattern`(matchに与えられた値)がある場合は、
         //   その値とarmのパターンを比較する式(値を与えるパターン)にする
@@ -877,7 +883,7 @@ impl IR {
         if let Some(arm) = arm_else.clone() {
             self.begin_scope();
             self.gen_inst::<M>(&arm)?;
-            self.end_block_scope();
+            self.end_block_scope(&scope_span);
         }
         crate::push_jmp_code!(self, Jmp, &end_label);
 
@@ -892,7 +898,7 @@ impl IR {
                 self.unwrap_or_report(result);
             }
             self.gen_inst::<M>(&arm.body)?;
-            self.end_block_scope();
+            self.end_block_scope(&scope_span);
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
 
@@ -996,14 +1002,14 @@ impl IR {
         // 条件が偽のとき
         self.begin_scope();
         let _ = self.gen_expr_ir::<M>(right, Some(expect_byte))?;
-        self.end_block_scope();
+        self.end_block_scope(&(cond).span);
         crate::push_jmp_code!(self, Jmp, &end_label);
 
         // 条件が真のとき
         crate::push_jmp_code!(self, Block, &then_label);
         self.begin_scope();
         let _ = self.gen_expr_ir::<M>(left, Some(expect_byte))?;
-        self.end_block_scope();
+        self.end_block_scope(&(*cond).span);
         crate::push_jmp_code!(self, Jmp, &end_label);
 
         // 合流

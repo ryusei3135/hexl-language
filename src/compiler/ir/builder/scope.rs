@@ -13,8 +13,8 @@ impl IR {
 
     /// ブロックの終わりで、スコープを終了する
     /// 契約の検査をしたあと、irに`EndScope`を挿入する
-    pub(in crate::compiler::ir::builder) fn end_block_scope(&mut self) {
-        let result = self.end_scope(true);
+    pub(in crate::compiler::ir::builder) fn end_block_scope(&mut self, span: &Rc<err::Span>) {
+        let result = self.end_scope(true, &span);
         self.unwrap_or_report(result);
         self.push_scope_inst(inst::Inst::EndScope);
     }
@@ -32,6 +32,7 @@ impl IR {
     pub(in crate::compiler::ir::builder) fn end_scope(
         &mut self,
         from_break: bool,
+        span: &Rc<err::Span>,
     ) -> Result<(), err::ErrKind> {
         let states = if from_break {
             self.scope_states.iter().rev().collect::<Vec<_>>()
@@ -41,7 +42,7 @@ impl IR {
 
         states.iter().try_for_each(|state| {
             // 契約が終了しているかを確認
-            self.var_tree.all_var_is_end_constract(state)
+            self.var_tree.all_var_is_end_constract(state, Rc::clone(span))
         })?;
 
         if from_break == false {
@@ -132,6 +133,7 @@ impl IR {
                         self_idx,
                         &self_area_ty,
                         &var_attr,
+                        Rc::clone(&(*target).span),
                         || self.constract_flag.put_var_def(&self_area_ty),
                     )?;
 

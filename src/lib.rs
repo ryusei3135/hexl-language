@@ -218,6 +218,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         DEFAULT.to_string()
     };
 
+    // エラーメッセージを蓄積する
     let mut err_pool = Rc::new(RefCell::new(err::err_pool::ErrPool::new()));
     // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
     // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
@@ -252,6 +253,9 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
     )
     // `AsmSettingError` は Display で日本語メッセージになる。`run` がそれを表示する
     .map_err(|e| format!("アセンブリコードの生成に失敗しました: {}", e))?;
+
+    // エラーメッセージを表示
+    err_pool.borrow().view();
 
     // 出力先のアセンブリ言語のファイル
     let asm_file = file_name.replace(".hexl", "");

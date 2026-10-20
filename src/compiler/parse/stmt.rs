@@ -372,7 +372,7 @@ impl Parser {
         let stmt = if is_continue {
             node::StmtNode::Continue
         } else {
-            node::StmtNode::Break
+            node::StmtNode::Break(self.build_err_span())
         };
         Ok(stmt.wrap())
     }
