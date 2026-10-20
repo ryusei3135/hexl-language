@@ -99,7 +99,11 @@ impl Parser {
         if let Some(span) = self.tkns.as_ref().and_then(|tkns| tkns.get(self.idx)) {
             Rc::clone(&span.span)
         } else {
-            panic!();
+            if let Some(span) = self.tkns.as_ref().and_then(|x| x.get(self.idx - 1)) {
+                Rc::clone(&span.span)
+            } else {
+                panic!();
+            }
         }
     }
 
