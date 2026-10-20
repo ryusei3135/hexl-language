@@ -170,7 +170,7 @@ impl Parser {
         name: String,
     ) -> Result<bool, err::ErrKind> {
         // フィールドの位置(`name:`の`:`)
-        let span = Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         self.next_tkn(&[])?;
         let ty = self.define_ty_node()?;
 
@@ -220,7 +220,7 @@ impl Parser {
                     let node = self.one_line_node()?;
                     let span = self.build_err_span();
                     func.body
-                        .push(node.gen_group_info(span.line, Rc::new(span)));
+                        .push(node.gen_group_info(span.line, Rc::clone(&span)));
                 }
 
                 if self.current_tkn() == &lex::Tkn::RBrace {

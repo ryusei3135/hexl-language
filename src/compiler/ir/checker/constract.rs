@@ -40,13 +40,13 @@ impl IR {
                         node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                         &fn_name,
                     )
-                    .map_err(|err| err.with_span(self.current_span))?
+                    .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?
                 }
 
                 if let Some(var_name) = Self::arg_var_name(arg) {
                     self.var_tree
                         .finish_constract_var(var_name)
-                        .map_err(|err| err.with_span(self.current_span))
+                        .map_err(|err| err.with_span(Rc::clone(&self.current_span)))
                 } else {
                     Ok(())
                 }
@@ -57,7 +57,7 @@ impl IR {
                 &param.name,
                 node::ConstractTy::name_or_anon(of.of_name().map(|v| v.as_str())),
             )
-            .map_err(|err| err.with_span(self.current_span)),
+            .map_err(|err| err.with_span(Rc::clone(&self.current_span))),
             // `must`の値は、`of`の引数にしか渡せない
             (None, Some(must)) => {
                 // 引数が契約を譲渡するならOk
@@ -70,7 +70,7 @@ impl IR {
                     &param.name,
                     node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                 )
-                .map_err(|err| err.with_span(self.current_span))
+                .map_err(|err| err.with_span(Rc::clone(&self.current_span)))
             }
             (None, None) => Ok(()),
         }
@@ -104,7 +104,7 @@ impl IR {
         if let Some(var_name) = Self::arg_var_name(arg) {
             self.var_tree
                 .finish_constract_var(var_name)
-                .map_err(|err| err.with_span(self.current_span))?;
+                .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
 
             Ok(true)
         } else {

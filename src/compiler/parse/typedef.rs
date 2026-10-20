@@ -35,7 +35,7 @@ impl Parser {
         if let Some(reserved) = self.reserved_impls.remove(&name) {
             methods.extend(reserved);
         }
-        let r = node::StructDefine::new(name, fields, methods, Rc::new(self.build_err_span()));
+        let r = node::StructDefine::new(name, fields, methods, self.build_err_span());
         Ok(r)
     }
 
@@ -90,7 +90,7 @@ impl Parser {
             name,
             fields,
             methods,
-            Rc::new(self.build_err_span()),
+            self.build_err_span(),
         ))
     }
 
@@ -142,7 +142,7 @@ impl Parser {
                 name: name.to_string(),
                 fields: fields.clone(),
             },
-            Rc::new(self.build_err_span()),
+            self.build_err_span(),
         ))
     }
 
@@ -172,7 +172,7 @@ impl Parser {
                     name: name.to_string(),
                     variant: member,
                 },
-                Rc::new(self.build_err_span()),
+                self.build_err_span(),
             ));
         }
 
@@ -193,7 +193,7 @@ impl Parser {
                 name: name.to_string(),
                 fields,
             },
-            Rc::new(self.build_err_span()),
+            self.build_err_span(),
         ))
     }
 

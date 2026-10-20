@@ -1,7 +1,10 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::{err, lex::preprocessor::Preprocessor};
+use crate::compiler::{
+    err,
+    lex::{lexer::local::CharKind::Space, preprocessor::Preprocessor},
+};
 
 mod local {
     /// asciiに対応したテーブルを作成する
@@ -105,6 +108,7 @@ pub struct Lexer {
     /// `byte* = ...`のように`*`と`=`の間に空白があるだけのケースまで
     /// `*=`(MulEq)として誤って結合してしまう。
     saw_gap: bool,
+    span: Option<Rc<err::Span>>,
 }
 
 impl Lexer {
@@ -139,6 +143,7 @@ impl Lexer {
             preproc_table,
             include_c_file_list: Vec::new(),
             saw_gap: true,
+            span: None,
         }
     }
 
@@ -168,6 +173,13 @@ impl Lexer {
         let mut line_counter: usize = 1;
 
         let chars: Vec<char> = content.chars().collect();
+        let lines: Vec<&str> = content.split('\n').collect();
+
+        self.span = Some(Rc::new(err::Span::new(
+            line_counter,
+            chr_counter,
+            lines[line_counter - 1].to_string(),
+        )));
 
         for (idx, &chr) in chars.iter().enumerate() {
             let curr_kind = &char_table[chr as usize];
@@ -196,8 +208,7 @@ impl Lexer {
                             let adjacent = !self.saw_gap;
                             let t = LocatedTkn {
                                 tkn: self.join_sym_tkn(&tkn, adjacent).unwrap_or(tkn.tkn.clone()),
-                                pos: chr_counter.clone(),
-                                line: line_counter.clone(),
+                                span: Rc::clone(self.span.as_ref().unwrap()),
                             };
                             self.gen_tkns.push(t);
                             self.saw_gap = false;
@@ -229,6 +240,13 @@ impl Lexer {
                 }
                 // 改行が来たので、lineをインクリメント
                 if curr_kind == &CharKind::Ln {
+                    self.span = Some(Rc::new(err::Span::new(
+                        line_counter,
+                        chr_counter,
+                        lines[line_counter - 1].to_string(),
+                    )));
+                    // 文字の場所を初期化
+                    chr_counter = 0;
                     line_counter += 1;
                 }
 
@@ -297,7 +315,7 @@ impl Lexer {
                             u32::from_str_radix(self.chr_stk.trim_start_matches("0x"), 16)
                         else {
                             return crate::lex_err!(
-                                err::Span::new(line_counter, chr_counter),
+                                Rc::clone(self.span.as_ref().unwrap()),
                                 NumIsInvalid
                             );
                         };
@@ -306,7 +324,7 @@ impl Lexer {
                         // `3.14x` のように数字以外が混ざったものは不正な数値
                         if self.chr_stk.parse::<f64>().is_err() {
                             return crate::lex_err!(
-                                err::Span::new(line_counter, chr_counter),
+                                Rc::clone(self.span.as_ref().unwrap()),
                                 NumIsInvalid
                             );
                         }
@@ -348,11 +366,10 @@ impl Lexer {
             };
             Ok(LocatedTkn {
                 tkn,
-                pos: chr_counter.clone(),
-                line: line_counter.clone(),
+                span: Rc::clone(self.span.as_ref().unwrap()),
             })
         } else {
-            crate::lex_err!(err::Span::new(line_counter, chr_counter), FlagNotFound)
+            crate::lex_err!(Rc::clone(self.span.as_ref().unwrap()), FlagNotFound)
         }
     }
 

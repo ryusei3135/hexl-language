@@ -12,7 +12,7 @@ impl Parser {
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         // 名前の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す
         if init_struct == false {
             return Ok(node::Expr::new(node::ExprNode::Var(name), span));
@@ -64,7 +64,7 @@ impl Parser {
         init_struct: bool,
     ) -> Result<node::Expr, err::ErrKind> {
         // 型の名前の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         self.next_tkn(&["name"])?;
         let found = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(mem_name) = found.clone() else {
@@ -180,7 +180,7 @@ impl Parser {
     /// これは配列を初期化するノード
     pub(super) fn make_array_node(&mut self) -> Result<node::Expr, err::ErrKind> {
         // `{`の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let mut items = Vec::<node::Expr>::new();
 
         if self.next_tkn_ref(&["not `}`"])? != lex::Tkn::RBrace {

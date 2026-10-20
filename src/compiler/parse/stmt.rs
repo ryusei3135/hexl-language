@@ -275,7 +275,7 @@ impl Parser {
                     }
 
                     // 文の先頭の位置
-                    let span = Rc::new(self.build_err_span());
+                    let span = self.build_err_span();
                     let line_node = self.one_line_node();
                     let node: Group2Info =
                         C::handle_ty::<node::Group2Node>(&self.err_pool, line_node)?
@@ -390,7 +390,7 @@ impl Parser {
     /// 反復処理のノードを作成する関数
     fn make_loop_node(&mut self) -> Result<node::Group2Node, err::ErrKind> {
         // `loop`の位置
-        let span = Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // 反復処理の条件式
         let pattern = match self.next_tkn_ref(&["{", ".."])? {
             // "{"の場合は条件無し
@@ -437,7 +437,7 @@ impl Parser {
 
         loop {
             // 文の先頭の位置
-            let span = Rc::new(self.build_err_span());
+            let span = self.build_err_span();
             let node = self.one_line_node()?;
             block.push(node.gen_group_info(self.build_err_span().line, span));
             if matches!(self.current_tkn(), lex::Tkn::RBrace) {
@@ -504,7 +504,7 @@ impl Parser {
     /// つまり`current_tkn()`が`name`を指している必要がある。
     fn ptr_stmt_node(&mut self, name: &String) -> Result<node::Group2Node, err::ErrKind> {
         // `[name]`の`name`の位置
-        let span = Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // `]`まで進める
         self.next_tkn(&["]"])?;
 
@@ -516,10 +516,10 @@ impl Parser {
         // 既存通り: ポインタが指す値そのものへの代入 `[name] = value`
         self.next_tkn(&["="])?;
         let value = self.expr_branch()?;
-        let mk = |n: node::ExprNode| node::Expr::new(n, span.clone());
+        let mk = |n: node::ExprNode| node::Expr::new(n, Rc::clone(&span));
         let var = mk(node::ExprNode::Var(name.to_string()));
         let addr = mk(node::ExprNode::GetAddress(Box::new(var)));
         let dst = mk(node::ExprNode::ConnectAddr(Box::new(addr)));
-        Ok(node::AssignVar::new(name, dst, value, span.clone()).wrap_group2())
+        Ok(node::AssignVar::new(name, dst, value, span).wrap_group2())
     }
 }

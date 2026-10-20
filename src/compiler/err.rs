@@ -16,23 +16,25 @@ pub mod err_pool;
 // --------------------------------------------------------------------
 
 /// 解析対象のソースコード上の位置(何行目の何文字目か)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Span {
     pub line: usize,
     pub pos: usize,
+    pub line_txt: String,
 }
 
 impl Span {
-    pub fn new(line: usize, pos: usize) -> Self {
+    pub fn new(line: usize, pos: usize, line_txt: String) -> Self {
         Self {
             line: line,
             pos: pos,
+            line_txt,
         }
     }
 
     /// 位置情報が存在しない(取得できない)場合に使う
     pub fn unknown() -> Self {
-        Self { line: 0, pos: 0 }
+        Self::new(0, 0, "undefine".to_string())
     }
 }
 
@@ -49,7 +51,7 @@ impl fmt::Display for Span {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErrLoc {
     /// 解析していたソースコード上の位置
-    pub span: Span,
+    pub span: Rc<Span>,
     /// エラーを発生させた(パーサー側の)関数の名前
     ///
     /// [`func_name!`]マクロによって、モジュールパス付きの
@@ -58,7 +60,7 @@ pub struct ErrLoc {
 }
 
 impl ErrLoc {
-    pub fn new(span: Span, func_name: String) -> Self {
+    pub fn new(span: Rc<Span>, func_name: String) -> Self {
         Self { span, func_name }
     }
 }
@@ -94,7 +96,7 @@ macro_rules! func_name {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErrAt {
     pub error: CompileErr,
-    pub span: Span,
+    pub span: Rc<Span>,
 }
 
 /// `parse`クレート全体で使う、集約されたエラー型。
@@ -130,7 +132,7 @@ impl fmt::Display for ErrKind {
 }
 
 impl ErrKind {
-    pub fn with_span(self, span: Span) -> Self {
+    pub fn with_span(self, span: Rc<Span>) -> Self {
         match self {
             Self::CompileErr(error) => Self::CompileErrAt(Box::new(ErrAt {
                 error: *error,

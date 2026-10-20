@@ -3,6 +3,8 @@
 //!     - これがtrueの場合構造体を初期化するノードを作成できる
 //!     - falseの場合は初期化ノードを作成しない
 
+use std::rc::Rc;
+
 use super::*;
 
 mod arr_access;
@@ -22,7 +24,7 @@ impl Parser {
         name: String,
     ) -> Result<node::Expr, err::ErrKind> {
         // この式(名前)の位置。内側のノードも同じ位置を使う
-        let start = std::rc::Rc::new(self.build_err_span());
+        let start = self.build_err_span();
         let mk = |n: node::ExprNode| node::Expr::new(n, start.clone());
         let node = if self
             .next_tkn(&[
@@ -118,8 +120,7 @@ impl Parser {
             }
 
             if self.current_tkn() == &lex::Tkn::Equal {
-                node::DefineVar::new(&name, self.expr_branch()?, &ty_node, var_attr)
-                    .wrap(start.clone())
+                node::DefineVar::new(&name, self.expr_branch()?, &ty_node, var_attr).wrap(start)
             } else {
                 return crate::err_at!(self.unexpect_tkn_in_expr());
             }
@@ -395,7 +396,7 @@ impl Parser {
         // 演算子を現在のトークンにする。オペランドは次のトークンから始まる
         self.next_tkn(&[])?;
         // 位置は、演算子
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let operand = Box::new(self.expr_unary(ini_struct)?);
         let node = match op {
             lex::Tkn::Inc => node::ExprNode::LeftInc(operand),
@@ -413,7 +414,7 @@ impl Parser {
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {
             // 名前の位置
-            let name_span = std::rc::Rc::new(self.build_err_span());
+            let name_span = self.build_err_span();
             match self.next_tkn_ref(&[])? {
                 // おそらくこれは、条件しきなので変数の名前として返す
                 lex::Tkn::LBrace => {
@@ -433,9 +434,9 @@ impl Parser {
                     self.advance_tkn_checked()?;
                     let var = self.gen_name_node::<false>(name, init_struct)?;
                     return Ok(if postfix == lex::Tkn::Inc {
-                        node::Expr::new(node::ExprNode::Inc(Box::new(var)), name_span)
+                        node::Expr::new(node::ExprNode::Inc(Box::new(var)), Rc::clone(&name_span))
                     } else {
-                        node::Expr::new(node::ExprNode::Dec(Box::new(var)), name_span)
+                        node::Expr::new(node::ExprNode::Dec(Box::new(var)), Rc::clone(&name_span))
                     });
                 }
                 // データ付きバリアントなど
@@ -465,14 +466,14 @@ impl Parser {
         let value_tkn =
             self.next_tkn(&["[", "*", "number", "float", "string", "name", "(", "{"])?;
         // 値の先頭のトークン(`next_tkn`で進めた後の現在のトークン)の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let v = match value_tkn {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
             // ポインタにアクセス
             lex::Tkn::Mul => node::Expr::new(
                 node::ExprNode::ConnectAddr(Box::new(self.expr_value(init_struct)?)),
-                span,
+                Rc::clone(&span),
             ),
             lex::Tkn::Number(value) => node::Expr::new(node::ExprNode::Number(value), span),
             lex::Tkn::Float(value) => node::Expr::new(node::ExprNode::Float(value), span),
@@ -615,7 +616,7 @@ impl Parser {
             return crate::err_at!(self.expected_at_current("("));
         }
         // 関数呼び出しの位置(`(`)
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // 引数
         let mut args = Vec::<node::Expr>::new();
 

@@ -49,7 +49,11 @@ fn unsup<T>(line: usize, msg: impl Into<String>) -> PResult<T> {
 }
 
 fn span_at(line: usize) -> std::rc::Rc<crate::compiler::err::Span> {
-    std::rc::Rc::new(crate::compiler::err::Span::new(line, 0))
+    std::rc::Rc::new(crate::compiler::err::Span::new(
+        line,
+        0,
+        "undefine".to_string(),
+    ))
 }
 
 fn expr_at(node: ExprNode, line: usize) -> Expr {

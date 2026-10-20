@@ -2,6 +2,7 @@ use crate::compiler::node;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::mem;
+use std::rc::Rc;
 /// 変数や関数、構造体などの、定義を一時的に
 /// 保存する構造体を提供するモジュール
 pub mod types;
@@ -47,7 +48,7 @@ pub struct IR {
     // 定義済みの列挙型の情報
     // pub enum_tree: HashMap<String, node::EnumDefine>,
     stk_counter: usize,
-    pub(in crate::compiler::ir) current_span: err::Span,
+    pub(in crate::compiler::ir) current_span: Rc<err::Span>,
 
     pub(in crate::compiler::ir) constract_flag: checker::ConstractFlags,
 

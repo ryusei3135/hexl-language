@@ -36,7 +36,7 @@ impl IR {
             struct_tree: def_tree::StructTree::new(),
             variant_tree: def_tree::VariantTree::new(),
             stk_counter: 0,
-            current_span: err::Span::unknown(),
+            current_span: Rc::new(Span::unknown()),
             constract_flag: checker::ConstractFlags::new(),
             var_counter: counter_mnger::VarCounter::new(),
             expr_is_ptr_val: false,
@@ -256,7 +256,7 @@ impl IR {
 
     fn gen_inst<M: ResultMod>(&mut self, node: &Body) -> Result<usize, err::ErrKind> {
         for stmt in node {
-            self.current_span = err::Span::new(stmt.line, 0);
+            self.current_span = Rc::clone(&stmt.span);
             self.expr_counter = 0;
             self.constract_flag.reset();
             match stmt.get_node().clone() {
@@ -620,7 +620,8 @@ impl IR {
                             .map_or(false, |n| self.variant_tree.contains_key(&n)));
                 if is_variant {
                     // `src/ir/builder/expr_node.rs`
-                    let result = self.init_variant_node::<M>(*is_self, &name, &mut fields_c, &expect_byte);
+                    let result =
+                        self.init_variant_node::<M>(*is_self, &name, &mut fields_c, &expect_byte);
                     M::handle(result)?
                 } else {
                     // `src/ir/builder/expr_node.rs`
@@ -635,7 +636,8 @@ impl IR {
             } => {
                 let mut fields_c = fields.clone();
                 // `src/ir/builder/expr_node.rs`
-                let result = self.init_variant_node::<M>(*is_self, &name, &mut fields_c, &expect_byte);
+                let result =
+                    self.init_variant_node::<M>(*is_self, &name, &mut fields_c, &expect_byte);
                 M::handle(result)?
             }
             // ここでは対応する「元の変数名」が分からない文脈

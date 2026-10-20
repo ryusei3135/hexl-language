@@ -13,7 +13,7 @@ impl Parser {
         &mut self,
     ) -> Result<node::Expr, err::ErrKind> {
         // `[`の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let next = self.next_tkn_ref(&["name"])?;
         let lex::Tkn::Name(name) = next.clone() else {
             return crate::err_at!(self.expected_tkn("name", next));
@@ -67,7 +67,7 @@ impl Parser {
     /// 終了時、`current_tkn()`は`]`を指す。
     fn ref_array_expr(&mut self, name: String) -> Result<node::Expr, err::ErrKind> {
         // `[`の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // `[`から配列の名前まで進める
         self.next_tkn(&["name"])?;
         let index = self.arr_access_index()?;
@@ -81,7 +81,7 @@ impl Parser {
             return self.ptr_member_node(&name, Some(Box::new(index)), else_idx);
         }
 
-        let dst = node::Expr::new(node::ExprNode::Var(name.clone()), span.clone());
+        let dst = node::Expr::new(node::ExprNode::Var(name.clone()), Rc::clone(&span));
         Ok(node::Expr::new(
             node::ExprNode::RefArray {
                 dst: Box::new(dst),
@@ -113,8 +113,8 @@ impl Parser {
         name: &str,
     ) -> Result<node::Expr, err::ErrKind> {
         // `[`の位置(メンバーアクセス全体の位置として使う)
-        let span = std::rc::Rc::new(self.build_err_span());
-        let mk = |n: node::ExprNode| node::Expr::new(n, span.clone());
+        let span = self.build_err_span();
+        let mk = |n: node::ExprNode| node::Expr::new(n, Rc::clone(&span));
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::err_at!(self.arr_member_name_not_found(member_tkn));
@@ -143,7 +143,7 @@ impl Parser {
         if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
             self.next_tkn(&["="])?;
             let value = self.expr_branch()?;
-            return Ok(node::AssignVar::new(name, member_node, value, span.clone()));
+            return Ok(node::AssignVar::new(name, member_node, value, span));
         }
 
         // 代入ではなく値の参照なので、"]"を消費せずに返す
@@ -175,7 +175,7 @@ impl Parser {
         name: &str,
     ) -> Result<node::Group2Node, err::ErrKind> {
         // 配列の名前の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let index = self.arr_access_index()?;
         let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
 
@@ -193,7 +193,7 @@ impl Parser {
         }
         let value = self.expr_branch()?;
 
-        let dst = node::Expr::new(node::ExprNode::Var(name.to_string()), span.clone());
+        let dst = node::Expr::new(node::ExprNode::Var(name.to_string()), Rc::clone(&span));
         let arr = node::Expr::new(
             node::ExprNode::RefArray {
                 name: name.to_string(),
@@ -201,7 +201,7 @@ impl Parser {
                 index: Box::new(index),
                 else_idx,
             },
-            span.clone(),
+            Rc::clone(&span),
         );
         Ok(node::AssignVar::new(name, arr, value, span).wrap_group2())
     }

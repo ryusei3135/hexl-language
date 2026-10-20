@@ -148,7 +148,7 @@ impl Parser {
             return self.tkn_is_eof(Vec::new());
         };
         crate::syntax_err!(
-            err::Span::new(t.line, t.pos),
+            Rc::clone(&t.span),
             err::SyntaxErrKind::ExpectedKind {
                 expected,
                 found: t.tkn.clone(),
@@ -167,7 +167,7 @@ impl Parser {
             return self.tkn_is_eof(Vec::new());
         };
         crate::syntax_err!(
-            err::Span::new(t.line, t.pos),
+            Rc::clone(&t.span),
             err::SyntaxErrKind::TknIsEof { expected },
             Rc::clone(&self.file_name)
         )

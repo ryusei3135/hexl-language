@@ -209,7 +209,7 @@ impl IR {
                     // ポインタの範囲指定がある場合、指定された範囲と初期値の長さが一致するか確認する
                     if r.unwrap() != (0, base_range) {
                         CompileErr::ptr_range_len_mismatch(r.unwrap(), base_range)
-                            .map_err(|err| err.with_span(self.current_span))?;
+                            .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
                     }
                 }
                 let inst = inst::Inst::Mov {

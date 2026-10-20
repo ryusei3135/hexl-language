@@ -1,3 +1,7 @@
+use std::rc::Rc;
+
+use crate::err;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tkn {
     Add,
@@ -112,6 +116,5 @@ impl Tkn {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocatedTkn {
     pub tkn: Tkn,
-    pub pos: usize,
-    pub line: usize,
+    pub span: Rc<err::Span>,
 }

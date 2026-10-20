@@ -18,7 +18,7 @@ macro_rules! push_jmp_code {
 macro_rules! scope_node {
     ($self:tt, $target:ident, $result:ident, $start:expr) => {
         // `::`(`.`)の位置。作るノード全体の位置にする
-        let scope_span = std::rc::Rc::new($self.build_err_span());
+        let scope_span = $self.build_err_span();
         // "::"をスキップ
         let _ = $self.next_tkn(&[])?;
         let mut path_node = Vec::<String>::new();
@@ -45,7 +45,7 @@ macro_rules! scope_node {
                 let expr = match after_name {
                     lex::Tkn::Equal => {
                         // 代入先の名前の位置
-                        let target_span = std::rc::Rc::new($self.build_err_span());
+                        let target_span = $self.build_err_span();
                         $self.next_tkn(&["="])?;
                         let value = $self.expr_branch()?;
 
@@ -83,7 +83,7 @@ macro_rules! scope_node {
                     // 自身は消費せず、呼び出し元がそれを見て処理を続けられる
                     // ように、名前の次のトークンまでだけ進める
                     _ => {
-                        let var_span = std::rc::Rc::new($self.build_err_span());
+                        let var_span = $self.build_err_span();
                         let _ = $self.next_tkn(&[])?;
                         node::ExprNode::Var(path_node.last().unwrap().to_string())
                             .with_span(var_span)

@@ -45,10 +45,12 @@ impl Parser {
 
         // match の結果を直接 return する形に統一
         match self.next_tkn(&["string", "name"])? {
-            lex::Tkn::Str(literal) => self.finish_literal_include(&literal, alias, span),
+            lex::Tkn::Str(literal) => {
+                self.finish_literal_include(&literal, alias, Rc::clone(&span))
+            }
             // match のガード条件 `if` は Rust らしくて非常に綺麗です！
             lex::Tkn::Name(first_seg) if alias.is_none() => {
-                self.build_mod_path_segments(first_seg, span)
+                self.build_mod_path_segments(first_seg, Rc::clone(&span))
             }
             _ => {
                 return crate::err_at!(self.expected_path_segment());
@@ -82,7 +84,7 @@ impl Parser {
         &mut self,
         literal: &str,
         alias: Option<String>,
-        span: err::Span,
+        span: Rc<err::Span>,
     ) -> Result<node::ModPath, err::ErrKind> {
         // `::`が続いていなければ、ファイル全体をモジュールとして
         // 取り込む(エイリアスが無ければファイル名からモジュール名を
@@ -91,7 +93,7 @@ impl Parser {
             return Ok(node::ModPath::new_literal(
                 literal,
                 node::ImportKind::Module(alias),
-                Rc::new(span),
+                Rc::clone(&span),
             ));
         }
         // `::`を読み飛ばす
@@ -105,7 +107,7 @@ impl Parser {
             }
         };
 
-        Ok(node::ModPath::new_literal(literal, kind, Rc::new(span)))
+        Ok(node::ModPath::new_literal(literal, kind, Rc::clone(&span)))
     }
 
     /// 従来通りの書き方(`mod::file`)を解析する。
@@ -113,9 +115,9 @@ impl Parser {
     fn build_mod_path_segments(
         &mut self,
         first_seg: String,
-        span: err::Span,
+        span: Rc<err::Span>,
     ) -> Result<node::ModPath, err::ErrKind> {
-        let mut mod_path = node::ModPath::new_segments(Rc::new(span));
+        let mut mod_path = node::ModPath::new_segments(Rc::clone(&span));
         mod_path.add_path(&first_seg)?;
 
         while self.peek_tkn()? == lex::Tkn::ModPathTkn {
@@ -196,7 +198,7 @@ impl Parser {
     /// (以前の実装は最後の1つしか保持できなかった)。
     fn gen_asm_line(&mut self, value: &str) -> Result<node::InlineAsm, err::ErrKind> {
         // この行(文字列)の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // 正規表現は定数なので失敗しないが、失敗した場合も`Err`で返す
         let inline_var = Regex::new(r"\$\{([^}]+)\}").map_err(|_| err::ErrKind::UnexpectedToken)?;
 
@@ -230,7 +232,7 @@ impl Parser {
         Ok(node::InlineAsm {
             asm: asm.to_string(),
             operands,
-            span,
+            span: Rc::clone(&span),
         })
     }
 }

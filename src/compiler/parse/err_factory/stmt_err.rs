@@ -38,6 +38,7 @@ impl Parser {
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(err::ErrKind::Syntax(Box::new(err::SyntaxErr {
+            span: self.build_err_span(),
             kind: err::SyntaxErrKind::UnexpectTknInStmt {
                 found: self.current_tkn().clone(),
             },

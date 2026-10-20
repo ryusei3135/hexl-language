@@ -20,7 +20,7 @@ impl fmt::Display for LexErrKind {
 
 #[derive(Debug)]
 pub struct LexErrs {
-    pub span: Span,
+    pub span: Rc<Span>,
     pub kind: LexErrKind,
 }
 

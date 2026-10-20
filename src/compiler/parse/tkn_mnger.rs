@@ -1,6 +1,7 @@
 //! トークンを次に進めたり、次のトークンの参照
 //! などのトークンにアクセスするAPIを提供
 //! するモジュール
+use std::rc::Rc;
 
 use super::*;
 use stmt::*;
@@ -93,11 +94,13 @@ impl Parser {
 
     /// エラーが発生したときのどの行の何文字目がエラーかを
     /// 確認する構造体を作成する
-    pub(in crate::compiler::parse) fn build_err_span(&self) -> err::Span {
-        err::Span::new(
-            self.current_line(self.idx.saturating_sub(1)),
-            self.tkn_chr_pos(),
-        )
+    pub(in crate::compiler::parse) fn build_err_span(&self) -> Rc<err::Span> {
+        // 範囲外はエラーの位置を表示するための値なので`0`を返す
+        if let Some(span) = self.tkns.as_ref().and_then(|tkns| tkns.get(self.idx)) {
+            Rc::clone(&span.span)
+        } else {
+            panic!();
+        }
     }
 
     #[inline(always)]
@@ -111,7 +114,7 @@ impl Parser {
         self.tkns
             .as_ref()
             .and_then(|tkns| tkns.get(idx))
-            .map_or(0, |t| t.line)
+            .map_or(0, |t| t.span.line)
     }
 
     #[inline(always)]
@@ -119,6 +122,6 @@ impl Parser {
         self.tkns
             .as_ref()
             .and_then(|tkns| tkns.get(self.idx.saturating_sub(1)))
-            .map_or(0, |t| t.pos)
+            .map_or(0, |t| t.span.pos)
     }
 }

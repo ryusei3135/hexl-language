@@ -97,7 +97,7 @@ impl Parser {
         else_idx: Option<Box<node::Expr>>,
     ) -> Result<node::Expr, err::ErrKind> {
         // `.`の位置(`PtrMember`全体の位置)
-        let span = Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let member_tkn = self.next_tkn(&["name"])?;
         let lex::Tkn::Name(member) = member_tkn.clone() else {
             return crate::err_at!(self.ptr_member_name_not_found(member_tkn));
@@ -113,12 +113,12 @@ impl Parser {
                 else_idx,
                 target: Box::new(call),
             }
-            .with_span(span));
+            .with_span(Rc::clone(&span)));
         }
 
         // フィールドへのアクセス: `[name].member`
         // メンバー名の位置
-        let member_span = Rc::new(self.build_err_span());
+        let member_span = self.build_err_span();
         Ok(node::ExprNode::PtrMember {
             name: name.to_string(),
             index,

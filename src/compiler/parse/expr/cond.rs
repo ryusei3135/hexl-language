@@ -9,7 +9,7 @@ impl Parser {
             return crate::err_at!(self.cond_keyword_not_found());
         }
         // `cond`の位置
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         // match の対象式
         let cond_expr = if self.peek_tkn()? == lex::Tkn::LBrace {
             self.next_tkn(&[])?;
@@ -27,7 +27,7 @@ impl Parser {
         // `cond a == 10 { .. } else { .. }`
         if cond_expr.as_ref().is_some_and(|e| Self::is_bool_expr(e)) {
             if let Some(cond) = cond_expr {
-                return self.expr_match_bool(*cond, span);
+                return self.expr_match_bool(*cond, Rc::clone(&span));
             }
         }
 

@@ -77,7 +77,7 @@ impl Parser {
             );
         };
         // 束縛の位置(`M`か`Type`の位置)
-        let span = std::rc::Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let (variant_ty, variant) = if self.peek_tkn()? == lex::Tkn::ModPathTkn {
             // `::`
             self.next_tkn(&["::"])?;

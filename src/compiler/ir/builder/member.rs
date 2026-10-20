@@ -2,6 +2,7 @@ use crate::compiler::err::undef::UndefKind::*;
 
 use super::*;
 use err_factory::member;
+use std::rc::Rc;
 
 impl IR {
     pub(super) fn member_is_var(
@@ -72,7 +73,10 @@ impl IR {
         );
         call_info.args.insert(
             0,
-            node::Expr::new(node::ExprNode::GetAddress(Box::new(self_var)), self_span),
+            node::Expr::new(
+                node::ExprNode::GetAddress(Box::new(self_var)),
+                Rc::clone(&self_span),
+            ),
         );
 
         let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;
@@ -123,7 +127,7 @@ impl IR {
             0,
             node::Expr::new(
                 node::ExprNode::Var(ptr_name.to_owned()),
-                std::rc::Rc::new(self.current_span.clone()),
+                Rc::clone(&self.current_span),
             ),
         );
 

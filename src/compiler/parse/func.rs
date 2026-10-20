@@ -17,7 +17,7 @@ impl Parser {
         is_public: bool,
     ) -> Result<node::Group1Node, err::ErrKind> {
         // 関数の位置(関数名)
-        let span = Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         let arg = match self.next_tkn(&["(", "<"])? {
             lex::Tkn::LParen => self.define_arg_node()?,
             lex::Tkn::LAngleBracket => {
@@ -41,7 +41,7 @@ impl Parser {
                         arg,
                         ret_ty,
                         is_public,
-                        span,
+                        Rc::clone(&span),
                     ))
                 } else {
                     crate::err_at!(self.fn_lbrace_not_found())
@@ -96,7 +96,7 @@ impl Parser {
             match self.next_tkn(&["name", ")"])? {
                 lex::Tkn::Name(name) => {
                     // 引数の位置(引数の名前)
-                    let span = Rc::new(self.build_err_span());
+                    let span = self.build_err_span();
                     let var_attr: VarMutAttr = self.args_is_mut(&name)?;
                     // 直前の`if !can_create_param`のチェックを通過して
                     // いるため、ここでは常に`true`(同上、パーサー自体の

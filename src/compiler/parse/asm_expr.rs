@@ -26,7 +26,7 @@ impl Parser {
             .map_err(|_| err::ErrKind::UnexpectedToken)?;
 
         if lexer.gen_tkns.is_empty() {
-            return crate::err_at!(Parser::empty_asm_operand());
+            return crate::err_at!(self.empty_asm_operand());
         }
 
         let mut parser = Parser::new(&Rc::clone(&self.file_name), Rc::clone(&self.err_pool));

@@ -390,8 +390,7 @@ impl Parser {
                     for ty_tkn in &ty_tkns[p] {
                         // 位置情報は、置き換え前の`T`の位置にしておく
                         let mut tkn = ty_tkn.clone();
-                        tkn.line = t.line;
-                        tkn.pos = t.pos;
+                        tkn.span = Rc::clone(&t.span);
                         out.push(tkn);
                     }
                     continue;
@@ -517,10 +516,7 @@ mod generic_type_tests {
     }
 
     fn expr(node: node::ExprNode) -> node::Expr {
-        node::Expr::new(
-            node,
-            std::rc::Rc::new(crate::compiler::err::Span::unknown()),
-        )
+        node::Expr::new(node, crate::compiler::err::Span::unknown())
     }
 
     fn structs(nodes: &Vec<node::Group1Node>) -> Vec<&node::StructDefine> {

@@ -168,6 +168,7 @@ pub struct SyntaxErr {
     pub kind: SyntaxErrKind,
     pub loc: ErrLoc,
     pub file_name: Rc<String>,
+    pub span: Rc<Span>,
 }
 
 /// `SyntaxErr`の別名。式まわりの解析関数(`expr.rs`など)では
@@ -196,6 +197,7 @@ macro_rules! syntax_err {
                 kind: $kind,
                 loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
                 file_name: $file_name,
+                span: $span,
             },
         )))
     };
@@ -319,14 +321,11 @@ impl fmt::Display for PreprocErrDetail {
 /// ```
 #[macro_export]
 macro_rules! preproc_err {
-    ($parser:expr, $kind:ident, $file_name:expr) => {
+    ($span:expr, $kind:ident, $file_name:expr) => {
         return Err($crate::compiler::err::ErrKind::Preproc(Box::new(
             $crate::compiler::err::PreprocErrDetail {
                 kind: $crate::compiler::err::PreprocErrs::$kind,
-                loc: $crate::compiler::err::ErrLoc::new(
-                    $parser.build_err_span(),
-                    $crate::func_name!(),
-                ),
+                loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
             },
         )))
     };

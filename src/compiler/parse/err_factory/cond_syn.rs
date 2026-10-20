@@ -1,14 +1,14 @@
 use super::*;
 
 pub(in crate::compiler::parse) struct MatchErr {
-    span: err::Span,
+    span: Rc<err::Span>,
     tkn: lex::Tkn,
     file_name: Rc<String>,
 }
 
 impl MatchErr {
     #[inline(always)]
-    pub fn new(span: err::Span, tkn: lex::Tkn, file_name: Rc<String>) -> Self {
+    pub fn new(span: Rc<err::Span>, tkn: lex::Tkn, file_name: Rc<String>) -> Self {
         Self {
             span,
             tkn,
@@ -22,7 +22,7 @@ impl MatchErr {
             // match構文が`}`で閉じられていない
             crate::err_generated_by!();
             crate::syntax_err!(
-                self.span,
+                Rc::clone(&self.span),
                 err::SyntaxErrKind::UnenclosedScope { target },
                 Rc::clone(&self.file_name)
             )
@@ -36,7 +36,7 @@ impl MatchErr {
             // 式の最後に`=>`(lex::Tkn::Arrow)がないので構文えらー
             crate::err_generated_by!();
             crate::syntax_err!(
-                self.span,
+                Rc::clone(&self.span),
                 err::SyntaxErrKind::UnexpectedTkn {
                     // 今のトークン
                     found: self.tkn,

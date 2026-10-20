@@ -6,13 +6,21 @@ impl Parser {
     /// `#include`などのパスの要素(名前/文字列/`*`)が来るはずの位置に、別のトークンがあった
     pub(in crate::compiler::parse) fn expected_path_segment<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, ExpectedPathSegment, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self.build_err_span(),
+            ExpectedPathSegment,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `#asm(name)`の`name`が無かった
     pub(in crate::compiler::parse) fn not_found_asm_name<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, NotFoundAsmName, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self.build_err_span(),
+            NotFoundAsmName,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `#asm`の次に`(`が無かった
@@ -20,7 +28,11 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, ExpectedLParenAfterAsm, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self.build_err_span(),
+            ExpectedLParenAfterAsm,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `#asm(name`の次に`)`が無かった
@@ -28,7 +40,11 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, ExpectedRParenAfterAsm, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self.build_err_span(),
+            ExpectedRParenAfterAsm,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// プリプロセッサの構文として解釈できないトークンがあった
@@ -40,10 +56,10 @@ impl Parser {
     }
 
     /// `${}`の中が空だった
-    pub(in crate::compiler::parse) fn empty_asm_operand<T>() -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::parse) fn empty_asm_operand<T>(&self) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(crate::preproc_err_at!(
-            err::Span::new(0, 0),
+            self.build_err_span(),
             EmptyAsmOperand
         ))
     }
@@ -54,7 +70,7 @@ impl Parser {
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::preproc_err!(
-            self,
+            self.build_err_span(),
             UnexpectedTrailingTokenInAsmOperand,
             Rc::clone(&self.file_name)
         )
@@ -66,7 +82,7 @@ impl Parser {
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::preproc_err!(
-            self,
+            self.build_err_span(),
             ExpectedRBracketInAsmOperand,
             Rc::clone(&self.file_name)
         )
@@ -77,7 +93,11 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::preproc_err!(self, ExpectedRParenInAsmOperand, Rc::clone(&self.file_name))
+        crate::preproc_err!(
+            self.build_err_span(),
+            ExpectedRParenInAsmOperand,
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `${}`の中に、式として解釈できないトークンがあった
@@ -86,7 +106,7 @@ impl Parser {
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::preproc_err!(
-            self,
+            self.build_err_span(),
             UnexpectedTokenInAsmOperand,
             Rc::clone(&self.file_name)
         )
@@ -98,7 +118,7 @@ impl Parser {
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::preproc_err!(
-            self,
+            self.build_err_span(),
             ExpectedMemberNameInAsmOperand,
             Rc::clone(&self.file_name)
         )

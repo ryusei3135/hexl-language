@@ -21,7 +21,7 @@ impl Parser {
         pub_flag: bool,
     ) -> Result<VariantFieldKind, err::ErrKind> {
         // メンバーの位置(メンバーの名前)
-        let span = Rc::new(self.build_err_span());
+        let span = self.build_err_span();
         match self.peek_tkn()? {
             lex::Tkn::LParen => {
                 // 現在のトークンを`(`にする
