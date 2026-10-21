@@ -259,8 +259,7 @@ impl Parser {
                         // `type T = BaseTy`
                         lex::Tkn::KeyWordType => {
                             let binding = self.type_alias_node();
-                            let node =
-                                C::handle_ty::<node::Group1Node>(&self.err_pool, binding)?;
+                            let node = C::handle_ty::<node::Group1Node>(&self.err_pool, binding)?;
                             self.gen_nodes.push(node);
                         }
                         t => {

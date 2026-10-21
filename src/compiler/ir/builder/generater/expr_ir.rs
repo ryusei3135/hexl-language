@@ -387,7 +387,11 @@ impl IR {
     /// 両辺は評価しても副作用が無い必要がある(`Ternary`は両辺を先に評価するため)
     /// - 左右の式が、数字のみの式
     /// - 条件式が、メモリにアクセスしない式
-    pub(in crate::compiler::ir) fn ternary_is_select(cond: &node::Expr, left: &node::Expr, right: &node::Expr) -> bool {
+    pub(in crate::compiler::ir) fn ternary_is_select(
+        cond: &node::Expr,
+        left: &node::Expr,
+        right: &node::Expr,
+    ) -> bool {
         Self::is_number_only(left) && Self::is_number_only(right) && Self::is_mem_free(cond)
     }
 

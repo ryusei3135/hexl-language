@@ -9,7 +9,9 @@
 use super::*;
 
 impl Parser {
-    pub(in crate::compiler::parse) fn type_alias_node(&mut self) -> Result<node::Group1Node, err::ErrKind> {
+    pub(in crate::compiler::parse) fn type_alias_node(
+        &mut self,
+    ) -> Result<node::Group1Node, err::ErrKind> {
         // `type`の位置
         let span = self.build_err_span();
 

@@ -131,16 +131,19 @@ impl ErrPool {
     }
 
     fn render_syntax_err(&self, n: &err::SyntaxErr, color: bool) -> String {
-        self.render_diag(&Diag {
-            code: String::new(),
-            title: n.kind.to_string(),
-            file: n.file_name.to_string(),
-            line: n.loc.span.line as usize,
-            pos: n.loc.span.pos as usize,
-            label: Self::label(&n.kind),
-            notes: Vec::new(),
-            help: Self::help(&n.kind).map(|h| h.to_string()),
-        }, color)
+        self.render_diag(
+            &Diag {
+                code: String::new(),
+                title: n.kind.to_string(),
+                file: n.file_name.to_string(),
+                line: n.loc.span.line as usize,
+                pos: n.loc.span.pos as usize,
+                label: Self::label(&n.kind),
+                notes: Vec::new(),
+                help: Self::help(&n.kind).map(|h| h.to_string()),
+            },
+            color,
+        )
     }
 
     /// `CompileErr`(型・契約・配列の範囲などの意味解析のエラー)を表示する
@@ -153,16 +156,19 @@ impl ErrPool {
         } else {
             "<unknown>".to_string()
         };
-        self.render_diag(&Diag {
-            code: n.kind.code().to_string(),
-            title: n.kind.title(),
-            file,
-            line: n.span.line as usize,
-            pos: n.span.pos as usize,
-            label: String::new(),
-            notes: n.kind.note().into_iter().collect(),
-            help: n.kind.help(),
-        }, color)
+        self.render_diag(
+            &Diag {
+                code: n.kind.code().to_string(),
+                title: n.kind.title(),
+                file,
+                line: n.span.line as usize,
+                pos: n.span.pos as usize,
+                label: String::new(),
+                notes: n.kind.note().into_iter().collect(),
+                help: n.kind.help(),
+            },
+            color,
+        )
     }
 
     /// 未定義のエラー(変数・関数・型・メンバーなど)を表示する
@@ -170,16 +176,19 @@ impl ErrPool {
     /// `UndefErrs`は位置(`Span`)を持たないので、`-->`とソース行は出さず、
     /// `= note:`/`= help:`だけを出す
     fn render_undef_err(&self, n: &err::undef::UndefErrs, color: bool) -> String {
-        self.render_diag(&Diag {
-            code: n.code().to_string(),
-            title: n.title(),
-            file: String::new(),
-            line: 0,
-            pos: 0,
-            label: String::new(),
-            notes: n.note().into_iter().collect(),
-            help: Some(n.help()),
-        }, color)
+        self.render_diag(
+            &Diag {
+                code: n.code().to_string(),
+                title: n.title(),
+                file: String::new(),
+                line: 0,
+                pos: 0,
+                label: String::new(),
+                notes: n.note().into_iter().collect(),
+                help: Some(n.help()),
+            },
+            color,
+        )
     }
 
     /// 構文エラーとコンパイルエラーに共通の表示

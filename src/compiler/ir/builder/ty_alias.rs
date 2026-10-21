@@ -20,7 +20,7 @@ type AliasMap = HashMap<String, node::TyNode>;
 pub(super) fn expand_type_aliases(
     nodes: &[node::Group1Node],
 ) -> Result<Vec<node::Group1Node>, err::ErrKind> {
-    let map = collect_aliases(nodes)?;
+    let map = map_alias(nodes)?;
     let mut out = nodes.to_vec();
     if map.is_empty() {
         return Ok(out);
@@ -32,7 +32,7 @@ pub(super) fn expand_type_aliases(
 }
 
 /// 全てのエイリアスを、他のエイリアスを含まない型へ解決した表を作る
-fn collect_aliases(nodes: &[node::Group1Node]) -> Result<AliasMap, err::ErrKind> {
+fn map_alias(nodes: &[node::Group1Node]) -> Result<AliasMap, err::ErrKind> {
     let mut map: AliasMap = HashMap::new();
     for n in nodes {
         if let node::Group1Node::TypeAlias(a) = n {
@@ -65,7 +65,11 @@ fn collect_aliases(nodes: &[node::Group1Node]) -> Result<AliasMap, err::ErrKind>
     for (name, ty) in &map {
         let leaf = ty.get_ty_str_name();
         if map.contains_key(&leaf) {
-            return Err(crate::GenUndefErrResult!(UndefVarTy, name.to_string(), None));
+            return Err(crate::GenUndefErrResult!(
+                UndefVarTy,
+                name.to_string(),
+                None
+            ));
         }
     }
     Ok(map)
@@ -105,7 +109,9 @@ fn group1(node: &mut node::Group1Node, map: &AliasMap) {
             }
             v.methods.iter_mut().for_each(|m| group1(m, map));
         }
-        node::Group1Node::TypeAlias(_) | node::Group1Node::Include(_) | node::Group1Node::Line(_) => {}
+        node::Group1Node::TypeAlias(_)
+        | node::Group1Node::Include(_)
+        | node::Group1Node::Line(_) => {}
     }
 }
 
@@ -157,7 +163,12 @@ fn expr(e: &mut node::Expr, map: &AliasMap) {
             c.temp_ty.iter_mut().for_each(|t| ty(t, map));
             c.args.iter_mut().for_each(|a| expr(a, map));
         }
-        E::InitStruct { name: n, fields, .. } | E::InitVariant { name: n, fields, .. } => {
+        E::InitStruct {
+            name: n, fields, ..
+        }
+        | E::InitVariant {
+            name: n, fields, ..
+        } => {
             name(n, map);
             fields.values_mut().for_each(|v| expr(v, map));
         }
@@ -272,7 +283,7 @@ mod tests {
     #[test]
     fn chain_is_fully_expanded() {
         let nodes = vec![alias("A", TyNode::Ty("B".into())), alias("B", int())];
-        let map = collect_aliases(&nodes).unwrap();
+        let map = map_alias(&nodes).unwrap();
         assert_eq!(map["A"], int());
         assert_eq!(map["B"], int());
     }
@@ -280,7 +291,7 @@ mod tests {
     #[test]
     fn pointer_inside_is_expanded() {
         let nodes = vec![alias("T", int())];
-        let map = collect_aliases(&nodes).unwrap();
+        let map = map_alias(&nodes).unwrap();
         let mut t = TyNode::Pointer {
             is_const: false,
             ty_name: Box::new(TyNode::Ty("T".into())),
@@ -303,13 +314,13 @@ mod tests {
             alias("A", TyNode::Ty("B".into())),
             alias("B", TyNode::Ty("A".into())),
         ];
-        assert!(collect_aliases(&nodes).is_err());
-        assert!(collect_aliases(&[alias("T", TyNode::Ty("T".into()))]).is_err());
+        assert!(map_alias(&nodes).is_err());
+        assert!(map_alias(&[alias("T", TyNode::Ty("T".into()))]).is_err());
     }
 
     #[test]
     fn duplicate_is_error() {
         let nodes = vec![alias("T", int()), alias("T", int())];
-        assert!(collect_aliases(&nodes).is_err());
+        assert!(map_alias(&nodes).is_err());
     }
 }

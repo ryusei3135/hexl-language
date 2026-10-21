@@ -101,14 +101,18 @@ impl UndefKind {
             Self::UndefVarTy | Self::UndefFuncRetTy => {
                 "型の綴りを確認するか、構造体/バリアント型を先に定義してください"
             }
-            Self::UndefVar => "変数を使う前に定義しているか、スコープの外で使っていないか確認してください",
+            Self::UndefVar => {
+                "変数を使う前に定義しているか、スコープの外で使っていないか確認してください"
+            }
             Self::UndefFunc => "関数名の綴りを確認するか、呼び出す前に関数を定義してください",
             Self::UndefStruct => "構造体の名前の綴りを確認するか、先に構造体を定義してください",
             Self::UndefVariant => "バリアント型の名前の綴りを確認するか、先に定義してください",
             Self::UndefStructMember
             | Self::UndefMemberInVar
             | Self::UndefMemberInFn
-            | Self::UndefVariantField => "メンバー名の綴りと、定義されているメンバーの一覧を確認してください",
+            | Self::UndefVariantField => {
+                "メンバー名の綴りと、定義されているメンバーの一覧を確認してください"
+            }
         }
     }
 }
@@ -129,7 +133,10 @@ impl UndefErrs {
     pub fn note(&self) -> Option<String> {
         match (&self.expect, self.kind.expect_is_owner()) {
             (Some(cand), false) => Some(format!("もしかして: `{cand}`")),
-            _ => Some(format!("`{}`はこの位置から見える範囲で定義されていません", self.found)),
+            _ => Some(format!(
+                "`{}`はこの位置から見える範囲で定義されていません",
+                self.found
+            )),
         }
     }
 

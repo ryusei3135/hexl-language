@@ -7,9 +7,9 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::err::Span;
 use crate::compiler::err::compile::{CompileErr, CompileErrKind};
 use crate::compiler::ir::checker::mem::check_list::{IndexCheckList, IsImmOrConst, IsUnsigned};
+use crate::err::Span;
 
 /// 添字が可変な配列アクセスに挿入する実行時ガード
 ///

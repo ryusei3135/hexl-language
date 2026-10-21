@@ -303,9 +303,9 @@ impl CompileErrKind {
                 "契約の名前が一致しません(関数`{fn_name}`の引数`{param_name}`)\n\
                  期待: `of {of_name}` / 渡された値: `must {must_name}`"
             ),
-            Self::ContractMustNotUsed { fn_name, var_name } => format!(
-                "`must`の変数`{var_name}`が、関数`{fn_name}`の中で一度も使われていません"
-            ),
+            Self::ContractMustNotUsed { fn_name, var_name } => {
+                format!("`must`の変数`{var_name}`が、関数`{fn_name}`の中で一度も使われていません")
+            }
             Self::AssignToMustVar(name) => {
                 format!("`must`の契約を持つ変数`{name}`には再代入できません")
             }
@@ -324,7 +324,9 @@ impl CompileErrKind {
     /// `= note:`に出す補足(原因の説明)
     pub fn note(&self) -> Option<String> {
         Some(match self {
-            Self::InvalidIndexType { .. } => "添字には数値(または数値型の変数)だけを使えます".into(),
+            Self::InvalidIndexType { .. } => {
+                "添字には数値(または数値型の変数)だけを使えます".into()
+            }
             Self::InvalidIndexUnsigned(..) => {
                 "添字の型は`u8`/`u16`/`u32`/`u64`のいずれかである必要があります".into()
             }
@@ -345,10 +347,14 @@ impl CompileErrKind {
                 format!("`of {of_name}`の引数には、`must {of_name}`の契約を持つ値しか渡せません")
             }
             Self::ContractMustRequiresOf { must_name, .. } => {
-                format!("`must {must_name}`の値は、`of {must_name}`の引数に渡して契約を果たす必要があります")
+                format!(
+                    "`must {must_name}`の値は、`of {must_name}`の引数に渡して契約を果たす必要があります"
+                )
             }
             Self::AssignToMustVar(..) => "`must`の変数は一度だけ`of`の引数として使えます".into(),
-            Self::VariableConstractExpired(..) => "契約は`of`の引数として渡された時点で終了します".into(),
+            Self::VariableConstractExpired(..) => {
+                "契約は`of`の引数として渡された時点で終了します".into()
+            }
             _ => return None,
         })
     }
@@ -384,7 +390,12 @@ impl CompileErrKind {
 
     /// Rust風の表示を組み立てる。`location`は発生位置の文字列
     pub fn render(&self, location: &str) -> String {
-        let mut out = format!("error[{}]: {}\n  --> {}", self.code(), self.title(), location);
+        let mut out = format!(
+            "error[{}]: {}\n  --> {}",
+            self.code(),
+            self.title(),
+            location
+        );
         if let Some(note) = self.note() {
             out.push_str(&format!("\n   = note: {note}"));
         }

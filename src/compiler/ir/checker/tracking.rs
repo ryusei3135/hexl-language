@@ -2,7 +2,7 @@
 //! 探索
 
 use super::*;
-use crate::err::compile::{CompileErrKind, CompileErr};
+use crate::err::compile::{CompileErr, CompileErrKind};
 
 impl IR {
     /// 範囲付きポインタや配列の長さを超えて数を指定しているかを

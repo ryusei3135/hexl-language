@@ -1,4 +1,7 @@
-use crate::compiler::{err, node::FuncDefInfo::{AllDef, DefOnly}};
+use crate::compiler::{
+    err,
+    node::FuncDefInfo::{AllDef, DefOnly},
+};
 
 use super::*;
 use std::rc::Rc;

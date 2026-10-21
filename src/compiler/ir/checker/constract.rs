@@ -39,7 +39,7 @@ impl IR {
                         &param.name,
                         node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                         &fn_name,
-                        Rc::clone(&arg.span)
+                        Rc::clone(&arg.span),
                     )
                     .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?
                 }
@@ -57,7 +57,7 @@ impl IR {
                 &fn_name,
                 &param.name,
                 node::ConstractTy::name_or_anon(of.of_name().map(|v| v.as_str())),
-                Rc::clone(&arg.span)
+                Rc::clone(&arg.span),
             )
             .map_err(|err| err.with_span(Rc::clone(&self.current_span))),
             // `must`の値は、`of`の引数にしか渡せない
@@ -71,7 +71,7 @@ impl IR {
                     &fn_name,
                     &param.name,
                     node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
-                    Rc::clone(&arg.span)
+                    Rc::clone(&arg.span),
                 )
                 .map_err(|err| err.with_span(Rc::clone(&self.current_span)))
             }
@@ -169,7 +169,8 @@ impl IR {
             .iter()
             .filter(|var| (!var.used && !var.ended_on_exit) || var.branch_mismatch)
         {
-            CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span)).unwrap();
+            CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span))
+                .unwrap();
         }
     }
 }

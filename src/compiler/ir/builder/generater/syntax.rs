@@ -4,7 +4,10 @@
 use super::*;
 
 impl IR {
-    pub(in crate::compiler::ir) fn gen_inst<M: ResultMod>(&mut self, node: &Body) -> Result<usize, err::ErrKind> {
+    pub(in crate::compiler::ir) fn gen_inst<M: ResultMod>(
+        &mut self,
+        node: &Body,
+    ) -> Result<usize, err::ErrKind> {
         for stmt in node {
             self.current_span = Rc::clone(&stmt.span);
             self.expr_counter = 0;
@@ -27,7 +30,10 @@ impl IR {
     }
 
     /// 文のノードを生成
-    pub(super) fn gen_stmt_ir<M: ResultMod>(&mut self, stmt: node::StmtNode) -> Result<usize, err::ErrKind> {
+    pub(super) fn gen_stmt_ir<M: ResultMod>(
+        &mut self,
+        stmt: node::StmtNode,
+    ) -> Result<usize, err::ErrKind> {
         let node = match stmt {
             node::StmtNode::Return(expr) => {
                 let func_ret_ty = self.func_ret_ty.as_ref().ok_or_else(|| {

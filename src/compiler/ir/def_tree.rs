@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
-use crate::err::Span;
 use crate::compiler::{
     err::compile::{CompileErr, CompileErrKind},
     parse,
 };
+use crate::err::Span;
 
 use super::types::*;
 use super::*;

@@ -1,4 +1,6 @@
 mod err_factory;
+/// ここに処理が分割されている
+mod generater;
 mod member;
 mod node_process;
 mod preproc;
@@ -6,11 +8,9 @@ mod proc_fn_info;
 mod scope;
 mod ty_alias;
 mod variant_bind;
-/// ここに処理が分割されている
-mod generater;
 
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use super::*;
 use crate::compiler::ir::types::*;
@@ -51,7 +51,7 @@ impl IR {
     pub(crate) fn builder<M: ResultMod>(
         &mut self,
         nodes: &[node::Group1Node],
-        #[cfg(not(test))]err_pool: Rc<RefCell<err::err_pool::ErrPool>>,
+        #[cfg(not(test))] err_pool: Rc<RefCell<err::err_pool::ErrPool>>,
         #[cfg(not(test))] settings: &crate::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
         // `type T = BaseTy`の`T`を、使われている全ての場所で`BaseTy`に展開する。

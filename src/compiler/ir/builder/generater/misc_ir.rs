@@ -6,7 +6,10 @@ impl IR {
     /// テスト用のヘルパー。
     /// `Self`をメゾットの所属構造体名に解決し、最初の引数が`self`の場合は
     /// そのまま構造体へのポインタ型に変換する。
-    pub(in crate::compiler::ir) fn resolved_self_ty(&self, mut func: node::FuncDefine) -> node::FuncDefine {
+    pub(in crate::compiler::ir) fn resolved_self_ty(
+        &self,
+        mut func: node::FuncDefine,
+    ) -> node::FuncDefine {
         let first_param_is_self = func
             .params
             .first()
@@ -40,7 +43,10 @@ impl IR {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) fn resolve_self_ty(&self, func: &node::FuncDefine) -> node::FuncDefine {
+    pub(in crate::compiler::ir) fn resolve_self_ty(
+        &self,
+        func: &node::FuncDefine,
+    ) -> node::FuncDefine {
         self.resolved_self_ty(func.to_owned())
     }
 
@@ -164,7 +170,10 @@ impl IR {
     /// エラー内容を表示してから終了する
     /// (`gen_expr_ir`など戻り値が`usize`の関数の中では
     /// `?`が使えないため、この形にしている)
-    pub(in crate::compiler::ir) fn unwrap_or_report<T>(&self, result: Result<T, err::ErrKind>) -> T {
+    pub(in crate::compiler::ir) fn unwrap_or_report<T>(
+        &self,
+        result: Result<T, err::ErrKind>,
+    ) -> T {
         match result {
             Ok(v) => v,
             Err(e) => {

@@ -42,7 +42,8 @@ impl IR {
 
         states.iter().try_for_each(|state| {
             // 契約が終了しているかを確認
-            self.var_tree.all_var_is_end_constract(state, Rc::clone(span))
+            self.var_tree
+                .all_var_is_end_constract(state, Rc::clone(span))
         })?;
 
         if from_break == false {

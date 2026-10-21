@@ -11,11 +11,14 @@ use std::rc::Rc;
 /// 配列のしていされたものが数字じゃなかった
 pub(in crate::compiler::ir::builder) fn arr_index_is_not_num<R>(
     val: &str,
-    span: &Rc<err::Span>
+    span: &Rc<err::Span>,
 ) -> Result<R, err::ErrKind> {
-    crate::GenCompileErr2!(CompileErrKind::InvalidIndexType {
-        val: val.to_owned()
-    }, Rc::clone(&span))
+    crate::GenCompileErr2!(
+        CompileErrKind::InvalidIndexType {
+            val: val.to_owned()
+        },
+        Rc::clone(&span)
+    )
 }
 
 /// 構造体が存在しなかった
