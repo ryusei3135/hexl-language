@@ -256,6 +256,13 @@ impl Parser {
                             let impl_node = self.impl_node();
                             C::handle(&self.err_pool, impl_node)?;
                         }
+                        // `type T = BaseTy`
+                        lex::Tkn::KeyWordType => {
+                            let binding = self.type_alias_node();
+                            let node =
+                                C::handle_ty::<node::Group1Node>(&self.err_pool, binding)?;
+                            self.gen_nodes.push(node);
+                        }
                         t => {
                             return crate::err_at!(self.unexpect_tkn_in_stmt(t));
                         }

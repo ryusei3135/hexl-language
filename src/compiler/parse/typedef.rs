@@ -1,6 +1,7 @@
 mod def_fields;
 mod generic;
 mod impl_block;
+pub(in crate::compiler::parse) mod ty_alias;
 mod variant_field;
 
 use super::{Parser, *};

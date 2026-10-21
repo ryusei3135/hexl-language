@@ -45,6 +45,15 @@ impl ConstractTy {
         }
     }
 
+    /// 内側の型だけを差し替えた契約を返す(型エイリアスの展開用)
+    pub fn with_ty(&self, ty: TyNode) -> Self {
+        Self {
+            must: self.must.clone(),
+            of: self.of.clone(),
+            ty: Box::new(ty),
+        }
+    }
+
     #[inline(always)]
     pub fn unwrap_ty(&self) -> TyNode {
         (*self.ty).clone()

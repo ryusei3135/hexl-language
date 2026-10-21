@@ -13,6 +13,24 @@ pub(in crate::compiler) trait Field {
     fn make_field(name: &str, ty: &str, span: Rc<err::Span>) -> Self;
 }
 
+// === 型エイリアス =====
+
+/// `type Name = BaseTy`
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeAlias {
+    pub name: String,
+    pub ty: TyNode,
+    /// `type`の位置
+    pub span: Rc<err::Span>,
+}
+
+impl TypeAlias {
+    #[inline(always)]
+    pub const fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Group1Node {
+        Group1Node::TypeAlias(Self { name, ty, span })
+    }
+}
+
 // === 構造体 =====
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,6 +240,40 @@ pub enum TyNode {
 }
 
 impl TyNode {
+    /// 型名(`Ty`)を`lookup`で置き換えた新しい型を返す。
+    /// ポインタ・参照・配列・契約の中の型も再帰的に置き換える。
+    /// `lookup`は型名から展開後の型を返す(型エイリアスなら`Some`)
+    pub fn expand_alias(&self, lookup: &dyn Fn(&str) -> Option<TyNode>) -> TyNode {
+        match self {
+            Self::Ty(name) => lookup(name).unwrap_or_else(|| self.clone()),
+            Self::SelfTy(_) => self.clone(),
+            Self::Pointer {
+                is_const,
+                ty_name,
+                range,
+            } => Self::Pointer {
+                is_const: *is_const,
+                ty_name: Box::new(ty_name.expand_alias(lookup)),
+                range: *range,
+            },
+            Self::RefTy(t) => Self::RefTy(Box::new(t.expand_alias(lookup))),
+            Self::Stack { name, len } => Self::Stack {
+                name: Box::new(name.expand_alias(lookup)),
+                len: *len,
+            },
+            Self::Static { name, len } => Self::Static {
+                name: Box::new(name.expand_alias(lookup)),
+                len: *len,
+            },
+            Self::ConstractMust(c) => {
+                Self::ConstractMust(c.with_ty(c.unwrap_ty().expand_alias(lookup)))
+            }
+            Self::ConstractOf(c) => {
+                Self::ConstractOf(c.with_ty(c.unwrap_ty().expand_alias(lookup)))
+            }
+        }
+    }
+
     pub fn make_ref_ty(ty_name: &String) -> Self {
         Self::RefTy(Box::new(Self::Ty(ty_name.to_string())))
     }

@@ -158,6 +158,7 @@ pub enum Group1Node {
     FuncDefine(FuncDefine),
     StructDefine(StructDefine),
     VariantDefine(VariantDefine),
+    TypeAlias(TypeAlias),
     Include(ModPath),
     Line(String),
 }

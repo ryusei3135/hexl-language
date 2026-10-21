@@ -4,6 +4,7 @@ mod node_process;
 mod preproc;
 mod proc_fn_info;
 mod scope;
+mod ty_alias;
 mod variant_bind;
 /// ここに処理が分割されている
 mod generater;
@@ -53,10 +54,15 @@ impl IR {
         #[cfg(not(test))]err_pool: Rc<RefCell<err::err_pool::ErrPool>>,
         #[cfg(not(test))] settings: &crate::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
+        // `type T = BaseTy`の`T`を、使われている全ての場所で`BaseTy`に展開する。
+        // 以降の処理(サイズの計算や型の照合など)は、エイリアスの存在を知らなくてよい
+        let expanded = ty_alias::expand_type_aliases(nodes)?;
+        let nodes = &expanded[..];
+
         // 構造体・バリアント型は、定義された場所より前で使われる場合があるので
         // 先に全て登録しておく(前方参照に対応するため)
         for node in nodes {
-            match node {
+            match &node {
                 // 構造体を登録
                 node::Group1Node::StructDefine(info) => {
                     self.struct_tree.add(info);
@@ -86,7 +92,7 @@ impl IR {
 
         for node in nodes {
             self.expr_counter = 0;
-            match node {
+            match &node {
                 node::Group1Node::FuncDefine(info) => {
                     pool_err!(self.ini_def_fn_info::<M>(&info));
                 }
