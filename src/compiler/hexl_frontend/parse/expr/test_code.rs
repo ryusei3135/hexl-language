@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 #[cfg(test)]
 mod expr_tests {
     use crate::compiler::{
@@ -10,6 +9,7 @@ mod expr_tests {
         ast::{self, *},
         hexl_frontend::parse,
     };
+    use crate::compiler::ast::zero_span::ZeroSpan;
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp(line: usize) -> std::rc::Rc<err::Span> {
@@ -248,17 +248,18 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0].get_node().zero_span(),
-            &ex(ExprNode::Match {
+            node.body[0].get_node().clone().zeroed_spans(),
+            ex(ExprNode::Match {
                 pattern: None,
                 arms: vec![MatchArm {
                     pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
-                    body: vec![gen_var_node("hh", "100", "int", 5),],
-                    span: sp(6),
+                    body: vec![gen_var_node("hh", "100", "int", 0),],
+                    span: sp(0),
                 }],
-                arm_else: Some(vec![gen_var_node("a", "10", "int", 8),]),
-            }.zero_span())
+                arm_else: Some(vec![gen_var_node("a", "10", "int", 0),]),
+            })
             .wrap_group2()
+            .zeroed_spans()
         );
     }
 
@@ -283,20 +284,21 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0].get_node(),
-            &ex(ExprNode::Match {
+            node.body[0].get_node().clone().zeroed_spans(),
+            ex(ExprNode::Match {
                 pattern: None,
                 arms: vec![MatchArm {
                     pattern: Box::new(ex(ExprNode::Equal((
                         Box::new(ex(ExprNode::Var("a".to_string()))),
                         Box::new(ex(ExprNode::Number("10".to_string()))),
                     )))),
-                    body: vec![gen_var_node("hh", "100", "int", 4),],
-                    span: sp(5),
+                    body: vec![gen_var_node("hh", "100", "int", 0),],
+                    span: sp(0),
                 }],
-                arm_else: Some(vec![gen_var_node("a", "10", "int", 6),]),
+                arm_else: Some(vec![gen_var_node("a", "10", "int", 0),]),
             })
             .wrap_group2()
+            .zeroed_spans()
         );
     }
 
@@ -327,24 +329,25 @@ mod expr_tests {
             panic!("not func");
         };
         assert_eq!(
-            node.body[0].get_node(),
-            &ex(ExprNode::Match {
+            node.body[0].get_node().clone().zeroed_spans(),
+            ex(ExprNode::Match {
                 pattern: Some(Box::new(ex(ExprNode::Var("a".to_string())))),
                 arms: vec![
                     MatchArm {
                         pattern: Box::new(ex(ExprNode::Number("10".to_string()))),
-                        body: vec![gen_var_node("hh", "100", "int", 5),],
-                        span: sp(6),
+                        body: vec![gen_var_node("hh", "100", "int", 0),],
+                        span: sp(0),
                     },
                     MatchArm {
                         pattern: Box::new(ex(ExprNode::Number("20".to_string()))),
-                        body: vec![gen_var_node("hh", "200", "int", 8),],
-                        span: sp(9),
+                        body: vec![gen_var_node("hh", "200", "int", 0),],
+                        span: sp(0),
                     }
                 ],
-                arm_else: Some(vec![gen_var_node("a", "10", "int", 11)]),
+                arm_else: Some(vec![gen_var_node("a", "10", "int", 0)]),
             })
             .wrap_group2()
+            .zeroed_spans()
         );
     }
 

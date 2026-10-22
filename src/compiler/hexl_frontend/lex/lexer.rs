@@ -240,14 +240,14 @@ impl Lexer {
                 }
                 // 改行が来たので、lineをインクリメント
                 if curr_kind == &CharKind::Ln {
+                    // 文字の場所を初期化
+                    chr_counter = 0;
+                    line_counter += 1;
                     self.span = Some(Rc::new(err::Span::new(
                         line_counter,
                         chr_counter,
                         lines[line_counter - 1].to_string(),
                     )));
-                    // 文字の場所を初期化
-                    chr_counter = 0;
-                    line_counter += 1;
                 }
 
                 self.chr_stk.push(chr);

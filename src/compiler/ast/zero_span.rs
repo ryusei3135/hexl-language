@@ -205,9 +205,10 @@ impl ZeroSpan for Group2Node {
     }
 }
 
-/// `line`フィールド(何行目か)は変更しない。`span`だけを0にする
+/// `span`に加えて、`line`フィールド(何行目か)も0にする
 impl ZeroSpan for Group2Info {
     fn zero_span(&mut self) {
+        self.line = 0;
         self.node.zero_span();
         self.span.zero_span();
     }
