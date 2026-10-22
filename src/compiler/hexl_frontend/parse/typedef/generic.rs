@@ -28,7 +28,6 @@
 //! 通常のノードの後ろへ追加する。
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Field, FuncDefine, Group1Node, Group2Node, StructDefine, StructField, TyNode, VariantDefine, VariantField};
 
 /// ジェネリクスの型を入れ子にできる深さの上限(`func.rs`と同じ値)。
 /// `struct Node<T> { next: Node<T*>* }`のように、型が増え続ける再帰で

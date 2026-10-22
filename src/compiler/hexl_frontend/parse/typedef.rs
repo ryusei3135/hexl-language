@@ -5,7 +5,6 @@ pub(in crate::compiler::hexl_frontend::parse) mod ty_alias;
 mod variant_field;
 
 use super::{Parser, *};
-use crate::compiler::ast::{Expr, ExprNode, Field, FuncDefine, Group1Node, Group2Node, StructDefine, StructField, TyNode, VariantDefine, VariantField, VariantMode};
 use std::collections::HashMap;
 use std::rc::Rc;
 

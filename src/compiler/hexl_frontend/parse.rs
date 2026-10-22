@@ -26,7 +26,7 @@ pub(in crate::compiler::hexl_frontend::parse) use parse_loop_control::*;
 use crate::compiler::hexl_frontend::parse::stmt::parse_loop_control::ParseLoopControl;
 use crate::err::err_pool;
 
-use crate::compiler::{c_frontend, models::Body, ast::Group2Info};
+use crate::compiler::{c_frontend, models::Body};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VarMutAttr {

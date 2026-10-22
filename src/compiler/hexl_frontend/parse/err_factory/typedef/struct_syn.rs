@@ -1,5 +1,4 @@
 use super::*;
-use crate::compiler::ast::Group1Node;
 
 impl Parser {
     pub(in crate::compiler::hexl_frontend::parse) fn struct_name_is_not_found(

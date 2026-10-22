@@ -7,7 +7,6 @@
 //! - 終了時は`BaseTy`のトークンを指す(`struct`が閉じの`}`を指すのと同じ規約。
 //!   次のトークンへは`parse_loop`の`next_tkn`が進める)
 use super::*;
-use crate::compiler::ast::{Group1Node, TyNode, TypeAlias};
 
 impl Parser {
     pub(in crate::compiler::hexl_frontend::parse) fn type_alias_node(

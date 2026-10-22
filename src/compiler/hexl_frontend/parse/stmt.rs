@@ -8,7 +8,6 @@ use std::rc::Rc;
 use crate::syntax_err;
 
 use super::*;
-use crate::compiler::ast::{AssignVar, Expr, ExprNode, Group1Node, Group2Node, StmtNode, TyNode};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum GenFlag {

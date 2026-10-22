@@ -1,7 +1,6 @@
 //! self.expr_valueのmatchの中から呼び出すAPIを提供
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Group1Node};
 
 impl Parser {
     /// 呼び出しもとで、トークン`lex::Tkn::Name(..)`が

@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Group1Node, Group2Node, ImportKind, InlineAsm, ModPath, StmtNode};
 use regex::{Captures, Regex};
 
 /// `${...}`を検出する正規表現。

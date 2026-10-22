@@ -1,5 +1,4 @@
 use super::*;
-use crate::compiler::ast::Expr;
 
 pub(in crate::compiler::hexl_frontend::parse) struct MatchErr {
     span: Rc<err::Span>,

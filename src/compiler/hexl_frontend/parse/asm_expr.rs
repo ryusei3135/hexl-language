@@ -11,7 +11,6 @@
 //! 先読みした瞬間にトークンが無く(EOF)、エラーとして
 //! 伝播してしまう。
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode};
 use std::rc::Rc;
 
 impl Parser {

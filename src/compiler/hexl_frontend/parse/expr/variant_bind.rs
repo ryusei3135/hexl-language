@@ -18,7 +18,6 @@
 //! (`a: int = 1`の型の部分を省略した形)。
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Group1Node, Group2Info, Group2Node, VariantBind};
 use crate::compiler::hexl_frontend::parse::VarMutAttr;
 
 impl Parser {

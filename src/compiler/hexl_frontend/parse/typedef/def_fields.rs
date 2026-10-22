@@ -1,8 +1,5 @@
 //! 構造体や共用体などのフィールドを生成するAPIを提供
 
-use crate::compiler::ast::{
-    Field, Group1Node, StructField, VariantField, VariantFieldKind, VariantMode,
-};
 
 use std::rc::Rc;
 

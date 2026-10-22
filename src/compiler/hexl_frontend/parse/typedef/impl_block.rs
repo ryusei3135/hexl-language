@@ -6,7 +6,6 @@
 //!   最後まで定義されなければ、`Parser::parser`がエラーにする
 
 use super::*;
-use crate::compiler::ast::Group1Node;
 
 impl Parser {
     /// `impl Name { メゾット.. }`を解析する

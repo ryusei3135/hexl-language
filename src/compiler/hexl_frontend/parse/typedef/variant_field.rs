@@ -1,9 +1,7 @@
-use crate::compiler::ast::{Field, VariantField, VariantFieldKind};
 
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::ast::{Group1Node, TyNode, VariantDefine};
 
 /// メゾットかを調べる時に使う
 const IS_METHOD: bool = true;

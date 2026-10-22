@@ -2,7 +2,6 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::ast::{AssignVar, Expr, ExprNode};
 
 impl Parser {
     /// 変数を定義する際に、可変か不変かを判定する

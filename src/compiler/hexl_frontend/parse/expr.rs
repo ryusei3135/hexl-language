@@ -6,7 +6,6 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::ast::{AssignVar, CallInfo, DefineVar, Expr, ExprNode, Group1Node, Group2Node, MatchArm, StmtNode, TyNode};
 
 mod arr_access;
 mod cond;
@@ -16,7 +15,6 @@ mod value_api;
 /// `cond`の条件式の中だけで使える`M(val) := value`
 mod variant_bind;
 use crate::compiler::hexl_frontend::lex;
-use crate::compiler::ast;
 
 impl Parser {
     pub(in crate::compiler::hexl_frontend::parse) fn expr_define_var(
