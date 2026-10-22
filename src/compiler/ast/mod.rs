@@ -13,6 +13,8 @@ pub(in crate::compiler) use expr_node::*;
 pub(in crate::compiler) use stmt_node::*;
 #[cfg(test)]
 pub(in crate::compiler) use test_utils::*;
+#[cfg(test)]
+pub mod zero_span;
 
 use crate::compiler::{models::Body, hexl_frontend::parse::VarMutAttr};
 
