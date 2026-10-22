@@ -121,9 +121,9 @@ impl Parser {
 #[cfg(test)]
 mod variant_node_test {
     use crate::compiler::{
-        lex,
-        node::{self, *},
-        parse,
+        hexl_frontend::lex,
+        ast::{self, *},
+        hexl_frontend::parse,
     };
 
     fn gen_variant(content: &str) -> VariantDefine {

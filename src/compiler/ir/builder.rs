@@ -82,10 +82,20 @@ impl IR {
         // エラーは`err_pool`にためて、次の定義の処理を続ける
         // (1つ目のエラーで止めず、まとめて表示するため)。
         // 呼び出し側は、この関数の後に`err_pool.borrow().has_err()`を確認すること
+        #[cfg(not(test))]
         macro_rules! pool_err {
             ($result:expr) => {
                 if let Err(e) = $result {
                     err_pool.borrow_mut().push_err_node(e);
+                }
+            };
+        }
+        // テストでは`err_pool`を受け取らないので、最初のエラーをそのまま返す
+        #[cfg(test)]
+        macro_rules! pool_err {
+            ($result:expr) => {
+                if let Err(e) = $result {
+                    return Err(e);
                 }
             };
         }
@@ -128,11 +138,11 @@ fn test_span() -> std::rc::Rc<err::Span> {
 
 #[cfg(test)]
 fn parse_test_source(src: &str) -> Vec<Group1Node> {
-    let mut lexer = crate::compiler::lex::Lexer::new();
+    let mut lexer = crate::compiler::hexl_frontend::lex::Lexer::new();
     lexer.analy(&src.to_string()).unwrap();
     let file_name = std::rc::Rc::new("<test>".to_string());
     let err_pool = std::rc::Rc::new(std::cell::RefCell::new(crate::err::err_pool::ErrPool::new()));
-    let mut parser = parse::Parser::new(&file_name, err_pool);
+    let mut parser = crate::compiler::hexl_frontend::parse::Parser::new(&file_name, err_pool);
     parser
         .parser(&lexer.gen_tkns, &Vec::<String>::new())
         .unwrap()

@@ -247,7 +247,7 @@ mod match_expr_ir_tests {
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
         let nodes = parse_test_source(src);
         let mut ir = IR::new();
-        ir.builder(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
         ir.test_only_get_func_body("main").to_vec()
     }
 
@@ -462,7 +462,7 @@ mod match_expr_ir_tests {
         let nodes =
             parse_test_source("main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }");
         let mut ir = IR::new();
-        ir.builder(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
         let body = ir.test_only_get_func_body("main").to_vec();
         assert!(
             body.iter().any(|inst| matches!(

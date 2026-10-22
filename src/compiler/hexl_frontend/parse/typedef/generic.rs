@@ -495,8 +495,8 @@ impl Parser {
 
 #[cfg(test)]
 mod generic_type_tests {
-    use crate::compiler::Field;
-    use crate::compiler::{lex, parse};
+    use crate::compiler::ast::*;
+    use crate::compiler::{hexl_frontend::lex, hexl_frontend::parse};
 
     fn try_build(src: &str) -> Result<Vec<Group1Node>, ()> {
         let mut lexer = lex::Lexer::new();
@@ -511,12 +511,16 @@ mod generic_type_tests {
         try_build(src).expect("parse failed")
     }
 
+    fn sp() -> std::rc::Rc<crate::compiler::err::Span> {
+        std::rc::Rc::new(crate::compiler::err::Span::unknown())
+    }
+
     fn ty(name: &str) -> TyNode {
         TyNode::Ty(name.to_string())
     }
 
     fn expr(node: ExprNode) -> Expr {
-        Expr::new(node, crate::compiler::err::Span::unknown())
+        Expr::new(node, sp())
     }
 
     fn structs(nodes: &Vec<Group1Node>) -> Vec<&StructDefine> {
@@ -579,10 +583,11 @@ mod generic_type_tests {
                 StructDefine::new(
                     name,
                     vec![
-                        StructField::new("a".to_string(), ty(t)),
-                        StructField::new("b".to_string(), ty(t)),
+                        StructField::new("a".to_string(), ty(t), sp()),
+                        StructField::new("b".to_string(), ty(t), sp()),
                     ],
-                    Vec::new()
+                    Vec::new(),
+                    sp()
                 )
             );
         }
@@ -640,8 +645,8 @@ mod generic_type_tests {
         assert_eq!(
             s.fields,
             vec![
-                StructField::new("a".to_string(), ty("int")),
-                StructField::new("b".to_string(), ty("byte")),
+                StructField::new("a".to_string(), ty("int"), sp()),
+                StructField::new("b".to_string(), ty("byte"), sp()),
             ]
         );
     }
@@ -736,8 +741,8 @@ mod generic_type_tests {
             assert_eq!(
                 v.fields,
                 vec![
-                    VariantField::new("Some".to_string(), ty(t)),
-                    VariantField::typeless_new("None".to_string()),
+                    VariantField::new("Some".to_string(), ty(t), sp()),
+                    VariantField::typeless_new("None".to_string(), sp()),
                 ]
             );
         }
@@ -819,8 +824,8 @@ mod generic_type_tests {
         assert_eq!(
             v.fields,
             vec![
-                VariantField::new("a".to_string(), ty("int")),
-                VariantField::new("b".to_string(), ty("i64")),
+                VariantField::new("a".to_string(), ty("int"), sp()),
+                VariantField::new("b".to_string(), ty("i64"), sp()),
             ]
         );
         assert!(!v.is_tagged());

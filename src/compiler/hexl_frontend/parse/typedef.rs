@@ -388,7 +388,7 @@ mod ty_tests {
 
     /// テストで組み立てるノードに付ける位置
     fn sp() -> Rc<err::Span> {
-        Rc::new(Parser::new_for_test().build_err_span())
+        Parser::new_for_test().build_err_span()
     }
 
     fn build(value: &str) -> Vec<Group1Node> {

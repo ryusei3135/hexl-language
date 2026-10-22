@@ -13,6 +13,9 @@
     コメント
     */
     ```
+### Changed
+- ノードの位置を変更 `compiler::parse::node`から`compiler::ast`
+- hexlのフロントエンドディレクトリにparseとlexを移動
 
 ## [1.0.2] - 2026-10-18
 ### Fixed

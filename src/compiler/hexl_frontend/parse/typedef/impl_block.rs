@@ -100,9 +100,9 @@ impl Parser {
 #[cfg(test)]
 mod impl_block_test {
     use crate::compiler::{
-        lex,
-        node::{self, *},
-        parse,
+        hexl_frontend::lex,
+        ast::{self, *},
+        hexl_frontend::parse,
     };
 
     fn parse_nodes(content: &str) -> Result<Vec<Group1Node>, ()> {

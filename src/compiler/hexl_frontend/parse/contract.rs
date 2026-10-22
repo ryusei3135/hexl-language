@@ -75,7 +75,7 @@ impl Parser {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::compiler::parse;
+    use crate::compiler::hexl_frontend::parse;
 
     fn gen_nodes(content: &str) -> Vec<lex::LocatedTkn> {
         let mut lexer = lex::Lexer::new();

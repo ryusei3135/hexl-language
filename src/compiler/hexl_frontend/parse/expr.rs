@@ -663,14 +663,14 @@ impl Parser {
 #[cfg(test)]
 mod expr_tests {
     use crate::compiler::{
-        err, lex,
-        node::{self, *},
-        parse,
+        err, hexl_frontend::lex,
+        ast::{self, *},
+        hexl_frontend::parse,
     };
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp() -> std::rc::Rc<err::Span> {
-        std::rc::Rc::new(err::Span::new(&0, &0))
+        std::rc::Rc::new(err::Span::new(0, 0, String::new()))
     }
 
     /// 位置を付けて`Expr`にする
@@ -820,7 +820,7 @@ mod expr_tests {
                 name: "a".to_string(),
                 value: Box::new(ex(ExprNode::Number("100".to_string()))),
                 ty: TyNode::Stack {
-                    name: "int".to_string(),
+                    name: Box::new(TyNode::Ty("int".to_string())),
                     len: 1
                 },
                 var_attr: parse::VarMutAttr::Invar,
@@ -849,7 +849,7 @@ mod expr_tests {
                     ex(ExprNode::Number("100".to_string())),
                 ]))),
                 ty: TyNode::Stack {
-                    name: "int".to_string(),
+                    name: Box::new(TyNode::Ty("int".to_string())),
                     len: 4
                 },
                 var_attr: parse::VarMutAttr::Invar,
@@ -873,7 +873,7 @@ mod expr_tests {
                 name: "a".to_string(),
                 value: Box::new(ex(ExprNode::Number("100".to_string()))),
                 ty: TyNode::Static {
-                    name: "int".to_string(),
+                    name: Box::new(TyNode::Ty("int".to_string())),
                     len: 1
                 },
                 var_attr: parse::VarMutAttr::Invar,
@@ -911,6 +911,7 @@ mod expr_tests {
                 arms: vec![MatchArm {
                     pattern: Box::new(wrap_eq_expr_cmp("10", "10")),
                     body: vec![gen_var_node("hh", "100", "b1", 5),],
+                    span: sp(),
                 }],
                 arm_else: Some(vec![gen_var_node("a", "10", "b1", 8),]),
             })
@@ -948,6 +949,7 @@ mod expr_tests {
                         Box::new(ex(ExprNode::Number("10".to_string()))),
                     )))),
                     body: vec![gen_var_node("hh", "100", "int", 4),],
+                    span: sp(),
                 }],
                 arm_else: Some(vec![gen_var_node("a", "10", "int", 6),]),
             })
@@ -989,10 +991,12 @@ mod expr_tests {
                     MatchArm {
                         pattern: Box::new(ex(ExprNode::Number("10".to_string()))),
                         body: vec![gen_var_node("hh", "100", "int", 5),],
+                        span: sp(),
                     },
                     MatchArm {
                         pattern: Box::new(ex(ExprNode::Number("20".to_string()))),
                         body: vec![gen_var_node("hh", "200", "int", 8),],
+                        span: sp(),
                     }
                 ],
                 arm_else: Some(vec![gen_var_node("a", "10", "int", 11)]),

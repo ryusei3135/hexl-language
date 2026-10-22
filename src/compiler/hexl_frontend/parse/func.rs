@@ -553,12 +553,13 @@ impl Parser {
 
 #[cfg(test)]
 mod generic_tests {
-    use crate::compiler::{err, lex, parse};
+    use crate::compiler::ast::*;
+    use crate::compiler::{err, hexl_frontend::lex, hexl_frontend::parse};
     use std::rc::Rc;
 
     /// テストで組み立てるノードに付ける位置
     fn sp() -> Rc<err::Span> {
-        Rc::new(parse::Parser::new_for_test().build_err_span())
+        parse::Parser::new_for_test().build_err_span()
     }
 
     fn ex(node: ExprNode) -> Expr {

@@ -148,14 +148,14 @@ impl Parser {
 #[cfg(test)]
 mod variant_bind_tests {
     use crate::compiler::{
-        err, lex,
-        node::{self, *},
-        parse,
+        err, hexl_frontend::lex,
+        ast::{self, *},
+        hexl_frontend::parse,
     };
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp() -> std::rc::Rc<err::Span> {
-        std::rc::Rc::new(err::Span::new(&0, &0))
+        std::rc::Rc::new(err::Span::new(0, 0, String::new()))
     }
 
     /// 位置を付けて`Expr`にする

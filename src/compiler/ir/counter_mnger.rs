@@ -66,6 +66,26 @@ impl VarCounter {
         vars.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
         vars
     }
+
+    /// ローカル変数`var_name`が使われた回数(使われていなければ0)
+    #[cfg(test)]
+    pub fn var_use_count(&self, var_name: &str) -> usize {
+        self.list.get(var_name).copied().unwrap_or(0)
+    }
+
+    /// `index`番目の引数が使われた回数(使われていなければ0)
+    #[cfg(test)]
+    pub fn arg_use_count(&self, index: usize) -> usize {
+        self.args.get(index).copied().unwrap_or(0)
+    }
+
+    /// 引数を、使われた回数が多い順に`(番号, 回数)`で返す(同じ回数なら番号順)
+    #[cfg(test)]
+    pub fn args_by_priority(&self) -> Vec<(usize, usize)> {
+        let mut args: Vec<(usize, usize)> = self.args.iter().copied().enumerate().collect();
+        args.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        args
+    }
 }
 
 impl IR {

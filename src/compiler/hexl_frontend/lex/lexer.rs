@@ -569,7 +569,7 @@ impl Lexer {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::lex::*;
+    use crate::compiler::hexl_frontend::lex::*;
 
     fn lexer() -> Lexer {
         Lexer::new()
@@ -1164,7 +1164,7 @@ mod tests {
         let main_path = base.join(main);
         let src = std::fs::read_to_string(&main_path).unwrap();
         let mut lex = Lexer::with_os("linux");
-        lex.set_source_file(main_path.to_str().unwrap());
+        lex.set_source_file(std::rc::Rc::new(main_path.to_str().unwrap().to_string()));
         lex.analy(&src).unwrap();
         let _ = std::fs::remove_dir_all(&base);
         lex.gen_tkns
@@ -1269,7 +1269,7 @@ mod tests {
             .gen_tkns
             .iter()
             .filter_map(|t| match &t.tkn {
-                Tkn::Number(n) => Some((n.clone(), t.line)),
+                Tkn::Number(n) => Some((n.clone(), t.span.line)),
                 _ => None,
             })
             .collect();
@@ -1305,7 +1305,7 @@ mod tests {
         let main_path = base.join("m.hexl");
         std::fs::write(&main_path, "#include \"a.hexl\"").unwrap();
         let mut lex = Lexer::with_os("linux");
-        lex.set_source_file(main_path.to_str().unwrap());
+        lex.set_source_file(std::rc::Rc::new(main_path.to_str().unwrap().to_string()));
         lex.analy(&std::fs::read_to_string(&main_path).unwrap())
             .unwrap();
         let _ = std::fs::remove_dir_all(&base);

@@ -180,7 +180,7 @@ impl IR {
 #[cfg(test)]
 mod constract_ir_test {
     use super::*;
-    use crate::compiler::{lex, parse};
+    use crate::compiler::hexl_frontend::{lex, parse};
 
     /// 契約のテストで共通して使う関数の定義
     ///
@@ -226,7 +226,7 @@ g(v: int must=d) { d(v) }
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut ir = IR::new();
-            ir.builder(&nodes)
+            ir.builder::<crate::compiler::ir::result_mod::ReturnErr>(&nodes)
                 .map(|_| ())
                 .map_err(|err| format!("{:?}", err))
         }));

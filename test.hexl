@@ -85,16 +85,10 @@ add(a mut: int, b: int): Option<int> {
     loop a > 0 {
         cond {
             a > 5 => {
-                io::print(c, 12)
+                io::print_line(c, 12)
             }
             else => {
-                #asm(gcc_x64) {
-                    "{space}movl $1, %eax"
-                    "{space}movl $1, %edi"
-                    "{space}leaq (${d}), %rsi"
-                    "{space}movl $8, %edx"
-                    "{space}syscall"
-                }
+                io::print_line(d, 8)
                 break
             }
         }

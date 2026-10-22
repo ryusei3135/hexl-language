@@ -1,8 +1,8 @@
 use super::*;
 use crate::compiler::err::Span;
-use crate::compiler::node::*;
-use crate::compiler::parse::VarMutAttr;
-use crate::preproc::Preprocessor;
+use crate::compiler::ast::*;
+use crate::compiler::hexl_frontend::parse::VarMutAttr;
+use crate::compiler::c_frontend::lex::Preprocessor;
 use std::rc::Rc;
 
 fn parse(src: &str) -> Vec<Group1Node> {
@@ -280,7 +280,10 @@ fn while_loop() {
         arms[0].pattern.node,
         ExprNode::GreaterThenEq((var("i"), num("10")))
     );
-    assert_eq!(arms[0].body[0].node, Group2Node::Stmt(StmtNode::Break(..)));
+    assert!(matches!(
+        arms[0].body[0].node,
+        Group2Node::Stmt(StmtNode::Break(_))
+    ));
     assert_eq!(
         body[1].node,
         Group2Node::Expr(expr(ExprNode::Inc(var("i"))))

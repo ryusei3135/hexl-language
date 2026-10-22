@@ -107,7 +107,7 @@ impl IR {
     /// - 第一引数が`Self`型のメゾット(`self: Self`)は`resolve_self_ty`に
     ///   よって、自身の構造体を指すポインタを受け取る関数として解決される
     /// - それ以外の変換処理は、トップレベルの関数定義
-    ///   (`Group1ast::FuncDefine`)と全く同じ流れで行う
+    ///   (`Group1Node::FuncDefine`)と全く同じ流れで行う
     pub(in crate::compiler::ir) fn expand_struct_methods<M: ResultMod>(
         &mut self,
         struct_def: &ast::StructDefine,
@@ -347,7 +347,7 @@ mod struct_method_expand_tests {
             parse_test_source("struct Point { x: int pub get_num(self: Self): int { ret 1 } }");
 
         let mut ir = IR::new();
-        ir.builder(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
 
         // `Point::get_num`として展開され、呼び出せる状態になっている
         let body = ir.test_only_get_method_body("Point", "get_num");
@@ -386,7 +386,7 @@ mod struct_method_expand_tests {
         );
 
         let mut ir = IR::new();
-        ir.builder(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
 
         let body = ir.test_only_get_func_body("main");
         assert!(
@@ -412,7 +412,7 @@ mod method_call_via_member_tests {
         );
 
         let mut ir = IR::new();
-        ir.builder(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
 
         let body = ir.test_only_get_func_body("main");
 
