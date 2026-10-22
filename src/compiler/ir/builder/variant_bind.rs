@@ -1,5 +1,5 @@
 //! `cond`の条件式の中だけで使える、バリアントのパターン束縛
-//! (`node::Expr::VariantBind`)を、次のように展開するAPIを提供する
+//! (`Expr::VariantBind`)を、次のように展開するAPIを提供する
 //!
 //! ```text
 //! cond M(val) := value { body } | { else_body }
@@ -23,6 +23,7 @@
 //! そのため、`val`は本体の中でだけ使える。
 
 use super::*;
+use crate::compiler::ast::{Expr, ExprNode, TyNode, VariantBind};
 use err_factory::expr_node;
 
 /// `M(val) := value`の展開に必要な情報
@@ -42,7 +43,7 @@ pub(super) struct VariantBindInfo {
     /// `val`の名前
     bind: String,
     /// `val`の型(`:=`のときは`M`の中身の型)
-    ty: node::TyNode,
+    ty: TyNode,
     /// `val`が不変か、`mut`/`const`か
     var_attr: parse::VarMutAttr,
 }
@@ -54,9 +55,9 @@ impl IR {
     /// 変数の置かれた場所から直接読み出すため
     fn variant_bind_resolve(
         &mut self,
-        bind: &node::VariantBind,
+        bind: &VariantBind,
     ) -> Result<VariantBindInfo, err::ErrKind> {
-        let node::ExprNode::Var(src) = &(*bind.value).node else {
+        let ExprNode::Var(src) = &(*bind.value).node else {
             panic!(
                 "`{}({}) := ..`の`:=`の右辺には、バリアント型の変数を渡してください: {:?}",
                 bind.variant, bind.bind, bind.value
@@ -67,7 +68,7 @@ impl IR {
 
         let via_ptr = matches!(
             self.var_tree.get_ty_node(src),
-            Some(node::TyNode::Pointer { .. })
+            Some(TyNode::Pointer { .. })
         );
         // ポインタ型の変数なら、指す先のバリアント型の名前が返る
         let variant_name = self.var_tree.get_ty_name(src)?;
@@ -155,7 +156,7 @@ impl IR {
     /// (他の条件式と同じ。最後に積まれた比較が真なら`arm`へジャンプする)
     pub(super) fn variant_bind_cond(
         &mut self,
-        bind: &node::VariantBind,
+        bind: &VariantBind,
     ) -> Result<VariantBindInfo, err::ErrKind> {
         let info = self.variant_bind_resolve(bind)?;
         // `value.label`
@@ -208,11 +209,11 @@ impl IR {
     /// 渡されてくる。IRはバリアント型の定義を全て集めてから処理するので、ここで直す。
     ///
     /// `Type`がバリアント型で、`Mem`がそのメンバー、かつ引数が1つのときだけ直す
-    pub(super) fn scope_call_to_variant_init(&self, expr: &node::Expr) -> node::Expr {
-        let node::ExprNode::Scope { scope, target } = &expr.node else {
+    pub(super) fn scope_call_to_variant_init(&self, expr: &Expr) -> Expr {
+        let ExprNode::Scope { scope, target } = &expr.node else {
             return expr.clone();
         };
-        let (Some(type_name), node::ExprNode::CallFunc(call)) = (scope.last(), &(**target).node)
+        let (Some(type_name), ExprNode::CallFunc(call)) = (scope.last(), &(**target).node)
         else {
             return expr.clone();
         };
@@ -228,8 +229,8 @@ impl IR {
         }
         let mut fields = HashMap::new();
         fields.insert(call.name.clone(), Box::new(call.args[0].clone()));
-        node::Expr::new(
-            node::ExprNode::InitVariant {
+        Expr::new(
+            ExprNode::InitVariant {
                 is_self: false,
                 name: type_name.clone(),
                 fields,

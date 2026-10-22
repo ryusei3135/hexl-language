@@ -1,4 +1,4 @@
-use crate::compiler::node;
+use crate::compiler::ast;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::mem;
@@ -18,13 +18,14 @@ mod result_mod;
 
 use crate::compiler::err::{self, undef::UndefKind::*};
 pub use result_mod::*;
+use crate::compiler::{err::*, models::Body, hexl_frontend::parse};
 
 #[derive(Debug)]
 pub struct IR {
     pub var_tree: def_tree::VarTree,
     pub extern_funcs: Vec<inst::Inst>,
     id_counter: usize,
-    func_ret_ty: Option<node::TyNode>,
+    func_ret_ty: Option<ast::TyNode>,
     ir_tree: Vec<inst::Inst>,
     pattern_labels: usize,
     loop_labels: Vec<(usize, usize)>,

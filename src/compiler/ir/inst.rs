@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::compiler::ast::TyNode;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind {
     Add,
@@ -92,7 +94,7 @@ pub struct CallFuncMetaData {
     pub path: Vec<String>,
     pub public: bool,
     pub name: String,
-    pub temp_ty: Vec<node::TyNode>,
+    pub temp_ty: Vec<TyNode>,
     pub params: Vec<ValueId>,
 
     /// 関数を呼ぶ際に、代入する変数があるかをbooleanで表現

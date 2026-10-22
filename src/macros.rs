@@ -50,14 +50,14 @@ macro_rules! scope_node {
                         let value = $self.expr_branch()?;
 
                         let target_name = path_node.pop().unwrap();
-                        let node = node::ExprNode::$result {
+                        let node = ast::ExprNode::$result {
                             scope: path_node.clone(),
                             target: Box::new(
-                                node::ExprNode::Var(target_name).with_span(target_span),
+                                ast::ExprNode::Var(target_name).with_span(target_span),
                             ),
                         }
                         .with_span(std::rc::Rc::clone(&scope_span));
-                        return Ok(node::AssignVar::new(
+                        return Ok(ast::AssignVar::new(
                             $start,
                             node,
                             value,
@@ -85,12 +85,12 @@ macro_rules! scope_node {
                     _ => {
                         let var_span = $self.build_err_span();
                         let _ = $self.next_tkn(&[])?;
-                        node::ExprNode::Var(path_node.last().unwrap().to_string())
+                        ast::ExprNode::Var(path_node.last().unwrap().to_string())
                             .with_span(var_span)
                     }
                 };
                 path_node.pop().unwrap();
-                let node = node::ExprNode::$result {
+                let node = ast::ExprNode::$result {
                     scope: path_node.clone(),
                     target: Box::new(expr),
                 }

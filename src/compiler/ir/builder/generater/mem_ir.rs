@@ -3,7 +3,7 @@
 use super::*;
 
 impl IR {
-    pub(in crate::compiler::ir) fn stack_counter(&mut self, size: &node::TyNode) {
+    pub(in crate::compiler::ir) fn stack_counter(&mut self, size: &ast::TyNode) {
         let result = self.try_size_or_emit_struct(size);
         let ty = self.unwrap_or_report(result);
         self.stk_counter += ty.to_bytes();
@@ -17,18 +17,18 @@ impl IR {
     ///   与えられた場合は、要素ごとに値を生成する
     pub(in crate::compiler::ir) fn gen_mem_def_var<M: ResultMod>(
         &mut self,
-        mut var: node::DefineVar,
+        mut var: ast::DefineVar,
     ) -> Result<inst::Inst, err::ErrKind> {
         let (ref ty_name, len, is_static) = match &var.ty {
-            node::TyNode::Stack { name, len } => (name.clone(), *len, false),
-            node::TyNode::Static { name, len } => (name.clone(), *len, true),
+            ast::TyNode::Stack { name, len } => (name.clone(), *len, false),
+            ast::TyNode::Static { name, len } => (name.clone(), *len, true),
             _ => panic!("gen_mem_def_var: スタック/静的領域の型ではありません"),
         };
         let elem_size = self.size_of(&ty_name);
 
         // 配列リテラルなら要素ごとに展開し、単一の値ならそのまま1要素として扱う
         let values = match (*var.value).node {
-            node::ExprNode::Array(items) => items,
+            ast::ExprNode::Array(items) => items,
             _ => vec![(*var.value).clone()],
         };
 

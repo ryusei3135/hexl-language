@@ -3,6 +3,7 @@
 use crate::compiler::ir::def_tree::FnDefInfo;
 
 use super::*;
+use crate::compiler::ast::{CallInfo, FuncDefine, TyNode};
 
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
@@ -11,7 +12,7 @@ impl IR {
     #[inline(always)]
     pub(super) fn ini_def_fn_info<M: ResultMod>(
         &mut self,
-        info: &node::FuncDefine,
+        info: &FuncDefine,
     ) -> Result<(), err::ErrKind> {
         // 関数のスコープごとに使用回数を数え直す(`FnDefInfo.var_counter`に保存される)
         self.var_counter = counter_mnger::VarCounter::with_arg_count(info.params.len());
@@ -31,7 +32,7 @@ impl IR {
     }
 
     /// 関数の情報を関数ツリーに登録
-    pub(super) fn push_fn_ir_tree(&mut self, info: &node::FuncDefine) {
+    pub(super) fn push_fn_ir_tree(&mut self, info: &FuncDefine) {
         // 関数のデータをpush
         self.func_tree.add(
             // 関数の処理
@@ -48,7 +49,7 @@ impl IR {
 
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
-    pub(super) fn entry_fn_info(&mut self, info: &node::FuncDefine) {
+    pub(super) fn entry_fn_info(&mut self, info: &FuncDefine) {
         self.check_must_var_used(&info);
         self.func_ret_ty = Some(info.ret_ty.clone());
 
@@ -76,7 +77,7 @@ impl IR {
     pub(super) fn gen_call_fn_ir<M: ResultMod>(
         &mut self,
         module_name: Option<&str>,
-        meta_data: &node::CallInfo,
+        meta_data: &CallInfo,
         return_var_name: Option<&String>,
     ) -> Result<inst::Inst, err::ErrKind> {
         // 関数の定義を取得
@@ -119,7 +120,7 @@ impl IR {
         func_meta_data.temp_ty = meta_data.temp_ty.clone();
 
         if return_var_name.is_some() {
-            if let Some(node::TyNode::Ty(struct_name)) = defined_func_data.ret_ty.as_ref() {
+            if let Some(TyNode::Ty(struct_name)) = defined_func_data.ret_ty.as_ref() {
                 if let Some(struct_info) = self.struct_tree.get(&struct_name).cloned() {
                     let size = struct_info
                         .fields

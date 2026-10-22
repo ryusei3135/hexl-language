@@ -12,14 +12,15 @@
 use std::collections::HashMap;
 
 use super::*;
+use crate::compiler::ast::{StmtNode, TyNode};
 
-type AliasMap = HashMap<String, node::TyNode>;
+type AliasMap = HashMap<String, ast::TyNode>;
 
 /// エイリアスを展開したノードの列を返す。エイリアスの宣言自体は残す
 /// (`builder`は`TypeAlias`を無視する)
 pub(super) fn expand_type_aliases(
-    nodes: &[node::Group1Node],
-) -> Result<Vec<node::Group1Node>, err::ErrKind> {
+    nodes: &[ast::Group1Node],
+) -> Result<Vec<ast::Group1Node>, err::ErrKind> {
     let map = map_alias(nodes)?;
     let mut out = nodes.to_vec();
     if map.is_empty() {
@@ -32,10 +33,10 @@ pub(super) fn expand_type_aliases(
 }
 
 /// 全てのエイリアスを、他のエイリアスを含まない型へ解決した表を作る
-fn map_alias(nodes: &[node::Group1Node]) -> Result<AliasMap, err::ErrKind> {
+fn map_alias(nodes: &[ast::Group1Node]) -> Result<AliasMap, err::ErrKind> {
     let mut map: AliasMap = HashMap::new();
     for n in nodes {
-        if let node::Group1Node::TypeAlias(a) = n {
+        if let ast::Group1ast::TypeAlias(a) = n {
             if map.insert(a.name.clone(), a.ty.clone()).is_some() {
                 // 重複定義。専用のエラー種別があれば差し替える
                 return Err(err::ErrKind::UnexpectedToken);
@@ -75,21 +76,21 @@ fn map_alias(nodes: &[node::Group1Node]) -> Result<AliasMap, err::ErrKind> {
     Ok(map)
 }
 
-fn ty(t: &mut node::TyNode, map: &AliasMap) {
+fn ty(t: &mut TyNode, map: &AliasMap) {
     *t = t.expand_alias(&|name: &str| map.get(name).cloned());
 }
 
 /// 型名だけが文字列で使われている場所用。
 /// エイリアスの先が名前だけの型(`Ty`)のときだけ置き換える
 fn name(n: &mut String, map: &AliasMap) {
-    if let Some(node::TyNode::Ty(target)) = map.get(n.as_str()) {
+    if let Some(TyNode::Ty(target)) = map.get(n.as_str()) {
         *n = target.clone();
     }
 }
 
-fn group1(node: &mut node::Group1Node, map: &AliasMap) {
+fn group1(node: &mut ast::Group1Node, map: &AliasMap) {
     match node {
-        node::Group1Node::FuncDefine(f) => {
+        ast::Group1Node::FuncDefine(f) => {
             f.temp_ty.iter_mut().for_each(|t| ty(t, map));
             f.params.iter_mut().for_each(|p| ty(&mut p.ty, map));
             ty(&mut f.ret_ty, map);
@@ -97,11 +98,11 @@ fn group1(node: &mut node::Group1Node, map: &AliasMap) {
                 group2(&mut g.node, map);
             }
         }
-        node::Group1Node::StructDefine(s) => {
+        ast::Group1Node::StructDefine(s) => {
             s.fields.iter_mut().for_each(|f| ty(&mut f.ty, map));
             s.methods.iter_mut().for_each(|m| group1(m, map));
         }
-        node::Group1Node::VariantDefine(v) => {
+        ast::Group1Node::VariantDefine(v) => {
             for f in v.fields.iter_mut() {
                 if let Some(t) = f.ty.as_mut() {
                     ty(t, map);
@@ -109,9 +110,9 @@ fn group1(node: &mut node::Group1Node, map: &AliasMap) {
             }
             v.methods.iter_mut().for_each(|m| group1(m, map));
         }
-        node::Group1Node::TypeAlias(_)
-        | node::Group1Node::Include(_)
-        | node::Group1Node::Line(_) => {}
+        ast::Group1ast::TypeAlias(_)
+        | ast::Group1Node::Include(_)
+        | ast::Group1Node::Line(_) => {}
     }
 }
 
@@ -121,17 +122,17 @@ fn body(b: &mut Body, map: &AliasMap) {
     }
 }
 
-fn group2(node: &mut node::Group2Node, map: &AliasMap) {
+fn group2(node: &mut ast::Group2Node, map: &AliasMap) {
     match node {
-        node::Group2Node::Expr(e) | node::Group2Node::Stmt(node::StmtNode::Return(e)) => {
+        ast::Group2Node::Expr(e) | ast::Group2Node::Stmt(StmtNode::Return(e)) => {
             expr(e, map)
         }
         _ => {}
     }
 }
 
-fn expr(e: &mut node::Expr, map: &AliasMap) {
-    use node::ExprNode as E;
+fn expr(e: &mut ast::Expr, map: &AliasMap) {
+    use ast::ExprNode as E;
 
     // 子が2つの二項演算など
     macro_rules! pair {
@@ -270,10 +271,10 @@ fn expr(e: &mut node::Expr, map: &AliasMap) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use node::TyNode;
+    use ast::TyNode;
 
-    fn alias(name: &str, base: TyNode) -> node::Group1Node {
-        node::TypeAlias::new(name.to_string(), base, test_span())
+    fn alias(name: &str, base: TyNode) -> ast::Group1Node {
+        ast::TypeAlias::new(name.to_string(), base, test_span())
     }
 
     fn int() -> TyNode {

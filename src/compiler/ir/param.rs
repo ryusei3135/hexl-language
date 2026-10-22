@@ -1,11 +1,12 @@
 use super::*;
+use crate::compiler::ast::ArgsNode;
 
 impl IR {
     /// 関数のノードを生成するときに、引数を登録
     #[inline(always)]
     pub(in crate::compiler::ir) fn push_param_meta_data(
         &mut self,
-        params: &[node::ArgsNode],
+        params: &[ArgsNode],
     ) -> Result<(), err::ErrKind> {
         for (index, param) in params.iter().enumerate() {
             let _ = self.var_tree.push::<'p'>(

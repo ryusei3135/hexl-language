@@ -4,7 +4,7 @@ mod mem_ir;
 use super::*;
 use crate::compiler::asm_gen::emit_fn_name::*;
 use crate::compiler::ir::{self, types};
-use crate::compiler::parse::node;
+use crate::compiler::ast;
 
 /// 関数の入口で`callee_saved`のレジスタを退避する位置の目印
 /// (本体の生成が終わってから、実際に使ったレジスタの`push`に置き換える)
@@ -460,7 +460,7 @@ impl AsmEmitter {
 
     /// 関数の引数を名前とセットでレジスタを登録
     /// 引数が構造体などなら必ず64bitのサイズになる
-    fn setting_args_reg_alloc(&mut self, args_def: &[node::ArgsNode]) {
+    fn setting_args_reg_alloc(&mut self, args_def: &[ast::ArgsNode]) {
         args_def.iter().enumerate().for_each(|(idx, arg)| {
             let reg = self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ));
             self.used_reg.bind_var(&arg.name, &reg);

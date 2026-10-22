@@ -12,6 +12,7 @@
 //! `if idx < arr_len { arr[idx] } else { arr[else_idx] }`になる。
 
 use super::*;
+use crate::compiler::ast::Expr;
 
 impl IR {
     /// 添字が可変な配列アクセスのIRを、範囲外のときの分岐つきで生成する
@@ -25,7 +26,7 @@ impl IR {
     pub(in crate::compiler::ir) fn insert_arr_guard<M: ResultMod>(
         &mut self,
         guard: checker::ArrIdxGuard,
-        dst: &node::Expr,
+        dst: &Expr,
         expect_byte: &types::Size,
     ) -> Result<usize, err::ErrKind> {
         let name = guard.name.clone();
@@ -58,7 +59,7 @@ impl IR {
     pub(in crate::compiler::ir) fn insert_guarded_store<M: ResultMod>(
         &mut self,
         guard: checker::ArrIdxGuard,
-        dst: &node::Expr,
+        dst: &Expr,
         expect_byte: &types::Size,
         store: impl Fn(&mut Self, usize, usize),
     ) -> Result<usize, err::ErrKind> {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::compiler::ast::{ArgsNode, ConstractTy, Expr, ExprNode, FuncDefine, TyNode};
 use crate::compiler::err::CompileErr;
 
 // 条件分岐・反復処理・共通の処理は、それぞれ別のファイルに分けている
@@ -17,12 +18,12 @@ impl IR {
     pub(in crate::compiler::ir) fn check_constract_arg(
         &mut self,
         fn_name: &str,
-        param: &node::ArgsNode,
+        param: &ArgsNode,
         // 呼び出し元
-        arg: &node::Expr,
+        arg: &Expr,
     ) -> Result<(), err::ErrKind> {
         let arg_ty = self.expr_ty_node(arg);
-        let arg_must = arg_ty.as_ref().and_then(node::TyNode::as_constract_must);
+        let arg_must = arg_ty.as_ref().and_then(TyNode::as_constract_must);
         let param_of = param.ty.as_constract_of();
 
         match (param_of, arg_must) {
@@ -37,7 +38,7 @@ impl IR {
                     CompileErr::constract_name_mismatch(
                         &fn_name,
                         &param.name,
-                        node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
+                        ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                         &fn_name,
                         Rc::clone(&arg.span),
                     )
@@ -56,7 +57,7 @@ impl IR {
             (Some(of), None) => CompileErr::constract_of_requires_must(
                 &fn_name,
                 &param.name,
-                node::ConstractTy::name_or_anon(of.of_name().map(|v| v.as_str())),
+                ConstractTy::name_or_anon(of.of_name().map(|v| v.as_str())),
                 Rc::clone(&arg.span),
             )
             .map_err(|err| err.with_span(Rc::clone(&self.current_span))),
@@ -70,7 +71,7 @@ impl IR {
                 CompileErr::constract_must_requires_of(
                     &fn_name,
                     &param.name,
-                    node::ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
+                    ConstractTy::name_or_anon(must.must_name().map(|v| v.as_str())),
                     Rc::clone(&arg.span),
                 )
                 .map_err(|err| err.with_span(Rc::clone(&self.current_span)))
@@ -90,8 +91,8 @@ impl IR {
     #[inline(always)]
     fn move_constract_next_fn(
         &mut self,
-        param: &node::ArgsNode,
-        arg: &node::Expr,
+        param: &ArgsNode,
+        arg: &Expr,
         must: Option<&String>,
     ) -> Result<bool, err::ErrKind> {
         // 渡し先の引数が、同じ名前の`must`でなければ譲渡できない
@@ -119,14 +120,14 @@ impl IR {
 
     /// 式が変数を指している場合、その変数の型を返す
     /// (`&var`や`*var`のように、間接的に指している場合も辿る)
-    fn expr_ty_node(&self, expr: &node::Expr) -> Option<node::TyNode> {
+    fn expr_ty_node(&self, expr: &Expr) -> Option<TyNode> {
         match &expr.node {
-            node::ExprNode::Var(name) => self.var_tree.get_ty_node(name),
-            node::ExprNode::CallFunc(call) => self
+            ExprNode::Var(name) => self.var_tree.get_ty_node(name),
+            ExprNode::CallFunc(call) => self
                 .func_tree
                 .get(&call.name, None)
                 .and_then(|func| func.ret_ty),
-            node::ExprNode::GetAddress(target) | node::ExprNode::ConnectAddr(target) => {
+            ExprNode::GetAddress(target) | ExprNode::ConnectAddr(target) => {
                 self.expr_ty_node(target)
             }
             _ => None,
@@ -139,7 +140,7 @@ impl IR {
     /// 渡した先の引数が本当に`of`かどうか(名前が一致するか)は、
     /// IRを生成する時点で`check_constract_arg`が確認するので、
     /// ここでは「そもそも関数に渡されているか」だけを見る
-    pub(crate) fn check_must_var_used(&self, func: &node::FuncDefine) {
+    pub(crate) fn check_must_var_used(&self, func: &FuncDefine) {
         let mut must_vars: Vec<MustVar> = Vec::new();
 
         // 引数として受け取った`must`の値も、この関数の中で

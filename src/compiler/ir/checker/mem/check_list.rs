@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use super::*;
 use crate::compiler::err::{self, CompileErr, CompileErrKind};
-use crate::parse::node;
+use crate::parse::node::{Expr, TyNode};
 
 pub(in crate::compiler::ir::checker::mem) trait IndexCheckList {
     fn num_check(val: &str, span: &Rc<err::Span>) -> Result<(), err::ErrKind>;
@@ -12,10 +12,10 @@ pub(in crate::compiler::ir::checker::mem) trait IndexCheckList {
         span: &Rc<err::Span>,
     ) -> Result<(), err::ErrKind>;
     /// 式で無効なもの
-    fn cond_is_invalid(expr: &node::Expr, span: &Rc<err::Span>) -> Result<(), err::ErrKind>;
+    fn cond_is_invalid(expr: &Expr, span: &Rc<err::Span>) -> Result<(), err::ErrKind>;
     /// indexに使えない種類の式(関数の呼び出し・メンバーアクセスなど)。
     /// 値を静的に決められないので、必ず`Err`を返す
-    fn unsupported_expr(expr: &node::Expr) -> Result<(), err::ErrKind> {
+    fn unsupported_expr(expr: &Expr) -> Result<(), err::ErrKind> {
         crate::GenCompileErrNode!(UnexpectArrIndexExprKind, expr, Rc::clone(&expr.span))
     }
 }
@@ -37,7 +37,7 @@ impl IndexCheckList for IsUnsigned {
         name: &str,
         span: &Rc<err::Span>,
     ) -> Result<(), err::ErrKind> {
-        let binding: node::TyNode = var_tree.get_ty_node(name).unwrap();
+        let binding: TyNode = var_tree.get_ty_node(name).unwrap();
         let t: types::Size = binding.try_into()?;
         if t.is_unsigned() {
             Ok(())
@@ -46,7 +46,7 @@ impl IndexCheckList for IsUnsigned {
         }
     }
 
-    fn cond_is_invalid(expr: &node::Expr, span: &Rc<err::Span>) -> Result<(), err::ErrKind> {
+    fn cond_is_invalid(expr: &Expr, span: &Rc<err::Span>) -> Result<(), err::ErrKind> {
         crate::GenCompileErrNode!(UnexpectArrIndexExprKind, expr, Rc::clone(&span))
     }
 }
@@ -76,7 +76,7 @@ impl IndexCheckList for IsImmOrConst {
         }
     }
 
-    fn cond_is_invalid(expr: &node::Expr, span: &Rc<err::Span>) -> Result<(), err::ErrKind> {
+    fn cond_is_invalid(expr: &Expr, span: &Rc<err::Span>) -> Result<(), err::ErrKind> {
         crate::GenCompileErrNode!(UnexpectArrIndexExprKind, expr, Rc::clone(&span))
     }
 }

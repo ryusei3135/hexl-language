@@ -2,6 +2,7 @@
 //! `loop`、`match`、三項演算子の分岐展開
 
 use super::*;
+use crate::compiler::ast::{Group2Node, Group2ast, MatchArm, StmtNode};
 
 impl IR {
     pub(in crate::compiler::ir) fn gen_inst<M: ResultMod>(
@@ -13,14 +14,14 @@ impl IR {
             self.expr_counter = 0;
             self.constract_flag.reset();
             match stmt.get_node().clone() {
-                node::Group2Node::Expr(expr) => {
+                Group2ast::Expr(expr) => {
                     let _ = self.gen_expr_ir::<M>(&expr, None)?;
                 }
-                node::Group2Node::Stmt(stmt) => {
+                Group2Node::Stmt(stmt) => {
                     let _ = self.gen_stmt_ir::<M>(stmt)?;
                 }
                 // inlineアセンブラ
-                node::Group2Node::CompleSyntax((name, lines)) => {
+                Group2Node::CompleSyntax((name, lines)) => {
                     self.inline_proc::<M>(&lines, &name)?;
                 }
                 _ => {}
@@ -32,10 +33,10 @@ impl IR {
     /// 文のノードを生成
     pub(super) fn gen_stmt_ir<M: ResultMod>(
         &mut self,
-        stmt: node::StmtNode,
+        stmt: StmtNode,
     ) -> Result<usize, err::ErrKind> {
         let node = match stmt {
-            node::StmtNode::Return(expr) => {
+            StmtNode::Return(expr) => {
                 let func_ret_ty = self.func_ret_ty.as_ref().ok_or_else(|| {
                     crate::GenUndefErrResult!(UndefFuncRetTy, "none".to_string(), None)
                 })?;
@@ -43,14 +44,14 @@ impl IR {
                 let idx = self.gen_expr_ir::<M>(&expr, Some(&ret_size))?;
                 inst::Inst::Ret(idx)
             }
-            node::StmtNode::Continue => {
+            StmtNode::Continue => {
                 let (continue_label, _) = self
                     .loop_labels
                     .last()
                     .expect("continueはloopの中でのみ使用できます");
                 inst::Inst::Jmp(format!("L{}", continue_label))
             }
-            node::StmtNode::Break(span) => {
+            StmtNode::Break(span) => {
                 let result = self.end_scope(false, &span);
                 self.unwrap_or_report(result);
                 let (_, break_label) = self
@@ -69,7 +70,7 @@ impl IR {
     #[inline(always)]
     pub(super) fn gen_loop_expr_ir<M: ResultMod>(
         &mut self,
-        pattern: &Option<Box<node::Expr>>,
+        pattern: &Option<Box<ast::Expr>>,
         body: &Body,
     ) -> Result<usize, err::ErrKind> {
         // 本体の処理中に`current_span`が書き換わるので、先に控えておく
@@ -107,8 +108,8 @@ impl IR {
     #[inline(always)]
     pub(super) fn gen_match_expr_ir<M: ResultMod>(
         &mut self,
-        pattern: &Option<Box<node::Expr>>,
-        arms: &[node::MatchArm],
+        pattern: &Option<Box<ast::Expr>>,
+        arms: &[MatchArm],
         arm_else: &Option<Body>,
     ) -> Result<usize, err::ErrKind> {
         // 本体の処理中に`current_span`が書き換わるので、先に控えておく
@@ -119,10 +120,10 @@ impl IR {
         //   その値とarmのパターンを比較する式(値を与えるパターン)にする
         // - 無い場合は、armのパターンをそのまま真偽値の条件として使う
         //   (真偽値/何も与えないパターン)
-        let build_cond = |arm_pattern: &node::Expr| -> node::Expr {
+        let build_cond = |arm_pattern: &ast::Expr| -> ast::Expr {
             if let Some(target) = pattern.as_ref() {
-                node::Expr::new(
-                    node::ExprNode::Equal((target.clone(), Box::new(arm_pattern.clone()))),
+                ast::Expr::new(
+                    ast::ExprNode::Equal((target.clone(), Box::new(arm_pattern.clone()))),
                     Rc::clone(&arm_pattern.span),
                 )
             } else {
@@ -151,7 +152,7 @@ impl IR {
         let mut binds: Vec<Option<variant_bind::VariantBindInfo>> = Vec::new();
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
             crate::push_jmp_code!(self, ExpectJmp, label);
-            if let node::ExprNode::VariantBind(bind) = &(*arm.pattern).node {
+            if let ast::ExprNode::VariantBind(bind) = &(*arm.pattern).node {
                 // `src/ir/builder/variant_bind.rs`
                 let result = self.variant_bind_cond(bind);
                 binds.push(Some(self.unwrap_or_report(result)));
@@ -207,9 +208,9 @@ impl IR {
     /// 戻り値は、最後に生成した命令の番号
     pub(super) fn gen_ternary_branch_ir<M: ResultMod>(
         &mut self,
-        cond: &Box<node::Expr>,
-        left: &Box<node::Expr>,
-        right: &Box<node::Expr>,
+        cond: &Box<ast::Expr>,
+        left: &Box<ast::Expr>,
+        right: &Box<ast::Expr>,
         expect_byte: &types::Size,
     ) -> Result<usize, err::ErrKind> {
         // 中の式が発番するラベルと重ならないよう、先にまとめて発番する

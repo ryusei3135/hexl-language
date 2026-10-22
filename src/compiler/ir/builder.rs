@@ -13,8 +13,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::*;
+use crate::compiler::ast::Group1Node;
 use crate::compiler::ir::types::*;
-use crate::compiler::{err::*, models::Body, parse};
 
 const NEXT_VAR_NODE_IS_GET_ADDR: bool = true;
 
@@ -50,7 +50,7 @@ impl IR {
 
     pub(crate) fn builder<M: ResultMod>(
         &mut self,
-        nodes: &[node::Group1Node],
+        nodes: &[Group1Node],
         #[cfg(not(test))] err_pool: Rc<RefCell<err::err_pool::ErrPool>>,
         #[cfg(not(test))] settings: &crate::OptSettings,
     ) -> Result<Vec<def_tree::FnDefMetaData>, err::ErrKind> {
@@ -64,13 +64,13 @@ impl IR {
         for node in nodes {
             match &node {
                 // 構造体を登録
-                node::Group1Node::StructDefine(info) => {
+                Group1Node::StructDefine(info) => {
                     self.struct_tree.add(info);
                 }
-                node::Group1Node::VariantDefine(info) => {
+                Group1Node::VariantDefine(info) => {
                     self.variant_tree.add(info);
                 }
-                node::Group1Node::FuncDefine(info) => {
+                Group1Node::FuncDefine(info) => {
                     // 関数本体を生成する前にシグネチャを登録し、
                     // 前方参照とジェネリック関数の呼び出しを解決する
                     self.func_tree.declare(info);
@@ -93,21 +93,21 @@ impl IR {
         for node in nodes {
             self.expr_counter = 0;
             match &node {
-                node::Group1Node::FuncDefine(info) => {
+                Group1Node::FuncDefine(info) => {
                     pool_err!(self.ini_def_fn_info::<M>(&info));
                 }
                 #[cfg(not(test))]
-                node::Group1Node::Include(path) => {
+                Group1Node::Include(path) => {
                     pool_err!(self.include_proc(path, settings));
                 }
-                node::Group1Node::StructDefine(info) => {
+                Group1Node::StructDefine(info) => {
                     // 構造体の情報を登録
                     self.struct_tree.add(info);
                     // 構造体の中に定義されているメゾットを、
                     // 通常の関数としてIRへ展開する
                     pool_err!(self.expand_struct_methods::<M>(info));
                 }
-                node::Group1Node::VariantDefine(info) => {
+                Group1Node::VariantDefine(info) => {
                     // バリアント型の情報を登録
                     self.variant_tree.add(info);
                     // バリアント型の中に定義されているメゾットを、
@@ -127,7 +127,7 @@ fn test_span() -> std::rc::Rc<err::Span> {
 }
 
 #[cfg(test)]
-fn parse_test_source(src: &str) -> Vec<node::Group1Node> {
+fn parse_test_source(src: &str) -> Vec<Group1Node> {
     let mut lexer = crate::compiler::lex::Lexer::new();
     lexer.analy(&src.to_string()).unwrap();
     let file_name = std::rc::Rc::new("<test>".to_string());

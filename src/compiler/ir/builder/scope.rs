@@ -1,6 +1,7 @@
 //! スコープのノードを処理する
 
 use super::*;
+use crate::compiler::ast::{Expr, ExprNode, TyNode};
 
 impl IR {
     /// スコープをスタート
@@ -74,11 +75,11 @@ impl IR {
     pub(super) fn scope_node<M: ResultMod>(
         &mut self,
         scope: &[String],
-        target: &Box<node::Expr>,
+        target: &Box<Expr>,
         var_name: Option<&String>,
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
-        if let node::ExprNode::CallFunc(mut call_func_node) = (**target).node.clone() {
+        if let ExprNode::CallFunc(mut call_func_node) = (**target).node.clone() {
             let struct_name: &str = scope.last().unwrap();
 
             let needs_self_area = self
@@ -97,8 +98,8 @@ impl IR {
                     def.args.first().is_some_and(|arg| {
                         matches!(
                             &arg.ty,
-                            node::TyNode::Pointer { ty_name, .. }
-                                if matches!(&**ty_name, node::TyNode::Ty(name) if name == struct_name)
+                            TyNode::Pointer { ty_name, .. }
+                                if matches!(&**ty_name, TyNode::Ty(name) if name == struct_name)
                         )
                     })
                 });
@@ -128,7 +129,7 @@ impl IR {
                         Some(name) => name.clone(),
                         None => format!("$self_area_{}", self_idx),
                     };
-                    let self_area_ty = node::TyNode::Ty(struct_info.name.clone());
+                    let self_area_ty = TyNode::Ty(struct_info.name.clone());
                     let _ = self.var_tree.push::<'l'>(
                         &tmp_name,
                         self_idx,
@@ -142,9 +143,9 @@ impl IR {
                     // スタックへのポインタを暗黙的に先頭へ渡す
                     call_func_node.args.insert(
                         0,
-                        node::Expr::new(
-                            node::ExprNode::GetAddress(Box::new(node::Expr::new(
-                                node::ExprNode::Var(tmp_name),
+                        Expr::new(
+                            ExprNode::GetAddress(Box::new(Expr::new(
+                                ExprNode::Var(tmp_name),
                                 Rc::clone(&(*target).span),
                             ))),
                             Rc::clone(&(*target).span),

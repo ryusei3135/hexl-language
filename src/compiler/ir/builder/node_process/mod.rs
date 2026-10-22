@@ -10,7 +10,7 @@ mod expr_stmt;
 
 use std::rc::Rc;
 
-use crate::compiler::parse::{self, VarMutAttr};
+use crate::compiler::hexl_frontend::parse::{self, VarMutAttr};
 
 use super::*;
 use crate::compiler::ir::result_mod::*;

@@ -1,27 +1,28 @@
-use crate::compiler::node::Expr;
+use crate::compiler::ast::Expr;
 
 use super::*;
+use crate::compiler::ast::{ExprNode, ImportKind, InlineAsm, ModPath};
 
 impl IR {
     pub(super) fn include_proc(
         &mut self,
-        path: &node::ModPath,
+        path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         match &path.kind {
             // 従来の書き方(`mod::file`)。ファイルとして存在するかどうかで
             // モジュールとして取り込むか、関数として取り込むかを判断する
-            node::ImportKind::Auto => self.include_auto(path, settings),
+            ImportKind::Auto => self.include_auto(path, settings),
             // `#include Name="mod/file.hexl"` / `#include "mod/file.hexl"`
             // 公開関数を全て、モジュール名(エイリアスかファイル名由来)を
             // 付けて取り込む
-            node::ImportKind::Module(alias) => self.include_module(path, alias.as_ref(), settings),
+            ImportKind::Module(alias) => self.include_module(path, alias.as_ref(), settings),
             // `#include "mod/file.hexl"::func`
             // 指定した関数だけを、モジュール名を付けずに取り込む
-            node::ImportKind::Func(func_name) => self.include_func(path, func_name, settings),
+            ImportKind::Func(func_name) => self.include_func(path, func_name, settings),
             // `#include "mod/file.hexl"::*`
             // 公開関数を全て、モジュール名を付けずに取り込む
-            node::ImportKind::Glob => self.include_glob(path, settings),
+            ImportKind::Glob => self.include_glob(path, settings),
         }
     }
 
@@ -44,7 +45,7 @@ impl IR {
     /// その手前までのパスから、その関数だけを取り込む
     fn include_auto(
         &mut self,
-        path: &node::ModPath,
+        path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();
@@ -107,7 +108,7 @@ impl IR {
     /// 生成した名前)を付けて取り込む
     fn include_module(
         &mut self,
-        path: &node::ModPath,
+        path: &ModPath,
         alias: Option<&String>,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
@@ -138,7 +139,7 @@ impl IR {
     /// (モジュール名は付けないので、そのまま`func()`のように呼び出せる)
     fn include_func(
         &mut self,
-        path: &node::ModPath,
+        path: &ModPath,
         func_name: &str,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
@@ -170,7 +171,7 @@ impl IR {
     /// (そのまま`func()`のように呼び出せる)
     fn include_glob(
         &mut self,
-        path: &node::ModPath,
+        path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
         let full_path = path.gen_path();
@@ -190,13 +191,13 @@ impl IR {
     #[inline(always)]
     pub(super) fn inline_proc<M: ResultMod>(
         &mut self,
-        lines: &[node::InlineAsm],
+        lines: &[InlineAsm],
         name: &str,
     ) -> Result<(), err::ErrKind> {
         let mut gen_ir = |expr: Expr| {
             let ty: Option<types::Size> =
             // 変数のノードを取得
-            if let node::ExprNode::Var(
+            if let ExprNode::Var(
                 ref var_name
                 ) = expr.node
             {

@@ -1,6 +1,7 @@
 //! その他: `Self`型の解決、メゾットの展開、エラーの報告、ラベル発番、テスト用の取得関数
 
 use super::*;
+use crate::compiler::ast::{ArgsNode, Expr, Group1Node};
 
 impl IR {
     /// テスト用のヘルパー。
@@ -8,8 +9,8 @@ impl IR {
     /// そのまま構造体へのポインタ型に変換する。
     pub(in crate::compiler::ir) fn resolved_self_ty(
         &self,
-        mut func: node::FuncDefine,
-    ) -> node::FuncDefine {
+        mut func: ast::FuncDefine,
+    ) -> ast::FuncDefine {
         let first_param_is_self = func
             .params
             .first()
@@ -45,37 +46,37 @@ impl IR {
     #[inline(always)]
     pub(in crate::compiler::ir) fn resolve_self_ty(
         &self,
-        func: &node::FuncDefine,
-    ) -> node::FuncDefine {
+        func: &ast::FuncDefine,
+    ) -> ast::FuncDefine {
         self.resolved_self_ty(func.to_owned())
     }
 
-    pub(in crate::compiler::ir) fn ty_contains_self(ty: &node::TyNode) -> bool {
+    pub(in crate::compiler::ir) fn ty_contains_self(ty: &ast::TyNode) -> bool {
         match ty {
-            node::TyNode::SelfTy(..) => true,
-            node::TyNode::Pointer { ty_name, .. } => Self::ty_contains_self(ty_name),
-            node::TyNode::RefTy(inner) => Self::ty_contains_self(inner),
+            ast::TyNode::SelfTy(..) => true,
+            ast::TyNode::Pointer { ty_name, .. } => Self::ty_contains_self(ty_name),
+            ast::TyNode::RefTy(inner) => Self::ty_contains_self(inner),
             _ => false,
         }
     }
 
-    pub(in crate::compiler::ir) fn resolve_self_like_ty(ty: &node::TyNode) -> node::TyNode {
+    pub(in crate::compiler::ir) fn resolve_self_like_ty(ty: &ast::TyNode) -> ast::TyNode {
         match ty {
-            node::TyNode::SelfTy(name) => node::TyNode::Pointer {
+            ast::TyNode::SelfTy(name) => ast::TyNode::Pointer {
                 is_const: false,
-                ty_name: Box::new(node::TyNode::Ty(name.clone())),
+                ty_name: Box::new(ast::TyNode::Ty(name.clone())),
                 range: None,
             },
-            node::TyNode::Pointer {
+            ast::TyNode::Pointer {
                 is_const,
                 ty_name,
                 range,
             } => {
                 if Self::ty_contains_self(ty_name) {
-                    node::TyNode::Pointer {
+                    ast::TyNode::Pointer {
                         is_const: *is_const,
                         ty_name: Box::new(match &**ty_name {
-                            node::TyNode::SelfTy(name) => node::TyNode::Ty(name.clone()),
+                            ast::TyNode::SelfTy(name) => ast::TyNode::Ty(name.clone()),
                             other => other.clone(),
                         }),
                         range: range.clone(),
@@ -84,9 +85,9 @@ impl IR {
                     ty.clone()
                 }
             }
-            node::TyNode::RefTy(inner) => {
+            ast::TyNode::RefTy(inner) => {
                 if Self::ty_contains_self(inner) {
-                    node::TyNode::RefTy(Box::new(Self::resolve_self_like_ty(inner)))
+                    ast::TyNode::RefTy(Box::new(Self::resolve_self_like_ty(inner)))
                 } else {
                     ty.clone()
                 }
@@ -99,17 +100,17 @@ impl IR {
     /// 通常のトップレベルの関数として展開してIRへ変換する
     ///
     /// - メゾットは、そのメゾットが属する構造体の名前をモジュール名として
-    ///   持つ関数として登録される(`node::FuncDefine::self_module_name`)。
+    ///   持つ関数として登録される(`ast::FuncDefine::self_module_name`)。
     ///   これにより`StructName::method_name(..)`という、通常の
     ///   モジュール(`#include`)経由の関数呼び出しと同じ構文
-    ///   (`node::Expr::Scope`)で呼び出せるようになる
+    ///   (`Expr::Scope`)で呼び出せるようになる
     /// - 第一引数が`Self`型のメゾット(`self: Self`)は`resolve_self_ty`に
     ///   よって、自身の構造体を指すポインタを受け取る関数として解決される
     /// - それ以外の変換処理は、トップレベルの関数定義
-    ///   (`node::Group1Node::FuncDefine`)と全く同じ流れで行う
+    ///   (`Group1ast::FuncDefine`)と全く同じ流れで行う
     pub(in crate::compiler::ir) fn expand_struct_methods<M: ResultMod>(
         &mut self,
-        struct_def: &node::StructDefine,
+        struct_def: &ast::StructDefine,
     ) -> Result<(), err::ErrKind> {
         self.expand_methods::<M>("構造体", &struct_def.name, &struct_def.methods)
     }
@@ -119,7 +120,7 @@ impl IR {
     /// (処理の流れは`expand_struct_methods`と同じ)
     pub(in crate::compiler::ir) fn expand_variant_methods<M: ResultMod>(
         &mut self,
-        variant_def: &node::VariantDefine,
+        variant_def: &ast::VariantDefine,
     ) -> Result<(), err::ErrKind> {
         self.expand_methods::<M>("バリアント型", &variant_def.name, &variant_def.methods)
     }
@@ -131,11 +132,11 @@ impl IR {
         &mut self,
         kind: &str,
         owner: &str,
-        methods: &[node::Group1Node],
+        methods: &[ast::Group1Node],
     ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
         for method in methods {
-            let node::Group1Node::FuncDefine(method_info) = method else {
+            let ast::Group1ast::FuncDefine(method_info) = method else {
                 panic!(
                     "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
                     kind, owner, method
@@ -229,12 +230,12 @@ mod self_ty_tests {
 
     fn make_func(
         name: &str,
-        params: Vec<node::ArgsNode>,
-        ret_ty: node::TyNode,
-    ) -> node::FuncDefine {
+        params: Vec<ArgsNode>,
+        ret_ty: ast::TyNode,
+    ) -> ast::FuncDefine {
         let mut func =
-            match node::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span()) {
-                node::Group1Node::FuncDefine(func) => func,
+            match ast::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span()) {
+                Group1ast::FuncDefine(func) => func,
                 _ => unreachable!(),
             };
         func.module = Some("Name".to_string());
@@ -249,34 +250,34 @@ mod self_ty_tests {
         let func = make_func(
             "func",
             vec![
-                node::ArgsNode {
+                ArgsNode {
                     name: "self".to_string(),
-                    ty: node::TyNode::SelfTy("Name".to_string()),
+                    ty: ast::TyNode::SelfTy("Name".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
-                node::ArgsNode {
+                ArgsNode {
                     name: "param".to_string(),
-                    ty: node::TyNode::Ty("int".to_string()),
+                    ty: ast::TyNode::Ty("int".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
             ],
-            node::TyNode::Ty("int".to_string()),
+            ast::TyNode::Ty("int".to_string()),
         );
 
         let resolved = ir.resolve_self_ty(&func);
 
         assert_eq!(
             resolved.params[0].ty,
-            node::TyNode::Pointer {
+            ast::TyNode::Pointer {
                 is_const: false,
-                ty_name: Box::new(node::TyNode::Ty("Name".to_string())),
+                ty_name: Box::new(ast::TyNode::Ty("Name".to_string())),
                 range: None,
             }
         );
         // 第一引数以外はそのまま
-        assert_eq!(resolved.params[1].ty, node::TyNode::Ty("int".to_string()));
+        assert_eq!(resolved.params[1].ty, ast::TyNode::Ty("int".to_string()));
     }
 
     #[test]
@@ -287,20 +288,20 @@ mod self_ty_tests {
         let func = make_func(
             "invalid",
             vec![
-                node::ArgsNode {
+                ArgsNode {
                     name: "param".to_string(),
-                    ty: node::TyNode::Ty("int".to_string()),
+                    ty: ast::TyNode::Ty("int".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
-                node::ArgsNode {
+                ArgsNode {
                     name: "self".to_string(),
-                    ty: node::TyNode::SelfTy("Name".to_string()),
+                    ty: ast::TyNode::SelfTy("Name".to_string()),
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
             ],
-            node::TyNode::Ty("int".to_string()),
+            ast::TyNode::Ty("int".to_string()),
         );
 
         let _ = ir.resolve_self_ty(&func);
@@ -313,20 +314,20 @@ mod self_ty_tests {
         let ir = IR::new();
         let func = make_func(
             "func2",
-            vec![node::ArgsNode {
+            vec![ArgsNode {
                 name: "self".to_string(),
-                ty: node::TyNode::SelfTy("Name".to_string()),
+                ty: ast::TyNode::SelfTy("Name".to_string()),
                 var_attr: parse::VarMutAttr::Invar,
                 span: test_span(),
             }],
-            node::TyNode::SelfTy("Name".to_string()),
+            ast::TyNode::SelfTy("Name".to_string()),
         );
 
         let resolved = ir.resolve_self_ty(&func);
 
-        let expected_ptr = node::TyNode::Pointer {
+        let expected_ptr = ast::TyNode::Pointer {
             is_const: false,
-            ty_name: Box::new(node::TyNode::Ty("Name".to_string())),
+            ty_name: Box::new(ast::TyNode::Ty("Name".to_string())),
             range: None,
         };
         assert_eq!(resolved.params[0].ty, expected_ptr.clone());
@@ -364,9 +365,9 @@ mod struct_method_expand_tests {
             .unwrap();
         assert_eq!(
             registered.args[0].ty,
-            node::TyNode::Pointer {
+            ast::TyNode::Pointer {
                 is_const: false,
-                ty_name: Box::new(node::TyNode::Ty("Point".to_string())),
+                ty_name: Box::new(ast::TyNode::Ty("Point".to_string())),
                 range: None,
             }
         );

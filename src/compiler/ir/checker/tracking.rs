@@ -2,29 +2,30 @@
 //! 探索
 
 use super::*;
+use crate::compiler::ast::{Expr, ExprNode};
 use crate::err::compile::{CompileErr, CompileErrKind};
 
 impl IR {
     /// 範囲付きポインタや配列の長さを超えて数を指定しているかを
     /// 調べるためにインタプリタを実行
     ///
-    /// 変数の参照(`node::Expr::Var`)は、`record_var_value`で
+    /// 変数の参照(`Expr::Var`)は、`record_var_value`で
     /// `var_tree`に記録されている現在値に置き換えて評価する。
     /// 呼び出し前に`is_const_index`で評価可能かどうかを確認しておくこと
     /// (記録の無い変数を評価しようとした場合はここで`panic`する)
-    pub(in crate::compiler::ir) fn eval_expr(&self, n: &node::Expr) -> usize {
+    pub(in crate::compiler::ir) fn eval_expr(&self, n: &Expr) -> usize {
         match &n.node {
-            node::ExprNode::Number(val) => val.parse::<usize>().unwrap(),
-            node::ExprNode::Var(name) => self.var_tree.get_value(name).unwrap_or_else(|| {
+            ExprNode::Number(val) => val.parse::<usize>().unwrap(),
+            ExprNode::Var(name) => self.var_tree.get_value(name).unwrap_or_else(|| {
                 panic!(
                     "変数 `{}` の値が記録されておらず、静的に評価できません",
                     name
                 )
             }),
-            node::ExprNode::Add((l, r)) => self.eval_expr(l) + self.eval_expr(r),
-            node::ExprNode::Sub((l, r)) => self.eval_expr(l) - self.eval_expr(r),
-            node::ExprNode::Mul((l, r)) => self.eval_expr(l) * self.eval_expr(r),
-            node::ExprNode::Div((l, r)) => self.eval_expr(l) / self.eval_expr(r),
+            ExprNode::Add((l, r)) => self.eval_expr(l) + self.eval_expr(r),
+            ExprNode::Sub((l, r)) => self.eval_expr(l) - self.eval_expr(r),
+            ExprNode::Mul((l, r)) => self.eval_expr(l) * self.eval_expr(r),
+            ExprNode::Div((l, r)) => self.eval_expr(l) / self.eval_expr(r),
             _ => panic!(),
         }
     }
@@ -32,19 +33,19 @@ impl IR {
     /// 添字/代入値の式が、コンパイル時に値の分かる定数式(`eval_expr`で
     /// 評価できる形)かどうかを判定する
     ///
-    /// `node::Expr::Var`は、`var_tree`にその変数の現在値が
+    /// `Expr::Var`は、`var_tree`にその変数の現在値が
     /// 記録されている(`record_var_value`で記録済み)場合にのみ定数式として
     /// 扱う。記録が無い変数(実行時にしか値の分からない式で更新された
     /// 変数や、一度も記録されていない変数)を含む場合は、実行時にしか
     /// 値が分からないため、ここでの静的な範囲チェックの対象外として扱う
-    pub(in crate::compiler::ir) fn is_const_index(&self, n: &node::Expr) -> bool {
+    pub(in crate::compiler::ir) fn is_const_index(&self, n: &Expr) -> bool {
         match &n.node {
-            node::ExprNode::Number(_) => true,
-            node::ExprNode::Var(name) => self.var_tree.get_value(name).is_some(),
-            node::ExprNode::Add((l, r))
-            | node::ExprNode::Sub((l, r))
-            | node::ExprNode::Mul((l, r))
-            | node::ExprNode::Div((l, r)) => self.is_const_index(l) && self.is_const_index(r),
+            ExprNode::Number(_) => true,
+            ExprNode::Var(name) => self.var_tree.get_value(name).is_some(),
+            ExprNode::Add((l, r))
+            | ExprNode::Sub((l, r))
+            | ExprNode::Mul((l, r))
+            | ExprNode::Div((l, r)) => self.is_const_index(l) && self.is_const_index(r),
             _ => false,
         }
     }
@@ -58,7 +59,7 @@ impl IR {
     pub(in crate::compiler::ir) fn arr_idx_checker<M: ResultMod>(
         &mut self,
         name: &str,
-        index: &node::Expr,
+        index: &Expr,
     ) -> Result<bool, err::ErrKind> {
         if self.is_const_index(index) == false {
             return Ok(true);
@@ -98,7 +99,7 @@ impl IR {
     pub(in crate::compiler::ir) fn range_ptr_checker(
         &mut self,
         name: &str,
-        index: &node::Expr,
+        index: &Expr,
     ) -> bool {
         if self.is_const_index(index) == false {
             return true;
@@ -136,7 +137,7 @@ impl IR {
     pub(in crate::compiler::ir) fn range_ptr_reassign_checker(
         &mut self,
         name: &str,
-        value: &node::Expr,
+        value: &Expr,
     ) -> bool {
         if self.is_const_index(value) == false {
             return true;
@@ -198,7 +199,7 @@ impl IR {
     /// `value`が定数式として評価できる場合はその結果を記録し、
     /// 評価できない(実行時にしか値が分からない)場合は、古い記録が
     /// 残って以降の静的チェックに誤って使われないよう記録を消す
-    pub(in crate::compiler::ir) fn record_var_value(&mut self, name: &str, value: &node::Expr) {
+    pub(in crate::compiler::ir) fn record_var_value(&mut self, name: &str, value: &Expr) {
         if self.is_const_index(value) {
             let v = self.eval_expr(value);
             self.var_tree.record_value(name, v);

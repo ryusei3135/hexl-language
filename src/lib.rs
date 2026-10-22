@@ -22,8 +22,9 @@ const DEFAULT: &str = "linux";
 // 参照している可能性があるため、元の `use` はそのまま残している。
 #[allow(unused_imports)]
 use compiler::{
-    asm_gen, err, ir, lex,
-    parse::{self, node},
+    asm_gen, err, ir, hexl_frontend::lex,
+    hexl_frontend::parse,
+    ast,
 };
 
 use std::{error::Error, fs, process, sync::Mutex};
@@ -222,8 +223,8 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
     let mut err_pool = Rc::new(RefCell::new(err::err_pool::ErrPool::new()));
     // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
     // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
-    let mut lexer = lex::Lexer::with_os(&os);
-    let mut parser = parse::Parser::new(&file_name, Rc::clone(&err_pool));
+    let mut lexer = Lexer::with_os(&os);
+    let mut parser = Parser::new(&file_name, Rc::clone(&err_pool));
     let mut ir_builder = ir::IR::new();
 
     // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準

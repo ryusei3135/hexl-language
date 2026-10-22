@@ -1,4 +1,5 @@
 use super::*;
+use crate::compiler::ast::TyNode;
 use crate::compiler::ir::IR;
 
 mod constract;
@@ -16,9 +17,9 @@ use crate::compiler::models::Body;
 pub(in crate::compiler::ir) struct ConstractFlags {
     /// 変数を定義
     /// これは戻り値が契約のフラグを立てたときにtrueならOk
-    def_var: Option<node::TyNode>,
+    def_var: Option<TyNode>,
     /// 戻り値が契約
-    constract_ret: Option<node::TyNode>,
+    constract_ret: Option<TyNode>,
 }
 
 /// 一行の式の型をちぇっぅ
@@ -38,7 +39,7 @@ impl ConstractFlags {
 
     /// var_treeでフラグを立てる
     #[inline(always)]
-    pub(in crate::compiler::ir) fn put_var_def(&mut self, var_ty: &node::TyNode) {
+    pub(in crate::compiler::ir) fn put_var_def(&mut self, var_ty: &TyNode) {
         if self.constract_ret.is_none() {
             self.def_var = Some(var_ty.clone());
         } else {
@@ -50,7 +51,7 @@ impl ConstractFlags {
     }
 
     #[inline(always)]
-    pub(in crate::compiler::ir) fn constract_fn(&mut self, fn_ret_ty: Option<&node::TyNode>) {
+    pub(in crate::compiler::ir) fn constract_fn(&mut self, fn_ret_ty: Option<&TyNode>) {
         if self.def_var.is_none() {
             if self.constract_ret.is_none() {
                 self.constract_ret = fn_ret_ty.map(|v| v.clone());

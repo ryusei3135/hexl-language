@@ -1,19 +1,20 @@
 //! データの処理: 変数定義、配列、構造体、バリアント型(列挙型)
 
 use super::*;
+use crate::compiler::ast::{DefineVar, Expr, ExprNode, TyNode};
 
 impl IR {
-    fn get_ast_len(&self, ast: &node::Expr) -> Option<usize> {
+    fn get_ast_len(&self, ast: &Expr) -> Option<usize> {
         match &ast.node {
-            node::ExprNode::Str(value) => Some(value.len()),
-            node::ExprNode::Array(values) => Some(values.len()),
+            ExprNode::Str(value) => Some(value.len()),
+            ExprNode::Array(values) => Some(values.len()),
             _ => None,
         }
     }
 
     pub(in super::super) fn init_array_node<M: ResultMod>(
         &mut self,
-        init_nodes: Vec<node::Expr>,
+        init_nodes: Vec<Expr>,
         expect_byte: &types::Size,
     ) -> Result<inst::Inst, err::ErrKind> {
         let size = match expect_byte {
@@ -31,8 +32,8 @@ impl IR {
     #[inline(always)]
     pub(in super::super) fn ref_array_node<M: ResultMod>(
         &mut self,
-        dst: &node::Expr,
-        index: &node::Expr,
+        dst: &Expr,
+        index: &Expr,
         name: &str,
         expect_byte: &types::Size,
     ) -> Result<inst::Inst, err::ErrKind> {
@@ -47,7 +48,7 @@ impl IR {
 
     pub(in super::super) fn def_var_node<M: ResultMod>(
         &mut self,
-        var: node::DefineVar,
+        var: DefineVar,
         expect_byte: &types::Size,
         var_attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
@@ -67,13 +68,13 @@ impl IR {
     /// `None`の場合は`var.ty`がそのまま登録される
     fn def_var_node_with_register_ty<M: ResultMod>(
         &mut self,
-        mut var: node::DefineVar,
+        mut var: DefineVar,
         _expect_byte: &types::Size,
         var_attr: &parse::VarMutAttr,
-        register_ty: Option<node::TyNode>,
+        register_ty: Option<TyNode>,
     ) -> Result<inst::Inst, err::ErrKind> {
         match &var.ty.clone() {
-            node::TyNode::ConstractMust(constract) | node::TyNode::ConstractOf(constract) => {
+            TyNode::ConstractMust(constract) | TyNode::ConstractOf(constract) => {
                 // let _constract_ty = var.ty.clone();
                 let mut inner_var = var.clone();
                 inner_var.ty = constract.unwrap_ty();
@@ -103,7 +104,7 @@ impl IR {
                 };
                 return Ok(inst);
             }
-            node::TyNode::Stack { len, .. } => {
+            TyNode::Stack { len, .. } => {
                 if *len == 1 {
                     // 確保するスタックを増やす
                     self.stack_counter(&var.ty);
@@ -111,15 +112,15 @@ impl IR {
                 } else {
                     let array_ty = self.size_of(&var.ty);
                     self.stack_counter(&var.ty);
-                    let node::Expr {
+                    let Expr {
                         node: value_node,
                         span,
                     } = *var.value;
                     let init_values = match value_node {
-                        node::ExprNode::Array(values) => values,
-                        value_node => vec![node::Expr::new(value_node, std::rc::Rc::clone(&span))],
+                        ExprNode::Array(values) => values,
+                        value_node => vec![Expr::new(value_node, std::rc::Rc::clone(&span))],
                     };
-                    let array = node::Expr::new(node::ExprNode::Array(init_values), span);
+                    let array = Expr::new(ExprNode::Array(init_values), span);
                     let value_idx = self.gen_expr_ir::<M>(&array, Some(&array_ty))?;
                     let ty_to_register = register_ty.as_ref().unwrap_or(&var.ty);
                     self.var_tree.push::<'l'>(
@@ -138,8 +139,8 @@ impl IR {
                     })
                 }
             }
-            node::TyNode::Static { .. } => self.gen_mem_def_var::<M>(var),
-            node::TyNode::Ty(ty_name) => {
+            TyNode::Static { .. } => self.gen_mem_def_var::<M>(var),
+            TyNode::Ty(ty_name) => {
                 // 静的に分かる初期値であれば、以降の範囲チェックで
                 // 使えるよう記録しておく(`src/ir/checker/tracking.rs`)
                 self.record_var_value(&var.name, &var.value);
@@ -163,13 +164,13 @@ impl IR {
                 )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
-                    size: self.size_of(&node::TyNode::Ty(ty_name.to_string())),
+                    size: self.size_of(&TyNode::Ty(ty_name.to_string())),
                     dst: self.id_counter,
                     src: value_idx,
                 };
                 return Ok(inst);
             }
-            node::TyNode::Pointer { ty_name, range, .. } => {
+            TyNode::Pointer { ty_name, range, .. } => {
                 let mut r = range.clone();
                 // `TyNode::Ty`と同じ理由で、`var.name`をそのまま
                 // `gen_named_expr_ir`に渡す(詳細は上のコメントを参照)
@@ -285,7 +286,7 @@ impl IR {
     pub(in super::super) fn init_struct_node<M: ResultMod>(
         &mut self,
         name: &str,
-        fields: &mut HashMap<String, Box<node::Expr>>,
+        fields: &mut HashMap<String, Box<Expr>>,
     ) -> Result<inst::Inst, err::ErrKind> {
         // 構造体のメゾットを処理中かつ初期化する構造体が`self`
         let struct_name: String = if self.this_is_self {
@@ -345,7 +346,7 @@ impl IR {
         }
 
         // バリアント型全体のスタックを確保する
-        self.stack_counter(&node::TyNode::Ty(variant_name.to_string()));
+        self.stack_counter(&TyNode::Ty(variant_name.to_string()));
         Ok(inst::Inst::Variant {
             name: variant_name.to_string(),
             tag,
@@ -362,7 +363,7 @@ impl IR {
         &mut self,
         is_self: bool,
         name: &str,
-        fields: &mut HashMap<String, Box<node::Expr>>,
+        fields: &mut HashMap<String, Box<Expr>>,
         expect_byte: &types::Size,
     ) -> Result<inst::Inst, err::ErrKind> {
         // メゾットの処理中、初期化するバリアント型が`self`の場合は
@@ -388,7 +389,7 @@ impl IR {
             .ok_or_else(|| expr_node::this_variant_field_is_undefined(&field_name).unwrap_err())?;
 
         // バリアント型全体のスタックを一度だけ確保する
-        self.stack_counter(&node::TyNode::Ty(variant_name.clone()));
+        self.stack_counter(&TyNode::Ty(variant_name.clone()));
 
         let field_ty = variant_def.fields[tag].ty.clone();
         let value = match field_ty {

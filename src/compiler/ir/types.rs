@@ -1,5 +1,5 @@
 use super::*;
-use crate::compiler::parse::node::TyNode;
+use crate::compiler::ast::{StructDefine, TyNode, VariantDefine};
 use std::convert::TryFrom;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,9 +44,9 @@ impl TryFrom<&TyNode> for Size {
     /// `builder::IR::size_of` を使用する
     fn try_from(ty: &TyNode) -> Result<Self, Self::Error> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => embe_ty_sort(ty_name)?,
+            TyNode::Ty(ty_name) => embe_ty_sort(ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
+            TyNode::Stack { name, len } | TyNode::Static { name, len } => {
                 if *len == 1 {
                     name.as_ref().try_into()?
                 } else {
@@ -56,7 +56,7 @@ impl TryFrom<&TyNode> for Size {
                     }
                 }
             }
-            node::TyNode::Pointer {
+            TyNode::Pointer {
                 is_const,
                 ty_name,
                 range,
@@ -65,10 +65,10 @@ impl TryFrom<&TyNode> for Size {
                 is_const: is_const.clone(),
                 range: range.clone(),
             },
-            node::TyNode::SelfTy(..) => Self::DQ,
+            TyNode::SelfTy(..) => Self::DQ,
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
-            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
+            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
                 ty.unwrap_ty().try_into()?
             }
             t => panic!("{:?}", t),
@@ -84,9 +84,9 @@ impl TryFrom<TyNode> for Size {
     /// `builder::IR::size_of` を使用する
     fn try_from(ty: TyNode) -> Result<Self, Self::Error> {
         let size_ty = match ty {
-            node::TyNode::Ty(ty_name) => embe_ty_sort(&ty_name)?,
+            TyNode::Ty(ty_name) => embe_ty_sort(&ty_name)?,
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
+            TyNode::Stack { name, len } | TyNode::Static { name, len } => {
                 if len == 1 {
                     (*name).try_into()?
                 } else {
@@ -96,7 +96,7 @@ impl TryFrom<TyNode> for Size {
                     }
                 }
             }
-            node::TyNode::Pointer {
+            TyNode::Pointer {
                 is_const,
                 ty_name,
                 range,
@@ -105,10 +105,10 @@ impl TryFrom<TyNode> for Size {
                 is_const: is_const,
                 range: range,
             },
-            node::TyNode::SelfTy(..) => Self::DQ,
+            TyNode::SelfTy(..) => Self::DQ,
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
-            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
+            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
                 ty.unwrap_ty().try_into()?
             }
             t => panic!("{:?}", t),
@@ -144,8 +144,8 @@ impl Size {
 
     /// 構造体の型を作成する
     pub(in crate::compiler::ir) fn emit_struct_ty_node(
-        f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
-        ty: &node::TyNode,
+        f: &mut impl FnMut(&str) -> Result<StructDefine, err::ErrKind>,
+        ty: &TyNode,
     ) -> Result<Self, err::ErrKind> {
         let binding = ty.get_ty_str_name();
         let target = f(&binding)?;
@@ -166,8 +166,8 @@ impl Size {
     /// ユーザー定義の型では`Err`が返ってくる。その場合に`f`
     /// (構造体の定義を名前から取得する関数)を使って構造体の型を作成する
     pub(super) fn try_from_or_emit_struct(
-        f: &mut impl FnMut(&str) -> Result<node::StructDefine, err::ErrKind>,
-        ty: &node::TyNode,
+        f: &mut impl FnMut(&str) -> Result<StructDefine, err::ErrKind>,
+        ty: &TyNode,
     ) -> Result<Self, err::ErrKind> {
         match Self::try_from(ty) {
             Ok(size) => Ok(size),
@@ -317,10 +317,10 @@ impl IR {
     /// `struct_tree`を参照して`Size::emit_struct_ty_node`で構造体の型を作成する
     pub(in crate::compiler::ir) fn try_size_or_emit_struct(
         &self,
-        ty: &node::TyNode,
+        ty: &TyNode,
     ) -> Result<types::Size, err::ErrKind> {
         // バリアント型は`struct_tree`では解決できないので先に調べる
-        if let node::TyNode::Ty(name) = ty {
+        if let TyNode::Ty(name) = ty {
             if self.variant_tree.contains_key(name) {
                 return Ok(self.size_of(ty));
             }
@@ -331,7 +331,7 @@ impl IR {
     /// バリアント型の定義から`types::Size::Variant`を作る
     pub(in crate::compiler::ir) fn size_of_variant(
         &self,
-        variant_def: &node::VariantDefine,
+        variant_def: &VariantDefine,
     ) -> types::Size {
         let fields = variant_def
             .fields
@@ -357,9 +357,9 @@ impl IR {
     /// 組み込み型(`byte`/`u16`/`int`/`u64`)は`types::Size::new`と
     /// 同じ結果を返すが、構造体・バリアント型などのユーザー定義の型名が渡された
     /// 場合は`struct_tree`/`variant_tree`を参照して解決する
-    pub(in crate::compiler::ir) fn size_of(&self, ty: &node::TyNode) -> types::Size {
+    pub(in crate::compiler::ir) fn size_of(&self, ty: &TyNode) -> types::Size {
         match ty {
-            node::TyNode::Ty(name) => {
+            TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {
                     return ty.try_into().unwrap();
                 }
@@ -384,7 +384,7 @@ impl IR {
 
                 panic!("未定義の型です: {}", name);
             }
-            node::TyNode::Pointer {
+            TyNode::Pointer {
                 is_const,
                 ty_name,
                 range,
@@ -394,7 +394,7 @@ impl IR {
                 range: range.clone(),
             },
             // スタック/静的領域の型は、要素の型と同じサイズを持つ
-            node::TyNode::Stack { name, len } | node::TyNode::Static { name, len } => {
+            TyNode::Stack { name, len } | TyNode::Static { name, len } => {
                 let size = self.size_of(&name);
                 // 配列の作成
                 if len >= &1 {
@@ -406,11 +406,11 @@ impl IR {
                     size
                 }
             }
-            node::TyNode::RefTy(inner) => self.size_of(inner),
+            TyNode::RefTy(inner) => self.size_of(inner),
             // `Self`はIRへ変換する前に、実際の構造体の型
-            // (`node::TyNode::Ty`)やポインタ型へ解決されている必要がある
-            node::TyNode::SelfTy(name) => self.size_of(&node::TyNode::Ty(name.to_string())),
-            node::TyNode::ConstractMust(ty) | node::TyNode::ConstractOf(ty) => {
+            // (`TyNode::Ty`)やポインタ型へ解決されている必要がある
+            TyNode::SelfTy(name) => self.size_of(&TyNode::Ty(name.to_string())),
+            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
                 self.size_of(&ty.unwrap_ty())
             }
         }

@@ -10,7 +10,7 @@
 
 use super::*;
 
-use crate::compiler::lex;
+use crate::compiler::hexl_frontend::lex;
 use std::fmt;
 use std::rc::Rc;
 // ---------------------------------------------------------------------

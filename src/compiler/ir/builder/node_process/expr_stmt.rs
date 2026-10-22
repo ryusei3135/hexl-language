@@ -1,8 +1,9 @@
 //! 式の処理: 型の推論、二項/単項演算、キャスト、`++`/`--`、代入
 
-use crate::compiler::node::Expr;
+use crate::compiler::ast::Expr;
 
 use super::*;
+use crate::compiler::ast::{AssignVar, ExprNode, TyNode};
 
 impl IR {
     fn ensure_var_is_assignable(
@@ -21,7 +22,7 @@ impl IR {
     }
 
     /// `gen_expr_ir`とほぼ同じ処理を行うが、式が`Point.new()`のような
-    /// 構造体を返すスコープ呼び出し(`node::Expr::Scope`)だった場合、
+    /// 構造体を返すスコープ呼び出し(`Expr::Scope`)だった場合、
     /// この式の結果を格納する予定の変数名(`var_name`)を`scope_node`に
     /// そのまま渡す。これにより、構造体の初期化のために確保する
     /// 一時的なスタック領域が、コンパイラ内部の合成名(`__self_N`)
@@ -30,21 +31,21 @@ impl IR {
     pub(super) fn gen_named_expr_ir<M: ResultMod>(
         &mut self,
         var_name: &str,
-        expr: node::Expr,
+        expr: Expr,
         expect_byte: &types::Size,
         attr: &VarMutAttr,
     ) -> Result<usize, err::ErrKind> {
         // `Type::Mem(value)`がバリアント型の初期化なら、`InitVariant`に直す
         // (`src/ir/builder/variant_bind.rs`)
         let expr = self.scope_call_to_variant_init(&expr);
-        if let node::ExprNode::Scope { scope, target } = &expr.node {
+        if let ExprNode::Scope { scope, target } = &expr.node {
             self.expr_counter += 1;
             let result = self.scope_node::<M>(scope, target, Some(&var_name.to_string()), &attr);
             let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
             self.id_counter += 1;
             Ok(self.id_counter - 1)
-        } else if let node::ExprNode::CallFunc(call) = &expr.node {
+        } else if let ExprNode::CallFunc(call) = &expr.node {
             let result = self.gen_call_fn_ir::<M>(None, call, Some(&var_name.to_owned()));
             let inst = self.unwrap_or_report(result);
             self.ir_tree.push(inst);
@@ -62,7 +63,7 @@ impl IR {
     /// 整数の`expect_byte`をそのまま使い、整数でなければ`DD`にする
     pub(in crate::compiler::ir) fn index_expect_ty(
         &self,
-        index: &node::Expr,
+        index: &Expr,
         expect_byte: &types::Size,
     ) -> types::Size {
         match self.infer_expr_ty(index) {
@@ -73,25 +74,25 @@ impl IR {
     }
 
     /// 型が決まっていない即値(`10`や`1.5`、即値だけの式`1 + 2`)か
-    fn is_untyped_literal(expr: &node::Expr) -> bool {
+    fn is_untyped_literal(expr: &Expr) -> bool {
         match &expr.node {
-            node::ExprNode::Number(_) | node::ExprNode::Float(_) => true,
-            node::ExprNode::Add(n)
-            | node::ExprNode::Sub(n)
-            | node::ExprNode::Mul(n)
-            | node::ExprNode::Div(n)
-            | node::ExprNode::Surplus(n)
-            | node::ExprNode::LShift(n)
-            | node::ExprNode::RShift(n)
-            | node::ExprNode::AndCalcul(n)
-            | node::ExprNode::XorCalcul(n)
-            | node::ExprNode::OrCalcul(n) => {
+            ExprNode::Number(_) | ExprNode::Float(_) => true,
+            ExprNode::Add(n)
+            | ExprNode::Sub(n)
+            | ExprNode::Mul(n)
+            | ExprNode::Div(n)
+            | ExprNode::Surplus(n)
+            | ExprNode::LShift(n)
+            | ExprNode::RShift(n)
+            | ExprNode::AndCalcul(n)
+            | ExprNode::XorCalcul(n)
+            | ExprNode::OrCalcul(n) => {
                 Self::is_untyped_literal(&n.0) && Self::is_untyped_literal(&n.1)
             }
             // `-1`や`~0`のような、即値だけの単項演算
-            node::ExprNode::Sign((_, target))
-            | node::ExprNode::Inversion(target)
-            | node::ExprNode::CmpNot(target) => Self::is_untyped_literal(&target),
+            ExprNode::Sign((_, target))
+            | ExprNode::Inversion(target)
+            | ExprNode::CmpNot(target) => Self::is_untyped_literal(&target),
             _ => false,
         }
     }
@@ -104,38 +105,38 @@ impl IR {
     ///   即値の型にできないので`None`
     ///
     /// 副作用が無い(変数の使用回数も数えない)ので、`&self`で調べる
-    pub(in super::super) fn infer_expr_ty(&self, expr: &node::Expr) -> Option<types::Size> {
+    pub(in super::super) fn infer_expr_ty(&self, expr: &Expr) -> Option<types::Size> {
         let ty = match &expr.node {
-            node::ExprNode::Var(name) => {
+            ExprNode::Var(name) => {
                 let ty_node = self.var_tree.get_ty_node(name)?;
                 self.try_size_or_emit_struct(&ty_node).ok()?
             }
-            node::ExprNode::Inc(target) | node::ExprNode::Dec(target) => {
+            ExprNode::Inc(target) | ExprNode::Dec(target) => {
                 return self.infer_expr_ty(target);
             }
             // 単項演算の結果は、オペランドと同じ型
             // (`!a`は比較の結果なので、型を決める元にしない)
-            node::ExprNode::Sign((_, target))
-            | node::ExprNode::Inversion(target)
-            | node::ExprNode::LeftInc(target)
-            | node::ExprNode::LeftDec(target) => {
+            ExprNode::Sign((_, target))
+            | ExprNode::Inversion(target)
+            | ExprNode::LeftInc(target)
+            | ExprNode::LeftDec(target) => {
                 return self.infer_expr_ty(target);
             }
             // キャストの結果は、キャスト先の型(組み込み型のみ)
-            node::ExprNode::Cast((ty, _)) => match ty {
-                node::TyNode::Ty(_) => types::Size::try_from(ty).ok()?,
+            ExprNode::Cast((ty, _)) => match ty {
+                TyNode::Ty(_) => types::Size::try_from(ty).ok()?,
                 _ => return None,
             },
-            node::ExprNode::Add(n)
-            | node::ExprNode::Sub(n)
-            | node::ExprNode::Mul(n)
-            | node::ExprNode::Div(n)
-            | node::ExprNode::Surplus(n)
-            | node::ExprNode::LShift(n)
-            | node::ExprNode::RShift(n)
-            | node::ExprNode::AndCalcul(n)
-            | node::ExprNode::XorCalcul(n)
-            | node::ExprNode::OrCalcul(n) => self
+            ExprNode::Add(n)
+            | ExprNode::Sub(n)
+            | ExprNode::Mul(n)
+            | ExprNode::Div(n)
+            | ExprNode::Surplus(n)
+            | ExprNode::LShift(n)
+            | ExprNode::RShift(n)
+            | ExprNode::AndCalcul(n)
+            | ExprNode::XorCalcul(n)
+            | ExprNode::OrCalcul(n) => self
                 .infer_expr_ty(&n.0)
                 .or_else(|| self.infer_expr_ty(&n.1))?,
             _ => return None,
@@ -166,11 +167,11 @@ impl IR {
     /// それ以外は、渡された`expect_byte`をそのまま使う
     pub(in super::super) fn operand_expect_tys(
         &self,
-        ls: &node::Expr,
-        rs: &node::Expr,
+        ls: &Expr,
+        rs: &Expr,
         expect_byte: &types::Size,
     ) -> (types::Size, types::Size) {
-        let fit = |lit: &node::Expr, other: &node::Expr| -> Option<types::Size> {
+        let fit = |lit: &Expr, other: &Expr| -> Option<types::Size> {
             if Self::is_untyped_literal(lit) == false || Self::is_untyped_literal(other) {
                 return None;
             }
@@ -184,22 +185,22 @@ impl IR {
     }
 
     /// 即値の式の中に小数(`Expr::Float`)があるか
-    fn literal_has_float(expr: &node::Expr) -> bool {
+    fn literal_has_float(expr: &Expr) -> bool {
         match &expr.node {
-            node::ExprNode::Float(_) => true,
-            node::ExprNode::Add(n)
-            | node::ExprNode::Sub(n)
-            | node::ExprNode::Mul(n)
-            | node::ExprNode::Div(n)
-            | node::ExprNode::Surplus(n)
-            | node::ExprNode::LShift(n)
-            | node::ExprNode::RShift(n)
-            | node::ExprNode::AndCalcul(n)
-            | node::ExprNode::XorCalcul(n)
-            | node::ExprNode::OrCalcul(n) => {
+            ExprNode::Float(_) => true,
+            ExprNode::Add(n)
+            | ExprNode::Sub(n)
+            | ExprNode::Mul(n)
+            | ExprNode::Div(n)
+            | ExprNode::Surplus(n)
+            | ExprNode::LShift(n)
+            | ExprNode::RShift(n)
+            | ExprNode::AndCalcul(n)
+            | ExprNode::XorCalcul(n)
+            | ExprNode::OrCalcul(n) => {
                 Self::literal_has_float(&n.0) || Self::literal_has_float(&n.1)
             }
-            node::ExprNode::Sign((_, target)) => Self::literal_has_float(target),
+            ExprNode::Sign((_, target)) => Self::literal_has_float(target),
             _ => false,
         }
     }
@@ -215,10 +216,10 @@ impl IR {
     ///   オペランドの変数の型(定義元の型)、それ以外は`DD`にする
     pub(in super::super) fn resolve_expect_byte<M: ResultMod>(
         &mut self,
-        expr: &node::Expr,
+        expr: &Expr,
         expect_byte: Option<&types::Size>,
     ) -> Result<types::Size, err::ErrKind> {
-        if let node::ExprNode::Assign(assign_node) = &expr.node {
+        if let ExprNode::Assign(assign_node) = &expr.node {
             if let Some(size) = self.member_ty_of_assign_dst::<M>(&assign_node.dst, expect_byte)? {
                 return Ok(size);
             }
@@ -233,14 +234,14 @@ impl IR {
                 // 型が決まっていない二項演算(`if a < 10`など)は、
                 // オペランドの型で決める
                 match expr.node {
-                    node::ExprNode::Number(_) | node::ExprNode::Float(_) => None,
+                    ExprNode::Number(_) | ExprNode::Float(_) => None,
                     // 比較(`n % 15 == 0`/`i < 10`)は、結果ではなくオペランドの型で決める
-                    node::ExprNode::LessThen(ref n)
-                    | node::ExprNode::GreaterThen(ref n)
-                    | node::ExprNode::LessThenEq(ref n)
-                    | node::ExprNode::GreaterThenEq(ref n)
-                    | node::ExprNode::Equal(ref n)
-                    | node::ExprNode::NotEq(ref n) => self
+                    ExprNode::LessThen(ref n)
+                    | ExprNode::GreaterThen(ref n)
+                    | ExprNode::LessThenEq(ref n)
+                    | ExprNode::GreaterThenEq(ref n)
+                    | ExprNode::Equal(ref n)
+                    | ExprNode::NotEq(ref n) => self
                         .infer_expr_ty(&n.0)
                         .or_else(|| self.infer_expr_ty(&n.1)),
                     _ => self.infer_expr_ty(expr),
@@ -254,12 +255,12 @@ impl IR {
     /// - メンバーのノードが変数以外ならpanic
     fn member_ty_of_assign_dst<M: ResultMod>(
         &mut self,
-        dst: &node::Expr,
+        dst: &Expr,
         expect_byte: Option<&types::Size>,
     ) -> Result<Option<types::Size>, err::ErrKind> {
         // (構造体名, メンバー名, 配列メンバーの要素か)
         let (struct_name, member, is_arr_elem) = match &dst.node {
-            node::ExprNode::Member { scope, target } => {
+            ExprNode::Member { scope, target } => {
                 // スコープがemptyでないことは確定している
                 let var_name = scope.last().unwrap();
                 let struct_name = M::handle(self.var_tree.get_ty_name(var_name).or_else(|_| {
@@ -270,13 +271,13 @@ impl IR {
                     ))
                 }))?;
                 match &target.node {
-                    node::ExprNode::Var(m) => (struct_name, m.clone(), false),
-                    node::ExprNode::RefArray { name, .. } => (struct_name, name.clone(), true),
+                    ExprNode::Var(m) => (struct_name, m.clone(), false),
+                    ExprNode::RefArray { name, .. } => (struct_name, name.clone(), true),
                     // パーサーですでにはじいているのでpanic
                     n => panic!("構造体のメンバーに使えないノード {:?}", n),
                 }
             }
-            node::ExprNode::PtrMember { name, target, .. } => {
+            ExprNode::PtrMember { name, target, .. } => {
                 // // 代入先のメンバーの型(`member_ty_of_dst`は副作用なしの版)
                 // let Some(member_ty) = self.member_ty_of_dst(dst) else {
                 //     return Err();
@@ -289,8 +290,8 @@ impl IR {
 
                 let struct_name = self.var_tree.get_ty_name(name)?;
                 match &target.node {
-                    node::ExprNode::Var(m) => (struct_name, m.clone(), false),
-                    node::ExprNode::RefArray { name, .. } => (struct_name, name.clone(), true),
+                    ExprNode::Var(m) => (struct_name, m.clone(), false),
+                    ExprNode::RefArray { name, .. } => (struct_name, name.clone(), true),
                     // パーサーですでにはじいているのでpanic
                     n => panic!("構造体のメンバーに使えないノード {:?}", n),
                 }
@@ -320,7 +321,7 @@ impl IR {
         }
     }
 
-    /// `node::Expr::Cast((ty, target))`を`inst::Inst::Cast`にする
+    /// `Expr::Cast((ty, target))`を`inst::Inst::Cast`にする
     ///
     /// キャスト先`ty`は組み込みの型(`byte`/`int`/`u64`/`float`など)に限る。
     /// 構造体・バリアント型・ポインタ・配列などは受け付けない
@@ -330,11 +331,11 @@ impl IR {
     ///   (専用のエラーを`err`に用意したら差し替える)
     pub(in super::super) fn build_cast_inst<M: ResultMod>(
         &mut self,
-        ty: &node::TyNode,
-        target: &node::Expr,
+        ty: &TyNode,
+        target: &Expr,
     ) -> Result<inst::Inst, err::ErrKind> {
         let after = match ty {
-            node::TyNode::Ty(_) => types::Size::try_from(ty)?,
+            TyNode::Ty(_) => types::Size::try_from(ty)?,
             _ => return Err(err::ErrKind::UnexpectedToken),
         };
         // 変換元は、式自身の型で生成する(分からなければキャスト先の型)
@@ -373,10 +374,10 @@ impl IR {
 
     pub(in super::super) fn build_inc_dec_expr<M: ResultMod>(
         &mut self,
-        target: &node::Expr,
+        target: &Expr,
         kind: &inst::ExprKind,
     ) -> Result<inst::Inst, err::ErrKind> {
-        let node::ExprNode::Var(name) = &target.node else {
+        let ExprNode::Var(name) = &target.node else {
             return Err(err::ErrKind::UnexpectedToken);
         };
 
@@ -426,28 +427,28 @@ impl IR {
     /// 単項演算のノードでなければ`Ok(None)`
     pub(in super::super) fn desugar_unary<M: ResultMod>(
         &mut self,
-        expr: &node::Expr,
+        expr: &Expr,
         expect_byte: Option<&types::Size>,
-    ) -> Result<Option<node::Expr>, err::ErrKind> {
+    ) -> Result<Option<Expr>, err::ErrKind> {
         // オペランドの型。分からなければ呼び出し側の期待する型
-        let operand_ty = |this: &Self, target: &node::Expr| -> Option<types::Size> {
+        let operand_ty = |this: &Self, target: &Expr| -> Option<types::Size> {
             this.infer_expr_ty(target).or_else(|| expect_byte.cloned())
         };
 
         let expanded = match &expr.node {
-            node::ExprNode::Sign((true, target)) => (**target).clone(),
-            node::ExprNode::Sign((false, target)) => {
+            ExprNode::Sign((true, target)) => (**target).clone(),
+            ExprNode::Sign((false, target)) => {
                 let is_float = operand_ty(self, target).is_some_and(|ty| ty.is_float())
                     || Self::literal_has_float(target);
                 let zero = if is_float {
-                    node::ExprNode::Float("0.0".to_string()).with_span(Rc::clone(&expr.span))
+                    ExprNode::Float("0.0".to_string()).with_span(Rc::clone(&expr.span))
                 } else {
-                    node::ExprNode::Number("0".to_string()).with_span(Rc::clone(&expr.span))
+                    ExprNode::Number("0".to_string()).with_span(Rc::clone(&expr.span))
                 };
-                node::ExprNode::Sub(node::Expr::wrap(zero, (**target).clone()))
+                ExprNode::Sub(Expr::wrap(zero, (**target).clone()))
                     .with_span(Rc::clone(&expr.span))
             }
-            node::ExprNode::Inversion(target) => {
+            ExprNode::Inversion(target) => {
                 use types::Size;
                 // 全ビットが1の値(符号付きは-1、符号なしは型の最大値)
                 let mask = match operand_ty(self, target).unwrap_or(Size::DD) {
@@ -458,36 +459,36 @@ impl IR {
                     Size::F32 | Size::F64 => return Err(err::ErrKind::UnexpectedToken),
                     _ => "-1".to_string(),
                 };
-                node::ExprNode::XorCalcul(node::Expr::wrap(
+                ExprNode::XorCalcul(Expr::wrap(
                     (**target).clone(),
-                    node::ExprNode::Number(mask).with_span(Rc::clone(&expr.span)),
+                    ExprNode::Number(mask).with_span(Rc::clone(&expr.span)),
                 ))
                 .with_span(Rc::clone(&expr.span))
             }
-            node::ExprNode::CmpNot(target) => node::ExprNode::Equal(node::Expr::wrap(
+            ExprNode::CmpNot(target) => ExprNode::Equal(Expr::wrap(
                 (**target).clone(),
-                node::ExprNode::Number("0".to_string()).with_span(Rc::clone(&expr.span)),
+                ExprNode::Number("0".to_string()).with_span(Rc::clone(&expr.span)),
             ))
             .with_span(Rc::clone(&expr.span)),
-            node::ExprNode::LeftInc(target) | node::ExprNode::LeftDec(target) => {
-                let node::ExprNode::Var(name) = &(**target).node else {
+            ExprNode::LeftInc(target) | ExprNode::LeftDec(target) => {
+                let ExprNode::Var(name) = &(**target).node else {
                     return Err(err::ErrKind::UnexpectedToken);
                 };
                 // 後置の`++`/`--`と同じ条件(再代入できる整数型の変数)を確認する
                 self.inc_dec_var_ty::<M>(name)?;
-                let var = node::ExprNode::Var(name.clone());
-                let calc = node::Expr::wrap(
-                    node::Expr::new(var.clone(), Rc::clone(&expr.span)),
-                    node::ExprNode::Number("1".to_string()).with_span(Rc::clone(&expr.span)),
+                let var = ExprNode::Var(name.clone());
+                let calc = Expr::wrap(
+                    Expr::new(var.clone(), Rc::clone(&expr.span)),
+                    ExprNode::Number("1".to_string()).with_span(Rc::clone(&expr.span)),
                 );
-                let value = if matches!(&expr.node, node::ExprNode::LeftInc(_)) {
-                    node::ExprNode::Add(calc)
+                let value = if matches!(&expr.node, ExprNode::LeftInc(_)) {
+                    ExprNode::Add(calc)
                 } else {
-                    node::ExprNode::Sub(calc)
+                    ExprNode::Sub(calc)
                 };
-                node::AssignVar::new(
+                AssignVar::new(
                     name,
-                    node::Expr::new(var, Rc::clone(&expr.span)),
+                    Expr::new(var, Rc::clone(&expr.span)),
                     value.with_span(Rc::clone(&expr.span)),
                     Rc::clone(&expr.span),
                 )
@@ -499,7 +500,7 @@ impl IR {
 
     pub(in super::super) fn assign_expr_node<M: ResultMod>(
         &mut self,
-        assign_node: &node::AssignVar,
+        assign_node: &AssignVar,
         expect_byte: &types::Size,
         attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
@@ -531,12 +532,12 @@ impl IR {
     /// - 比較(`<` `>` `<=` `>=` `==` `!=`)・`&&`・`||`・`!`
     /// - 比較の両辺は、メモリにアクセスしない式(`is_mem_free`)だけ
     ///   (配列・ポインタの中身・メンバー・関数呼び出し・代入・`++`/`--`は不可)
-    fn is_ternary_cond(expr: &node::Expr) -> bool {
+    fn is_ternary_cond(expr: &Expr) -> bool {
         match &expr.node {
-            node::ExprNode::CmpAnd(n) | node::ExprNode::CmpOr(n) => {
+            ExprNode::CmpAnd(n) | ExprNode::CmpOr(n) => {
                 Self::is_ternary_cond(&n.0) && Self::is_ternary_cond(&n.1)
             }
-            node::ExprNode::CmpNot(target) => Self::is_ternary_cond(target),
+            ExprNode::CmpNot(target) => Self::is_ternary_cond(target),
             _ => Self::is_mem_free(expr),
         }
     }
@@ -576,7 +577,7 @@ impl IR {
     /// 呼び出し側は先に`is_ternary_cond`で確認すること。
     pub(in crate::compiler::ir) fn gen_ternary_cond_ir<M: ResultMod>(
         &mut self,
-        cond: &node::Expr,
+        cond: &Expr,
     ) -> Result<usize, err::ErrKind> {
         if Self::is_ternary_cond(cond) == false {
             panic!(
@@ -590,27 +591,27 @@ impl IR {
 
         match &cond.node {
             // 比較が1つだけ
-            node::ExprNode::LessThen(n) => {
+            ExprNode::LessThen(n) => {
                 self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryLessThen)
             }
-            node::ExprNode::GreaterThen(n) => {
+            ExprNode::GreaterThen(n) => {
                 self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryGreaterThen)
             }
-            node::ExprNode::LessThenEq(n) => {
+            ExprNode::LessThenEq(n) => {
                 self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryLessThenEq)
             }
-            node::ExprNode::GreaterThenEq(n) => {
+            ExprNode::GreaterThenEq(n) => {
                 self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryGreaterThenEq)
             }
-            node::ExprNode::Equal(n) => {
+            ExprNode::Equal(n) => {
                 self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryEqual)
             }
-            node::ExprNode::NotEq(n) => {
+            ExprNode::NotEq(n) => {
                 self.gen_ternary_cmp_ir::<M>(n, &size, inst::ExprKind::TernaryNotEq)
             }
 
             // `&&` / `||`: 結果(0/1)が0でないか
-            node::ExprNode::CmpAnd(..) | node::ExprNode::CmpOr(..) => {
+            ExprNode::CmpAnd(..) | ExprNode::CmpOr(..) => {
                 let value = self.gen_setcc_ir::<M>(cond)?;
                 let zero = self.push_ternary_inst(inst::Inst::gen_num(
                     &"0".to_string(),
@@ -621,7 +622,7 @@ impl IR {
             }
 
             // `!(..)`: 結果(0/1)が0か
-            node::ExprNode::CmpNot(target) => {
+            ExprNode::CmpNot(target) => {
                 let value = self.gen_setcc_ir::<M>(&*target)?;
                 let zero = self.push_ternary_inst(inst::Inst::gen_num(
                     &"0".to_string(),
@@ -647,7 +648,7 @@ impl IR {
     /// 比較1つ分の`Ternary*`命令
     fn gen_ternary_cmp_ir<M: ResultMod>(
         &mut self,
-        node: &(Box<node::Expr>, Box<node::Expr>),
+        node: &(Box<Expr>, Box<Expr>),
         size: &types::Size,
         kind: inst::ExprKind,
     ) -> Result<usize, err::ErrKind> {
@@ -666,13 +667,13 @@ impl IR {
     /// それ以外の単純な比較(`if a < b`や三項演算子の`a < b ? x : y`)は、
     /// 今までどおり`LessThen`や`Ternary*`を使う
     pub(in crate::compiler::ir) fn needs_setcc(
-        expr: &node::Expr,
+        expr: &Expr,
         expect_byte: Option<&types::Size>,
     ) -> bool {
         let is_bool = matches!(expect_byte, Some(types::Size::Bool));
         match &expr.node {
-            node::ExprNode::CmpAnd(..) | node::ExprNode::CmpOr(..) => true,
-            node::ExprNode::CmpNot(target) => {
+            ExprNode::CmpAnd(..) | ExprNode::CmpOr(..) => true,
+            ExprNode::CmpNot(target) => {
                 is_bool || Self::is_cmp_expr(target) || Self::is_logic_expr(target)
             }
             other => is_bool && Self::is_cmp_expr(expr),
@@ -680,22 +681,22 @@ impl IR {
     }
 
     /// 比較(`<` `>` `<=` `>=` `==` `!=`)か
-    fn is_cmp_expr(expr: &node::Expr) -> bool {
+    fn is_cmp_expr(expr: &Expr) -> bool {
         match &expr.node {
-            node::ExprNode::LessThen(..)
-            | node::ExprNode::GreaterThen(..)
-            | node::ExprNode::LessThenEq(..)
-            | node::ExprNode::GreaterThenEq(..)
-            | node::ExprNode::Equal(..)
-            | node::ExprNode::NotEq(..) => true,
+            ExprNode::LessThen(..)
+            | ExprNode::GreaterThen(..)
+            | ExprNode::LessThenEq(..)
+            | ExprNode::GreaterThenEq(..)
+            | ExprNode::Equal(..)
+            | ExprNode::NotEq(..) => true,
             _ => false,
         }
     }
 
     /// `&&` / `||` / `!`か
-    fn is_logic_expr(expr: &node::Expr) -> bool {
+    fn is_logic_expr(expr: &Expr) -> bool {
         match &expr.node {
-            node::ExprNode::CmpAnd(..) | node::ExprNode::CmpOr(..) | node::ExprNode::CmpNot(..) => {
+            ExprNode::CmpAnd(..) | ExprNode::CmpOr(..) | ExprNode::CmpNot(..) => {
                 true
             }
             _ => false,
@@ -706,7 +707,7 @@ impl IR {
     ///
     /// 変数などオペランドの型が分かればその型、分からなければ`DD`。
     /// `bool`への代入でも、オペランドの型は`bool`にならない(`check_var_ty`で弾かれる)
-    fn set_cmp_operand_ty(&self, node: &(Box<node::Expr>, Box<node::Expr>)) -> types::Size {
+    fn set_cmp_operand_ty(&self, node: &(Box<Expr>, Box<Expr>)) -> types::Size {
         self.infer_expr_ty(&node.0)
             .or_else(|| self.infer_expr_ty(&node.1))
             .unwrap_or(types::Size::DD)
@@ -715,7 +716,7 @@ impl IR {
     /// 比較1つ分の`Set*`命令(結果は0か1)
     fn gen_set_cmp_ir<M: ResultMod>(
         &mut self,
-        node: &(Box<node::Expr>, Box<node::Expr>),
+        node: &(Box<Expr>, Box<Expr>),
         kind: inst::ExprKind,
     ) -> Result<usize, err::ErrKind> {
         let size = self.set_cmp_operand_ty(&node);
@@ -735,28 +736,28 @@ impl IR {
     /// 右辺に副作用やメモリアクセスがあるときは、分岐で展開する必要がある
     pub(in crate::compiler::ir) fn gen_setcc_ir<M: ResultMod>(
         &mut self,
-        expr: &node::Expr,
+        expr: &Expr,
     ) -> Result<usize, err::ErrKind> {
         use inst::ExprKind as K;
         self.expr_counter += 1;
         match &expr.node {
-            node::ExprNode::LessThen(n) => self.gen_set_cmp_ir::<M>(n, K::SetLessThen),
-            node::ExprNode::GreaterThen(n) => self.gen_set_cmp_ir::<M>(n, K::SetGreaterThen),
-            node::ExprNode::LessThenEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetLessThenEq),
-            node::ExprNode::GreaterThenEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetGreaterThenEq),
-            node::ExprNode::Equal(n) => self.gen_set_cmp_ir::<M>(n, K::SetEqual),
-            node::ExprNode::NotEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetNotEq),
-            node::ExprNode::CmpAnd((l, r)) => {
+            ExprNode::LessThen(n) => self.gen_set_cmp_ir::<M>(n, K::SetLessThen),
+            ExprNode::GreaterThen(n) => self.gen_set_cmp_ir::<M>(n, K::SetGreaterThen),
+            ExprNode::LessThenEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetLessThenEq),
+            ExprNode::GreaterThenEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetGreaterThenEq),
+            ExprNode::Equal(n) => self.gen_set_cmp_ir::<M>(n, K::SetEqual),
+            ExprNode::NotEq(n) => self.gen_set_cmp_ir::<M>(n, K::SetNotEq),
+            ExprNode::CmpAnd((l, r)) => {
                 let ls = self.gen_setcc_ir::<M>(&*l)?;
                 let rs = self.gen_setcc_ir::<M>(&*r)?;
                 Ok(self.push_ternary_cmp(K::AndCalcul, ls, rs))
             }
-            node::ExprNode::CmpOr((l, r)) => {
+            ExprNode::CmpOr((l, r)) => {
                 let ls = self.gen_setcc_ir::<M>(&*l)?;
                 let rs = self.gen_setcc_ir::<M>(&*r)?;
                 Ok(self.push_ternary_cmp(K::OrCalcul, ls, rs))
             }
-            node::ExprNode::CmpNot(target) => {
+            ExprNode::CmpNot(target) => {
                 let value = self.gen_setcc_ir::<M>(&*target)?;
                 let bool_ty = types::Size::Bool;
                 let zero =
@@ -766,7 +767,7 @@ impl IR {
             // 比較ではない式
             _ => {
                 // `bool`型の変数は、すでに0か1
-                if let node::ExprNode::Var(name) = &expr.node {
+                if let ExprNode::Var(name) = &expr.node {
                     let is_bool = self
                         .var_tree
                         .get_ty_node(name)

@@ -3,15 +3,16 @@
 //! 一つの分岐で契約を終了するなら、すべての分岐で終了しなければならない
 
 use super::*;
+use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
 
 impl IR {
-    /// 条件分岐(`node::Expr::Match`)の追跡
+    /// 条件分岐(`Expr::Match`)の追跡
     ///
     /// 分岐ごとに独立して追跡し、最後に結果を突き合わせる。
     /// 一つでも契約を終了する分岐があるなら、すべての分岐で
     /// 終了しなければならない
-    pub(super) fn walk_match(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
-        let node::ExprNode::Match {
+    pub(super) fn walk_match(expr: &Expr, must_vars: &mut Vec<MustVar>) {
+        let ExprNode::Match {
             pattern,
             arms,
             arm_else,
@@ -57,8 +58,8 @@ impl IR {
     fn ends_with_exit(body: &Body) -> bool {
         matches!(
             body.iter().last().map(|n| n.get_node()),
-            Some(node::Group2Node::Stmt(
-                node::StmtNode::Return(_) | node::StmtNode::Break(_)
+            Some(Group2Node::Stmt(
+                StmtNode::Return(_) | StmtNode::Break(_)
             ))
         )
     }

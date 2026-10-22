@@ -1,6 +1,7 @@
 use crate::compiler::err::undef::UndefKind::*;
 
 use super::*;
+use crate::compiler::ast::{CallInfo, Expr, ExprNode};
 use err_factory::member;
 use std::rc::Rc;
 
@@ -47,7 +48,7 @@ impl IR {
     pub(super) fn member_is_fn<M: ResultMod>(
         &mut self,
         scope: &[&str],
-        call_func_info: &node::CallInfo,
+        call_func_info: &CallInfo,
     ) -> Result<inst::Inst, err::ErrKind> {
         // `変数名.メゾット名(引数, ..)`という、メンバーアクセス
         // を経由したメゾット呼び出し
@@ -67,14 +68,14 @@ impl IR {
 
         let mut call_info = call_func_info.clone();
         let self_span = std::rc::Rc::new(self.current_span.clone());
-        let self_var = node::Expr::new(
-            node::ExprNode::Var(var_name.to_owned()),
+        let self_var = Expr::new(
+            ExprNode::Var(var_name.to_owned()),
             std::rc::Rc::clone(&self_span),
         );
         call_info.args.insert(
             0,
-            node::Expr::new(
-                node::ExprNode::GetAddress(Box::new(self_var)),
+            Expr::new(
+                ExprNode::GetAddress(Box::new(self_var)),
                 Rc::clone(&self_span),
             ),
         );
@@ -118,15 +119,15 @@ impl IR {
     pub(super) fn member_is_fn_via_ptr<M: ResultMod>(
         &mut self,
         ptr_name: &str,
-        call_func_info: &node::CallInfo,
+        call_func_info: &CallInfo,
     ) -> Result<inst::Inst, err::ErrKind> {
         let struct_name = self.var_tree.get_ty_name(ptr_name)?;
 
         let mut call_info = call_func_info.clone();
         call_info.args.insert(
             0,
-            node::Expr::new(
-                node::ExprNode::Var(ptr_name.to_owned()),
+            Expr::new(
+                ExprNode::Var(ptr_name.to_owned()),
                 Rc::clone(&self.current_span),
             ),
         );
@@ -139,7 +140,7 @@ impl IR {
         &mut self,
         scope: &[&str],
         name: &str,
-        index: &Box<node::Expr>,
+        index: &Box<Expr>,
     ) -> Result<inst::Inst, err::ErrKind> {
         let var_name: &str = &scope.last().unwrap();
         // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
@@ -165,7 +166,7 @@ impl IR {
         // 添字は数字リテラルとしてのみ許可されているので、
         // ここでそのまま定数として解決する
         let index_num = match &index.node {
-            node::ExprNode::Number(val) => {
+            ExprNode::Number(val) => {
                 if let Ok(num) = val.parse::<usize>() {
                     num
                 } else {

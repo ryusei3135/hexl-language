@@ -6,13 +6,14 @@
 use std::rc::Rc;
 
 use super::*;
+use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
 use crate::err::Span;
 
 impl IR {
-    /// 反復処理(`node::Expr::Loop`)の追跡
+    /// 反復処理(`Expr::Loop`)の追跡
     /// (ループの中で定義した変数は、ループを抜けると追跡をやめる)
-    pub(super) fn walk_loop(expr: &node::Expr, must_vars: &mut Vec<MustVar>) {
-        let node::ExprNode::Loop {
+    pub(super) fn walk_loop(expr: &Expr, must_vars: &mut Vec<MustVar>) {
+        let ExprNode::Loop {
             ref pattern,
             ref body,
         } = expr.node
@@ -36,8 +37,8 @@ impl IR {
     ) {
         for n in nodes.iter() {
             match n.get_node() {
-                node::Group2Node::Expr(expr)
-                | node::Group2Node::Stmt(node::StmtNode::Return(expr)) => {
+                Group2Node::Expr(expr)
+                | Group2Node::Stmt(StmtNode::Return(expr)) => {
                     Self::scan_loop_expr(func_name, &expr, scope);
                 }
                 _ => {}
@@ -45,15 +46,15 @@ impl IR {
         }
     }
 
-    fn scan_loop_expr(func_name: &String, expr: &node::Expr, scope: &mut Vec<String>) {
+    fn scan_loop_expr(func_name: &String, expr: &Expr, scope: &mut Vec<String>) {
         match &expr.node {
-            node::ExprNode::DefVar(var) => {
+            ExprNode::DefVar(var) => {
                 Self::scan_loop_expr(func_name, &var.value, scope);
                 if var.ty.is_constract_must() {
                     scope.push(var.name.clone());
                 }
             }
-            node::ExprNode::Match { arms, arm_else, .. } => {
+            ExprNode::Match { arms, arm_else, .. } => {
                 for arm in arms.iter() {
                     let start = scope.len();
                     Self::check_loop_contract_ends(func_name, &arm.body, scope);
@@ -65,7 +66,7 @@ impl IR {
                     scope.truncate(start);
                 }
             }
-            node::ExprNode::Loop { body, .. } => {
+            ExprNode::Loop { body, .. } => {
                 let mut guarded = scope.clone();
                 Self::check_loop_block(func_name, body, &mut guarded);
             }
@@ -74,7 +75,7 @@ impl IR {
     }
 
     /// 式の中で終了される(関数の引数として渡される)`guarded`の変数名
-    fn ended_by(expr: &node::Expr, guarded: &[String]) -> Vec<String> {
+    fn ended_by(expr: &Expr, guarded: &[String]) -> Vec<String> {
         let mut scratch: Vec<MustVar> = guarded.iter().cloned().map(MustVar::new).collect();
         Self::walk_expr(expr, &mut scratch);
         scratch
@@ -97,16 +98,16 @@ impl IR {
 
         for n in body.iter() {
             let (expr, is_exit) = match n.get_node() {
-                node::Group2Node::Expr(expr) => (Some(expr), false),
-                node::Group2Node::Stmt(node::StmtNode::Return(expr)) => (Some(expr), true),
-                node::Group2Node::Stmt(node::StmtNode::Break(_span)) => (None, true),
+                Group2Node::Expr(expr) => (Some(expr), false),
+                Group2Node::Stmt(StmtNode::Return(expr)) => (Some(expr), true),
+                Group2Node::Stmt(StmtNode::Break(_span)) => (None, true),
                 _ => (None, false),
             };
             let mut ends: Vec<String> = Vec::new();
             if let Some(ref expr) = expr {
                 match &expr.node {
                     // 分岐の本体は、それぞれ同じ規則で検査する
-                    node::ExprNode::Match { arms, arm_else, .. } => {
+                    ExprNode::Match { arms, arm_else, .. } => {
                         for arm in arms.iter() {
                             Self::check_loop_block(func_name, &arm.body, &mut guarded.clone());
                         }
@@ -116,7 +117,7 @@ impl IR {
                     }
                     // 入れ子のループは、自分の本体を検査する。
                     // さらに外側のループから見ると、中で終了することも終了する文
-                    node::ExprNode::Loop { body, .. } => {
+                    ExprNode::Loop { body, .. } => {
                         let mut inner = guarded.clone();
                         inner.extend(locals.iter().cloned());
                         Self::check_loop_block(func_name, body, &mut inner);
@@ -127,7 +128,7 @@ impl IR {
                     }
                 }
                 // ループの中で定義した変数は、この周の中で終了するだけでよい
-                if let node::ExprNode::DefVar(ref var) = expr.node {
+                if let ExprNode::DefVar(ref var) = expr.node {
                     if var.ty.is_constract_must() {
                         guarded.retain(|name| name != &var.name);
                         locals.push(var.name.clone());
