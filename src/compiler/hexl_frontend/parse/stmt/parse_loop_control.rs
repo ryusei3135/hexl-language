@@ -3,7 +3,7 @@
 use super::*;
 use crate::err;
 
-pub(in crate::compiler::hexl_frontend::parse::stmt) trait ParseLoopControl {
+pub(in crate::compiler::hexl_frontend::parse) trait ParseLoopControl {
     fn handle(
         err_pool: &Rc<RefCell<err::err_pool::ErrPool>>,
         result: Result<(), err::ErrKind>,

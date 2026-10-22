@@ -36,7 +36,7 @@ pub(super) fn expand_type_aliases(
 fn map_alias(nodes: &[ast::Group1Node]) -> Result<AliasMap, err::ErrKind> {
     let mut map: AliasMap = HashMap::new();
     for n in nodes {
-        if let ast::Group1ast::TypeAlias(a) = n {
+        if let ast::Group1Node::TypeAlias(a) = n {
             if map.insert(a.name.clone(), a.ty.clone()).is_some() {
                 // 重複定義。専用のエラー種別があれば差し替える
                 return Err(err::ErrKind::UnexpectedToken);
@@ -110,7 +110,7 @@ fn group1(node: &mut ast::Group1Node, map: &AliasMap) {
             }
             v.methods.iter_mut().for_each(|m| group1(m, map));
         }
-        ast::Group1ast::TypeAlias(_)
+        ast::Group1Node::TypeAlias(_)
         | ast::Group1Node::Include(_)
         | ast::Group1Node::Line(_) => {}
     }

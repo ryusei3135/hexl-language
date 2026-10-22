@@ -477,7 +477,7 @@ impl Parser {
         let saved_nodes = std::mem::take(&mut self.gen_nodes);
         self.generic_depth += 1;
 
-        let result = self.parse_loop::<stmt::ParseLoopPushPool>();
+        let result = self.parse_loop::<parse_loop_control::ParseLoopPushPool>();
 
         self.generic_depth -= 1;
         let made = std::mem::replace(&mut self.gen_nodes, saved_nodes);

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::parse::node;
+use crate::compiler::ast;
 
 use crate::compiler::err;
 
@@ -20,7 +20,7 @@ pub enum CompileErrKind {
     /// 配列のindexの型が符号なし整数じゃない
     InvalidIndexUnsigned(String),
     /// 配列の中に使えない式がある
-    UnexpectArrIndexExprKind(node::Expr),
+    UnexpectArrIndexExprKind(ast::Expr),
     InvalidIndexIsNotConst(String),
     ArrElseIndexNotFound,
     /// 不変の変数に値を代入しようとした

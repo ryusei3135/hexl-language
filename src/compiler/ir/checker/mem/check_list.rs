@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use super::*;
 use crate::compiler::err::{self, CompileErr, CompileErrKind};
-use crate::parse::node::{Expr, TyNode};
+use crate::compiler::ast::{Expr, TyNode};
 
 pub(in crate::compiler::ir::checker::mem) trait IndexCheckList {
     fn num_check(val: &str, span: &Rc<err::Span>) -> Result<(), err::ErrKind>;
@@ -68,7 +68,7 @@ impl IndexCheckList for IsImmOrConst {
     ) -> Result<(), err::ErrKind> {
         // 引数など、`const`でない変数は`Err`
         if var_tree.get_ty_node(name).is_none()
-            || var_tree.is_mut(&name.to_string()) != crate::compiler::parse::VarMutAttr::Const
+            || var_tree.is_mut(&name.to_string()) != VarMutAttr::Const
         {
             crate::GenCompileErr!(InvalidIndexIsNotConst, name, Rc::clone(&span))
         } else {

@@ -2,7 +2,7 @@ pub mod asm_gen;
 /// c言語のフロントエンド
 mod c_frontend;
 /// Hexlのフロントエンド
-mod hexl_frontend;
+pub mod hexl_frontend;
 pub mod err;
 pub mod ir;
 pub mod models;

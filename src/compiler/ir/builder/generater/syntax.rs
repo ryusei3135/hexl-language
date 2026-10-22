@@ -2,7 +2,6 @@
 //! `loop`、`match`、三項演算子の分岐展開
 
 use super::*;
-use crate::compiler::ast::{Group2Node, Group2ast, MatchArm, StmtNode};
 
 impl IR {
     pub(in crate::compiler::ir) fn gen_inst<M: ResultMod>(
@@ -14,7 +13,7 @@ impl IR {
             self.expr_counter = 0;
             self.constract_flag.reset();
             match stmt.get_node().clone() {
-                Group2ast::Expr(expr) => {
+                Group2Node::Expr(expr) => {
                     let _ = self.gen_expr_ir::<M>(&expr, None)?;
                 }
                 Group2Node::Stmt(stmt) => {

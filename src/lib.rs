@@ -22,9 +22,8 @@ const DEFAULT: &str = "linux";
 // 参照している可能性があるため、元の `use` はそのまま残している。
 #[allow(unused_imports)]
 use compiler::{
-    asm_gen, err, ir, hexl_frontend::lex,
-    hexl_frontend::parse,
-    ast,
+    asm_gen, err, ir,
+    ast, Parser, Lexer
 };
 
 use std::{error::Error, fs, process, sync::Mutex};

@@ -1,5 +1,5 @@
 use super::{Parser, *};
-use crate::compiler::ast::{ArgsNode, CallInfo, Expr, ExprNode, FuncDefine, Group1Node, Group2Node, StmtNode, TyNode, gen_var_node};
+use crate::compiler::ast::*;
 use std::rc::Rc;
 
 /// 関数を定義するノードの生成
@@ -528,7 +528,7 @@ impl Parser {
         let saved_nodes = std::mem::take(&mut self.gen_nodes);
         self.generic_depth += 1;
 
-        let result = self.parse_loop::<stmt::ParseLoopPushPool>();
+        let result = self.parse_loop::<parse_loop_control::ParseLoopPushPool>();
 
         // エラーでも、必ず状態を元に戻してから返す
         self.generic_depth -= 1;

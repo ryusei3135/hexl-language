@@ -136,7 +136,7 @@ impl IR {
     ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
         for method in methods {
-            let ast::Group1ast::FuncDefine(method_info) = method else {
+            let ast::Group1Node::FuncDefine(method_info) = method else {
                 panic!(
                     "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
                     kind, owner, method
@@ -235,7 +235,7 @@ mod self_ty_tests {
     ) -> ast::FuncDefine {
         let mut func =
             match ast::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span()) {
-                Group1ast::FuncDefine(func) => func,
+                Group1Node::FuncDefine(func) => func,
                 _ => unreachable!(),
             };
         func.module = Some("Name".to_string());

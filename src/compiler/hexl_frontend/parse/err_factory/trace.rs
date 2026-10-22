@@ -86,7 +86,7 @@ macro_rules! fn_name {
 #[macro_export]
 macro_rules! err_at {
     ($($call:tt)+) => {{
-        $crate::compiler::parse::err_factory::trace::set_caller($crate::fn_name!());
+        $crate::compiler::hexl_frontend::parse::err_factory::trace::set_caller($crate::fn_name!());
         $($call)+
     }};
 }
@@ -95,6 +95,6 @@ macro_rules! err_at {
 #[macro_export]
 macro_rules! err_generated_by {
     () => {
-        $crate::compiler::parse::err_factory::trace::report($crate::fn_name!())
+        $crate::compiler::hexl_frontend::parse::err_factory::trace::report($crate::fn_name!())
     };
 }
