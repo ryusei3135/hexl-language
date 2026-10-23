@@ -1476,7 +1476,7 @@ mod sse_tests {
             ("cvttss2si %xmm0, %eax", "f30f2cc0"),
             ("cvttss2siq %xmm10, %r9", "f34d0f2cca"),
             ("cvttsd2si %xmm1, %rax", "f2480f2cc1"),
-            ("cvttsd2sil -8(%rbp), %r8d", "f3440f2c45f8"),
+            ("cvttsd2sil -8(%rbp), %r8d", "f2440f2c45f8"),
             ("cvttsd2siq 16(%r13,%r12,4), %rax", "f24b0f2c44a510"),
             ("cvtss2sd %xmm1, %xmm0", "f30f5ac1"),
             ("cvtss2sd 4(%rax), %xmm9", "f3440f5a4804"),

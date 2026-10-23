@@ -13,10 +13,9 @@ impl Parser {
     ) -> Result<Expr, err::ErrKind> {
         // 名前の位置
         let span = self.build_err_span();
-        // `init_struct`が`false`の場合構造体を初期化してはいけないので、変数を返す
-        if init_struct == false {
-            return Ok(Expr::new(ExprNode::Var(name), span));
-        }
+        // `init_struct`が`false`の場合(`cond`の条件式など)は構造体を初期化してはいけない。
+        // そのため`{`が続いても構造体の初期化とはみなさず変数を返すが、
+        // 関数呼び出し(`f(a)`)やメンバーアクセスは通常どおり解析する
         let node = match self.next_tkn_ref(&[".", "(", "`", "::"])? {
             lex::Tkn::Dot => {
                 let n = self.build_scope_node(&name);
@@ -43,7 +42,7 @@ impl Parser {
                 self.generic_type_expr::<T>(&name, init_struct)?
             }
             // 構造体の初期化ノードを作成する
-            lex::Tkn::LBrace => {
+            lex::Tkn::LBrace if init_struct => {
                 // "{"から始まらないといけないので、次に進める
                 self.next_tkn(&["{"])?;
                 return self.struct_init_node::<T>(&name);

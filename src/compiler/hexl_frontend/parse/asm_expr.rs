@@ -188,7 +188,9 @@ impl Parser {
             let lex::Tkn::Name(field) = self.current_tkn().clone() else {
                 return crate::err_at!(self.expected_member_name_in_asm_operand());
             };
-            self.advance_tkn_checked()?;
+            // メンバー名が`${}`の最後のトークンのこともある(`${p.x}`)ので、
+            // 次のトークンが無くてもエラーにしない
+            self.advance_tkn();
 
             Ok(Expr::new(
                 ExprNode::Member {
