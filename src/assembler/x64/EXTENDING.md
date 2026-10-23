@@ -120,3 +120,9 @@ AT&T 構文で `op 元, 先` の順に書きます。サフィックス (`b` / `
   8bit以外のレジスタ、即値、オペランド数の違いはエラーです。
 - `cmovcc` は16/32/64bitのレジスタ宛てで、`cmovl` / `cmovnel` のようにサフィックスを付けられます。
 - 符号化は GNU as の出力と一致することをテスト (`jcc_tests` / `cmov_tests` / `setcc_tests`) で確認しています。
+
+## lea のレジスタ同士
+
+`leaq %rax, %rcx` のように元・先がともにレジスタの場合は、`movq %rax, %rcx` と同じ符号化で出力します
+(実機の `lea` はメモリオペランド必須で、`mod=11` は #UD になるため)。
+サイズ不一致 (`leaq %eax, %rcx` など) は `register size mismatch` エラーです。

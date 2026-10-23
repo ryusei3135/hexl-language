@@ -24,6 +24,16 @@
 - 新しいアセンブリフォーマットでは `fmt.mnemonic_size` を指定する。
     未指定の場合は `true` として扱われる。
 
+### ensure_mnemonic_size (2026-10-23)
+- `asm_fmt/mng_fmt.rs`の`MngAsmFmt::ensure_mnemonic_size`。`to_asm_text`が出力する**すべての命令**を最後にこの関数へ通し、
+    サイズ接尾辞(gasの`b`/`w`/`l`/`q`)の無い整数命令に必ず付ける(`mnemonic_size`の設定に関係なく常に付く)。
+    テンプレートを直接埋めただけの行(`sub $16, %rsp`、`push`/`pop`など)の付け忘れもここで補う。
+- サイズは最後のレジスタオペランドの幅で決める。`lea`/`push`/`pop`は常に`q`。
+    すでに付いている命令・SSE・`call`/`jmp`/`ret`・ラベル・ディレクティブは変えない。
+- `#asm`ブロックのユーザーが書いた行は、行末の`RAW_ASM_MARK`で変更の対象外にする(`inline_asm.rs`)。
+- レジスタが無く幅を決められない行(`mov $1, -4(%rbp)`など)は変えない。そのような命令は生成時に
+    `mov_line`/`tmpl_line`でサイズを付けること。
+
 ## アクセス用の補助関数
 ### access.rs
 - 変数の表(`var_hash_map`)・IR(`curr_inst`)・静的領域(`data_map`)・

@@ -73,9 +73,9 @@ func5(a: int of func4): Result<int, byte> {
 }
 
 func6(a: int must=func5, f: float) {
-    r: Result = Result<int, int>::Ok(10)
+    r: Result<int, int> = Result<int, int>::Ok(10)
     cond Result::Ok(v) := r {
-        a: int = 0
+        c: int = 0
     } else {
         b: int = 0
     }

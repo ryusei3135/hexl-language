@@ -506,9 +506,13 @@ impl Emitter {
                 self.emit_u8(0xB8 + (id & 7));
                 self.emit_u16(value as u16);
             }
-            _ => {
-                return Err("unsupported mov immediate size".into());
+            8 => {
+                let id = dst.id();
+                self.emit_rex(false, false, false, id >= 8);
+                self.emit_u8(0xB0 + (id & 7));
+                self.emit_u8(value as u8);
             }
+            t => return Err(format!("unsupported mov immediate size {:?}", t)),
         }
 
         Ok(())
@@ -607,7 +611,7 @@ impl Emitter {
         match size_bits {
             8 => self.emit_u8(0xC6),
             16 | 32 | 64 => self.emit_u8(0xC7),
-            _ => return Err("unsupported mov immediate size".into()),
+            t => return Err(format!("unsupported mov immediate size {:?}", t)),
         }
 
         self.emit_memory_modrm(0, mem)?;
@@ -616,7 +620,7 @@ impl Emitter {
             8 => self.emit_u8(value as i8 as u8),
             16 => self.emit_u16(value as u16),
             32 | 64 => self.emit_i32(value as i32),
-            _ => return Err("unsupported mov immediate size".into()),
+            t => return Err(format!("unsupported mov immediate size {:?}", t)),
         }
 
         Ok(())
@@ -1099,10 +1103,17 @@ impl Emitter {
             return Err("lea requires two operands".into());
         }
 
+        // `leaq %rax, %rcx` のようにレジスタ同士の場合は、
+        // 実機の lea ではエンコードできない (mod=11 は #UD) ため、
+        // 同じ意味の `mov %rax, %rcx` として出力する。
+        if let (Operand::Register(src), Operand::Register(dst)) = (&operands[0], &operands[1]) {
+            return self.emit_mov_reg_reg(*src, *dst);
+        }
+
         let mem = match &operands[0] {
             Operand::Memory(m) => m,
             _ => {
-                return Err("lea source must be memory".into());
+                return Err("lea source must be memory or register".into());
             }
         };
 

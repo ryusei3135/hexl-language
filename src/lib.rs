@@ -29,11 +29,13 @@ use std::{error::Error, fs, process, sync::Mutex};
 // コマンドラインオプション
 // ---------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub enum OptFlags {
     FmtAsm,
     SetFile,
 }
 
+#[derive(Debug)]
 pub struct OptSettings {
     pub fmt_name: Option<String>,
     pub file_name: Option<String>,

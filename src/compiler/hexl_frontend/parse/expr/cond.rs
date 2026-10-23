@@ -148,6 +148,11 @@ impl Parser {
             expr.node,
             ExprNode::LessThen(_)
                 | ExprNode::GreaterThen(_)
+                | ExprNode::LessThenEq(_)
+                | ExprNode::GreaterThenEq(_)
+                | ExprNode::CmpAnd(_)
+                | ExprNode::CmpOr(_)
+                | ExprNode::CmpNot(_)
                 | ExprNode::Equal(_)
                 | ExprNode::NotEq(_)
                 | ExprNode::VariantBind(_)

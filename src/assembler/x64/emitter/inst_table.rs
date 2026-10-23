@@ -98,6 +98,34 @@ mod tests {
             [0x48, 0x81, 0x38, 0x78, 0x56, 0x34, 0x12]
         );
     }
+
+    fn reg_reg_bytes(mnemonic: &str, src: Reg, dst: Reg) -> Vec<u8> {
+        let mut emitter = Emitter::new();
+        dispatch(
+            &mut emitter,
+            &Instruction {
+                mnemonic: mnemonic.to_owned(),
+                operands: vec![Operand::Register(src), Operand::Register(dst)],
+            },
+        )
+        .unwrap();
+        emitter.text
+    }
+
+    #[test]
+    fn lea_register_to_register_is_mov() {
+        // leaq %rax, %rcx == movq %rax, %rcx
+        assert_eq!(
+            reg_reg_bytes("leaq", Reg::Rax, Reg::Rcx),
+            [0x48, 0x89, 0xc1]
+        );
+        assert_eq!(
+            reg_reg_bytes("leaq", Reg::Rax, Reg::Rcx),
+            reg_reg_bytes("movq", Reg::Rax, Reg::Rcx)
+        );
+        // leal %eax, %ecx
+        assert_eq!(reg_reg_bytes("leal", Reg::Eax, Reg::Ecx), [0x89, 0xc1]);
+    }
 }
 
 /// neg系ニーモニックのサフィックスからオペランドサイズ(bit数)を求める。

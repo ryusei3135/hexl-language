@@ -4,6 +4,7 @@ use crate::compiler::{
 };
 //use crate::ir::def_tree::{VarMetaData, VarTree};
 
+use super::asm_fmt::mng_fmt::RAW_ASM_MARK;
 use super::*;
 
 impl AsmEmitter {
@@ -407,6 +408,8 @@ impl AsmEmitter {
                 asm_line = asm_line.replace(&format!("{{{}}}", index), &operand_text);
             }
 
+            // ユーザーが書いた行なので、サイズ接尾辞の自動付与の対象外にする
+            asm_line.push_str(RAW_ASM_MARK);
             asm_line.push('\n');
             self.asm_text.push_str(&asm_line);
         }

@@ -231,7 +231,7 @@ impl IR {
                     ty
                 };
                 // `src/ir/ty_checker/var_ty.rs`
-                self.check_var_ty(&ty, &expect_byte);
+                self.check_var_ty(&ty, &expect_byte, &expr.span);
 
                 return Ok(match self.var_tree.get(&var_name) {
                     def_tree::VarType::Local(index) => *index,

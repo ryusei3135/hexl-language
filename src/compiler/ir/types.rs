@@ -378,7 +378,7 @@ impl IR {
                     return self.size_of_variant(&variant_def.clone());
                 }
 
-                panic!("未定義の型です: {}", name);
+                panic!("未定義の型です: {} {:?} {:?}", name, self.variant_tree, self.struct_tree);
             }
             TyNode::Pointer {
                 is_const,

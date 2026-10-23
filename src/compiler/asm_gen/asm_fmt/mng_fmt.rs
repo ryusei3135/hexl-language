@@ -390,10 +390,6 @@ impl MngAsmFmt {
         size: &types::Size,
         is_memory_access: bool,
     ) -> String {
-        if is_memory_access == false && self.fmt.fmt.mnemonic_size == false {
-            return value.to_string();
-        }
-
         if matches!(size, types::Size::Pointer { .. }) {
             return self.fmt_mnemonic_resize_inner(
                 mnemonic,
@@ -419,6 +415,121 @@ impl MngAsmFmt {
             t => panic!("{:?}", t),
         };
         value.replace(mnemonic, &format!("{}{}", mnemonic, s_fmt))
+    }
+
+    /// 出力するアセンブリ全体の、サイズ接尾辞(gas/AT&T構文の`b`/`w`/`l`/`q`)が
+    /// 無い整数命令に、必ずサイズ接尾辞を付ける。
+    ///
+    /// 生成した命令はすべて、最後にこの関数を通す(`to_asm_text`)。
+    /// これにより、テンプレートを直接埋めただけの行(`sub $16, %rsp`や
+    /// `push`/`pop`など)にも漏れなく付く。
+    ///
+    /// - 対象: `mov` `add` `sub` `imul` `cmp` `test` `and` `or` `xor` `lea`
+    ///   `neg` `not` `inc` `dec` `shl` `shr` `sar` `idiv` `div` `push` `pop` など
+    /// - サイズは、最後のレジスタオペランドの幅で決める。
+    ///   `lea` `push` `pop`は常に64bit(`q`)
+    /// - すでに接尾辞のある命令(`movl`/`addq`など)・SSE命令・`call`/`jmp`/`ret`・
+    ///   ラベル・ディレクティブは変えない
+    /// - `RAW_ASM_MARK`が付いた行(`#asm`ブロックのユーザーが書いた行)は、
+    ///   そのまま(マークだけ取り除いて)出力する
+    pub(in crate::compiler::asm_gen) fn ensure_mnemonic_size(&self, asm: &str) -> String {
+        let mut out = String::with_capacity(asm.len() + asm.len() / 8);
+        for line in asm.split_inclusive('\n') {
+            if let Some(raw) = line.strip_suffix(&format!("{}\n", RAW_ASM_MARK)) {
+                out.push_str(raw);
+                out.push('\n');
+                continue;
+            }
+            out.push_str(&Self::sized_line(line));
+        }
+        out
+    }
+
+    /// `ensure_mnemonic_size`の1行分
+    fn sized_line(line: &str) -> String {
+        let body = line.trim_start();
+        let indent = &line[..line.len() - body.len()];
+        let Some((mnemonic, operands)) = body.split_once(char::is_whitespace) else {
+            return line.to_string();
+        };
+        const SIZED: &[&str] = &[
+            "mov", "add", "sub", "imul", "mul", "idiv", "div", "cmp", "test", "and", "or",
+            "xor", "neg", "not", "inc", "dec", "shl", "shr", "sar", "sal", "rol", "ror", "adc",
+            "sbb", "lea", "push", "pop",
+        ];
+        if !SIZED.contains(&mnemonic) {
+            return line.to_string();
+        }
+        let suffix = if matches!(mnemonic, "lea" | "push" | "pop") {
+            Some('q')
+        } else {
+            Self::last_reg_suffix(operands)
+        };
+        match suffix {
+            Some(c) => format!("{}{}{} {}", indent, mnemonic, c, operands.trim_start()),
+            None => line.to_string(),
+        }
+    }
+
+    /// オペランドの並びから、最後のレジスタオペランドの幅に対応する接尾辞を返す
+    /// (`(%rbp)`のようなメモリ参照の中のレジスタは数えない)
+    fn last_reg_suffix(operands: &str) -> Option<char> {
+        let mut depth = 0i32;
+        let mut parts = Vec::<&str>::new();
+        let mut start = 0;
+        for (i, c) in operands.char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                ',' if depth == 0 => {
+                    parts.push(&operands[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        parts.push(&operands[start..]);
+
+        parts.iter().rev().find_map(|p| {
+            let name = p.trim().strip_prefix('%')?;
+            if name.contains('(') || name.starts_with("xmm") || name.starts_with("ymm") {
+                return None;
+            }
+            Self::reg_width_suffix(name)
+        })
+    }
+
+    fn reg_width_suffix(name: &str) -> Option<char> {
+        const Q: &[&str] = &["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp"];
+        const L: &[&str] = &["eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp"];
+        const W: &[&str] = &["ax", "bx", "cx", "dx", "si", "di", "bp", "sp"];
+        const B: &[&str] = &["al", "bl", "cl", "dl", "sil", "dil", "bpl", "spl", "ah", "bh", "ch", "dh"];
+        if Q.contains(&name) {
+            return Some('q');
+        }
+        if L.contains(&name) {
+            return Some('l');
+        }
+        if W.contains(&name) {
+            return Some('w');
+        }
+        if B.contains(&name) {
+            return Some('b');
+        }
+        // r8 - r15 (+ d/w/b)
+        let rest = name.strip_prefix('r')?;
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let n: u32 = digits.parse().ok()?;
+        if !(8..=15).contains(&n) {
+            return None;
+        }
+        match &rest[digits.len()..] {
+            "" => Some('q'),
+            "d" => Some('l'),
+            "w" => Some('w'),
+            "b" => Some('b'),
+            _ => None,
+        }
     }
 
     pub(in crate::compiler::asm_gen) fn get_push(&self, reg: &str) -> String {
@@ -643,5 +754,48 @@ impl MngAsmFmt {
     #[inline(always)]
     pub(in crate::compiler::asm_gen) fn inline_asm_list(&self) -> Vec<String> {
         self.asm_setting.as_ref().unwrap().get_inline_asm_list()
+    }
+}
+
+/// `#asm`ブロックのユーザーが書いた行の末尾に付けるマーク。
+/// `AsmFmt::ensure_mnemonic_size`は、このマークの付いた行を変更しない
+/// (マークは出力時に取り除く)
+pub(in crate::compiler::asm_gen) const RAW_ASM_MARK: &str = "\u{1}hexl_raw";
+
+#[cfg(test)]
+mod ensure_size_tests {
+    use super::*;
+
+    fn sz(line: &str) -> String {
+        MngAsmFmt::sized_line(line)
+    }
+
+    #[test]
+    fn adds_suffix_from_last_register() {
+        assert_eq!(sz("sub $16, %rsp\n"), "subq $16, %rsp\n");
+        assert_eq!(sz("mov %eax, %ecx\n"), "movl %eax, %ecx\n");
+        assert_eq!(sz("add %r8b, %r9b\n"), "addb %r8b, %r9b\n");
+        assert_eq!(sz("mov -4(%rbp), %ax\n"), "movw -4(%rbp), %ax\n");
+        assert_eq!(sz("  push %rax\n"), "  pushq %rax\n");
+        assert_eq!(sz("lea -8(%rbp), %rdi\n"), "leaq -8(%rbp), %rdi\n");
+        assert_eq!(sz("shl %cl, %edx\n"), "shll %cl, %edx\n");
+    }
+
+    #[test]
+    fn keeps_already_sized_and_others() {
+        for l in [
+            "movl %eax, -4(%rbp)\n",
+            "addq $1, -8(%rbp)\n",
+            "movss %xmm0, -4(%rbp)\n",
+            "call foo\n",
+            "ret\n",
+            "jmp .L1\n",
+            "main:\n",
+            ".global main\n",
+            "cltd\n",
+            "movzbl %al, %eax\n",
+        ] {
+            assert_eq!(sz(l), l);
+        }
     }
 }

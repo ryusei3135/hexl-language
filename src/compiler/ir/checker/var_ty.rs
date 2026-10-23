@@ -8,6 +8,7 @@ impl IR {
         &self,
         var_ty: &types::Size,
         expect_ty: &types::Size,
+        span: &Rc<Span>,
     ) {
         // let ty = self.var_tree.get_ty_node(var_name).unwrap();
 
@@ -33,7 +34,7 @@ impl IR {
                 } else {
                     if var_ty != expect_ty {
                         // let changed_ty: types::Size = ty.clone().try_into().unwrap();
-                        panic!("{:?} fond {:?}", expect_ty, var_ty);
+                        panic!("{:?} fond {:?} {:?}", expect_ty, var_ty, span);
                     }
                 }
             }

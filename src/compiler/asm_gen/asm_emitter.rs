@@ -141,7 +141,9 @@ impl AsmEmitter {
             "{}\n{}\n{}",
             self.data_sec_text,
             self.asm_fmt.get_section_fmt("text"),
-            self.asm_text.replace("{space}", "  ")
+            // 出力するすべての命令のニーモニックに、サイズ接尾辞を必ず付ける
+            self.asm_fmt
+                .ensure_mnemonic_size(&self.asm_text.replace("{space}", "  "))
         )
     }
 
