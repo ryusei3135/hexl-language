@@ -227,7 +227,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
     // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
     let mut lexer = Lexer::with_os(&os);
     let mut parser = Parser::new(&file_name, Rc::clone(&err_pool));
-    let mut ir_builder = ir::IR::new();
+    let mut ir_builder = ir::IR::new(&err_pool);
 
     // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準
     lexer.set_source_file(Rc::clone(&file_name));

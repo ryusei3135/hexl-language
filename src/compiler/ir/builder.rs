@@ -9,9 +9,6 @@ mod scope;
 mod ty_alias;
 mod variant_bind;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use super::*;
 use crate::compiler::ast::Group1Node;
 use crate::compiler::ir::types::*;
@@ -19,7 +16,7 @@ use crate::compiler::ir::types::*;
 const NEXT_VAR_NODE_IS_GET_ADDR: bool = true;
 
 impl IR {
-    pub fn new() -> Self {
+    pub fn new(err_pool: &Rc<RefCell<err_pool::ErrPool>>) -> Self {
         Self {
             var_tree: def_tree::VarTree::new(),
             extern_funcs: Vec::new(),
@@ -45,6 +42,8 @@ impl IR {
             var_counter: counter_mnger::VarCounter::new(),
             expr_is_ptr_val: false,
             ternatry: None,
+            // エラーのノードをスタック
+            err_pool: Rc::clone(&err_pool),
         }
     }
 

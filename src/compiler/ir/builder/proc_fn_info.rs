@@ -17,7 +17,7 @@ impl IR {
         // 関数のスコープごとに使用回数を数え直す(`FnDefInfo.var_counter`に保存される)
         self.var_counter = counter_mnger::VarCounter::with_arg_count(info.params.len());
         // 関数の情報を登録
-        self.entry_fn_info(&info);
+        self.entry_fn_info(&info)?;
         self.var_tree = def_tree::VarTree::new();
         self.scope_states.clear();
         // `ir/param.rs`
@@ -49,8 +49,9 @@ impl IR {
 
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
-    pub(super) fn entry_fn_info(&mut self, info: &FuncDefine) {
-        self.check_must_var_used(&info);
+    pub(super) fn entry_fn_info(&mut self, info: &FuncDefine) -> Result<(), err::ErrKind> {
+        println!("Resultがここで止まっている");
+        self.check_must_var_used(&info)?;
         self.func_ret_ty = Some(info.ret_ty.clone());
 
         // メゾットの場合、`info.module`に自身が属する構造体の名前が
@@ -61,6 +62,7 @@ impl IR {
         if info.public {
             self.public_func_tree.push(info.name.to_string());
         }
+        Ok(())
     }
 
     /// 外部の関数を定義するノードを

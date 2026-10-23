@@ -99,11 +99,12 @@ impl AsmEmitter {
     }
 
     /// 退避しているレジスタを全て復元する
-    pub(super) fn reload_all_spilled(&mut self) {
+    pub(super) fn reload_all_spilled(&mut self) -> Result<(), err::ErrKind> {
         let regs: Vec<RegisterMode> = self.spilled_regs.keys().copied().collect();
         for reg in regs {
-            self.reload_reg(reg);
+            self.reload_reg(reg)?;
         }
+        Ok(())
     }
 
     /// `EndScope`などでレジスタが解放された変数の退避を捨てる(復元しない)
@@ -183,17 +184,17 @@ impl AsmEmitter {
     /// 制御フローのノード(`Block`/`Jmp`/`ExpectJmp`)とインラインアセンブラの前は
     /// 全て復元する。それ以外は、ノードが参照する変数のレジスタだけを復元し、
     /// `node_vars`に記録する(ノードの中の関数呼び出しが、復元の要否を決めるため)。
-    pub(super) fn prepare_node_spills(&mut self, node: &inst::Inst) {
+    pub(super) fn prepare_node_spills<R: ResultRet>(&mut self, node: &inst::Inst) -> Result<(), err::ErrKind> {
         self.node_vars.clear();
         self.node_vars_all = false;
 
         let mut names = Vec::new();
         let known = match node {
             inst::Inst::Block(_) | inst::Inst::Jmp(_) | inst::Inst::ExpectJmp(_) => {
-                self.reload_all_spilled();
-                return;
+                self.reload_all_spilled()?;
+                return Ok(());
             }
-            inst::Inst::StartScope | inst::Inst::EndScope => return,
+            inst::Inst::StartScope | inst::Inst::EndScope => return Ok(()),
             inst::Inst::Comple { .. } => false,
             // 変数の定義は、初期値の式が参照する変数だけを見る
             inst::Inst::Mov { src, .. } => {
@@ -212,21 +213,23 @@ impl AsmEmitter {
             | inst::Inst::Float { .. }
             | inst::Inst::Str { .. }
             | inst::Inst::InitArr(_)
-            | inst::Inst::Param(_) => return,
+            | inst::Inst::Param(_) => return Ok(()),
             _ => false,
         };
 
         if !known {
             self.node_vars_all = true;
-            self.reload_all_spilled();
-            return;
+            self.reload_all_spilled()?;
+            return Ok(());
         }
         for name in &names {
             if let Some(reg) = self.var_reg(name) {
-                self.reload_reg(reg);
+                let binding = self.reload_reg(reg);
+                R::handle(&self.err_pool, binding)?;
             }
         }
         self.node_vars.extend(names);
+        Ok(())
     }
 
     /// ノード自身(根)が参照する変数を集める(自身のidは`visited`に入れない)
@@ -306,3 +309,4 @@ impl AsmEmitter {
         Ok(asm)
     }
 }
+

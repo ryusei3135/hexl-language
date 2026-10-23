@@ -139,7 +139,7 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) fn deploy_inline_asm(
+    pub(super) fn deploy_inline_asm<R: ResultRet>(
         &mut self,
         name: &str,
         lines: &[(String, Vec<usize>)],
@@ -190,11 +190,13 @@ impl AsmEmitter {
             // (インラインアセンブラが元のレジスタを別の値で書き換えているので、
             //  この後のコードのために変数の位置を元に戻す)
             moved_regs.iter().rev().for_each(|(reg, free_reg)| {
-                self.restore_register_val(*reg, *free_reg);
+                let binding = self.restore_register_val(*reg, *free_reg);
+                R::handle(&self.err_pool, binding);
             });
             // === スタックに退避したレジスタを、退避した時とは逆順に戻す ===
             for reg in stacked_regs.iter().rev() {
-                self.restore_register_val_from_stack(*reg);
+                let binding = self.restore_register_val_from_stack(*reg);
+                R::handle(&self.err_pool, binding)?;
             }
             Ok(())
         } else {

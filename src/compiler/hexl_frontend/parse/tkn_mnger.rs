@@ -107,10 +107,12 @@ impl Parser {
             if let Some(span) = self.tkns.as_ref().and_then(|x| x.get(self.idx - 1)) {
                 Rc::clone(&span.span)
             } else {
-                #[cfg(test)] {
+                #[cfg(test)]
+                {
                     Rc::new(Span::unknown())
                 }
-                #[cfg(not(test))] {
+                #[cfg(not(test))]
+                {
                     panic!("{:?}", self.tkns)
                 }
             }

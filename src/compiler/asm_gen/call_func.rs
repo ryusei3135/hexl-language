@@ -544,7 +544,8 @@ impl AsmEmitter {
         ctx: &FnGenCtx,
     ) -> Result<(), err::ErrKind> {
         // 退避した変数のうち、このノードが参照するものを復元する(`lazy_spill.rs`)
-        self.prepare_node_spills(node);
+        self.prepare_node_spills::<StackErr>(node)?;
+
         match node {
             inst::Inst::ExpectJmp(name) => self.expect_jmp(name),
             // 生成しない変数の初期値だけを構成する式・定数は生成しない
@@ -567,7 +568,7 @@ impl AsmEmitter {
             inst::Inst::StartScope => self.start_scope_asm(),
             inst::Inst::EndScope => self.end_scope_asm(),
             inst::Inst::Comple { name, lines } => {
-                self.gen_complie_asm(name, lines, ctx.asm_fmt_name.as_deref())
+                self.gen_complie_asm(name, lines, ctx.asm_fmt_name.as_deref())?
             }
             inst::Inst::Jmp(name) => {
                 // 直前が無条件ジャンプ(`break`の`jmp L1`など)なら、
@@ -605,11 +606,11 @@ impl AsmEmitter {
                         *dst,
                         *src,
                         ctx.returned_struct_idx,
-                    )
+                    )?
                 }
             }
             // メモリに配置されている値の生成
-            inst::Inst::MemoryValue(mem_value) => self.mem_val_ir(mem_value),
+            inst::Inst::MemoryValue(mem_value) => self.mem_val_ir(mem_value)?,
             inst::Inst::Param(_) => self.gen_param_asm(node),
             inst::Inst::CallFunc(meta_data) => self.gen_call_node_asm(node_idx, meta_data)?,
             _ => {}
@@ -625,7 +626,7 @@ impl AsmEmitter {
         dst: usize,
         src: usize,
         returned_struct_idx: Option<usize>,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         // 戻り値として返される構造体の初期化かどうか。
         //
         // `returned_struct_idx`が`None`(=この関数は構造体を返さない)
@@ -641,12 +642,13 @@ impl AsmEmitter {
             && returned_struct_idx.is_some()
             && returned_struct_idx == self.resolve_struct_idx(dst);
         if !is_returned_struct {
-            self.mov_value_ir(size, dst, src, name, Some(size));
+            self.mov_value_ir(size, dst, src, name, Some(size))?;
             // 定義した変数のレジスタは新しい値になる
             if let Some(reg) = name.and_then(|n| self.var_reg(n)) {
                 self.spilled_regs.remove(&reg);
             }
         }
+        Ok(())
     }
 
     /// `Inst::Param`(関数の引数)を変数として登録する
@@ -835,15 +837,15 @@ impl AsmEmitter {
         name: &str,
         lines: &[(String, Vec<usize>)],
         asm_fmt_name: Option<&str>,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         if let Some(asm_name) = asm_fmt_name {
             if name == asm_name {
-                self.deploy_inline_asm(name, &lines);
+                self.deploy_inline_asm::<StackErr>(name, &lines)
             } else {
                 panic!("unmatch asm name");
             }
         } else {
-            self.deploy_inline_asm(name, &lines);
+            self.deploy_inline_asm::<StackErr>(name, &lines)
         }
     }
 
@@ -861,7 +863,7 @@ impl AsmEmitter {
         );
 
         if is_mem_write {
-            self.write_mem(name, dst, value, Some(&self.get_var_ty(name)?));
+            self.write_mem(name, dst, value, Some(&self.get_var_ty(name)?))?;
             Ok(())
         } else {
             // 通常の変数への再代入(`b = 10`など)

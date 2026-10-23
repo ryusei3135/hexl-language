@@ -453,9 +453,9 @@ impl MngAsmFmt {
             return line.to_string();
         };
         const SIZED: &[&str] = &[
-            "mov", "add", "sub", "imul", "mul", "idiv", "div", "cmp", "test", "and", "or",
-            "xor", "neg", "not", "inc", "dec", "shl", "shr", "sar", "sal", "rol", "ror", "adc",
-            "sbb", "lea", "push", "pop",
+            "mov", "add", "sub", "imul", "mul", "idiv", "div", "cmp", "test", "and", "or", "xor",
+            "neg", "not", "inc", "dec", "shl", "shr", "sar", "sal", "rol", "ror", "adc", "sbb",
+            "lea", "push", "pop",
         ];
         if !SIZED.contains(&mnemonic) {
             return line.to_string();
@@ -503,7 +503,9 @@ impl MngAsmFmt {
         const Q: &[&str] = &["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp"];
         const L: &[&str] = &["eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp"];
         const W: &[&str] = &["ax", "bx", "cx", "dx", "si", "di", "bp", "sp"];
-        const B: &[&str] = &["al", "bl", "cl", "dl", "sil", "dil", "bpl", "spl", "ah", "bh", "ch", "dh"];
+        const B: &[&str] = &[
+            "al", "bl", "cl", "dl", "sil", "dil", "bpl", "spl", "ah", "bh", "ch", "dh",
+        ];
         if Q.contains(&name) {
             return Some('q');
         }

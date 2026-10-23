@@ -372,7 +372,7 @@ impl AsmEmitter {
     ///
     /// - 静的領域(`MemoryKind::Static`): `is_static_var`
     /// - それ以外(配列): `stack_arr_ir`
-    pub(super) fn mem_val_ir(&mut self, mem_value: &inst::MemoryInst) {
+    pub(super) fn mem_val_ir(&mut self, mem_value: &inst::MemoryInst) -> Result<(), err::ErrKind> {
         match mem_value {
             inst::MemoryInst::Memory {
                 name,
@@ -382,9 +382,9 @@ impl AsmEmitter {
                 dst,
             } => {
                 if kind == &inst::MemoryKind::Static {
-                    self.is_static_var(src, *dst, name, size.wrap_dst_size().as_ref());
+                    self.is_static_var(src, *dst, name, size.wrap_dst_size().as_ref())
                 } else {
-                    self.stack_arr_ir(name, size, src, *dst);
+                    self.stack_arr_ir(name, size, src, *dst)
                 }
             }
             _ => panic!(),

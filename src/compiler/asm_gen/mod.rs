@@ -13,7 +13,7 @@ mod lazy_spill;
 mod reg_mnger;
 mod sign;
 
-use crate::compiler::err::err_pool;
+use crate::compiler::err::{self, err_pool};
 use crate::compiler::ir::{def_tree, inst, types::Size};
 use crate::compiler::models::AsmFmtData;
 use sign::SizeSign;
@@ -147,4 +147,28 @@ pub struct AsmEmitter {
     float_caller_saved: Rc<Vec<usize>>,
 
     err_pool: Rc<RefCell<err_pool::ErrPool>>,
+}
+
+
+pub trait ResultRet {
+    fn handle(err_pool: &Rc<RefCell<err_pool::ErrPool>>, val: Result<(), err::ErrKind>) -> Result<(), err::ErrKind>;
+}
+
+
+pub struct StackErr {}
+
+impl ResultRet for StackErr {
+    fn handle(err_pool: &Rc<RefCell<err_pool::ErrPool>>, val: Result<(), err::ErrKind>) -> Result<(), err::ErrKind> {
+        (*err_pool.borrow_mut()).push_err_node(val.unwrap_err());
+        Ok(())
+    }
+}
+
+pub struct ReturnErr {}
+
+impl ResultRet for ReturnErr {
+    fn handle(err_pool: &Rc<RefCell<err_pool::ErrPool>>, val: Result<(), err::ErrKind>) -> Result<(), err::ErrKind> {
+        panic!("{:?}", val);
+        Ok(())
+    }
 }

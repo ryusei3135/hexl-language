@@ -18,3 +18,4 @@ hexl_d
 a
 library/os/*.md
 documents/docs.md
+src/compiler/ir/checker/constract/constract_d.md

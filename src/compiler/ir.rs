@@ -2,6 +2,8 @@ use crate::compiler::ast;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::mem;
+
+use std::cell::RefCell;
 use std::rc::Rc;
 /// 変数や関数、構造体などの、定義を一時的に
 /// 保存する構造体を提供するモジュール
@@ -62,6 +64,8 @@ pub struct IR {
     /// falseなら普通の条件分岐にする。
     /// Noneのときは参考演算子を追跡していない
     pub(in crate::compiler::ir) ternatry: Option<bool>,
+
+    pub(super) err_pool: Rc<RefCell<err_pool::ErrPool>>,
 }
 
 pub const IS_ASSIGN_EXPR: bool = true;

@@ -140,7 +140,7 @@ impl IR {
     /// 渡した先の引数が本当に`of`かどうか(名前が一致するか)は、
     /// IRを生成する時点で`check_constract_arg`が確認するので、
     /// ここでは「そもそも関数に渡されているか」だけを見る
-    pub(crate) fn check_must_var_used(&self, func: &FuncDefine) {
+    pub(crate) fn check_must_var_used(&self, func: &FuncDefine) -> Result<(), err::ErrKind> {
         let mut must_vars: Vec<MustVar> = Vec::new();
 
         // 引数として受け取った`must`の値も、この関数の中で
@@ -154,15 +154,15 @@ impl IR {
 
         Self::walk_group2_nodes(&func.body, &mut must_vars);
 
-        // ループの中での契約の終了は、`ret`/`break`の前にしか置けない
-        let mut scope: Vec<String> = must_vars.iter().map(|v| v.name.clone()).collect();
-        scope.truncate(
-            func.params
-                .iter()
-                .filter(|p| p.ty.is_constract_must())
-                .count(),
-        );
-        Self::check_loop_contract_ends(&func.name, &func.body, &mut scope);
+        // // ループの中での契約の終了は、`ret`/`break`の前にしか置けない
+        // let mut scope: Vec<String> = must_vars.iter().map(|v| v.name.clone()).collect();
+        // scope.truncate(
+        //     func.params
+        //         .iter()
+        //         .filter(|p| p.ty.is_constract_must())
+        //         .count(),
+        // );
+        Self::check_loop_contract_ends(&func.name, &func.body, &mut must_vars)?;
 
         // 一度も渡されていない変数、または条件分岐の一部でしか
         // 契約を終了していない変数はエラー
@@ -170,9 +170,12 @@ impl IR {
             .iter()
             .filter(|var| (!var.used && !var.ended_on_exit) || var.branch_mismatch)
         {
-            CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span))
-                .unwrap();
+            (*self.err_pool.borrow_mut()).push_err_node(
+                CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span))
+                    .unwrap_err(),
+            );
         }
+        Ok(())
     }
 }
 
