@@ -208,7 +208,7 @@ impl IR {
 
     #[cfg(test)]
     pub(crate) fn test_only_get_func_body(&self, name: &str) -> &[inst::Inst] {
-        &self.func_tree.func.get(name).unwrap().body
+        &self.func_tree.func.get(name).expect(format!("name -> {}", name).as_str()).body
     }
 
     /// 構造体のメゾットとして展開された関数の処理内容を取得する

@@ -249,7 +249,7 @@ mod match_expr_ir_tests {
         let mut ir = IR::new();
         ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
             .unwrap();
-        ir.test_only_get_func_body("main").to_vec()
+        ir.test_only_get_func_body("_start").to_vec()
     }
 
     #[test]
@@ -257,7 +257,7 @@ mod match_expr_ir_tests {
         // 1. 真偽値(比較式)を与えるパターンは、その式がそのまま
         //    条件分岐の判定に使われる (単純なif/else)
         let body = build_func_body(
-            "main(): int {
+            "_start(): int {
                 a: int = 10
                 cond a == 10 {
                     b: int = 1
@@ -282,7 +282,7 @@ mod match_expr_ir_tests {
     #[test]
     fn logical_and_generates_boolean_ir() {
         let body = build_func_body(
-            "main(): bool {
+            "_start(): bool {
                 a: int = 1
                 b: int = 2
                 ret a && b
@@ -319,7 +319,7 @@ mod match_expr_ir_tests {
     #[test]
     fn logical_or_generates_boolean_ir() {
         let body = build_func_body(
-            "main(): bool {
+            "_start(): bool {
                 a: int = 1
                 b: int = 2
                 ret a < b || b < a
@@ -356,7 +356,7 @@ mod match_expr_ir_tests {
     #[test]
     fn match_arm_block_labels_are_unique() {
         let body = build_func_body(
-            "main(): int {
+            "_start(): int {
                 cond 1 {
                     1 => { a: int = 1 }
                     2 => { a: int = 2 }
@@ -461,11 +461,11 @@ mod match_expr_ir_tests {
         // バリアント型が使う関数より後ろに定義されていても、
         // `E::b(10)`は関数呼び出しではなく、バリアント型の初期化になる
         let nodes =
-            parse_test_source("main(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }");
+            parse_test_source("_start(): int { e: E = E::b(10) ret 1 } variant E { a b(int) c }");
         let mut ir = IR::new();
         ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
             .unwrap();
-        let body = ir.test_only_get_func_body("main").to_vec();
+        let body = ir.test_only_get_func_body("_start").to_vec();
         assert!(
             body.iter().any(|inst| matches!(
                 inst,
