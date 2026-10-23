@@ -13,7 +13,6 @@ fi
 # プロジェクト名（バイナリ名）を Cargo.toml から自動取得
 PROJECT_NAME=$(grep -m 1 '^name =' Cargo.toml | sed -E 's/name = "(.*)"/\1/' | tr -d '\r')
 
-
 # リリースビルドを実行（デバッグ版にする場合は --release を削除してください）
 echo "Building project..."
 cargo build --release
