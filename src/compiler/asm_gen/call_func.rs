@@ -166,7 +166,7 @@ impl AsmEmitter {
     }
 
     fn push_caller_saved_regs(&self, regs: &[RegisterMode]) -> Result<Vec<String>, err::ErrKind> {
-        let emit_caller_reg = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind>{
+        let emit_caller_reg = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind> {
             Ok(match reg {
                 RegisterMode::Normal(index) => {
                     let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ)?;

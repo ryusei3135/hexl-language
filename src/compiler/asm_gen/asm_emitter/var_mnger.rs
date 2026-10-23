@@ -227,4 +227,3 @@ impl AsmEmitter {
         Ok(scratch)
     }
 }
-

@@ -27,8 +27,8 @@
 //! div <dst>
 //! ```
 
-use crate::asm_gen;
 use super::*;
+use crate::asm_gen;
 
 impl AsmEmitter {
     /// `/`と`%`のアセンブリ言語を生成する

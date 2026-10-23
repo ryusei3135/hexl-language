@@ -13,9 +13,12 @@
     コメント
     */
     ```
+- アセンブリ言語を出力する際にerrpoolにエラーを格納するようにした
 ### Changed
 - ノードの位置を変更 `compiler::parse::node`から`compiler::ast`
 - hexlのフロントエンドディレクトリにparseとlexを移動
+### Fixed
+- 反復処理のテストが通るように改善
 
 ## [1.0.2] - 2026-10-18
 ### Fixed

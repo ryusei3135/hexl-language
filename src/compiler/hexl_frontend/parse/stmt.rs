@@ -389,7 +389,10 @@ impl Parser {
         // 反復処理の条件式
         let pattern = match self.next_tkn_ref(&["{", ".."])? {
             // "{"の場合は条件無し
-            lex::Tkn::LBrace => None,
+            lex::Tkn::LBrace => {
+                self.advance_tkn().unwrap();
+                None
+            }
             // 条件式あり
             _ => {
                 // `M(val) := a`は`cond`の条件式の中でしか使えない
