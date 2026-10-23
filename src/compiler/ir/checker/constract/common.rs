@@ -16,6 +16,11 @@ pub(super) struct MustVar {
     /// `ret`/`break`で関数やループを抜ける分岐の中でだけ終了していれば`true`
     /// (抜けない側の分岐が終了しなくても、分岐の不一致とは扱わない)
     pub(super) ended_on_exit: bool,
+    /// `false`なら契約を持たない変数が、同名の契約変数を隠している印
+    /// (`x: int = 1`が外側の`must`の`x`をシャドーイングした場合など)。
+    /// 名前の検索でこの要素に当たった変数は契約の対象ではないので、
+    /// 外側の契約変数の状態を変えない。検査やエラーの対象にもならない
+    pub(super) tracked: bool,
     pub(super) span: Rc<Span>,
 }
 
@@ -26,7 +31,16 @@ impl MustVar {
             used: false,
             branch_mismatch: false,
             ended_on_exit: false,
+            tracked: true,
             span: Rc::clone(&span),
+        }
+    }
+
+    /// 契約を持たない変数が、同名の契約変数を隠していることを表す要素
+    pub(super) fn mask(name: String, span: &Rc<Span>) -> Self {
+        Self {
+            tracked: false,
+            ..Self::new(name, span)
         }
     }
 }
@@ -64,18 +78,13 @@ impl IR {
             ExprNode::DefVar(var) => {
                 self.walk_expr(&var.value, must_vars, fn_name)?;
                 if var.ty.is_constract_must() {
-                    if must_vars.iter().rev().any(|entry| entry.name == var.name) {
-                        // 同名の契約変数がブロックや分岐ごとに再定義された場合、
-                        // 直近のスコープで使われる変数だけを追跡対象にする。
-                        let shadowed = must_vars
-                            .iter_mut()
-                            .rev()
-                            .find(|entry| entry.name == var.name)
-                            .unwrap();
-                        shadowed.used = false;
-                    } else {
-                        must_vars.push(MustVar::new(var.name.clone(), &expr.span));
-                    }
+                    // 同名の契約変数が外側にあっても、既存の要素は書き換えず
+                    // 新しい要素を積む。名前の検索は後ろから行うので内側が優先され、
+                    // スコープを抜けるときの`truncate`で内側の要素だけが消える
+                    must_vars.push(MustVar::new(var.name.clone(), &expr.span));
+                } else if must_vars.iter().any(|entry| entry.name == var.name) {
+                    // 契約のない変数が外側の契約変数を隠す場合
+                    must_vars.push(MustVar::mask(var.name.clone(), &expr.span));
                 }
                 Ok(())
             }
@@ -150,8 +159,11 @@ impl IR {
     }
 
     pub(super) fn mark_used(name: &str, must_vars: &mut Vec<MustVar>) {
-        if let Some(ref mut var) = must_vars.iter_mut().rev().find(|var| &var.name == name) {
-            var.used = true;
+        // 最も内側の同名の要素だけを見る。それが契約を持たない変数なら何もしない
+        if let Some(var) = must_vars.iter_mut().rev().find(|var| var.name == name) {
+            if var.tracked {
+                var.used = true;
+            }
         }
     }
 }

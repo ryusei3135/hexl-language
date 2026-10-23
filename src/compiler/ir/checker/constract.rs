@@ -9,6 +9,16 @@ mod loop_check;
 
 use common::MustVar;
 
+/// 契約の検査から見た、式の型
+enum ExprTy {
+    /// 型が確定した
+    Known(TyNode),
+    /// 契約を持ち得ない、通常の値
+    Plain,
+    /// 契約を持ち得るが、型を確定できなかった(検査不能)
+    Unresolved,
+}
+
 impl IR {
     /// 関数を呼び出すときの、引数1つ分の契約チェック
     ///
@@ -23,7 +33,13 @@ impl IR {
         arg: &Expr,
     ) -> Result<(), err::ErrKind> {
         let arg_ty = self.expr_ty_node(arg);
-        let arg_must = arg_ty.as_ref().and_then(TyNode::as_constract_must);
+        // 型を確定できなかった式は、通常の値として扱わない。
+        // `of`の引数には「`must`の値だ」と確認できた式しか渡せないので、
+        // 確認できない式は`must`ではない値と同じエラーにする
+        let arg_must = match &arg_ty {
+            ExprTy::Known(ty) => ty.as_constract_must(),
+            ExprTy::Plain | ExprTy::Unresolved => None,
+        };
         let param_of = param.ty.as_constract_of();
 
         match (param_of, arg_must) {
@@ -118,19 +134,40 @@ impl IR {
         }
     }
 
-    /// 式が変数を指している場合、その変数の型を返す
+    /// 契約の検査のために、式の型を調べる
     /// (`&var`や`*var`のように、間接的に指している場合も辿る)
-    fn expr_ty_node(&self, expr: &Expr) -> Option<TyNode> {
+    ///
+    /// 型を確定できない式を`Plain`(契約のない通常の値)として返さないこと。
+    /// 契約を持つ値を表せる式で型を解決できなかった場合は`Unresolved`を返す
+    fn expr_ty_node(&self, expr: &Expr) -> ExprTy {
         match &expr.node {
-            ExprNode::Var(name) => self.var_tree.get_ty_node(name),
-            ExprNode::CallFunc(call) => self
-                .func_tree
-                .get(&call.name, None)
-                .and_then(|func| func.ret_ty),
+            ExprNode::Var(name) => self
+                .var_tree
+                .get_ty_node(name)
+                .map_or(ExprTy::Unresolved, ExprTy::Known),
+            ExprNode::CallFunc(call) => match self.func_tree.get(&call.name, None) {
+                Some(func) => func.ret_ty.map_or(ExprTy::Plain, ExprTy::Known),
+                // 呼び出し先が見つからない場合のエラーは、呼び出しのIR生成が報告する
+                None => ExprTy::Plain,
+            },
             ExprNode::GetAddress(target) | ExprNode::ConnectAddr(target) => {
                 self.expr_ty_node(target)
             }
-            _ => None,
+            // 代入式の値の型は、代入先の型
+            ExprNode::Assign(assign) => self.expr_ty_node(&assign.dst),
+            // 契約を持つ値を取り出せる式だが、ここでは型を解決できない
+            // (メンバー・配列の要素・分岐やループの値・変数の定義)
+            ExprNode::Scope { .. }
+            | ExprNode::Member { .. }
+            | ExprNode::PtrMember { .. }
+            | ExprNode::RefArray { .. }
+            | ExprNode::VariantBind(_)
+            | ExprNode::DefVar(_)
+            | ExprNode::Match { .. }
+            | ExprNode::Loop { .. } => ExprTy::Unresolved,
+            // 即値・算術・比較・構造体や配列の初期化など、新しく作られる値。
+            // 契約(`must`)は関数の戻り値からしか生まれないので、通常の値
+            _ => ExprTy::Plain,
         }
     }
 
@@ -168,7 +205,7 @@ impl IR {
         // 契約を終了していない変数はエラー
         for var in must_vars
             .iter()
-            .filter(|var| (!var.used && !var.ended_on_exit) || var.branch_mismatch)
+            .filter(|var| var.tracked && ((!var.used && !var.ended_on_exit) || var.branch_mismatch))
         {
             (*self.err_pool.borrow_mut()).push_err_node(
                 CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span))
@@ -462,6 +499,36 @@ g(v: int must=d) { d(v) }
         // 片方のスコープの`x`が契約のない変数でも、互いに影響しない
         assert_ok(&main_with(
             "cond 1 == 1 {\n x: int must=c = a()\n c(x)\n} else {\n x: int = 1\n}",
+        ));
+    }
+
+    // ------------------------------------------------------------------
+    // 9b. 分岐の後も外側の契約変数を追跡し続ける / シャドーイング
+    // ------------------------------------------------------------------
+    #[test]
+    fn outer_contract_is_still_tracked_after_branch() {
+        // 分岐の前後で`x`の追跡が途切れないので、ループの中の終了は
+        // `break`の前になければエラー
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n} else {\n}\nloop {\n c(x)\n}",
+        ));
+        assert_ok(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n} else {\n}\nloop {\n c(x)\n break\n}",
+        ));
+    }
+
+    #[test]
+    fn shadowing_must_var_in_branch_keeps_outer_state() {
+        // 外側の`x`を終了した後に、分岐の中で同名の`x`を作って終了しない
+        assert_err(&main_with(
+            "x: int must=c = a()\nc(x)\ncond 1 == 1 {\n x: int must=c = a()\n} else {}",
+        ));
+        // 内側の`x`を終了しても、外側の`x`は別に終了する必要がある
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n x: int must=c = a()\n c(x)\n} else {}",
+        ));
+        assert_ok(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n x: int must=c = a()\n c(x)\n} else {}\nc(x)",
         ));
     }
 

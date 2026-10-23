@@ -67,8 +67,11 @@ impl IR {
     ) {
         // Loopの中で新たに契約したのにloopで契約を終了していない場合エラー
         if must_vars.len() > start {
-            // 複数のエラーをスタック
+            // 複数のエラーをスタック(契約を終了していない変数だけ)
             for i in start..must_vars.len() {
+                if !must_vars[i].tracked || must_vars[i].used {
+                    continue;
+                }
                 let result: Result<(), err::ErrKind> = crate::GenCompileErr2!(
                     CompileErrKind::ContractMustNotUsed {
                         fn_name: fn_name.to_string(),
@@ -95,47 +98,30 @@ impl IR {
                 self.scan_loop_expr(fn_name, &var.value, scope)?;
                 if var.ty.is_constract_must() {
                     scope.push(MustVar::new(var.name.clone(), &expr.span));
+                } else if scope.iter().any(|entry| entry.name == var.name) {
+                    scope.push(MustVar::mask(var.name.clone(), &expr.span));
                 }
             }
             ExprNode::Match { arms, arm_else, .. } => {
-                // 1. Matchに入る前の未終了リスト（クローンして保持）
-                let mut common_musts: HashSet<_> = scope.iter().cloned().collect();
-                let mut visited_any_arm = false;
-
+                // 分岐の前の`scope`(外側の変数)は、どの分岐の後でも残す。
+                // 各分岐は分岐前の状態のコピーに対して解析し、分岐の中で
+                // 定義した変数は外側の変数とは別に扱って、分岐の終わりで捨てる。
+                let mut branches: Vec<Vec<MustVar>> = Vec::new();
                 for arm in arms.iter() {
-                    let start = scope.len();
-                    self.check_loop_contract_ends(fn_name, &arm.body, scope)?;
-                    self.emit_scope_constract_errs(start, scope, fn_name);
-
-                    // このアームの処理が終わった時点のscopeの要素をSetにする
-                    let current_musts: HashSet<_> = scope[start..].iter().cloned().collect();
-
-                    // 最初のアームならそのままコピー、2回目以降は「積集合（両方に残っているもの）」を取る
-                    if !visited_any_arm {
-                        common_musts = current_musts;
-                        visited_any_arm = true;
-                    } else {
-                        common_musts = common_musts.intersection(&current_musts).cloned().collect();
-                    }
-
-                    scope.truncate(start);
+                    branches.push(self.scan_loop_branch(fn_name, &arm.body, scope)?);
                 }
-                // elseの部分
                 if let Some(body) = arm_else {
-                    let start = scope.len();
-                    self.check_loop_contract_ends(fn_name, body, scope)?;
-                    self.emit_scope_constract_errs(start, scope, fn_name);
-
-                    let current_musts: HashSet<_> = scope[start..].iter().cloned().collect();
-                    if !visited_any_arm {
-                        common_musts = current_musts;
-                    } else {
-                        common_musts = common_musts.intersection(&current_musts).cloned().collect();
-                    }
-                    scope.truncate(start);
+                    branches.push(self.scan_loop_branch(fn_name, body, scope)?);
                 }
-                // 2. すべての分岐を通り抜けた後、共通して残ってしまった契約をscopeに戻す
-                scope.extend(common_musts);
+                // 外側の変数ごとに分岐の結果を合流させる。
+                // どれか一つの分岐でも終了していれば、その先では終了済みの
+                // 可能性があるものとして扱う(一部の分岐でしか終了しない場合の
+                // エラーは、`walk_match`が報告する)
+                for (i, var) in scope.iter_mut().enumerate() {
+                    if var.tracked && branches.iter().any(|branch| branch[i].used) {
+                        var.used = true;
+                    }
+                }
             }
             ExprNode::Loop { body, .. } => {
                 let mut guarded = scope.clone();
@@ -158,6 +144,22 @@ impl IR {
         Ok(())
     }
 
+    /// 分岐1つ分を、分岐前の`scope`のコピーに対して解析して返す
+    /// (分岐の中で定義された変数は、検査したうえで結果に含めない)
+    fn scan_loop_branch(
+        &mut self,
+        fn_name: &str,
+        body: &Body,
+        outer: &[MustVar],
+    ) -> Result<Vec<MustVar>, err::ErrKind> {
+        let outer_len = outer.len();
+        let mut local = outer.to_vec();
+        self.check_loop_contract_ends(fn_name, body, &mut local)?;
+        self.emit_scope_constract_errs(outer_len, &mut local, fn_name);
+        local.truncate(outer_len);
+        Ok(local)
+    }
+
     /// 式の中で終了される(関数の引数として渡される)`guarded`の変数名
     fn ended_by(
         &mut self,
@@ -168,7 +170,7 @@ impl IR {
         self.walk_expr(expr, guarded, fn_name)?;
         Ok(guarded
             .into_iter()
-            .filter(|v| v.used)
+            .filter(|v| v.tracked && v.used)
             .map(|v| v.name.clone())
             .collect())
     }
@@ -221,9 +223,10 @@ impl IR {
                     }
                 }
                 // ループの中で定義した変数は、この周の中で終了するだけでよい
+                // (契約のない変数が外側の契約変数を隠す場合も、以降は外側の変数を見ない)
                 if let ExprNode::DefVar(ref var) = expr.node {
+                    guarded.retain(|v| v.name != var.name);
                     if var.ty.is_constract_must() {
-                        guarded.retain(|v| v.name != var.name);
                         locals.push(MustVar::new(var.name.clone(), &expr.span));
                     }
                 }
