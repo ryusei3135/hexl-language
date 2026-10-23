@@ -14,12 +14,19 @@
     */
     ```
 - アセンブリ言語を出力する際にerrpoolにエラーを格納するようにした
+- 条件分岐の修正
+    ```
+    // 前回までの
+    cond expr {} else {}
+    // これをサポート
+    cond expr {}
+    ```
 ### Changed
 - ノードの位置を変更 `compiler::parse::node`から`compiler::ast`
 - hexlのフロントエンドディレクトリにparseとlexを移動
 ### Fixed
 - 反復処理のテストが通るように改善
-- IRのgeneraterのテストの修正
+- IRのgeneraterのテストの修正   
 
 ## [1.0.2] - 2026-10-18
 ### Fixed

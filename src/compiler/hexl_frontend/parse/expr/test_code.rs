@@ -296,6 +296,44 @@ mod expr_tests {
     }
 
     #[test]
+    fn check_match_expr_bool_without_else() {
+        // elseを省略した真偽値のcond
+        let mut p = parse::Parser::new_for_test();
+        let tkns = gen_nodes(
+            "
+            _start(): int {
+              cond a == 10 {
+                hh: int = 100
+              }
+              b: int = 1
+            }
+            ",
+        );
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        assert_eq!(
+            node.body[0].get_node().clone().zeroed_spans(),
+            ex(ExprNode::Match {
+                pattern: None,
+                arms: vec![MatchArm {
+                    pattern: Box::new(ex(ExprNode::Equal((
+                        Box::new(ex(ExprNode::Var("a".to_string()))),
+                        Box::new(ex(ExprNode::Number("10".to_string()))),
+                    )))),
+                    body: vec![gen_var_node("hh", "100", "int", 0),],
+                    span: sp(0),
+                }],
+                arm_else: None,
+            })
+            .wrap_group2()
+            .zeroed_spans()
+        );
+        assert_eq!(node.body.len(), 2);
+    }
+
+    #[test]
     fn check_match_expr_value() {
         // 2. 値を与えるパターン (他の言語のswitch/matchに相当)
         let mut p = parse::Parser::new_for_test();

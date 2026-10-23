@@ -115,6 +115,8 @@ impl Parser {
     }
 
     /// `else`が無かった
+    /// (真偽値の`cond`は`else`を省略できるようになったため、現在は未使用)
+    #[allow(dead_code)]
     pub(in crate::compiler::hexl_frontend::parse) fn cond_else_not_found<T>(
         &self,
     ) -> Result<T, err::ErrKind> {

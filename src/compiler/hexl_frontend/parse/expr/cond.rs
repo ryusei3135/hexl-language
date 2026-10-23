@@ -159,7 +159,7 @@ impl Parser {
     /// cond a == 10 {
     ///     // a が 10 のとき
     /// } else {
-    ///     // それ以外
+    ///     // それ以外 (`else`は省略可能)
     /// }
     /// ```
     /// これは `if` / `else` と同じ意味を持つ
@@ -177,21 +177,26 @@ impl Parser {
         // trueのときの処理
         let body = self.gen_block_node()?;
         // }
-        // } else {
         crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
-        // else
-        if self.next_tkn(&["else"])? != lex::Tkn::KeyWordElse {
-            return crate::err_at!(self.cond_else_not_found());
-        }
-        // {
-        if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {
-            return crate::err_at!(self.cond_else_lbrace());
-        }
-        self.next_tkn(&[])?;
-        // それ以外のときの処理
-        let else_body = self.gen_block_node()?;
-        // }
-        crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
+
+        // `else`は省略できる: `cond a == 10 { .. }`
+        // 次のトークンが`else`のときだけ、else節を解析する
+        let else_body = if matches!(self.next_tkn_ref(&[]), Ok(lex::Tkn::KeyWordElse)) {
+            // else
+            self.next_tkn(&["else"])?;
+            // {
+            if !matches!(self.next_tkn(&["{"])?, lex::Tkn::LBrace) {
+                return crate::err_at!(self.cond_else_lbrace());
+            }
+            self.next_tkn(&[])?;
+            // それ以外のときの処理
+            let else_body = self.gen_block_node()?;
+            // }
+            crate::err_at!(self.tkn_checker()).close_scope_to_rbrace(None)?;
+            Some(else_body)
+        } else {
+            None
+        };
         // 式の終了
         self.next_tkn(&[])?;
 
@@ -205,7 +210,7 @@ impl Parser {
                     body,
                     span: arm_span,
                 }],
-                arm_else: Some(else_body),
+                arm_else: else_body,
             },
             span,
         ))

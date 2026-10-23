@@ -249,9 +249,7 @@ g(v: int must=d) { d(v) }
 
     #[track_caller]
     fn assert_err(src: &str) {
-        if compile(src).is_ok() {
-            panic!("エラーになるはずが、成功しました\n{src}");
-        }
+        assert!(compile(src).is_err());
     }
 
     // ------------------------------------------------------------------
