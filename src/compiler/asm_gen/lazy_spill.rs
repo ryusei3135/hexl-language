@@ -184,7 +184,10 @@ impl AsmEmitter {
     /// 制御フローのノード(`Block`/`Jmp`/`ExpectJmp`)とインラインアセンブラの前は
     /// 全て復元する。それ以外は、ノードが参照する変数のレジスタだけを復元し、
     /// `node_vars`に記録する(ノードの中の関数呼び出しが、復元の要否を決めるため)。
-    pub(super) fn prepare_node_spills<R: ResultRet>(&mut self, node: &inst::Inst) -> Result<(), err::ErrKind> {
+    pub(super) fn prepare_node_spills<R: ResultRet>(
+        &mut self,
+        node: &inst::Inst,
+    ) -> Result<(), err::ErrKind> {
         self.node_vars.clear();
         self.node_vars_all = false;
 
@@ -309,4 +312,3 @@ impl AsmEmitter {
         Ok(asm)
     }
 }
-

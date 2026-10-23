@@ -624,7 +624,7 @@ impl AsmEmitter {
             // (例: 変数に束縛されずそのまま関数の引数などに使われる`{1,2,3}`)
             inst::Inst::InitArr(ids) => {
                 // `asm_emitter/operand_txt/`に記述
-                self.init_arr_txt::<false>(&ids, this_is_self);
+                self.init_arr_txt::<false>(&ids, this_is_self)?;
                 Ok(String::new())
             }
             inst::Inst::CallFunc(call_fn_info) => {

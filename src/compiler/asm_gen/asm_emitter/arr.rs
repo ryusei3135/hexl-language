@@ -96,7 +96,7 @@ impl AsmEmitter {
         self.arr_index_temp = Some(reg_num);
 
         let reg64 = self.reg64(&RegisterMode::Normal(reg_num))?;
-        self.load_index_reg(index_operand, index_size, reg_num, &reg64);
+        self.load_index_reg(index_operand, index_size, reg_num, &reg64)?;
         let offset = self.adjust_index_reg(&reg64, is_ptr, arr_len, arr_base, elem_size);
         Ok(self
             .asm_fmt

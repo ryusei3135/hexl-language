@@ -149,17 +149,23 @@ pub struct AsmEmitter {
     err_pool: Rc<RefCell<err_pool::ErrPool>>,
 }
 
-
 pub trait ResultRet {
-    fn handle(err_pool: &Rc<RefCell<err_pool::ErrPool>>, val: Result<(), err::ErrKind>) -> Result<(), err::ErrKind>;
+    fn handle(
+        err_pool: &Rc<RefCell<err_pool::ErrPool>>,
+        val: Result<(), err::ErrKind>,
+    ) -> Result<(), err::ErrKind>;
 }
-
 
 pub struct StackErr {}
 
 impl ResultRet for StackErr {
-    fn handle(err_pool: &Rc<RefCell<err_pool::ErrPool>>, val: Result<(), err::ErrKind>) -> Result<(), err::ErrKind> {
-        (*err_pool.borrow_mut()).push_err_node(val.unwrap_err());
+    fn handle(
+        err_pool: &Rc<RefCell<err_pool::ErrPool>>,
+        val: Result<(), err::ErrKind>,
+    ) -> Result<(), err::ErrKind> {
+        if let Err(e) = val.clone() {
+            (*err_pool.borrow_mut()).push_err_node(e);
+        }
         Ok(())
     }
 }
@@ -167,7 +173,10 @@ impl ResultRet for StackErr {
 pub struct ReturnErr {}
 
 impl ResultRet for ReturnErr {
-    fn handle(err_pool: &Rc<RefCell<err_pool::ErrPool>>, val: Result<(), err::ErrKind>) -> Result<(), err::ErrKind> {
+    fn handle(
+        err_pool: &Rc<RefCell<err_pool::ErrPool>>,
+        val: Result<(), err::ErrKind>,
+    ) -> Result<(), err::ErrKind> {
         panic!("{:?}", val);
         Ok(())
     }

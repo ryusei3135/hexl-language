@@ -19,7 +19,7 @@ pub mod err_pool;
 // --------------------------------------------------------------------
 
 /// 解析対象のソースコード上の位置(何行目の何文字目か)
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub struct Span {
     pub line: usize,
     pub pos: usize,

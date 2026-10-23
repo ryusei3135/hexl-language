@@ -431,7 +431,9 @@ impl AsmEmitter {
             }
         }
         self.gen_implicit_ret(ctx.fn_name);
-        self.fix_callee_saved(prologue_end);
+        if let Err(e) = self.fix_callee_saved(prologue_end) {
+            (*self.err_pool.borrow_mut()).push_err_node(e);
+        }
 
         // === スタックフレームで確保するサイズを確定させる ===
         // IRが見積もったサイズ(`stk_size`)と、本体の生成で実際に数えた

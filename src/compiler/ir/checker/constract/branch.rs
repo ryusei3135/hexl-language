@@ -11,47 +11,56 @@ impl IR {
     /// 分岐ごとに独立して追跡し、最後に結果を突き合わせる。
     /// 一つでも契約を終了する分岐があるなら、すべての分岐で
     /// 終了しなければならない
-    pub(super) fn walk_match(expr: &Expr, must_vars: &mut Vec<MustVar>) {
+    pub(super) fn walk_match(
+        &mut self,
+        expr: &Expr,
+        must_vars: &mut Vec<MustVar>,
+        fn_name: &str,
+    ) -> Result<(), err::ErrKind> {
         let ExprNode::Match {
             pattern,
             arms,
             arm_else,
         } = &expr.node
         else {
-            return;
+            return Ok(());
         };
         if let Some(pattern) = pattern {
-            Self::walk_expr(pattern, must_vars);
+            self.walk_expr(pattern, must_vars, fn_name)?;
         }
         // (分岐の解析結果, `ret`/`break`で抜ける分岐か)
         let mut branches: Vec<(Vec<MustVar>, bool)> = Vec::new();
         for arm in arms.iter() {
             let state = Self::walk_branch(&must_vars[..], |vars| {
-                Self::walk_expr(&arm.pattern, vars);
-                Self::walk_group2_nodes(&arm.body, vars);
-            });
+                self.walk_expr(&arm.pattern, vars, fn_name)?;
+                self.walk_group2_nodes(&arm.body, vars, fn_name)
+            })?;
             branches.push((state, Self::ends_with_exit(&arm.body)));
         }
         if let Some(body) = arm_else {
             let state = Self::walk_branch(&must_vars[..], |vars| {
-                Self::walk_group2_nodes(body, vars);
-            });
+                self.walk_group2_nodes(body, vars, fn_name)
+            })?;
             branches.push((state, Self::ends_with_exit(body)));
         } else if pattern.is_none() {
             // `else`の無い条件分岐は、何もしない分岐があるのと同じ
             branches.push((must_vars.clone(), false));
         }
         Self::merge_branches(must_vars, &branches);
+        Ok(())
     }
 
     /// 分岐1つ分を、分岐前の状態のコピーに対して解析して返す
     /// (分岐の中で定義された変数は結果に含めない)
-    fn walk_branch(must_vars: &[MustVar], walk: impl FnOnce(&mut Vec<MustVar>)) -> Vec<MustVar> {
+    fn walk_branch(
+        must_vars: &[MustVar],
+        walk: impl FnOnce(&mut Vec<MustVar>) -> Result<(), err::ErrKind>,
+    ) -> Result<Vec<MustVar>, err::ErrKind> {
         let outer_len = must_vars.len();
         let mut local = must_vars.to_vec();
-        walk(&mut local);
+        walk(&mut local)?;
         local.truncate(outer_len);
-        local
+        Ok(local)
     }
 
     /// 本体の最後の文が`ret`/`break`か
