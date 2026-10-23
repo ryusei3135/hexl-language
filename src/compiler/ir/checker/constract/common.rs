@@ -98,17 +98,43 @@ impl IR {
                 })?;
                 Ok(())
             }
+            // 条件分岐は`branch.rs`、反復処理は`loop_check.rs`で扱う
+            ExprNode::Match { .. } => self.walk_match(expr, must_vars, fn_name),
+            ExprNode::Loop { .. } => self.walk_loop(expr, must_vars, fn_name),
+            // それ以外は子の式を順に辿る(`try_for_each_child`を`scan_loop_expr`と共有する)
+            _ => Self::try_for_each_child(expr, &mut |child| {
+                self.walk_expr(child, must_vars, fn_name)
+            }),
+        }
+    }
+
+    /// `&Box<Expr>`などを`&Expr`にそろえる(関数の引数での型強制を使う)
+    pub(super) fn as_expr(expr: &Expr) -> &Expr {
+        expr
+    }
+
+    /// 式の子の式を、評価する順に`f`へ渡す
+    ///
+    /// `walk_expr`と`scan_loop_expr`が同じ一覧を使うための入口。
+    /// 契約の追跡で特別な扱いが要るノード(`DefVar`/`CallFunc`/`Match`/`Loop`)は
+    /// 含めず、呼び出し側で先に処理する。式ノードを追加したときは、
+    /// 子の式を持つなら、ここに足す(足さないと追跡が漏れる)
+    pub(super) fn try_for_each_child<E>(
+        expr: &Expr,
+        f: &mut impl FnMut(&Expr) -> Result<(), E>,
+    ) -> Result<(), E> {
+        match &expr.node {
             ExprNode::Scope { target, .. }
             | ExprNode::Member { target, .. }
-            | ExprNode::PtrMember { target, .. } => self.walk_expr(target, must_vars, fn_name),
+            | ExprNode::PtrMember { target, .. } => f(Self::as_expr(target)),
             ExprNode::Assign(assign) => {
-                self.walk_expr(&assign.dst, must_vars, fn_name)?;
-                self.walk_expr(&assign.value, must_vars, fn_name)
+                f(Self::as_expr(&assign.dst))?;
+                f(Self::as_expr(&assign.value))
             }
             ExprNode::GetAddress(target) | ExprNode::ConnectAddr(target) => {
-                self.walk_expr(target, must_vars, fn_name)
+                f(Self::as_expr(target))
             }
-            ExprNode::VariantBind(bind) => self.walk_expr(&bind.value, must_vars, fn_name),
+            ExprNode::VariantBind(bind) => f(Self::as_expr(&bind.value)),
             ExprNode::Add(pair)
             | ExprNode::Sub(pair)
             | ExprNode::Mul(pair)
@@ -118,29 +144,16 @@ impl IR {
             | ExprNode::GreaterThen(pair)
             | ExprNode::Equal(pair)
             | ExprNode::NotEq(pair) => {
-                self.walk_expr(&pair.0, must_vars, fn_name)?;
-                self.walk_expr(&pair.1, must_vars, fn_name)
+                f(Self::as_expr(&pair.0))?;
+                f(Self::as_expr(&pair.1))
             }
-            // 条件分岐は`branch.rs`、反復処理は`loop_check.rs`で扱う
-            ExprNode::Match { .. } => self.walk_match(expr, must_vars, fn_name),
-            ExprNode::Loop { .. } => self.walk_loop(expr, must_vars, fn_name),
-            ExprNode::InitStruct { fields, .. } => {
-                let f = |val: &Box<Expr>| -> Result<(), err::ErrKind> {
-                    self.walk_expr(val, must_vars, fn_name)
-                };
-                fields.values().try_for_each(f)?;
-                Ok(())
-            }
-            ExprNode::Array(values) => {
-                let f = |val: &Expr| -> Result<(), err::ErrKind> {
-                    self.walk_expr(val, must_vars, fn_name)
-                };
-                values.iter().try_for_each(f)?;
-                Ok(())
-            }
+            ExprNode::InitStruct { fields, .. } => fields
+                .values()
+                .try_for_each(|val| f(Self::as_expr(val))),
+            ExprNode::Array(values) => values.iter().try_for_each(|val| f(Self::as_expr(val))),
             ExprNode::RefArray { dst, index, .. } => {
-                self.walk_expr(dst, must_vars, fn_name)?;
-                self.walk_expr(index, must_vars, fn_name)
+                f(Self::as_expr(dst))?;
+                f(Self::as_expr(index))
             }
             _ => Ok(()),
         }

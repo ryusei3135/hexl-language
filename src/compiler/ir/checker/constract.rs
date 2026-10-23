@@ -604,4 +604,81 @@ g(v: int must=d) { d(v) }
             "loop {\n x: int must=c = a()\n cond 1 == 1 {\n continue\n } else {}\n c(x)\n break\n}",
         ));
     }
+
+    // ------------------------------------------------------------------
+    // 12. 分岐の脱出を全経路で判定する(入れ子の分岐の中の`ret`/`break`)
+    // ------------------------------------------------------------------
+    #[test]
+    fn nested_branch_that_always_exits_is_treated_like_direct_exit() {
+        // 末尾が直接`ret`の分岐と、末尾が「内側の全経路が`ret`する分岐」の分岐は
+        // 同じ結果になる(以前は後者だけ脱出と認識されなかった)
+        let direct = main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n ret 1\n} else {}");
+        let nested = main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n cond 2 == 2 {\n ret 1\n } else {\n ret 2\n }\n} else {}",
+        );
+        assert_eq!(compile(&direct).is_ok(), compile(&nested).is_ok());
+        // 内側の一方が抜けない(`else {}`)なら脱出とは認めず、分岐の不一致になる
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n cond 2 == 2 {\n ret 1\n } else {}\n} else {}",
+        ));
+    }
+
+    #[test]
+    fn loop_exit_through_branch_that_always_exits_is_ok() {
+        // 終了の後に、全経路が`break`/`ret`する分岐が続くなら次の周には進まない
+        assert_ok(&main_with(
+            "x: int must=c = a()\nloop {\n c(x)\n cond 1 == 1 {\n break\n } else {\n ret 1\n }\n}",
+        ));
+        // 抜けない経路(`else {}`)があるなら、次の周でもう一度終了してしまう
+        assert_err(&main_with(
+            "x: int must=c = a()\nloop {\n c(x)\n cond 1 == 1 {\n break\n } else {}\n}",
+        ));
+    }
+
+    // ------------------------------------------------------------------
+    // 13. ループの中の式に入れ子になった契約の終了
+    // ------------------------------------------------------------------
+    /// 戻り値のある`c`(式の中に置いて契約を終了できる)
+    const RET_DEFS: &str = "a(): int must=c { ret 1 }\nc(v: int of a): int { ret 1 }\n";
+
+    fn main_with_ret(body: &str) -> String {
+        format!("{RET_DEFS}\n_start(): int {{\n{body}\nret 0\n}}")
+    }
+
+    #[test]
+    fn ending_contract_in_nested_expr_inside_loop_is_error() {
+        // 代入の値・二項演算の中で終了しても、`break`の前でなければエラー
+        assert_err(&main_with_ret(
+            "x: int must=c = a()\nloop {\n y: int = c(x) + 1\n}",
+        ));
+        assert_ok(&main_with_ret(
+            "x: int must=c = a()\nloop {\n y: int = c(x) + 1\n break\n}",
+        ));
+    }
+
+    // ------------------------------------------------------------------
+    // 14. シャドーイングのスコープ境界(通常の変数が契約変数を隠す)
+    // ------------------------------------------------------------------
+    #[test]
+    fn plain_var_shadowing_in_branch_restores_outer_contract() {
+        // 分岐の中の通常の`x`は外側の契約`x`を隠すだけで、状態を変えない。
+        // 分岐を抜けたあとは外側の`x`が見える
+        assert_ok(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n x: int = 1\n e(x)\n} else {}\nc(x)",
+        ));
+        // 内側の`x`を使っても、外側の契約`x`は終了しない
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n x: int = 1\n e(x)\n} else {}",
+        ));
+    }
+
+    #[test]
+    fn plain_var_shadowing_in_loop_restores_outer_contract() {
+        assert_ok(&main_with(
+            "x: int must=c = a()\nloop {\n x: int = 1\n e(x)\n break\n}\nc(x)",
+        ));
+        assert_err(&main_with(
+            "x: int must=c = a()\nloop {\n x: int = 1\n e(x)\n break\n}",
+        ));
+    }
 }

@@ -102,16 +102,31 @@ impl IR {
                     scope.push(MustVar::mask(var.name.clone(), &expr.span));
                 }
             }
-            ExprNode::Match { arms, arm_else, .. } => {
+            ExprNode::Match {
+                pattern,
+                arms,
+                arm_else,
+            } => {
+                // 分岐の式(`cond`の条件など)は分岐の前に評価されるので、
+                // 分岐前の`scope`に対して走査する
+                if let Some(pattern) = pattern {
+                    self.scan_loop_expr(fn_name, Self::as_expr(pattern), scope)?;
+                }
                 // 分岐の前の`scope`(外側の変数)は、どの分岐の後でも残す。
                 // 各分岐は分岐前の状態のコピーに対して解析し、分岐の中で
                 // 定義した変数は外側の変数とは別に扱って、分岐の終わりで捨てる。
                 let mut branches: Vec<Vec<MustVar>> = Vec::new();
                 for arm in arms.iter() {
-                    branches.push(self.scan_loop_branch(fn_name, &arm.body, scope)?);
+                    // 各アームのパターン式は、そのアームの状態の中で評価される
+                    branches.push(self.scan_loop_branch(
+                        fn_name,
+                        Some(Self::as_expr(&arm.pattern)),
+                        &arm.body,
+                        scope,
+                    )?);
                 }
                 if let Some(body) = arm_else {
-                    branches.push(self.scan_loop_branch(fn_name, body, scope)?);
+                    branches.push(self.scan_loop_branch(fn_name, None, body, scope)?);
                 }
                 // 外側の変数ごとに分岐の結果を合流させる。
                 // どれか一つの分岐でも終了していれば、その先では終了済みの
@@ -128,18 +143,20 @@ impl IR {
                 self.check_loop_block(&fn_name, body, &mut guarded)?;
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
+            // (引数の中にも反復処理や分岐があり得るので、引数も同じ走査で辿る)
             ExprNode::CallFunc(call_info) => {
-                let f = |arg: &Expr| -> Result<(), err::ErrKind> {
+                for arg in call_info.args.iter() {
                     if let Some(name) = Self::arg_var_name(arg) {
                         Self::mark_used(name, scope);
                     }
-                    self.walk_expr(arg, scope, fn_name)?;
-                    Ok(())
-                };
-                // 💡 for_each から try_for_each に変更し、末尾に `?` をつける
-                call_info.args.iter().try_for_each(f)?;
+                    self.scan_loop_expr(fn_name, arg, scope)?;
+                }
             }
-            _ => {}
+            // 代入・演算・配列や構造体の初期化など、それ以外の式は子の式を辿る。
+            // (ここで辿らないと、式の奥にある反復処理や終了を見落とす)
+            _ => Self::try_for_each_child(expr, &mut |child| {
+                self.scan_loop_expr(fn_name, child, scope)
+            })?,
         }
         Ok(())
     }
@@ -149,11 +166,15 @@ impl IR {
     fn scan_loop_branch(
         &mut self,
         fn_name: &str,
+        pattern: Option<&Expr>,
         body: &Body,
         outer: &[MustVar],
     ) -> Result<Vec<MustVar>, err::ErrKind> {
         let outer_len = outer.len();
         let mut local = outer.to_vec();
+        if let Some(pattern) = pattern {
+            self.scan_loop_expr(fn_name, pattern, &mut local)?;
+        }
         self.check_loop_contract_ends(fn_name, body, &mut local)?;
         self.emit_scope_constract_errs(outer_len, &mut local, fn_name);
         local.truncate(outer_len);
@@ -167,11 +188,15 @@ impl IR {
         guarded: &mut Vec<MustVar>,
         fn_name: &str,
     ) -> Result<Vec<String>, err::ErrKind> {
+        // 式を辿る前から終了済みだった変数は、この式で終了したことにしない
+        // (前の文で終了した変数が、あとの文すべてで終了したことになってしまう)
+        let used_before: Vec<bool> = guarded.iter().map(|v| v.used).collect();
         self.walk_expr(expr, guarded, fn_name)?;
         Ok(guarded
-            .into_iter()
-            .filter(|v| v.tracked && v.used)
-            .map(|v| v.name.clone())
+            .iter()
+            .zip(used_before)
+            .filter(|(v, before)| v.tracked && v.used && !before)
+            .map(|(v, _)| v.name.clone())
             .collect())
     }
 
@@ -193,7 +218,11 @@ impl IR {
 
         for n in body.iter() {
             let (expr, is_exit) = match n.get_node() {
-                Group2Node::Expr(expr) => (Some(expr), false),
+                // 全経路が`ret`/`break`で抜ける分岐も、脱出する文として扱う
+                Group2Node::Expr(expr) => {
+                    let is_exit = Self::expr_exits(&expr).is_some();
+                    (Some(expr), is_exit)
+                }
                 Group2Node::Stmt(StmtNode::Return(expr)) => (Some(expr), true),
                 Group2Node::Stmt(StmtNode::Break(_span)) => (None, true),
                 _ => (None, false),
@@ -202,8 +231,24 @@ impl IR {
             if let Some(ref expr) = expr {
                 match &expr.node {
                     // 分岐の本体は、それぞれ同じ規則で検査する
-                    ExprNode::Match { arms, arm_else, .. } => {
+                    ExprNode::Match {
+                        pattern,
+                        arms,
+                        arm_else,
+                    } => {
+                        // 分岐の式(`cond`の条件など)で終了するなら、この文で終了する
+                        if let Some(pattern) = pattern {
+                            ends = self.ended_by(Self::as_expr(pattern), guarded, fn_name)?;
+                        }
                         for arm in arms.iter() {
+                            // アームのパターン式で終了するなら、この文で終了する
+                            for name in
+                                self.ended_by(Self::as_expr(&arm.pattern), &mut guarded.clone(), fn_name)?
+                            {
+                                if !ends.contains(&name) {
+                                    ends.push(name);
+                                }
+                            }
                             self.check_loop_block(fn_name, &arm.body, &mut guarded.clone())?;
                         }
                         if let Some(body) = arm_else {
