@@ -247,6 +247,26 @@ impl AsmEmitter {
         }
     }
 
+    /// 引数のノード`idx`が、ポインタ型の関数の引数(`Inst::Param`)で、
+    /// 値をそのまま渡す(`mov`)場合に、その変数名を返す
+    ///
+    /// `extract_operand_text`は、ポインタ型の`Inst::Param`を
+    /// 参照先(`-1(%rdi)`など)のオペランドにする(`*p`の読み出し用)。
+    /// 呼び出しの引数ではポインタ自身の値を渡したいので、
+    /// この場合は`var_operand`でポインタを持つレジスタを直接使う。
+    fn ptr_param_name(&self, idx: usize, opcode: &str) -> Option<String> {
+        if opcode != "mov" {
+            return None;
+        }
+        let node = &self.curr_inst[idx];
+        match node {
+            inst::Inst::Param(param) if node.get_param_ty()?.is_pointer().is_some() => {
+                Some(param.name.to_string())
+            }
+            _ => None,
+        }
+    }
+
     /// 各引数を引数レジスタへ設定する命令を作る
     ///
     /// 戻り値は各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
@@ -284,12 +304,27 @@ impl AsmEmitter {
                 param_ty.clone()
             };
 
-            let src1_text =
-                self.extract_operand_text(src1_idx, resize_size.wrap_dst_size().as_ref())?;
-            let src1_text = self.asm_fmt.resize_reg_operand(&src1_text, &resize_size)?;
+            // 呼び出し側の引数(ポインタ)をそのまま渡す場合は、
+            // 参照先(`-1(%rdi)`)ではなく、ポインタを持つレジスタを移動する
+            let (src1_text, asm) = if let Some(name) = self.ptr_param_name(src1_idx, opcode) {
+                let src_text = self.var_operand(&name)?;
+                // 同じレジスタへの`mov`(`movq %rdi, %rdi`)は何もしない
+                let asm = if src_text == param_reg {
+                    String::new()
+                } else {
+                    let is_stack = self.get_var_all_info(&name)?.is_stack;
+                    self.tmpl_line("mov", &param_reg, &src_text, &Size::DQ, is_stack)
+                };
+                (src_text, asm)
+            } else {
+                let src1_text =
+                    self.extract_operand_text(src1_idx, resize_size.wrap_dst_size().as_ref())?;
+                let src1_text = self.asm_fmt.resize_reg_operand(&src1_text, &resize_size)?;
 
-            let is_memory = self.check_node_is_mem_val(*param).is_some();
-            let asm = self.tmpl_line(opcode, &param_reg, &src1_text, &resize_size, is_memory);
+                let is_memory = self.check_node_is_mem_val(*param).is_some();
+                let asm = self.tmpl_line(opcode, &param_reg, &src1_text, &resize_size, is_memory);
+                (src1_text, asm)
+            };
             let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty)?;
             let param_reg_num = if param_ty.is_float() {
                 RegisterMode::Float(param_reg_num)

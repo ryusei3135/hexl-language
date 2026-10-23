@@ -68,3 +68,12 @@
 - 静的領域(`MemoryKind::Static`) → `is_static_var`
 - それ以外(配列) → `stack_arr_ir`
     - 領域全体(`要素のサイズ * 要素数`)を先に確保し、要素`k`は`arr_base + (k+1) * 要素のサイズ`に置く
+## ポインタ引数をそのまま渡す(2026-10-23)
+呼び出し側の関数の引数(`Inst::Param`)がポインタ型で、そのまま別の関数へ渡すとき、
+引数レジスタへポインタを持つレジスタを`mov`する(`movq %rsi, %rdi`)。
+以前は`extract_operand_text`が`*p`の読み出し用に参照先(`-1(%rdi)`)を返すため、
+`movq -1(%rdi), %rdi`と、ポインタの指す中身を読み込んでいた。
+
+- `build_arg_lines`の中で、`ptr_param_name`が「`mov`で渡すポインタ型の`Inst::Param`」を判定し、
+  `var_operand`でレジスタ(スタックに置いた場合は`%rbp`相対)を直接使う
+- 元と先が同じレジスタ(`movq %rdi, %rdi`)のときは何も出力しない
