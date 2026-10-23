@@ -1,6 +1,7 @@
 use crate::compiler::ast::Expr;
 
 use super::*;
+use crate::compiler::hexl_frontend::include_root;
 use crate::compiler::ast::{ExprNode, ImportKind, InlineAsm, ModPath};
 
 impl IR {
@@ -26,6 +27,12 @@ impl IR {
         }
     }
 
+    // `#include "dir/file"`のパスは、`#include`を書いたファイルではなく
+    // `ROOT`(最初にコンパイルしたファイルのあるディレクトリ)が基準になる
+    // (`include_root::resolve`で`ROOT/dir/file`にする)。
+    // 取り込んだファイルの中では、`pub`の付いた関数だけが使える
+    // (`public`で絞り込んでいる)。
+
     /// 指定されたファイルが存在するかを確認し、無ければパニックする
     #[inline(always)]
     fn check_include_file_exists(&self, full_path: &str) {
@@ -48,9 +55,10 @@ impl IR {
         path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = path.gen_path();
+        let full_path = include_root::resolve(&path.gen_path());
 
         if std::path::Path::new(&full_path).exists() {
+            let _root_guard = include_root::enter_include();
             let new_setting = settings.new_file(&full_path);
             let mut extern_fn_tree: Vec<def_tree::FnDefMetaData> =
                 crate::build(&new_setting).unwrap();
@@ -68,7 +76,7 @@ impl IR {
             self.extern_func_tree.extend(extern_fn_tree);
         } else {
             let func_name = path.last_segment();
-            let parent_path = path.gen_parent_path()?;
+            let parent_path = include_root::resolve(&path.gen_parent_path()?);
 
             if !std::path::Path::new(&parent_path).exists() {
                 panic!(
@@ -77,6 +85,8 @@ impl IR {
                     full_path, func_name, parent_path
                 );
             }
+
+            let _root_guard = include_root::enter_include();
 
             let new_setting = settings.new_file(&parent_path);
             let extern_fn_tree: Vec<def_tree::FnDefMetaData> = crate::build(&new_setting).unwrap();
@@ -112,8 +122,10 @@ impl IR {
         alias: Option<&String>,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = path.gen_path();
+        let full_path = include_root::resolve(&path.gen_path());
         self.check_include_file_exists(&full_path);
+
+        let _root_guard = include_root::enter_include();
 
         let new_setting = settings.new_file(&full_path);
         let mut extern_fn_tree: Vec<def_tree::FnDefMetaData> = crate::build(&new_setting).unwrap();
@@ -143,8 +155,10 @@ impl IR {
         func_name: &str,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = path.gen_path();
+        let full_path = include_root::resolve(&path.gen_path());
         self.check_include_file_exists(&full_path);
+
+        let _root_guard = include_root::enter_include();
 
         let new_setting = settings.new_file(&full_path);
         let extern_fn_tree: Vec<def_tree::FnDefMetaData> = crate::build(&new_setting).unwrap();
@@ -174,8 +188,10 @@ impl IR {
         path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = path.gen_path();
+        let full_path = include_root::resolve(&path.gen_path());
         self.check_include_file_exists(&full_path);
+
+        let _root_guard = include_root::enter_include();
 
         let new_setting = settings.new_file(&full_path);
         let mut extern_fn_tree: Vec<def_tree::FnDefMetaData> = crate::build(&new_setting).unwrap();

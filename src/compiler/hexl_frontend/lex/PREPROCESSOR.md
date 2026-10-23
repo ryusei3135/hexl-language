@@ -89,22 +89,24 @@ ret #A + 1      // ret 10 + 1
 - 組み込みのOSシンボル`#linux` / `#windows`は、`--linux` / `--windows`で選んだOS(未指定なら実行環境のOS)の
   **1つだけ**が定義される。もう一方は未定義(`Lexer::with_os(os)` → `Preprocessor::setup_defines_for(os)`)。
 
-## `#include "file"` のインライン展開
+## `#include "dir/file"`(2026-10-23変更)
 ```
-#include "test.hexl"         // ここで読み込み、その場に展開する
-#include "test.hexl"::io     // 展開しない(後段が処理する)
-#include io="test.hexl"      // 展開しない(後段が処理する)
+#include "lib/io.hexl"          // ROOT/lib/io.hexl のpubの関数を、io::func()で使う
+#include "lib/io.hexl"::func    // funcだけを、そのまま使う
+#include "lib/io.hexl"::*       // pubの関数を全て、そのまま使う
+#include Name="lib/io.hexl"     // Name::func()で使う
+#include "lib/a.c"              // C言語のファイル名を保存するだけ(`.c` / `.h`)
 ```
-- 別名のない1番目の形だけを、プリプロセッサがファイルを読み込んで、その場に展開する。
-  `"file"`の後ろは、空白か`//`のコメントだけ書ける。
-- 相対パスは、`#include`を書いたファイルのあるディレクトリが基準(入れ子でも、そのファイルの場所が基準)。
-  基準は`Lexer::set_source_file`で教える(`lib.rs`の`build`が呼ぶ)。
-- 取り込んだファイルもプリプロセッサを通る(`#if`などが使える)。そこで`#define`したものは、以降のソースでも使える。
-  `#if`の状態は、取り込んだファイルの中で閉じる。
-- 無効な`#if`の枝の中の`#include`は、読み込まない(ファイルが無くてもよい)。
-- ファイルが開けない、`#include`が循環している(自分自身を含む)場合は`panic`する。
-- 同じファイルを2回`#include`すると、2回ともそのまま展開される(重複した定義は呼び出し側で避ける)。
-- 行番号: 展開した分だけ、`#include`より後ろの行番号(`#line`、トークンの行)が後ろへずれる。
+- **プリプロセッサは`.hexl`を展開しない**(以前の「その場にインライン展開」はやめた)。
+  `#include`のまま字句解析→パーサー→IR(`ir/builder/preproc.rs`)が、別ファイルとして読み込む。
+- パスの基準は`ROOT`。`ROOT`は、**最初にコンパイルを始めたファイルのあるディレクトリ**で、
+  `#include`を書いたファイルの場所ではない。入れ子の`#include`の中でも`ROOT/dir/file`になる
+  (`hexl_frontend/include_root.rs`。`Lexer::set_source_file`が最も外側のファイルで設定する)。
+- 取り込んだファイルのうち、**`pub`が付いた関数だけ**が使える。`pub`の無い関数は見えない。
+- 取り込んだファイルの`#define`は、取り込んだ側には引き継がれない(別ファイルとして処理するため)。
+- 無効な`#if`の枝の中の`#include`は処理しない(`.c` / `.h`の名前も保存しない)。
+- ファイルが無い場合は、IR側が`panic`する。
+- `.c` / `.h`だけは、従来どおりプリプロセッサが名前を保存する(`take_c_files`)。
 
 ## 実装の場所
 | 処理 | 関数 |
@@ -114,8 +116,9 @@ ret #A + 1      // ret 10 + 1
 | 呼び出しの実引数の読み取り | `parse_macro_args` |
 | 仮引数の置き換え | `substitute_params` |
 | 展開(実引数→置き換え→再展開) | `Preprocessor::expand_fn_macro` / `expand_inline` |
-| `#include "file"`の判定/読み込み | `plain_include_path` / `Preprocessor::include_inline` |
-| ソース全体の処理(行頭の`#define`/`#if`、インライン展開) | `Preprocessor::preprocess` |
+| `#include "file.c"`の判定 | `plain_include_path` |
+| `#include`のROOT基準のパス解決 | `include_root::resolve` |
+| ソース全体の処理(行頭の`#define`/`#if`) | `Preprocessor::preprocess` |
 
 ## コメント(2026-10-22)
 ```

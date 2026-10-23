@@ -1,9 +1,5 @@
 use super::comment::strip_comments;
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::HashMap;
 
 /// `#define NAME VALUE` の右辺として実際に登録される値。
 /// 今後 `define` 以外のプリプロセッサ命令が増える前提のため、
@@ -39,11 +35,6 @@ pub(in crate::compiler::hexl_frontend::lex) enum PreprocKind {
 
 pub(in crate::compiler::hexl_frontend::lex) struct Preprocessor {
     tables: HashMap<String, PreprocKind>,
-    /// `#include "file"` の相対パスの基準になるディレクトリ
-    /// (読み込み中のファイルがあるディレクトリ。未設定なら実行時のカレント)
-    base_dir: PathBuf,
-    /// 今インライン展開中のファイルの正規化したパス(循環した `#include` の検出用)
-    include_stack: Vec<PathBuf>,
     /// `#include "file.c"` / `#include "file.h"` で指定された、C言語のファイル名
     /// (書かれたとおりの名前。読み込みや展開はせず、名前を保存するだけ。
     /// `Lexer`が`take_c_files`で受け取り、`include_c_file_list`に入れる)
@@ -54,8 +45,6 @@ impl Preprocessor {
     pub(in crate::compiler::hexl_frontend::lex) fn new() -> Self {
         Self {
             tables: HashMap::new(),
-            base_dir: PathBuf::new(),
-            include_stack: Vec::new(),
             c_files: Vec::new(),
         }
     }
@@ -63,69 +52,6 @@ impl Preprocessor {
     /// これまでの`#include`で集まったC言語のファイル名を取り出す(取り出した分は空になる)
     pub(in crate::compiler::hexl_frontend::lex) fn take_c_files(&mut self) -> Vec<String> {
         std::mem::take(&mut self.c_files)
-    }
-
-    /// これから処理するソースファイルの場所を教える。
-    /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
-    pub(in crate::compiler::hexl_frontend::lex) fn set_source_file(&mut self, file: &Path) {
-        self.base_dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
-        self.include_stack.clear();
-        if let Ok(canon) = fs::canonicalize(file) {
-            self.include_stack.push(canon);
-        }
-    }
-
-    /// `#include "rel"` のファイルを読み込み、プリプロセッサを通した結果を返す。
-    /// 取り込んだファイルの `#define` はそのまま以降のソースでも使える
-    /// (`#if` の状態は、ファイルの中で閉じる)。
-    ///
-    /// ファイルが読めない場合と、`#include` が循環している場合は panic する。
-    ///
-    /// `.c` / `.h` は読み込まず、ファイル名だけを`c_files`に保存して、
-    /// 空の文字列を返す(ソースには何も展開しない)。
-    fn include_inline(&mut self, rel: &str) -> String {
-        if rel.ends_with(".c") || rel.ends_with(".h") {
-            if !self.c_files.iter().any(|f| f == rel) {
-                self.c_files.push(rel.to_string());
-            }
-            String::new()
-        } else {
-            let path = self.base_dir.join(rel);
-            let canon = fs::canonicalize(&path).unwrap_or_else(|e| {
-                panic!(
-                    "`#include \"{}\"`: cannot open `{}`: {}",
-                    rel,
-                    path.display(),
-                    e
-                )
-            });
-            if self.include_stack.contains(&canon) {
-                panic!(
-                    "`#include \"{}\"`: circular include of `{}`",
-                    rel,
-                    canon.display()
-                );
-            }
-            let text = fs::read_to_string(&canon).unwrap_or_else(|e| {
-                panic!(
-                    "`#include \"{}\"`: cannot read `{}`: {}",
-                    rel,
-                    canon.display(),
-                    e
-                )
-            });
-
-            // 取り込んだファイルの中の `#include` は、そのファイルの場所が基準
-            let saved_base = std::mem::replace(
-                &mut self.base_dir,
-                canon.parent().map(Path::to_path_buf).unwrap_or_default(),
-            );
-            self.include_stack.push(canon);
-            let out = self.preprocess_text(&text);
-            self.include_stack.pop();
-            self.base_dir = saved_base;
-            out
-        }
     }
 
     /// 実行環境(`DEFAULT`)のOSシンボルを定義する。
@@ -284,7 +210,7 @@ impl Preprocessor {
         Some(self.preprocess_text(content))
     }
 
-    /// `preprocess` の本体(`#include` のインライン展開から再帰的にも呼ばれる)
+    /// `preprocess` の本体
     fn preprocess_text(&mut self, content: &str) -> String {
         /// `#if` / `#elif` / `#else` の入れ子1段分の状態。
         struct CondFrame {
@@ -391,15 +317,20 @@ impl Preprocessor {
                                 continue;
                             }
                             "include" => {
-                                // `#include "file"`(別名なし)だけは、ここでファイルを読み込み、
-                                // その場にインライン展開する。`#include "file"::io` と
-                                // `#include io="file"` は、これまでどおり後段に任せる。
+                                // `#include "file.c"` / `#include "file.h"` だけは、ここで
+                                // 名前を保存する(展開しない)。
+                                // それ以外(`.hexl`)は展開せず、`#include`のまま後段に任せる。
+                                // 後段は`ROOT/dir/file`として読み込み、`pub`の付いた
+                                // 関数だけを取り込む(`include_root`、`ir/builder/preproc.rs`)。
                                 if active_here {
                                     if let Some(rel) = plain_include_path(&rest_of_line) {
-                                        let included = self.include_inline(&rel);
-                                        output.push_str(&included);
-                                        i = line_end;
-                                        continue;
+                                        if rel.ends_with(".c") || rel.ends_with(".h") {
+                                            if !self.c_files.iter().any(|f| *f == rel) {
+                                                self.c_files.push(rel);
+                                            }
+                                            i = line_end;
+                                            continue;
+                                        }
                                     }
                                 }
                             }

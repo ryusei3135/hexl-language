@@ -124,13 +124,15 @@ impl Lexer {
     }
 
     /// これから解析するソースファイルのパスを教える。
-    /// `#include "file"` の相対パスは、このファイルのあるディレクトリが基準になる。
+    /// 最も外側のファイル(`#include`の先ではないもの)のあるディレクトリが
+    /// `ROOT`になり、`#include "dir/file"`は`ROOT/dir/file`として解決される。
     pub fn set_source_file(&mut self, file: Rc<String>) {
         if (*file).ends_with(".c") || (*file).ends_with(".h") {
             self.include_c_file_list.push(file.to_string());
         } else {
-            self.preproc_table
-                .set_source_file(std::path::Path::new((*file).as_str()));
+            crate::compiler::hexl_frontend::include_root::set_root_from_file(
+                std::path::Path::new((*file).as_str()),
+            );
         }
     }
 
@@ -1151,83 +1153,19 @@ mod tests {
         let _ = ret_nums("linux", "#if #X\n#else\n#elif #linux\n#endif");
     }
 
-    /// 一時ディレクトリにファイルを作り、`main` を字句解析して数字だけ返す
-    fn include_nums(dir: &str, files: &[(&str, &str)], main: &str) -> Vec<String> {
-        let base = std::env::temp_dir().join(format!("hexl_inc_{}_{}", dir, std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        for (name, body) in files {
-            let path = base.join(name);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, body).unwrap();
-        }
-        let main_path = base.join(main);
-        let src = std::fs::read_to_string(&main_path).unwrap();
+    #[test]
+    fn check_include_plain_is_not_inlined() {
+        // `.hexl`は展開せず、`#include`のまま後段(ROOT基準+pubのみ)に任せる。
+        // ファイルが無くてもここでは読まない
         let mut lex = Lexer::with_os("linux");
-        lex.set_source_file(std::rc::Rc::new(main_path.to_str().unwrap().to_string()));
-        lex.analy(&src).unwrap();
-        let _ = std::fs::remove_dir_all(&base);
-        lex.gen_tkns
-            .into_iter()
-            .filter_map(|t| match t.tkn {
-                Tkn::Number(n) => Some(n),
-                _ => None,
-            })
-            .collect()
-    }
-
-    #[test]
-    fn check_include_plain_is_inlined() {
-        let nums = include_nums(
-            "plain",
-            &[
-                ("a.hexl", "ret 1\n"),
-                ("m.hexl", "ret 0\n#include \"a.hexl\"\nret 2"),
-            ],
-            "m.hexl",
-        );
-        assert_eq!(nums, vec!["0", "1", "2"]);
-    }
-
-    #[test]
-    fn check_include_with_comment_is_inlined() {
-        let nums = include_nums(
-            "cmt",
-            &[
-                ("a.hexl", "ret 1"),
-                ("m.hexl", "#include \"a.hexl\" // 説明"),
-            ],
-            "m.hexl",
-        );
-        assert_eq!(nums, vec!["1"]);
-    }
-
-    #[test]
-    fn check_include_shares_define_and_nested_relative_path() {
-        let nums = include_nums(
-            "nest",
-            &[
-                ("sub/b.hexl", "#define B 7\n"),
-                ("sub/a.hexl", "#include \"b.hexl\"\n"),
-                ("m.hexl", "#include \"sub/a.hexl\"\nret #B"),
-            ],
-            "m.hexl",
-        );
-        assert_eq!(nums, vec!["7"]);
-    }
-
-    #[test]
-    fn check_include_in_inactive_branch_is_skipped() {
-        // 無効な枝の `#include` は、ファイルが無くても読まない
-        let nums = include_nums(
-            "inactive",
-            &[(
-                "m.hexl",
-                "#if #windows\n#include \"none.hexl\"\n#endif\nret 5",
-            )],
-            "m.hexl",
-        );
-        assert_eq!(nums, vec!["5"]);
+        lex.analy(&"ret 0\n#include \"dir/a.hexl\"\nret 2".to_string())
+            .unwrap();
+        let includes = lex
+            .gen_tkns
+            .iter()
+            .filter(|t| t.tkn == Tkn::Name("include".to_string()))
+            .count();
+        assert_eq!(includes, 1);
     }
 
     #[test]
@@ -1242,19 +1180,6 @@ mod tests {
             .filter(|t| t.tkn == Tkn::Name("include".to_string()))
             .count();
         assert_eq!(names, 2);
-    }
-
-    #[test]
-    #[should_panic]
-    fn check_include_circular_panics() {
-        let _ = include_nums(
-            "cycle",
-            &[
-                ("a.hexl", "#include \"m.hexl\""),
-                ("m.hexl", "#include \"a.hexl\""),
-            ],
-            "m.hexl",
-        );
     }
 
     #[test]
@@ -1293,23 +1218,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(lex.include_c_file_list, vec!["l.c"]);
-    }
-
-    #[test]
-    fn check_include_c_file_inside_included_file() {
-        // `.hexl`から`#include`された先にある`.c`も保存される
-        let base = std::env::temp_dir().join(format!("hexl_inc_cfile_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        std::fs::write(base.join("a.hexl"), "#include \"x.c\"\nret 1\n").unwrap();
-        let main_path = base.join("m.hexl");
-        std::fs::write(&main_path, "#include \"a.hexl\"").unwrap();
-        let mut lex = Lexer::with_os("linux");
-        lex.set_source_file(std::rc::Rc::new(main_path.to_str().unwrap().to_string()));
-        lex.analy(&std::fs::read_to_string(&main_path).unwrap())
-            .unwrap();
-        let _ = std::fs::remove_dir_all(&base);
-        assert_eq!(lex.include_c_file_list, vec!["x.c"]);
     }
 
     fn tkns_of(src: &str) -> Vec<Tkn> {
