@@ -68,7 +68,7 @@ impl IR {
         // Loopの中で新たに契約したのにloopで契約を終了していない場合エラー
         if must_vars.len() > start {
             // 複数のエラーをスタック
-            for i in (start - 1)..must_vars.len() {
+            for i in start..must_vars.len() {
                 let result: Result<(), err::ErrKind> = crate::GenCompileErr2!(
                     CompileErrKind::ContractMustNotUsed {
                         fn_name: fn_name.to_string(),

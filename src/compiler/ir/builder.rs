@@ -135,6 +135,13 @@ fn test_span() -> std::rc::Rc<err::Span> {
     std::rc::Rc::new(err::Span::unknown())
 }
 
+/// テスト用の`IR`を作る(`IR::new`は`ErrPool`を受け取るため)
+#[cfg(test)]
+fn new_test_ir() -> IR {
+    let err_pool = std::rc::Rc::new(std::cell::RefCell::new(crate::err::err_pool::ErrPool::new()));
+    IR::new(&err_pool)
+}
+
 #[cfg(test)]
 fn parse_test_source(src: &str) -> Vec<Group1Node> {
     let mut lexer = crate::compiler::hexl_frontend::lex::Lexer::new();

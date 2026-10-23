@@ -247,7 +247,7 @@ mod self_ty_tests {
     fn first_arg_self_becomes_pointer_to_struct() {
         // `func(self: Self, param: int): int` の第一引数は
         // 構造体`Name`へのポインタとして解決される
-        let ir = IR::new();
+        let ir = new_test_ir();
         let func = make_func(
             "func",
             vec![
@@ -285,7 +285,7 @@ mod self_ty_tests {
     #[should_panic]
     fn self_in_non_first_arg_panics() {
         // 第一引数以外に`Self`が使われている場合はエラー(panic)にする
-        let ir = IR::new();
+        let ir = new_test_ir();
         let func = make_func(
             "invalid",
             vec![
@@ -312,7 +312,7 @@ mod self_ty_tests {
     fn self_arg_and_self_return_resolves_to_matching_pointer() {
         // `func2(self: Self): Self` のように、第一引数がSelfかつ
         // 戻り値もSelfの場合、戻り値も`self`と同じポインタ型になる
-        let ir = IR::new();
+        let ir = new_test_ir();
         let func = make_func(
             "func2",
             vec![ArgsNode {
@@ -347,7 +347,7 @@ mod struct_method_expand_tests {
         let nodes =
             parse_test_source("struct Point { x: int pub get_num(self: Self): int { ret 1 } }");
 
-        let mut ir = IR::new();
+        let mut ir = new_test_ir();
         ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
             .unwrap();
 
@@ -387,7 +387,7 @@ mod struct_method_expand_tests {
             "struct Point { pub answer(): int { ret 42 } } main(): int { ret Point::answer() }",
         );
 
-        let mut ir = IR::new();
+        let mut ir = new_test_ir();
         ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
             .unwrap();
 
@@ -414,7 +414,7 @@ mod method_call_via_member_tests {
             "struct Point { x: int pub get_num(self: Self): int { ret 7 } } main(): int { p: Point = Point { x: 1 } ret p.get_num() }",
         );
 
-        let mut ir = IR::new();
+        let mut ir = new_test_ir();
         ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
             .unwrap();
 

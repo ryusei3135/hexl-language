@@ -221,17 +221,22 @@ g(v: int must=d) { d(v) }
         let file_name = std::rc::Rc::new("<test>".to_string());
         let err_pool =
             std::rc::Rc::new(std::cell::RefCell::new(crate::err::err_pool::ErrPool::new()));
-        let mut parser = parse::Parser::new(&file_name, err_pool);
+        let mut parser = parse::Parser::new(&file_name, err_pool.clone());
         let nodes = parser
             .parser(&lexer.gen_tkns, &Vec::<String>::new())
             .unwrap()
             .to_vec();
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut ir = IR::new();
+            let mut ir = IR::new(&err_pool);
             ir.builder::<crate::compiler::ir::result_mod::ReturnErr>(&nodes)
-                .map(|_| ())
-                .map_err(|err| format!("{:?}", err))
+                .map_err(|err| format!("{:?}", err))?;
+            // 契約のエラーは`err_pool`にためられ、`builder`の戻り値には
+            // 含まれないので、ここで確認する
+            if err_pool.borrow().has_err() {
+                return Err("契約のエラーがerr_poolに積まれました".to_string());
+            }
+            Ok(())
         }));
         match result {
             Ok(result) => result,

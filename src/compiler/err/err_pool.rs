@@ -66,11 +66,13 @@ impl ErrPool {
     }
 
     /// エラーが1つでもたまっているか
+    #[cfg(test)]
     pub fn has_err(&self) -> bool {
         !self.err_list.is_empty()
     }
 
     /// たまっているエラーの数
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.err_list.len()
     }
@@ -78,6 +80,7 @@ impl ErrPool {
     /// エラー箇所の表示に使うソースコードを登録する
     ///
     /// `file_name`は、`SyntaxErr::file_name`と同じ文字列にする
+    #[cfg(test)]
     pub fn add_source(&mut self, file_name: &str, source: &str) {
         self.sources
             .insert(file_name.to_string(), source.to_string());
