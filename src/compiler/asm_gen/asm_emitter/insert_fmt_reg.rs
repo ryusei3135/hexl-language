@@ -21,7 +21,13 @@ impl AsmEmitter {
 
                 let inner = &caps[1];
                 match inner.parse::<usize>() {
-                    Ok(reg_num) => format!("{}", self.asm_fmt.get_fmt_reg(reg_num, size)?),
+                    Ok(reg_num) => match self.asm_fmt.get_fmt_reg(reg_num, size) {
+                        Ok(reg) => reg,
+                        Err(e) => {
+                            parse_err = Some(e);
+                            String::new()
+                        }
+                    },
                     Err(_) => {
                         parse_err = Some(err::ErrKind::asm_emit_invalid_reg_placeholder(
                             inner.to_string(),

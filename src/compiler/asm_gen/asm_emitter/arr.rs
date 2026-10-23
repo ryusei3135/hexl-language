@@ -108,8 +108,14 @@ impl AsmEmitter {
     /// - ローカル配列: ベースは`%rbp`(`dst`のオペランドは`-4(%rbp)`のような
     ///   メモリ参照になるため使わない。使うと`-4(-4(%rbp), ..)`になる)
     /// - ポインタ: ポインタ自身を持つ64bitレジスタがベース
-    fn arr_ref_base(&self, name: &str) -> Result<ArrRefBase, err::ErrKind> {
-        let var_info = self.get_var_all_info(name)?;
+    fn arr_ref_base(&mut self, name: &str) -> Result<ArrRefBase, err::ErrKind> {
+        let var_info = self.get_var_all_info(name)?.clone();
+        // スタックに置いたポインタ変数は、一時レジスタへ読み込んだものをベースにする
+        let ptr_base = if var_info.size.is_pointer().is_some() {
+            Some(self.ptr_var_base(name)?)
+        } else {
+            None
+        };
         Ok(match &var_info.size {
             Size::Array { size, len } => ArrRefBase {
                 elem_size: size.to_bytes(),
@@ -122,7 +128,7 @@ impl AsmEmitter {
                 elem_size: ty.to_bytes(),
                 arr_base: 0,
                 is_ptr: true,
-                base: self.reg64(&var_info.reg)?,
+                base: ptr_base.expect("ポインタ変数のベースレジスタがありません"),
                 arr_len: 0,
             },
             other => ArrRefBase {

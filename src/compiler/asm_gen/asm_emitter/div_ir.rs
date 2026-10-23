@@ -27,6 +27,7 @@
 //! div <dst>
 //! ```
 
+use crate::asm_gen;
 use super::*;
 
 impl AsmEmitter {
@@ -64,17 +65,16 @@ impl AsmEmitter {
         let rax = self.asm_fmt.get_fmt_reg(0, &calc)?;
         let dst_txt = self.asm_fmt.get_fmt_reg(dst, &calc)?;
 
+        // === 書き換えられる`%rax`/`%rdx`のうち、使用中の物を退避 ===
+        let saved = self.live_reserved_regs(dst);
         let saved_reg_emit = |reg: &usize| -> Result<String, err::ErrKind> {
             let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
             Ok(self.asm_fmt.get_push(&name))
         };
-
-        // === 書き換えられる`%rax`/`%rdx`のうち、使用中の物を退避 ===
-        let saved = self.live_reserved_regs(dst);
-        let mut asm = saved
+        let mut asm: String = saved
             .iter()
             .map(saved_reg_emit)
-            .collect();
+            .collect::<Result<String, err::ErrKind>>()?;
 
         // === 割る数を空きレジスタへ ===
         // (`idiv`は即値を直接取れないのと、`%rdx`を書き換える前に
@@ -113,7 +113,7 @@ impl AsmEmitter {
         let result = self.asm_fmt.get_fmt_reg(result_reg, &calc)?;
         asm.push_str(&self.mov_line(&dst_txt, &result, &calc, false));
 
-        let saved_reg_gen = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind> {
+        let saved_reg_gen = |reg: &usize| -> Result<String, err::ErrKind> {
             let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
             Ok(self.asm_fmt.get_pop(&name))
         };
@@ -123,7 +123,7 @@ impl AsmEmitter {
                 .iter()
                 .rev()
                 .map(saved_reg_gen)
-                .collect::<String>()
+                .collect::<Result<String, err::ErrKind>>()?
                 .as_str(),
         );
         Ok(asm)

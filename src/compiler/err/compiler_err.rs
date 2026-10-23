@@ -9,7 +9,7 @@ pub enum CompilerErrKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompilerErr {
-    kind: CompilerErrKind,
+    pub kind: CompilerErrKind,
 }
 
 #[macro_export]

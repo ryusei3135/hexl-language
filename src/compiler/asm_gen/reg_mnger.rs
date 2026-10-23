@@ -494,6 +494,16 @@ impl AsmEmitter {
     /// 返したレジスタを使用中にするのは呼び出し側の責任
     /// (`mark_used`を呼ぶ)。
     pub(in crate::compiler::asm_gen) fn alloc_reg(&self, size: &Size) -> RegisterMode {
+        self.try_alloc_reg(size)
+            .expect("使用できるレジスタが足りません")
+    }
+
+    /// [`alloc_reg`](Self::alloc_reg)と同じ条件で空きレジスタを探し、
+    /// 1つも無ければ`None`を返す(panicしない)。
+    ///
+    /// 変数を定義するときに、`None`ならスタックへ置く
+    /// (`define_spilled_var`)ために使う。
+    pub(in crate::compiler::asm_gen) fn try_alloc_reg(&self, size: &Size) -> Option<RegisterMode> {
         let (count, mode) = if size.is_float() {
             (self.asm_fmt.float_reg_count(), RegisterMode::Float(0))
         } else {
@@ -510,7 +520,6 @@ impl AsmEmitter {
                     // まだ定義されていない変数のために割り当てたレジスタは使わない
                     && !self.used_reg.is_reserved(*reg)
             })
-            .expect("使用できるレジスタが足りません")
     }
 
     /// ## 引数

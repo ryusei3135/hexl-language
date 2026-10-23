@@ -86,7 +86,7 @@ impl AsmEmitter {
             }
         }
         call_func.push_str(&self.spill_store_regs(&lazy_regs)?);
-        call_func.push_str(&self.push_caller_saved_regs(&eager_regs)?);
+        call_func.push_str(&self.push_caller_saved_regs(&eager_regs)?.concat());
 
         // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
         self.used_reg.start_scope();
@@ -190,7 +190,7 @@ impl AsmEmitter {
             .iter()
             .filter(|reg| !self.is_callee_saved(**reg))
             .map(emit_caller_reg)
-            .collect();
+            .collect::<Result<Vec<String>, err::ErrKind>>()?;
         Ok(result)
     }
 
@@ -262,7 +262,9 @@ impl AsmEmitter {
             // 引数の実際の型のサイズ
             // (レジスタの取得だけでなく、後段のニーモニックの
             //  サイズ決定にも同じサイズを使う必要がある)
-            let param_ty = self.curr_inst[*param].get_param_ty();
+            let param_ty = self.curr_inst[*param]
+                .get_param_ty()
+                .ok_or_else(|| err::ErrKind::asm_emit_label_not_found("param type", *param))?;
             // 引数のレジスタを取得
             let param_reg = self.asm_fmt.get_fmt_param::<String>(index, &param_ty)?;
             // 引数のレジスタと値のidを挿入
@@ -314,14 +316,21 @@ impl AsmEmitter {
         let mut pending: Vec<usize> = (0..arg_lines.len()).collect();
 
         while !pending.is_empty() {
-            let pos = pending
-                .iter()
-                .position(|i| {
-                    (0..arg_lines.len()).all(|j| {
-                        j == *i || !self.text_reads_reg(&arg_lines[j].1, arg_lines[*i].0)?
-                    })
-                })
-                .unwrap_or(0);
+            let mut found: Option<usize> = None;
+            for (p, i) in pending.iter().enumerate() {
+                let mut readable = false;
+                for j in 0..arg_lines.len() {
+                    if j != *i && self.text_reads_reg(&arg_lines[j].1, arg_lines[*i].0)? {
+                        readable = true;
+                        break;
+                    }
+                }
+                if !readable {
+                    found = Some(p);
+                    break;
+                }
+            }
+            let pos = found.unwrap_or(0);
             let i = pending.remove(pos);
             asm.push_str(&arg_lines[i].2);
         }
@@ -828,6 +837,26 @@ impl AsmEmitter {
             //  引数や他の変数のレジスタを壊したり、ループの先頭が
             //  参照するレジスタと食い違ったりしていた)
             let var_ty = self.get_var_ty(name)?;
+            // レジスタが足りずスタックに置いた変数は、そのメモリへ書き込む
+            if self.is_spilled_scalar(name) {
+                let s = if this_is_self {
+                    None
+                } else {
+                    var_ty.wrap_dst_size()
+                };
+                self.assign_spilled_var(name, |this, scratch| {
+                    if var_ty.is_pointer().is_some() {
+                        this.assign_val_ty_is_ptr(scratch, value, s.as_ref())
+                    } else if var_ty.is_float() {
+                        this.assign_val_is_float(scratch, value, &var_ty, s.as_ref())
+                    } else {
+                        this.assign_val_is_not_ptr(scratch, value, s.as_ref())
+                    }
+                })?;
+                // 代入する値が式の結果だった場合、そのレジスタはもう不要
+                self.release_expr_temp(value);
+                return Ok(());
+            }
             let current_reg = self.var_reg(name).unwrap_or_else(|| {
                 if var_ty.is_float() {
                     RegisterMode::Float(self.reg_idx)

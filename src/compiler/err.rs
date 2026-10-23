@@ -8,6 +8,7 @@ pub mod opt;
 pub mod syntax_err;
 pub mod undef;
 pub use syntax_err::*;
+pub use compiler_err::*;
 pub mod compile;
 pub use compile::*;
 pub mod compiler_err;

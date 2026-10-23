@@ -104,6 +104,12 @@ impl AsmEmitter {
         let size = Self::struct_member_offset(pos, member_size);
         let var_info = self.get_var_all_info(src)?;
 
+        // レジスタが足りずスタックに置いたポインタ変数(`is_stack`だが構造体ではない)は、
+        // 構造体変数ではないので、ポインタの値を読み込んだレジスタ経由で参照する
+        if var_info.is_stack && !matches!(var_info.size, Size::Struct(..)) {
+            let reg = self.ptr_var_base(src)?;
+            return Ok(self.ref_base_offset(&reg, size));
+        }
         if var_info.is_stack {
             // `src`(構造体変数自身)が、ポインタをレジスタに持つのでは
             // なく`%rbp`相対のメモリに直接置かれている場合

@@ -98,10 +98,14 @@ impl AsmEmitter {
         let inst::Inst::Param(param) = &self.curr_inst[node_idx] else {
             return Ok(None);
         };
-        let var_info = self.find_var_info(&param.name)?;
-        var_info.size.is_pointer()?;
+        let Some(var_info) = self.find_var_info(&param.name) else {
+            return Ok(None);
+        };
+        if var_info.size.is_pointer().is_none() {
+            return Ok(None);
+        }
 
-        self.ptr_deref_operand(var_info.reg).map(|x| Some(x))
+        self.ptr_deref_operand(var_info.reg).map(Some)
     }
 
     fn extract_operand_text_sized(
@@ -212,7 +216,10 @@ impl AsmEmitter {
         reg: RegisterMode,
         asm_regs: &[RegisterMode],
     ) -> Result<Option<RegisterMode>, err::ErrKind> {
-        let free_reg = self.find_free_reg(reg, asm_regs);
+        // 空いているレジスタが無ければ何もしない
+        let Some(free_reg) = self.find_free_reg(reg, asm_regs) else {
+            return Ok(None);
+        };
 
         let mov_asm = self.register_move(&free_reg, &reg)?;
         self.asm_text.push_str(&mov_asm);

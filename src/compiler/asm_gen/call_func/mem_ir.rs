@@ -124,13 +124,16 @@ impl AsmEmitter {
     /// それを使い、そうでなければ使用中のレジスタ(引数など)と
     /// `%rax`/`%rdx`を避けて空きレジスタを確保する。
     /// このレジスタはスコープが終わると解放される
-    fn bind_var_reg(&mut self, name: Option<&str>, size: &types::Size) -> RegisterMode {
+    ///
+    /// 空きレジスタが1つも無ければ`None`を返す。呼び出し側は、変数を
+    /// スタックに置く(`define_spilled_var`)
+    fn bind_var_reg(&mut self, name: Option<&str>, size: &types::Size) -> Option<RegisterMode> {
         let reg = match name
             .and_then(|n| self.used_reg.allocated_reg(n))
             .filter(|r| !self.used_reg.is_used(r))
         {
             Some(reg) => reg,
-            None => self.alloc_reg(size),
+            None => self.try_alloc_reg(size)?,
         };
         self.reg_idx = reg.index();
         match name {
@@ -139,7 +142,7 @@ impl AsmEmitter {
                 self.used_reg.mark_used(&reg);
             }
         }
-        reg
+        Some(reg)
     }
 
     /// 構造体リテラルをポインタ変数へ束縛する
@@ -157,7 +160,18 @@ impl AsmEmitter {
         let offset = self
             .struct_mem(None, struct_ty, src, dst)?
             .expect("構造体リテラルの初期化に失敗しました");
-        let reg = self.bind_var_reg(name, size);
+        let Some(reg) = self.bind_var_reg(name, size) else {
+            // レジスタが足りないので、先頭アドレスをスタックの変数に置く
+            return self.define_spilled_var(size, dst, name, |this, scratch| {
+                Ok(this.tmpl_line(
+                    "address",
+                    &this.reg64(&scratch)?,
+                    &this.rbp_ref(offset),
+                    &types::Size::DQ,
+                    false,
+                ))
+            });
+        };
 
         let text = self.tmpl_line(
             "address",
@@ -254,7 +268,7 @@ impl AsmEmitter {
         );
     }
 
-    /// レジスタに置く変数を定義する
+    /// レジスタに置く変数を定義する(空きレジスタが無ければスタックに置く)
     fn mov_reg_var(
         &mut self,
         size: &types::Size,
@@ -263,7 +277,15 @@ impl AsmEmitter {
         name: Option<&str>,
         this_is_self: SelfPtrInfo,
     ) -> Result<(), err::ErrKind> {
-        let reg = self.bind_var_reg(name, size);
+        let Some(reg) = self.bind_var_reg(name, size) else {
+            // レジスタが足りないので、変数をスタックに置いて、変数として登録する
+            self.define_spilled_var(size, dst, name, |this, scratch| {
+                this.init_reg_line(size, scratch, src, this_is_self)
+            })?;
+            // 初期値が式の結果だった場合、そのレジスタはもう不要
+            self.release_expr_temp(src);
+            return Ok(());
+        };
         let formated = self.init_reg_line(size, reg, src, this_is_self)?;
         self.asm_text.push_str(&formated);
         // 初期値が式の結果だった場合、そのレジスタはもう不要

@@ -105,3 +105,18 @@
 - `Ret`の後と、`EndScope`で解放されたレジスタ(スコープが終わった変数、`dead_vars`)の退避は、復元せず捨てる。
 - 関数ごとの状態(`spilled_regs`/`spill_slots`/`node_vars`/`node_vars_all`/`dead_vars`)は、`reset_fn_state`で初期化し、
     `emit_callee_fn`で退避・復元する。
+
+## レジスタが足りない変数のスタック配置(2026-10-23)
+- 変数を定義するとき(`call_func/mem_ir.rs`の`bind_var_reg`)、割り当て済みのレジスタも
+    空きレジスタ(`try_alloc_reg`)も無ければ、変数をスタックへ置く(以前は`alloc_reg`がpanicしていた)。
+- `define_spilled_var`(`asm_emitter/var_mnger.rs`)が、8byteの領域を`stk_use_counter`から確保し、
+    初期値を書き込んで、`VarIndexInfo::new_stack(offset, size, dst)`で変数として登録する。
+    以降の参照は`var_operand`が`-N(%rbp)`のメモリ参照にする。
+- メモリからメモリへの`mov`はできないので、値は一時レジスタを経由して書く。
+    - 整数・ポインタ: `%rax`(`RESERVED_REGS`なので変数や式には使われていない)
+    - 浮動小数点: `xmm`の最後のレジスタを、前後でスタックへ退避・復元して使う
+- 再代入(`gen_assign_var_asm`)も同じ経路(`assign_spilled_var`)でメモリへ書く。
+- スタックに置いたポインタ変数の指す先を参照する場合(`p[i]`・`p.member`)は、
+    `ptr_var_base`が`%rdx`へ読み込んでからベースにする。
+- 構造体の変数(`is_stack`)と区別するときは`is_spilled_scalar`を使う(`Size::Struct`でない`is_stack`)。
+- 未対応: インラインアセンブラの`${var}`・引数(`Inst::Param`)に、スタックへ置いた変数を渡すケース。
