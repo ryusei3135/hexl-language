@@ -1,3 +1,4 @@
+use crate::compiler::err::compiler_err::CompilerErr;
 use crate::compiler::hexl_frontend::lex;
 use std::fmt;
 use std::rc::Rc;
@@ -109,6 +110,7 @@ pub enum ErrKind {
     UnexpectedToken,
     CompileErr(Box<CompileErr>),
     CompileErrAt(Box<ErrAt>),
+    CompilerErr(Box<CompilerErr>),
     /// トークン管理・式解析など、構文解析全般のエラー
     Syntax(Box<SyntaxErr>),
     Undef(Box<undef::UndefErrs>),
@@ -128,6 +130,7 @@ impl fmt::Display for ErrKind {
                 write!(f, "コンパイルエラー: {} [{}]", e.error.message(), e.span)
             }
             Self::Undef(e) => panic!("{:?}", e),
+            Self::CompilerErr(e) => panic!("{:?}", e),
         }
     }
 }

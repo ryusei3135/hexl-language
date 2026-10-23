@@ -2,7 +2,7 @@ mod assign_var;
 mod mem_ir;
 
 use super::*;
-use crate::compiler::asm_gen::emit_fn_name::*;
+use crate::compiler::asm_gen::{self, emit_fn_name::*};
 use crate::compiler::ir::{self, types};
 use crate::compiler::{ast, err};
 
@@ -165,11 +165,9 @@ impl AsmEmitter {
         }
     }
 
-    fn push_caller_saved_regs(&self, regs: &[RegisterMode]) -> Result<String, err::ErrKind> {
-        let result = regs
-            .iter()
-            .filter(|reg| !self.is_callee_saved(**reg))
-            .map(|reg| match reg {
+    fn push_caller_saved_regs(&self, regs: &[RegisterMode]) -> Result<Vec<String>, err::ErrKind> {
+        let emit_caller_reg = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind>{
+            Ok(match reg {
                 RegisterMode::Normal(index) => {
                     let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ)?;
                     self.asm_fmt.get_push(&reg_name)
@@ -187,7 +185,12 @@ impl AsmEmitter {
                     )
                 }
             })
-            .collect::<String>();
+        };
+        let result = regs
+            .iter()
+            .filter(|reg| !self.is_callee_saved(**reg))
+            .map(emit_caller_reg)
+            .collect();
         Ok(result)
     }
 
@@ -259,7 +262,7 @@ impl AsmEmitter {
             // 引数の実際の型のサイズ
             // (レジスタの取得だけでなく、後段のニーモニックの
             //  サイズ決定にも同じサイズを使う必要がある)
-            let param_ty = self.curr_inst[*param].get_param_ty()?;
+            let param_ty = self.curr_inst[*param].get_param_ty();
             // 引数のレジスタを取得
             let param_reg = self.asm_fmt.get_fmt_param::<String>(index, &param_ty)?;
             // 引数のレジスタと値のidを挿入
@@ -652,16 +655,28 @@ impl AsmEmitter {
     fn fix_callee_saved(&mut self, prologue_end: usize) -> Result<(), err::ErrKind> {
         let callee_regs = self.used_reg.callee_regs_to_save();
 
-        let save_asm = callee_regs
+        let fmt_reg_fn = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind> {
+            let r = self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ)?;
+            Ok(r)
+        };
+
+        let caller_name: Vec<String> = callee_regs
             .iter()
-            .map(|reg| self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ)?)
-            .map(|name| self.asm_fmt.get_push(&name))
+            .map(fmt_reg_fn)
+            .collect::<Result<Vec<String>, _>>()?;
+        let save_asm = caller_name
+            .iter()
+            .map(|name| self.asm_fmt.get_push(name))
             .collect::<String>();
-        let restore_asm = callee_regs
+
+        let callee_names: Vec<String> = callee_regs
             .iter()
             .rev()
-            .map(|reg| self.asm_fmt.get_fmt_reg(reg.unwrap_normal(), &Size::DQ)?)
-            .map(|name| self.asm_fmt.get_pop(&name))
+            .map(fmt_reg_fn)
+            .collect::<Result<Vec<String>, _>>()?;
+        let restore_asm = callee_names
+            .iter()
+            .map(|name| self.asm_fmt.get_pop(name))
             .collect::<String>();
 
         // スタックフレームの作り直し(`build_fn_process`の`replace_range`)は

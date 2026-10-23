@@ -346,7 +346,7 @@ impl AsmEmitter {
             self.format_value_line(opcode, dst, src1, this_is_self)?
         };
 
-        if let Some(resized_asm) = self.gen_resize_mnemonic(&formated, opcode, src1)? {
+        if let Some(resized_asm) = self.gen_resize_mnemonic(&formated, opcode, src1) {
             formated = resized_asm;
         }
 

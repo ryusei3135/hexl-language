@@ -64,15 +64,17 @@ impl AsmEmitter {
         let rax = self.asm_fmt.get_fmt_reg(0, &calc)?;
         let dst_txt = self.asm_fmt.get_fmt_reg(dst, &calc)?;
 
+        let saved_reg_emit = |reg: &usize| -> Result<String, err::ErrKind> {
+            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
+            Ok(self.asm_fmt.get_push(&name))
+        };
+
         // === 書き換えられる`%rax`/`%rdx`のうち、使用中の物を退避 ===
         let saved = self.live_reserved_regs(dst);
         let mut asm = saved
             .iter()
-            .try_map(|reg| {
-                let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
-                self.asm_fmt.get_push(&name)
-            })
-            .collect::<String>();
+            .map(saved_reg_emit)
+            .collect();
 
         // === 割る数を空きレジスタへ ===
         // (`idiv`は即値を直接取れないのと、`%rdx`を書き換える前に
@@ -111,15 +113,16 @@ impl AsmEmitter {
         let result = self.asm_fmt.get_fmt_reg(result_reg, &calc)?;
         asm.push_str(&self.mov_line(&dst_txt, &result, &calc, false));
 
+        let saved_reg_gen = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind> {
+            let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
+            Ok(self.asm_fmt.get_pop(&name))
+        };
         // === 退避したレジスタを逆順に復元 ===
         asm.push_str(
             saved
                 .iter()
                 .rev()
-                .map(|reg| {
-                    let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
-                    self.asm_fmt.get_pop(&name)
-                })
+                .map(saved_reg_gen)
                 .collect::<String>()
                 .as_str(),
         );

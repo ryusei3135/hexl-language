@@ -105,7 +105,7 @@ impl AsmEmitter {
         // 符号なしの32bit → 64bitは、32bitレジスタへの`mov`で上位32bitが0になる
         if before.is_unsigned() && before_bytes == 4 {
             let dst32 = self.asm_fmt.get_fmt_reg(dst.index(), &Size::DD)?;
-            return self.mov_line(&dst32, operand, &Size::DD, is_mem);
+            return Ok(self.mov_line(&dst32, operand, &Size::DD, is_mem));
         }
         Ok(self.asm_fmt.get_int_extend(
             !before.is_unsigned(),

@@ -94,14 +94,14 @@ impl AsmEmitter {
 
     /// インラインアセンブラ内の`${var}`が、ポインタ型の引数(`Inst::Param`)
     /// を指している場合のオペランドを返す。
-    fn inline_ptr_param_operand(&self, node_idx: usize) -> Option<String> {
+    fn inline_ptr_param_operand(&self, node_idx: usize) -> Result<Option<String>, err::ErrKind> {
         let inst::Inst::Param(param) = &self.curr_inst[node_idx] else {
-            return None;
+            return Ok(None);
         };
         let var_info = self.find_var_info(&param.name)?;
         var_info.size.is_pointer()?;
 
-        self.ptr_deref_operand(var_info.reg)
+        self.ptr_deref_operand(var_info.reg).map(|x| Some(x))
     }
 
     fn extract_operand_text_sized(
@@ -382,7 +382,7 @@ impl AsmEmitter {
             for (index, operand_id) in operand_ids.iter().enumerate() {
                 let operand_text = if let Some(ptr_operand) =
                     // ポインタ型の引数は、オフセット無しの参照にする
-                    self.inline_ptr_param_operand(*operand_id)
+                    self.inline_ptr_param_operand(*operand_id)?
                 {
                     ptr_operand
                 } else {

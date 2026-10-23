@@ -18,15 +18,16 @@ impl AsmEmitter {
         this_is_self: SelfPtrInfo,
     ) -> Result<(), err::ErrKind> {
         if let Some(struct_ty) = self.struct_literal_ptr_target(size, src) {
-            self.mov_struct_literal_to_ptr(size, struct_ty, dst, src, name);
+            self.mov_struct_literal_to_ptr(size, struct_ty, dst, src, name)
         } else if let types::Size::Struct(_) = size {
-            self.mov_struct_var(size, dst, src, name, this_is_self);
+            self.mov_struct_var(size, dst, src, name, this_is_self)
         } else if size.is_pointer().is_none() && self.static_label(src).is_some() {
             self.mov_static_var(size, dst, name);
+            Ok(())
         } else if let types::Size::Array { size: elem, len } = size {
-            self.init_array_node(name, elem, *len, dst, src, this_is_self);
+            self.init_array_node(name, elem, *len, dst, src, this_is_self)
         } else {
-            self.mov_reg_var(size, dst, src, name, this_is_self);
+            self.mov_reg_var(size, dst, src, name, this_is_self)
         }
     }
 
@@ -438,6 +439,7 @@ impl AsmEmitter {
                 dst,
             ),
         );
+        Ok(())
     }
 
     fn struct_mem(
