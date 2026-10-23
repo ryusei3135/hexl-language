@@ -380,10 +380,7 @@ impl VariantTree {
     /// 名前から、バリアント型の定義を探す。
     /// ジェネリクスなバリアント型(`Option`)は、型引数ごとに`Option$int`のような
     /// 名前で登録されているので、完全一致が無ければ`名前$`で始まるものを探す
-    pub(in crate::compiler::ir) fn find_by_base_name(
-        &self,
-        name: &str,
-    ) -> Option<&VariantDefine> {
+    pub(in crate::compiler::ir) fn find_by_base_name(&self, name: &str) -> Option<&VariantDefine> {
         self.tree.get(name).or_else(|| {
             self.tree
                 .iter()

@@ -1,6 +1,6 @@
 use crate::compiler::{
-    err,
     ast::FuncDefInfo::{AllDef, DefOnly},
+    err,
 };
 
 use super::*;

@@ -445,8 +445,7 @@ impl IR {
                 } else {
                     ExprNode::Number("0".to_string()).with_span(Rc::clone(&expr.span))
                 };
-                ExprNode::Sub(Expr::wrap(zero, (**target).clone()))
-                    .with_span(Rc::clone(&expr.span))
+                ExprNode::Sub(Expr::wrap(zero, (**target).clone())).with_span(Rc::clone(&expr.span))
             }
             ExprNode::Inversion(target) => {
                 use types::Size;
@@ -696,9 +695,7 @@ impl IR {
     /// `&&` / `||` / `!`か
     fn is_logic_expr(expr: &Expr) -> bool {
         match &expr.node {
-            ExprNode::CmpAnd(..) | ExprNode::CmpOr(..) | ExprNode::CmpNot(..) => {
-                true
-            }
+            ExprNode::CmpAnd(..) | ExprNode::CmpOr(..) | ExprNode::CmpNot(..) => true,
             _ => false,
         }
     }

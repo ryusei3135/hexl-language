@@ -13,13 +13,21 @@ mod var_mnger;
 use super::emit_fn_name::emit_fn_name_id;
 use super::*;
 use crate::asm_setting;
+use crate::compiler::err::{self, err_pool};
 use crate::compiler::ir::inst::Inst;
 use crate::compiler::ir::types;
+
+use super::*;
 
 pub use var_mnger::VarIndexInfo;
 
 impl AsmEmitter {
-    pub fn new(asm_setting: asm_setting::AsmSetting, asm_fmt: AsmFmtData, os: &str) -> Self {
+    pub fn new(
+        asm_setting: asm_setting::AsmSetting,
+        asm_fmt: AsmFmtData,
+        os: &str,
+        err_pool: &Rc<RefCell<err_pool::ErrPool>>,
+    ) -> Self {
         let caller = Rc::new(vec![1, 4, 5, 6, 7, 8, 9]);
         let callee = Rc::new(vec![3, 10, 11, 12, 13]);
         let float_caller = Rc::new((0..16).collect());
@@ -66,6 +74,8 @@ impl AsmEmitter {
 
             float_callee_saved: Rc::clone(&float_callee),
             float_caller_saved: Rc::clone(&float_caller),
+
+            err_pool: Rc::clone(&err_pool),
         };
         me.data_sec_text
             .push_str(&me.asm_fmt.get_section_fmt("data"));
@@ -327,24 +337,24 @@ impl AsmEmitter {
         src1: usize,
         src2: Option<usize>,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let mut formated = if let Some(variant_idx) = self.resolve_variant_idx(src1) {
-            self.format_variant_init_line(variant_idx, dst, this_is_self)
+            self.format_variant_init_line(variant_idx, dst, this_is_self)?
         } else if let Some(struct_idx) = self.resolve_struct_idx(src1) {
-            self.format_struct_init_line(opcode, struct_idx, dst, src1, this_is_self)
+            self.format_struct_init_line(opcode, struct_idx, dst, src1, this_is_self)?
         } else {
-            self.format_value_line(opcode, dst, src1, this_is_self)
+            self.format_value_line(opcode, dst, src1, this_is_self)?
         };
 
-        if let Some(resized_asm) = self.gen_resize_mnemonic(&formated, opcode, src1) {
+        if let Some(resized_asm) = self.gen_resize_mnemonic(&formated, opcode, src1)? {
             formated = resized_asm;
         }
 
-        if let Some(src2_id) = src2 {
-            formated.replace("{src2}", &self.extract_operand_text(src2_id, this_is_self))
+        Ok(if let Some(src2_id) = src2 {
+            formated.replace("{src2}", &self.extract_operand_text(src2_id, this_is_self)?)
         } else {
             formated
-        }
+        })
     }
 
     /// バリアントの生成: 初期化の命令を出した後、先頭(タグ)の
@@ -354,8 +364,8 @@ impl AsmEmitter {
         variant_idx: usize,
         dst: Option<usize>,
         this_is_self: SelfPtrInfo,
-    ) -> String {
-        let mut txt = self.extract_operand_text(variant_idx, this_is_self);
+    ) -> Result<String, err::ErrKind> {
+        let mut txt = self.extract_operand_text(variant_idx, this_is_self)?;
         let is_self = matches!(
             self.curr_inst[variant_idx],
             inst::Inst::Variant { is_self: true, .. }
@@ -363,11 +373,11 @@ impl AsmEmitter {
         if !is_self {
             let stk = self.ptr_stk(variant_idx, 0);
             let src = self.rbp_ref(stk);
-            let dst_text = self.get_reg(dst, &Size::DQ);
+            let dst_text = self.get_reg_txt(dst, &Size::DQ).unwrap();
             let line = self.fill_tmpl("address", &dst_text, &src);
             txt.push_str(&self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ));
         }
-        txt
+        Ok(txt)
     }
 
     /// 構造体の生成: 初期化の命令を出した後、構造体のアドレス
@@ -379,19 +389,19 @@ impl AsmEmitter {
         dst: Option<usize>,
         src1: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let base_size: Size = self.check_node_is_mem_val(src1).unwrap_or(Size::DQ);
-        let mut txt = self.extract_operand_text(struct_idx, this_is_self);
+        let mut txt = self.extract_operand_text(struct_idx, this_is_self)?;
 
         let ret_line = if this_is_self.is_none() {
             let self_ptr_reg = self.self_ptr_reg();
-            let line = self.fill_tmpl("address", &self.get_reg(dst, &Size::DQ), &self_ptr_reg);
+            let line = self.fill_tmpl("address", &self.get_reg_txt(dst, &Size::DQ)?, &self_ptr_reg);
             self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
         } else {
-            self.fill_tmpl(opcode, &self.get_reg(dst, &base_size), FRAME_BASE_REG)
+            self.fill_tmpl(opcode, &self.get_reg_txt(dst, &base_size)?, FRAME_BASE_REG)
         };
         txt.push_str(&ret_line);
-        txt
+        Ok(txt)
     }
 
     /// 普通の値(数値・変数・式の結果など)をdstへ渡す命令を作る
@@ -401,18 +411,18 @@ impl AsmEmitter {
         dst: Option<usize>,
         src1: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let dst_size = self.resolve_dst_reg_size(opcode, src1, this_is_self);
-        let dst_text = self.get_reg(dst, &dst_size);
-        let src_text = self.extract_operand_text(src1, this_is_self);
+        let dst_text = self.get_reg_txt(dst, &dst_size)?;
+        let src_text = self.extract_operand_text(src1, this_is_self)?;
         // srcがレジスタの場合は、dstとサイズを揃える
         // (`movl %rcx, %edx`のような、サイズの混在を防ぐ)
         let src_text = if opcode == "address" {
             src_text
         } else {
-            self.asm_fmt.resize_reg_operand(&src_text, &dst_size)
+            self.asm_fmt.resize_reg_operand(&src_text, &dst_size)?
         };
-        self.fill_tmpl(opcode, &dst_text, &src_text)
+        Ok(self.fill_tmpl(opcode, &dst_text, &src_text))
     }
 
     #[inline(always)]
@@ -549,21 +559,21 @@ impl AsmEmitter {
         &mut self,
         parent_id: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         match self.inst_at(parent_id) {
-            inst::Inst::Num { value, .. } => self.asm_fmt.get_fmt_num(&value),
+            inst::Inst::Num { value, .. } => Ok(self.asm_fmt.get_fmt_num(&value)),
             inst::Inst::Float { .. } => {
                 let label = self
                     .static_label(parent_id)
                     .expect("float literal data label not found");
-                self.asm_fmt.fmt_static_var_rip(&label)
+                Ok(self.asm_fmt.fmt_static_var_rip(&label))
             }
             inst::Inst::GetPtr { size: _, stk } => {
                 // スタック上に置かれた値そのもの(値が置かれているメモリ)
                 // を指すオペランドを、`%rbp`からのオフセットを使って生成する
                 // (構造体の実体は`alloc_struct_stk`で確保したオフセットを使う)
                 let stk = self.ptr_stk(parent_id, stk);
-                self.rbp_ref(stk)
+                Ok(self.rbp_ref(stk))
             }
             inst::Inst::Param(param) => {
                 // `asm_emitter/operand_txt/`に記述
@@ -583,8 +593,8 @@ impl AsmEmitter {
                 // `asm_emitter/operand_txt/`に記述
                 self.gen_mov_code(name.as_deref(), src)
             }
-            inst::Inst::Block(name) => name.to_string(),
-            inst::Inst::ExpectJmp(name) => name.to_string(),
+            inst::Inst::Block(name) => Ok(name.to_string()),
+            inst::Inst::ExpectJmp(name) => Ok(name.to_string()),
             inst::Inst::Struct { mem, .. } => {
                 self.emit_struct_init_asm(
                     mem,
@@ -613,7 +623,7 @@ impl AsmEmitter {
             inst::Inst::InitArr(ids) => {
                 // `asm_emitter/operand_txt/`に記述
                 self.init_arr_txt::<false>(&ids, this_is_self);
-                String::new()
+                Ok(String::new())
             }
             inst::Inst::CallFunc(call_fn_info) => {
                 self.call_result_operand(parent_id, &call_fn_info, this_is_self)
@@ -632,20 +642,20 @@ impl AsmEmitter {
         parent_id: usize,
         call_fn_info: &inst::CallFuncMetaData,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         // 関数呼び出しのアセンブリが`build_fn_process`側で
         // 既に生成済みか
         let already_emitted = self.emitted_calls.contains(&parent_id);
 
         if !already_emitted && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR {
             // 呼び出しを生成する対象ではない
-            return String::new();
+            return Ok(String::new());
         }
         if !already_emitted {
             let call_asm = self.emit_call_func(
                 call_fn_info,
                 matches!(this_is_self, Some(types::Size::Struct(..))),
-            );
+            )?;
             self.asm_text.push_str(&call_asm);
         }
         // 戻り値のレジスタ(0番、`%eax`など)を返す。
@@ -661,7 +671,11 @@ impl AsmEmitter {
 
     /// 式などの計算結果を持つレジスタのオペランドを返す
     /// (`last_inst_idx`に結果のレジスタが記録されているノード)
-    fn expr_result_operand(&mut self, parent_id: usize, node: &inst::Inst) -> String {
+    fn expr_result_operand(
+        &mut self,
+        parent_id: usize,
+        node: &inst::Inst,
+    ) -> Result<String, err::ErrKind> {
         if let Some(result) = self.last_inst_idx.iter().find(|i| i.0 == parent_id) {
             // 式の結果を持つレジスタは、その式自身の型のサイズで
             // 取得する(常に64bitにすると、`movl %rcx, %edx`の
@@ -682,7 +696,10 @@ impl AsmEmitter {
         }
     }
 
-    pub(super) fn format_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
+    pub(super) fn format_expr_inst(
+        &mut self,
+        expr: &inst::ExprInst,
+    ) -> Result<String, err::ErrKind> {
         // `/`と`%`は`%rax`/`%rdx`を使う専用の手順で生成する
         // (`div_ir.rs`)。テンプレートでは、割られる数を`%rax`ではなく
         // `%rdx`に置いてしまい、さらに`%rdx`にある引数を壊していた
@@ -690,14 +707,15 @@ impl AsmEmitter {
             return self.format_div_expr_inst(expr);
         }
 
-        let key = Self::expr_tmpl_key(&expr, &self.curr_inst);
-        let mnemonic = Self::expr_mnemonic(&expr.kind);
+        let key = Self::expr_tmpl_key(&expr, &self.curr_inst)?;
+        let mnemonic = Self::expr_mnemonic(&expr.kind)?;
 
         let resolved_size: Size = self.get_expr_ty(expr.ls);
         if matches!(expr.kind, inst::ExprKind::Inc | inst::ExprKind::Dec) {
             let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some();
-            let operand = self.extract_operand_text(expr.ls, None);
-            let dst = self.get_reg(Some(self.reg_idx), &Self::value_reg_size(&resolved_size));
+            let operand = self.extract_operand_text(expr.ls, None)?;
+            let dst =
+                self.get_reg_txt(Some(self.reg_idx), &Self::value_reg_size(&resolved_size))?;
             let mut output = self.mov_line(&dst, &operand, &resolved_size, is_memory_access);
             let mut update = self.asm_fmt.get_opcode_tmpl(key).replace("{dst}", &operand);
             update = if is_memory_access {
@@ -708,7 +726,7 @@ impl AsmEmitter {
                     .fmt_mnemonic_resize(mnemonic, &update, &resolved_size)
             };
             output.push_str(&update);
-            return output;
+            return Ok(output);
         }
         // `<`/`>`は、どちらかのオペランドが符号なしなら符号なしの比較
         // (`jl`/`jg`ではなく`jb`/`ja`)にする。`==`/`!=`は符号に関係ない
@@ -722,8 +740,8 @@ impl AsmEmitter {
             || self.get_expr_ty(expr.rs).is_unsigned());
         let wrap_size = resolved_size.wrap_dst_size();
 
-        let dst_text = self.get_reg(Some(self.reg_idx), &resolved_size);
-        let src1_text = self.extract_operand_text(expr.ls, wrap_size.as_ref());
+        let dst_text = self.get_reg_txt(Some(self.reg_idx), &resolved_size)?;
+        let src1_text = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
 
         let mut tmpl = if is_unsigned_cmp {
             self.asm_fmt.get_unsigned_cmp_tmpl(key)
@@ -734,13 +752,11 @@ impl AsmEmitter {
             tmpl = tmpl.replace("add", "imul");
         }
 
+        let src2_text = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
         let mut formated = tmpl
             .replace("{dst}", &dst_text)
             .replace("{src1}", &src1_text)
-            .replace(
-                "{src2}",
-                &self.extract_operand_text(expr.rs, wrap_size.as_ref()),
-            )
+            .replace("{src2}", &src2_text)
             .to_string();
 
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
@@ -777,9 +793,9 @@ impl AsmEmitter {
         // サイズがSelfでない場合
         if self.reserved_label_name.is_some() && formated.contains("{label}") {
             let name = self.reserved_label_name.take().unwrap();
-            formated.replace("{label}", &name)
+            Ok(formated.replace("{label}", &name))
         } else {
-            formated
+            Ok(formated)
         }
     }
 }

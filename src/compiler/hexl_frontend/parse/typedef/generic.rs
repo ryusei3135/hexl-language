@@ -63,7 +63,9 @@ impl Parser {
     ///
     /// 使用が定義より前に書かれていても、その型を作れるように、
     /// 本格的な解析(`parse_loop`)の前に1度だけ呼ぶ
-    pub(in crate::compiler::hexl_frontend::parse) fn collect_generic_types(&mut self) -> Result<(), err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn collect_generic_types(
+        &mut self,
+    ) -> Result<(), err::ErrKind> {
         let Some(len) = self.tkns.as_ref().map(|tkns| tkns.len()) else {
             return crate::err_at!(self.tkn_is_eof(Vec::new()));
         };
@@ -446,9 +448,7 @@ impl Parser {
 
         // 置き換え後のトークン列は型1つ分なので、作られるノードも1つ
         let def = match made.next() {
-            Some(
-                def @ (Group1Node::StructDefine(_) | Group1Node::VariantDefine(_)),
-            ) => def,
+            Some(def @ (Group1Node::StructDefine(_) | Group1Node::VariantDefine(_))) => def,
             _ => {
                 return crate::err_at!(self.internal_state_err("generated struct/variant node"));
             }
@@ -495,6 +495,7 @@ impl Parser {
 
 #[cfg(test)]
 mod generic_type_tests {
+    use crate::compiler::ast::zero_span::ZeroSpan;
     use crate::compiler::ast::*;
     use crate::compiler::{hexl_frontend::lex, hexl_frontend::parse};
 
@@ -503,7 +504,7 @@ mod generic_type_tests {
         lexer.analy(&src.to_string()).unwrap();
         let mut p = parse::Parser::new_for_test();
         p.parser_for_test(&lexer.gen_tkns.clone())
-            .map(|nodes| nodes.to_vec())
+            .map(|nodes| nodes.to_vec().zeroed_spans())
             .map_err(|_| ())
     }
 
@@ -512,7 +513,14 @@ mod generic_type_tests {
     }
 
     fn sp() -> std::rc::Rc<crate::compiler::err::Span> {
-        std::rc::Rc::new(crate::compiler::err::Span::unknown())
+        std::rc::Rc::new(crate::compiler::err::Span::new(0, 0, String::new()))
+    }
+
+    /// `unsafe`共用体のメンバー(`mode`が`Unsafe`)を作る
+    fn unsafe_field(name: &str, ty_name: &str) -> VariantField {
+        let mut field = VariantField::new(name.to_string(), ty(ty_name), sp());
+        field.mode = VariantMode::Unsafe;
+        field
     }
 
     fn ty(name: &str) -> TyNode {
@@ -674,10 +682,7 @@ mod generic_type_tests {
         let Group1Node::FuncDefine(method) = &s.methods[1] else {
             panic!();
         };
-        assert_eq!(
-            method.params[0].ty,
-            TyNode::SelfTy("Box$int".to_string())
-        );
+        assert_eq!(method.params[0].ty, TyNode::SelfTy("Box$int".to_string()));
         assert_eq!(method.params[1].ty, ty("int"));
         assert_eq!(method.ret_ty, ty("int"));
     }
@@ -823,10 +828,7 @@ mod generic_type_tests {
         assert_eq!(v.name, "Raw$int");
         assert_eq!(
             v.fields,
-            vec![
-                VariantField::new("a".to_string(), ty("int"), sp()),
-                VariantField::new("b".to_string(), ty("i64"), sp()),
-            ]
+            vec![unsafe_field("a", "int"), unsafe_field("b", "i64"),]
         );
         assert!(!v.is_tagged());
     }

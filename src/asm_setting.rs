@@ -1,10 +1,13 @@
 //! アセンブリ言語のフォーマット関係
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
+use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::asm_gen;
+use crate::compiler::err::err_pool;
 use crate::compiler::ir;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -224,17 +227,18 @@ pub fn gen_asm_text(
     global_funcs: &[String],
     inline_name: Option<&str>,
     os: &str,
+    err_pool: &Rc<RefCell<err_pool::ErrPool>>,
 ) -> Result<String, AsmSettingError> {
     if inline_name.is_some() {
         let asm_settings = load_setting()?;
 
         let asm_fmt = asm_settings.get_asm_fmt(inline_name)?;
-        let mut writer = asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt), os);
+        let mut writer = asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt), os, &err_pool);
         Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     } else {
         println!("現在アセンブリコードのフォーマットをハードコード `asm_setting`");
         let asm_settings = load_setting()?;
-        let mut writer = asm_gen::AsmEmitter::new(asm_settings, None, os);
+        let mut writer = asm_gen::AsmEmitter::new(asm_settings, None, os, &err_pool);
         Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     }
 }

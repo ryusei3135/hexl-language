@@ -66,13 +66,17 @@ impl Parser {
     }
 
     /// 型の前の区切りが`:`ではなかった
-    pub(in crate::compiler::hexl_frontend::parse) fn ty_colon_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn ty_colon_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(err::ErrKind::UnexpectedToken)
     }
 
     /// 構造体などの定義が`{`から始まっていなかった
-    pub(in crate::compiler::hexl_frontend::parse) fn fields_lbrace_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn fields_lbrace_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
     }

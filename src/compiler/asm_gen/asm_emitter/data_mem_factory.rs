@@ -8,7 +8,7 @@ impl AsmEmitter {
         &mut self,
         struct_node: Vec<inst::MemoryInst>,
         this_is_self: bool,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let mut struct_txt = String::new();
         let mut add_size = 0;
         for member in struct_node.clone().iter() {
@@ -16,19 +16,22 @@ impl AsmEmitter {
                 value_idx, size, ..
             } = member
             else {
-                panic!();
+                return Err(err::ErrKind::asm_emit_not_member_inst(format!(
+                    "{:?}",
+                    member
+                )));
             };
 
             let member_size = Some(size);
 
             let value = self
-                .extract_operand_text(*value_idx, member_size)
+                .extract_operand_text(*value_idx, member_size)?
                 .to_string();
             if value.is_empty() {
                 let inst::Inst::InitArr(arr) = self.inst_at(*value_idx) else {
-                    panic!();
+                    return Err(err::ErrKind::asm_emit_not_init_arr(*value_idx));
                 };
-                struct_txt.push_str(self.init_arr_txt::<true>(&arr, member_size).as_str());
+                struct_txt.push_str(self.init_arr_txt::<true>(&arr, member_size)?.as_str());
                 continue;
             }
             // このメンバー分を足した「累積」サイズ
@@ -37,7 +40,7 @@ impl AsmEmitter {
 
             // ポインタは先頭のメンバーを指す(先頭のメンバーのオフセットは0)ので、
             // このメンバーより前のメンバーの累積サイズがオフセットになる
-            let offset = self.make_member_offset(this_is_self, add_size, &size);
+            let offset = self.make_member_offset(this_is_self, add_size, &size)?;
 
             let fmted = self.asm_fmt.get_fmt_struct_member(value, &size, offset);
 
@@ -54,7 +57,7 @@ impl AsmEmitter {
             self.stk_use_counter += add_size;
         }
 
-        struct_txt
+        Ok(struct_txt)
     }
 
     /// バリアント(`E::a`など)をスタック領域に配置するコードを生成
@@ -78,7 +81,7 @@ impl AsmEmitter {
         tag: usize,
         this_is_self: bool,
         variant_size: &Size,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let payload_bytes = variant_size.extract_variant_largest_size().to_bytes();
         let (tag_off, data_off) = if this_is_self {
             (0, payload_bytes)
@@ -94,18 +97,21 @@ impl AsmEmitter {
                 value_idx, size, ..
             } = mem_val
             else {
-                panic!("{:?}", member);
+                return Err(err::ErrKind::asm_emit_not_member_inst(format!(
+                    "{:?}",
+                    mem_val
+                )));
             };
 
             let member_size = Some(size);
             let value = self
-                .extract_operand_text(*value_idx, member_size)
+                .extract_operand_text(*value_idx, member_size)?
                 .to_string();
             if value.is_empty() {
                 let inst::Inst::InitArr(arr) = self.inst_at(*value_idx) else {
-                    panic!();
+                    return Err(err::ErrKind::asm_emit_not_init_arr(*value_idx));
                 };
-                variant_txt.push_str(self.init_arr_txt::<true>(&arr, member_size).as_str());
+                variant_txt.push_str(self.init_arr_txt::<true>(&arr, member_size)?.as_str());
             } else {
                 variant_txt.push_str(&self.asm_fmt.get_fmt_struct_member(
                     value,
@@ -120,7 +126,7 @@ impl AsmEmitter {
             // `self`のポインタ(64bitのレジスタ)の指す先へ書き込む
             variant_txt = variant_txt.replace("%rbp", &self.self_ptr_reg());
         }
-        variant_txt
+        Ok(variant_txt)
     }
 
     fn emit_variant_tag_field(&mut self, offset: usize, tag_num: usize) -> String {
@@ -132,11 +138,18 @@ impl AsmEmitter {
     }
 
     /// 構造体やバリアントのoffsetを計算
-    fn make_member_offset(&self, this_is_self: bool, add_size: usize, size: &Size) -> usize {
+    fn make_member_offset(
+        &self,
+        this_is_self: bool,
+        add_size: usize,
+        size: &Size,
+    ) -> Result<usize, err::ErrKind> {
         // ポインタは先頭のメンバーを指す(先頭のメンバーのオフセットは0)ので、
         // このメンバーより前のメンバーの累積サイズがオフセットになる
-        let member_off = add_size - size.to_bytes();
-        if this_is_self {
+        let member_off = add_size.checked_sub(size.to_bytes()).ok_or_else(|| {
+            err::ErrKind::asm_emit_member_offset_underflow(add_size, size.to_bytes())
+        })?;
+        Ok(if this_is_self {
             // `self`のポインタ先に直接書き込むので、既存の
             // `stk_use_counter`(このスコープでのスタック使用量)は
             // 無関係
@@ -144,6 +157,6 @@ impl AsmEmitter {
         } else {
             // 既に使用していたスタックのサイズ + 前のメンバーの累積サイズ
             self.stk_use_counter + member_off
-        }
+        })
     }
 }

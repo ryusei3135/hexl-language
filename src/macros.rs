@@ -150,7 +150,8 @@ macro_rules! gen_struct_asm {
                 // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
                 let self_ptr_reg = $self
                     .asm_fmt
-                    .get_fmt_reg(&$self.asm_fmt.get_fmt_param::<usize>(&0), &Size::DQ);
+                    .get_fmt_reg(&$self.asm_fmt.get_fmt_param::<usize>(&0), &Size::DQ)
+                    .unwrap();
                 struct_txt.push_str(&fmted.replace("%rbp", &self_ptr_reg));
             } else {
                 struct_txt.push_str(&fmted);

@@ -228,11 +228,7 @@ impl IR {
 mod self_ty_tests {
     use super::*;
 
-    fn make_func(
-        name: &str,
-        params: Vec<ArgsNode>,
-        ret_ty: ast::TyNode,
-    ) -> ast::FuncDefine {
+    fn make_func(name: &str, params: Vec<ArgsNode>, ret_ty: ast::TyNode) -> ast::FuncDefine {
         let mut func =
             match ast::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span()) {
                 Group1Node::FuncDefine(func) => func,
@@ -347,7 +343,8 @@ mod struct_method_expand_tests {
             parse_test_source("struct Point { x: int pub get_num(self: Self): int { ret 1 } }");
 
         let mut ir = IR::new();
-        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
 
         // `Point::get_num`として展開され、呼び出せる状態になっている
         let body = ir.test_only_get_method_body("Point", "get_num");
@@ -386,7 +383,8 @@ mod struct_method_expand_tests {
         );
 
         let mut ir = IR::new();
-        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
 
         let body = ir.test_only_get_func_body("main");
         assert!(
@@ -412,7 +410,8 @@ mod method_call_via_member_tests {
         );
 
         let mut ir = IR::new();
-        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
 
         let body = ir.test_only_get_func_body("main");
 

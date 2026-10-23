@@ -6,9 +6,12 @@ use super::*;
 
 impl AsmEmitter {
     /// 式の種類から、アセンブリのテンプレートを引くキーを返す
-    pub(super) fn expr_tmpl_key(expr: &inst::ExprInst, insts: &[Inst]) -> &'static str {
+    pub(super) fn expr_tmpl_key(
+        expr: &inst::ExprInst,
+        insts: &[Inst],
+    ) -> Result<&'static str, err::ErrKind> {
         if expr.is_float(insts) {
-            match expr.kind {
+            Ok(match expr.kind {
                 inst::ExprKind::Add => "float_add",
                 inst::ExprKind::Sub => "float_sub",
                 // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
@@ -21,10 +24,15 @@ impl AsmEmitter {
                 inst::ExprKind::GreaterThenEq => "cmp_g_e",
                 inst::ExprKind::Equal => "cmp_e",
                 inst::ExprKind::NotEq => "cmp_ne",
-                _ => panic!(),
-            }
+                _ => {
+                    return Err(err::ErrKind::asm_emit_unexpected_expr_kind(format!(
+                        "{:?}",
+                        expr.kind
+                    )));
+                }
+            })
         } else {
-            match expr.kind {
+            Ok(match expr.kind {
                 inst::ExprKind::Inc => "inc",
                 inst::ExprKind::Dec => "dec",
                 inst::ExprKind::AndCalcul => "and",
@@ -66,15 +74,23 @@ impl AsmEmitter {
                 | inst::ExprKind::TernaryEqual
                 | inst::ExprKind::TernaryNotEq => "tcmp",
                 // 選ぶ側は`format_expr_inst`を通らない(`gen_ternary_select_asm`)
-                inst::ExprKind::Ternary => unreachable!("`Ternary`は`ternary.rs`で生成する"),
+                inst::ExprKind::Ternary => {
+                    return Err(err::ErrKind::asm_emit_unexpected_expr_kind(
+                        "`Ternary`は`ternary.rs`で生成する".to_string(),
+                    ));
+                }
                 // `Set<比較>`も`format_expr_inst`を通らない(`gen_set_cc_asm`)
                 inst::ExprKind::SetLessThen
                 | inst::ExprKind::SetGreaterThen
                 | inst::ExprKind::SetLessThenEq
                 | inst::ExprKind::SetGreaterThenEq
                 | inst::ExprKind::SetEqual
-                | inst::ExprKind::SetNotEq => unreachable!("`Set<比較>`は`set_cc.rs`で生成する"),
-            }
+                | inst::ExprKind::SetNotEq => {
+                    return Err(err::ErrKind::asm_emit_unexpected_expr_kind(
+                        "`Set<比較>`は`set_cc.rs`で生成する".to_string(),
+                    ));
+                }
+            })
         }
     }
 
@@ -82,8 +98,8 @@ impl AsmEmitter {
     /// (`cmp_l`/`cmp_g`はテンプレートを引くためのキーであって、
     ///  実際にテンプレート中で使われるニーモニックは"cmp"なので、
     ///  `fmt_mnemonic_resize`にはそちらを渡す必要がある)
-    pub(super) fn expr_mnemonic(kind: &inst::ExprKind) -> &'static str {
-        match kind {
+    pub(super) fn expr_mnemonic(kind: &inst::ExprKind) -> Result<&'static str, err::ErrKind> {
+        Ok(match kind {
             inst::ExprKind::Inc => "inc",
             inst::ExprKind::Dec => "dec",
             inst::ExprKind::AndCalcul => "and",
@@ -94,7 +110,12 @@ impl AsmEmitter {
             inst::ExprKind::Add => "add",
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "imul",
-            inst::ExprKind::Div | inst::ExprKind::Surplus => unreachable!(),
+            inst::ExprKind::Div | inst::ExprKind::Surplus => {
+                return Err(err::ErrKind::asm_emit_unexpected_expr_kind(format!(
+                    "{:?}は`div_ir.rs`で生成する",
+                    kind
+                )));
+            }
             inst::ExprKind::LessThen
             | inst::ExprKind::GreaterThen
             | inst::ExprKind::LessThenEq
@@ -107,13 +128,21 @@ impl AsmEmitter {
             | inst::ExprKind::TernaryGreaterThenEq
             | inst::ExprKind::TernaryEqual
             | inst::ExprKind::TernaryNotEq => "cmp",
-            inst::ExprKind::Ternary => unreachable!("`Ternary`は`ternary.rs`で生成する"),
+            inst::ExprKind::Ternary => {
+                return Err(err::ErrKind::asm_emit_unexpected_expr_kind(
+                    "`Ternary`は`ternary.rs`で生成する".to_string(),
+                ));
+            }
             inst::ExprKind::SetLessThen
             | inst::ExprKind::SetGreaterThen
             | inst::ExprKind::SetLessThenEq
             | inst::ExprKind::SetGreaterThenEq
             | inst::ExprKind::SetEqual
-            | inst::ExprKind::SetNotEq => unreachable!("`Set<比較>`は`set_cc.rs`で生成する"),
-        }
+            | inst::ExprKind::SetNotEq => {
+                return Err(err::ErrKind::asm_emit_unexpected_expr_kind(
+                    "`Set<比較>`は`set_cc.rs`で生成する".to_string(),
+                ));
+            }
+        })
     }
 }

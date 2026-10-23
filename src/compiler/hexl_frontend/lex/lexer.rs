@@ -1333,7 +1333,10 @@ mod tests {
 
     #[test]
     fn check_multiline_block_comment() {
-        assert_eq!(tkns_of("x = 1\n/* a\nb\nc */\ny = 2"), tkns_of("x = 1\ny = 2"));
+        assert_eq!(
+            tkns_of("x = 1\n/* a\nb\nc */\ny = 2"),
+            tkns_of("x = 1\ny = 2")
+        );
     }
 
     #[test]

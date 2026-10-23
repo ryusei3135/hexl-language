@@ -149,7 +149,11 @@ impl Preprocessor {
     /// 名前がまだ登録されていなければ追加する。
     /// 仕様には書かれていないが、同名の再定義は無視する
     /// (元の `add` の `is_none()` チェックを踏襲)。
-    pub(in crate::compiler::hexl_frontend::lex) fn add(&mut self, name: &str, preproc: PreprocKind) {
+    pub(in crate::compiler::hexl_frontend::lex) fn add(
+        &mut self,
+        name: &str,
+        preproc: PreprocKind,
+    ) {
         if self.tables.get(name).is_none() {
             self.tables.insert(name.to_string(), preproc);
         }
@@ -273,7 +277,10 @@ impl Preprocessor {
     ///   最初に `NAME` が定義済みだった枝だけを有効にする(どれも当てはまらなければ
     ///   `#else` の枝)。`#elif`は何個でも、`#else`は省略可、入れ子可。
     ///   `#windows` / `#linux` は `--windows` / `--linux` で選んだOSだけが定義済みになる
-    pub(in crate::compiler::hexl_frontend::lex) fn preprocess(&mut self, content: &str) -> Option<String> {
+    pub(in crate::compiler::hexl_frontend::lex) fn preprocess(
+        &mut self,
+        content: &str,
+    ) -> Option<String> {
         Some(self.preprocess_text(content))
     }
 

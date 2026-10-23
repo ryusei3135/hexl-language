@@ -39,16 +39,21 @@ impl AsmEmitter {
     }
 
     /// 条件の種類から、`cmov`のテンプレートを引くキーを返す
-    fn ternary_cmov_key(kind: &inst::ExprKind) -> &'static str {
-        match kind {
+    fn ternary_cmov_key(kind: &inst::ExprKind) -> Result<&'static str, err::ErrKind> {
+        Ok(match kind {
             inst::ExprKind::TernaryLessThen => "cmov_l",
             inst::ExprKind::TernaryGreaterThen => "cmov_g",
             inst::ExprKind::TernaryLessThenEq => "cmov_l_e",
             inst::ExprKind::TernaryGreaterThenEq => "cmov_g_e",
             inst::ExprKind::TernaryEqual => "cmov_e",
             inst::ExprKind::TernaryNotEq => "cmov_ne",
-            other => panic!("三項演算子の条件ではありません: {:?}", other),
-        }
+            other => {
+                return Err(err::ErrKind::asm_emit_not_ternary_cond_kind(format!(
+                    "{:?}",
+                    other
+                )));
+            }
+        })
     }
 
     /// `cmov`が使えるレジスタのサイズ(8bitは使えないので32bitにする)
@@ -60,16 +65,21 @@ impl AsmEmitter {
     }
 
     /// `Ternary<比較>`: `cmp`だけを出す(結果のレジスタは作らない)
-    pub(in crate::compiler::asm_gen) fn gen_ternary_cmp_asm(&mut self, expr: &inst::ExprInst) {
+    pub(in crate::compiler::asm_gen) fn gen_ternary_cmp_asm(
+        &mut self,
+        expr: &inst::ExprInst,
+    ) -> Result<(), err::ErrKind> {
         let ls_ty = self.get_expr_ty(expr.ls);
         if ls_ty.is_float() || self.get_expr_ty(expr.rs).is_float() {
-            panic!("三項演算子の条件に小数は使えません");
+            return Err(err::ErrKind::asm_emit_float_not_supported(
+                "三項演算子の条件",
+            ));
         }
         let size = Self::value_reg_size(&ls_ty);
         let wrap_size = size.wrap_dst_size();
 
-        let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref());
-        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref());
+        let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
+        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
             || self.check_node_is_mem_val(expr.rs).is_some();
 
@@ -79,7 +89,7 @@ impl AsmEmitter {
         if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
             let reg = self.alloc_reg(&size);
             self.used_reg.mark_used(&reg);
-            let reg_txt = self.get_reg(Some(reg.index()), &size);
+            let reg_txt = self.get_reg_txt(Some(reg.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &src1, &size, false));
             src1 = reg_txt;
             tmp = Some(reg);
@@ -99,20 +109,31 @@ impl AsmEmitter {
         // 比較し終わったので、オペランドの一時的な結果のレジスタを解放する
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);
+        Ok(())
     }
 
     /// `Ternary`: 直前の`Ternary<比較>`のフラグで、左辺(真)か右辺(偽)を選ぶ
-    pub(in crate::compiler::asm_gen) fn gen_ternary_select_asm(&mut self, expr: &inst::ExprInst) {
+    pub(in crate::compiler::asm_gen) fn gen_ternary_select_asm(
+        &mut self,
+        expr: &inst::ExprInst,
+    ) -> Result<(), err::ErrKind> {
         // 条件は、選ぶ命令のひとつ前に置かれる(`ir/builder.rs`)
-        let cond = match expr.dst.checked_sub(1).map(|i| &self.curr_inst[i]) {
+        let cond = match expr.dst.checked_sub(1).and_then(|i| self.curr_inst.get(i)) {
             Some(inst::Inst::Expr(cond)) if Self::is_ternary_cmp_kind(&cond.kind) => cond.clone(),
-            other => panic!("三項演算子の直前に条件の命令がありません: {:?}", other),
+            other => {
+                return Err(err::ErrKind::asm_emit_ternary_cond_not_found(format!(
+                    "{:?}",
+                    other
+                )));
+            }
         };
 
         let value_ty = self.get_expr_ty(expr.ls);
         if value_ty.is_float() || self.get_expr_ty(expr.rs).is_float() {
-            panic!("三項演算子の値に小数は使えません");
+            return Err(err::ErrKind::asm_emit_float_not_supported("三項演算子の値"));
         }
+        // レジスタを確保する前に、`cmov`の種類を確認する
+        let key = Self::ternary_cmov_key(&cond.kind)?;
         let size = Self::cmov_reg_size(&value_ty);
         let wrap_size = size.wrap_dst_size();
 
@@ -121,13 +142,13 @@ impl AsmEmitter {
         let dst = self.alloc_reg(&size);
         self.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
-        let dst_txt = self.get_reg(Some(dst.index()), &size);
+        let dst_txt = self.get_reg_txt(Some(dst.index()), &size)?;
 
         // 8bitの値のレジスタは、32bitのレジスタ名にそろえる
-        let left = self.extract_operand_text(expr.ls, wrap_size.as_ref());
-        let right = self.extract_operand_text(expr.rs, wrap_size.as_ref());
-        let left = self.asm_fmt.resize_reg_operand(&left, &size);
-        let right = self.asm_fmt.resize_reg_operand(&right, &size);
+        let left = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
+        let right = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
+        let left = self.asm_fmt.resize_reg_operand(&left, &size)?;
+        let right = self.asm_fmt.resize_reg_operand(&right, &size)?;
 
         let mut output = String::new();
         // `cmov`の元は即値にできないので、左辺が即値なら一時レジスタへ移す
@@ -136,7 +157,7 @@ impl AsmEmitter {
         let left = if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
             let reg = self.alloc_reg(&size);
             self.used_reg.mark_used(&reg);
-            let reg_txt = self.get_reg(Some(reg.index()), &size);
+            let reg_txt = self.get_reg_txt(Some(reg.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &left, &size, false));
             tmp = Some(reg);
             reg_txt
@@ -156,7 +177,6 @@ impl AsmEmitter {
                 | inst::ExprKind::TernaryGreaterThenEq
         ) && (self.get_expr_ty(cond.ls).is_unsigned()
             || self.get_expr_ty(cond.rs).is_unsigned());
-        let key = Self::ternary_cmov_key(&cond.kind);
         let tmpl = if is_unsigned_cmp {
             self.asm_fmt.get_unsigned_cmov_tmpl(key)
         } else {
@@ -174,5 +194,6 @@ impl AsmEmitter {
         self.last_inst_idx.push((expr.dst, dst));
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);
+        Ok(())
     }
 }

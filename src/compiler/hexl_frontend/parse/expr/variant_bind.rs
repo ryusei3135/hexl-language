@@ -27,7 +27,10 @@ impl Parser {
     ///
     /// `cond f(a) == 1 { .. }`のような通常の関数呼び出しは、
     /// `)`の次が`:`にならないので、区別できる
-    pub(in crate::compiler::hexl_frontend::parse) fn is_variant_bind_at(&self, start: usize) -> bool {
+    pub(in crate::compiler::hexl_frontend::parse) fn is_variant_bind_at(
+        &self,
+        start: usize,
+    ) -> bool {
         let Some(tkns) = self.tkns.as_ref() else {
             return false;
         };
@@ -148,8 +151,9 @@ impl Parser {
 #[cfg(test)]
 mod variant_bind_tests {
     use crate::compiler::{
-        err, hexl_frontend::lex,
         ast::{self, *},
+        err,
+        hexl_frontend::lex,
         hexl_frontend::parse,
     };
 
@@ -220,10 +224,7 @@ mod variant_bind_tests {
         assert_eq!(target, None);
         assert_eq!(
             patterns,
-            vec![
-                VariantBind::new("M", "val", None, ex(ExprNode::Var("a".to_string())))
-                    .wrap(sp())
-            ]
+            vec![VariantBind::new("M", "val", None, ex(ExprNode::Var("a".to_string()))).wrap(sp())]
         );
         assert!(has_else);
     }
@@ -282,10 +283,7 @@ mod variant_bind_tests {
         assert_eq!(target, None);
         assert_eq!(
             patterns,
-            vec![
-                VariantBind::new("M", "val", None, ex(ExprNode::Var("a".to_string())))
-                    .wrap(sp())
-            ]
+            vec![VariantBind::new("M", "val", None, ex(ExprNode::Var("a".to_string()))).wrap(sp())]
         );
         assert!(has_else);
     }

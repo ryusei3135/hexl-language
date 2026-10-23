@@ -21,10 +21,7 @@ const DEFAULT: &str = "linux";
 // 他モジュールが `crate::err` / `crate::parse` / `crate::node` などの形で
 // 参照している可能性があるため、元の `use` はそのまま残している。
 #[allow(unused_imports)]
-use compiler::{
-    asm_gen, err, ir,
-    ast, Parser, Lexer
-};
+use compiler::{Lexer, Parser, asm_gen, ast, err, ir};
 
 use std::{error::Error, fs, process, sync::Mutex};
 
@@ -252,6 +249,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         &ir_builder.public_func_tree,
         settings.fmt_name.as_deref(),
         os.as_str(),
+        &err_pool,
     )
     // `AsmSettingError` は Display で日本語メッセージになる。`run` がそれを表示する
     .map_err(|e| format!("アセンブリコードの生成に失敗しました: {}", e))?;

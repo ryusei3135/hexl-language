@@ -17,6 +17,8 @@
 //! | メモリ参照 | [`rbp_ref`](AsmEmitter::rbp_ref) / [`ref_base_offset`](AsmEmitter::ref_base_offset) / [`reg64`](AsmEmitter::reg64) / [`ptr_deref_operand`](AsmEmitter::ptr_deref_operand) |
 //! | 命令の1行 | [`fill_tmpl`](AsmEmitter::fill_tmpl) / [`tmpl_line`](AsmEmitter::tmpl_line) / [`mov_line`](AsmEmitter::mov_line) |
 
+use crate::compiler::err::{self, undef::UndefKind::UndefVar};
+
 use super::*;
 
 /// スタックフレームのベースレジスタ
@@ -40,11 +42,16 @@ impl AsmEmitter {
 // 変数
 // ===========================================================================
 impl AsmEmitter {
-    /// 変数の情報を取得する。登録されていなければpanicする
-    pub(in crate::compiler::asm_gen) fn var_info(&self, name: &str) -> &asm_emitter::VarIndexInfo {
-        self.var_hash_map
-            .get(name)
-            .unwrap_or_else(|| panic!("this var is not found -> {}", name))
+    /// 変数の情報を取得する。登録されていなければErr
+    pub(in crate::compiler::asm_gen) fn get_var_all_info(
+        &self,
+        name: &str,
+    ) -> Result<&asm_emitter::VarIndexInfo, err::ErrKind> {
+        self.var_hash_map.get(name).ok_or(crate::GenUndefErrResult!(
+            UndefVar,
+            name.to_string(),
+            None
+        ))
     }
 
     /// 変数の情報を取得する。登録されていなければ`None`
@@ -90,10 +97,13 @@ impl AsmEmitter {
     /// - `%rbp`相対のメモリに置かれた変数: `-8(%rbp)`のようなメモリ参照
     /// - レジスタに置かれた変数: そのレジスタ
     ///   (ポインタはアドレスを持つので常に64bit、それ以外は変数自身の型のサイズ)
-    pub(in crate::compiler::asm_gen) fn var_operand(&self, name: &str) -> String {
-        let var = self.var_info(name);
+    pub(in crate::compiler::asm_gen) fn var_operand(
+        &self,
+        name: &str,
+    ) -> Result<String, err::ErrKind> {
+        let var = self.get_var_all_info(name)?;
         if var.is_stack {
-            return self.rbp_ref(var.offset);
+            return Ok(self.rbp_ref(var.offset));
         }
         if var.size.is_pointer().is_some() {
             return self.asm_fmt.get_fmt_reg(
@@ -148,7 +158,7 @@ impl AsmEmitter {
     /// 構造体のメソッドへ渡す、暗黙の`self`ポインタを持つレジスタ
     /// (第1引数のレジスタ。ポインタなので64bit)
     pub(in crate::compiler::asm_gen) fn self_ptr_reg(&self) -> String {
-        self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ)
+        self.asm_fmt.get_fmt_param::<String>(0, &Size::DQ).unwrap()
     }
 }
 
@@ -189,7 +199,10 @@ impl AsmEmitter {
     }
 
     /// レジスタ番号に対応する、64bitのレジスタ名
-    pub(in crate::compiler::asm_gen) fn reg64(&self, reg: &RegisterMode) -> String {
+    pub(in crate::compiler::asm_gen) fn reg64(
+        &self,
+        reg: &RegisterMode,
+    ) -> Result<String, err::ErrKind> {
         match reg {
             RegisterMode::Float(idx) => self.asm_fmt.get_fmt_float_reg(*idx, &Size::F64),
             RegisterMode::Normal(idx) => self.asm_fmt.get_fmt_reg(*idx, &Size::DQ),
@@ -198,8 +211,11 @@ impl AsmEmitter {
 
     /// ポインタを持つレジスタ番号`reg`が指す先を、オフセット無しで参照する
     /// オペランド(`(%rdi)`など)
-    pub(in crate::compiler::asm_gen) fn ptr_deref_operand(&self, reg: RegisterMode) -> String {
-        self.asm_fmt.fmt_ref_operand_no_offset(&self.reg64(&reg))
+    pub(in crate::compiler::asm_gen) fn ptr_deref_operand(
+        &self,
+        reg: RegisterMode,
+    ) -> Result<String, err::ErrKind> {
+        Ok(self.asm_fmt.fmt_ref_operand_no_offset(&self.reg64(&reg)?))
     }
 }
 

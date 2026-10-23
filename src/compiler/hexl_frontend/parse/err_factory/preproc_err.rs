@@ -4,7 +4,9 @@ use super::*;
 
 impl Parser {
     /// `#include`などのパスの要素(名前/文字列/`*`)が来るはずの位置に、別のトークンがあった
-    pub(in crate::compiler::hexl_frontend::parse) fn expected_path_segment<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn expected_path_segment<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::preproc_err!(
             self.build_err_span(),
@@ -14,7 +16,9 @@ impl Parser {
     }
 
     /// `#asm(name)`の`name`が無かった
-    pub(in crate::compiler::hexl_frontend::parse) fn not_found_asm_name<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn not_found_asm_name<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::preproc_err!(
             self.build_err_span(),
@@ -56,7 +60,9 @@ impl Parser {
     }
 
     /// `${}`の中が空だった
-    pub(in crate::compiler::hexl_frontend::parse) fn empty_asm_operand<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn empty_asm_operand<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(crate::preproc_err_at!(
             self.build_err_span(),

@@ -16,7 +16,7 @@ impl AsmEmitter {
         src: usize,
         name: Option<&str>,
         this_is_self: SelfPtrInfo,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         if let Some(struct_ty) = self.struct_literal_ptr_target(size, src) {
             self.mov_struct_literal_to_ptr(size, struct_ty, dst, src, name);
         } else if let types::Size::Struct(_) = size {
@@ -61,7 +61,7 @@ impl AsmEmitter {
         dst: usize,
         src: usize,
         this_is_self: SelfPtrInfo,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         let inst::Inst::InitArr(elems) = self.inst_at(src) else {
             panic!(
                 "配列の初期化式はInitArrである必要があります: {:?}",
@@ -89,7 +89,7 @@ impl AsmEmitter {
         let mut txt = String::new();
         for k in 0..len {
             let value = match elems.get(k) {
-                Some(idx) => self.extract_operand_text(*idx, this_is_self),
+                Some(idx) => self.extract_operand_text(*idx, this_is_self)?,
                 None => "$0".to_string(),
             };
             let elem_ref = self
@@ -114,6 +114,7 @@ impl AsmEmitter {
         for idx in &elems {
             self.release_expr_temp(*idx);
         }
+        Ok(())
     }
 
     /// 変数が使うレジスタを決めて、使用中として記録する(`self.reg_idx`も更新する)
@@ -151,15 +152,15 @@ impl AsmEmitter {
         dst: usize,
         src: usize,
         name: Option<&str>,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         let offset = self
-            .struct_mem(None, struct_ty, src, dst)
+            .struct_mem(None, struct_ty, src, dst)?
             .expect("構造体リテラルの初期化に失敗しました");
         let reg = self.bind_var_reg(name, size);
 
         let text = self.tmpl_line(
             "address",
-            &self.reg64(&reg),
+            &self.reg64(&reg)?,
             &self.rbp_ref(offset),
             &types::Size::DQ,
             false,
@@ -168,6 +169,7 @@ impl AsmEmitter {
         if let Some(var_name) = name {
             self.insert_var_info(var_name, asm_emitter::VarIndexInfo::new(reg, size, dst));
         }
+        Ok(())
     }
 
     /// コンストラクタ呼び出しで初期化する構造体の、暗黙の`self`引数
@@ -197,15 +199,15 @@ impl AsmEmitter {
         src: usize,
         name: Option<&str>,
         this_is_self: SelfPtrInfo,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         self.reserve_ctor_self_stk(src, size);
         // 呼び出し自体(`lea`+`call`)は副作用として`self.asm_text`へ
         // 積まれる。戻り値のオペランド文字列自体は構造体には
         // 使えないので捨てる
-        let _ = self.extract_operand_text(src, this_is_self);
+        let _ = self.extract_operand_text(src, this_is_self)?;
         // 構造体リテラルの場合は`struct_mem`が初期化と登録まで行う
-        if self.struct_mem(name, size, src, dst).is_some() {
-            return;
+        if self.struct_mem(name, size, src, dst)?.is_some() {
+            return Ok(());
         }
         // コンストラクタ呼び出しの場合は、`self`引数が指す領域を変数の実体として登録する
         let stk = self.ctor_self_stk_offset(src);
@@ -215,6 +217,7 @@ impl AsmEmitter {
                 asm_emitter::VarIndexInfo::new_stack(stk, size, dst),
             );
         }
+        Ok(())
     }
 
     /// コンストラクタ呼び出し`src`の、暗黙の`self`引数が指すスタック領域の
@@ -258,9 +261,9 @@ impl AsmEmitter {
         src: usize,
         name: Option<&str>,
         this_is_self: SelfPtrInfo,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         let reg = self.bind_var_reg(name, size);
-        let formated = self.init_reg_line(size, reg, src, this_is_self);
+        let formated = self.init_reg_line(size, reg, src, this_is_self)?;
         self.asm_text.push_str(&formated);
         // 初期値が式の結果だった場合、そのレジスタはもう不要
         self.release_expr_temp(src);
@@ -278,6 +281,7 @@ impl AsmEmitter {
                 self.update_value_reg(var_name, &current_reg);
             }
         }
+        Ok(())
     }
 
     /// レジスタ`reg`へ初期値`src`を書き込む命令を作る
@@ -287,7 +291,7 @@ impl AsmEmitter {
         reg: RegisterMode,
         src: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         // ポインタ型の変数へ数値リテラル(`ptr: int* = 0`の
         // ような`0`=NULL初期化など)を代入する場合は、
         // アドレスを求める`lea`(="address")命令ではなく、
@@ -295,9 +299,9 @@ impl AsmEmitter {
         // そのまま即値をレジスタへ書き込む
         let is_literal_num = matches!(self.curr_inst[src], inst::Inst::Num { .. });
 
-        if size.is_pointer().is_some() && is_literal_num {
-            let dst_reg = self.reg64(&reg);
-            let value_operand = self.extract_operand_text(src, this_is_self);
+        let result = if size.is_pointer().is_some() && is_literal_num {
+            let dst_reg = self.reg64(&reg)?;
+            let value_operand = self.extract_operand_text(src, this_is_self)?;
             self.mov_line(&dst_reg, &value_operand, &Size::DQ, false)
         } else {
             // メモリのポインタか、値かで、ニーモニックが変わる
@@ -320,8 +324,8 @@ impl AsmEmitter {
                     } else {
                         "f64_mov"
                     };
-                    let dst = self.asm_fmt.get_fmt_float_reg(index, size);
-                    let src = self.extract_operand_text(src, this_is_self);
+                    let dst = self.asm_fmt.get_fmt_float_reg(index, size)?;
+                    let src = self.extract_operand_text(src, this_is_self)?;
                     self.asm_fmt
                         .get_opcode_tmpl(opcode)
                         .replace("{src1}", &src)
@@ -331,13 +335,14 @@ impl AsmEmitter {
                     if size.is_float() {
                         panic!("floating-point variable allocated to a normal register");
                     }
-                    self.format_line(mnemonic, Some(index), src, None, this_is_self)
+                    self.format_line(mnemonic, Some(index), src, None, this_is_self)?
                 }
                 RegisterMode::Float(_) => {
                     panic!("non-floating-point variable allocated to a floating-point register")
                 }
             }
-        }
+        };
+        Ok(result)
     }
 
     /// メモリに置く値(`Inst::MemoryValue`)のアセンブリを生成する
@@ -364,11 +369,17 @@ impl AsmEmitter {
     }
 
     /// スタックに置く配列の、各要素の書き込みを生成して変数として登録する
-    fn stack_arr_ir(&mut self, name: &str, size: &types::Size, src: &[usize], dst: usize) {
+    fn stack_arr_ir(
+        &mut self,
+        name: &str,
+        size: &types::Size,
+        src: &[usize],
+        dst: usize,
+    ) -> Result<(), err::ErrKind> {
         let dst_size = size.wrap_dst_size();
         let base = match &self.curr_inst[dst] {
             inst::Inst::Pointer(..) | inst::Inst::Param(..) | inst::Inst::GetPtr { .. } => {
-                self.extract_operand_text(dst, dst_size.as_ref())
+                self.extract_operand_text(dst, dst_size.as_ref())?
             }
             _ => FRAME_BASE_REG.to_string(),
         };
@@ -382,7 +393,7 @@ impl AsmEmitter {
         let arr_base = self.stk_use_counter;
         self.stk_use_counter = arr_base + elem_bytes * src.len();
         for (k, idx) in src.iter().enumerate() {
-            let value = self.extract_operand_text(*idx, dst_size.as_ref());
+            let value = self.extract_operand_text(*idx, dst_size.as_ref())?;
             let elem_ref = self
                 .asm_fmt
                 .fmt_ref_operand(&base, arr_base + (k + 1) * elem_bytes);
@@ -399,11 +410,18 @@ impl AsmEmitter {
                 .with_arr_base(arr_base),
         );
         self.asm_text.push_str(txt.as_str());
+        Ok(())
     }
 
-    fn is_static_var(&mut self, src: &[usize], dst: usize, name: &str, this_is_self: SelfPtrInfo) {
+    fn is_static_var(
+        &mut self,
+        src: &[usize],
+        dst: usize,
+        name: &str,
+        this_is_self: SelfPtrInfo,
+    ) -> Result<(), err::ErrKind> {
         println!("src/gen/call_func/MemoryValue");
-        let val = self.extract_operand_text(*src.last().unwrap(), this_is_self);
+        let val = self.extract_operand_text(*src.last().unwrap(), this_is_self)?;
         let label_name = format!("M{}", self.data_idx.to_string());
         let fmt_data =
             self.asm_fmt
@@ -428,7 +446,7 @@ impl AsmEmitter {
         size: &types::Size,
         src: usize,
         dst: usize,
-    ) -> Option<usize> {
+    ) -> Result<Option<usize>, err::ErrKind> {
         if let inst::Inst::Struct { mem, is_self, .. } = self.inst_at(src) {
             // `emit_struct_ini_asm`はメンバーを書き込みながら
             // `self.stk_use_counter`を進めていくため、呼び出し後
@@ -444,7 +462,7 @@ impl AsmEmitter {
                 self.stk_use_counter = base;
                 base
             };
-            let ini_asm = self.emit_struct_init_asm(mem, is_self);
+            let ini_asm = self.emit_struct_init_asm(mem, is_self)?;
             if !is_self {
                 self.stk_use_counter = self
                     .stk_use_counter
@@ -457,8 +475,8 @@ impl AsmEmitter {
                     asm_emitter::VarIndexInfo::new_stack(struct_stk_offset, &size, dst),
                 );
             }
-            return Some(struct_stk_offset);
+            return Ok(Some(struct_stk_offset));
         }
-        None
+        Ok(None)
     }
 }

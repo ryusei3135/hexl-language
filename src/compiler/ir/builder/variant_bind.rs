@@ -66,10 +66,7 @@ impl IR {
         // `value`の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
         self.count_var_use(src);
 
-        let via_ptr = matches!(
-            self.var_tree.get_ty_node(src),
-            Some(TyNode::Pointer { .. })
-        );
+        let via_ptr = matches!(self.var_tree.get_ty_node(src), Some(TyNode::Pointer { .. }));
         // ポインタ型の変数なら、指す先のバリアント型の名前が返る
         let variant_name = self.var_tree.get_ty_name(src)?;
         let variant_def = self.variant_tree.get_variant(&variant_name)?;
@@ -213,8 +210,7 @@ impl IR {
         let ExprNode::Scope { scope, target } = &expr.node else {
             return expr.clone();
         };
-        let (Some(type_name), ExprNode::CallFunc(call)) = (scope.last(), &(**target).node)
-        else {
+        let (Some(type_name), ExprNode::CallFunc(call)) = (scope.last(), &(**target).node) else {
             return expr.clone();
         };
         let is_ctor = scope.len() == 1

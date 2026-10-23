@@ -16,7 +16,7 @@
 //!
 use std::collections::HashMap;
 
-use crate::compiler::ir::counter_mnger;
+use crate::compiler::{err, ir::counter_mnger};
 
 pub(in crate::compiler::asm_gen) const MARKED_REG: bool = true;
 pub(in crate::compiler::asm_gen) const UNMARKED_REG: bool = false;
@@ -515,11 +515,11 @@ impl AsmEmitter {
 
     /// ## 引数
     /// - reg_idx これは必ずusizeで無ければいけない、
-    pub(in crate::compiler::asm_gen) fn get_reg(
+    pub(in crate::compiler::asm_gen) fn get_reg_txt(
         &self,
         reg_idx: Option<usize>,
         size: &Size,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let num = if reg_idx.is_none() {
             self.reg_idx
         } else {

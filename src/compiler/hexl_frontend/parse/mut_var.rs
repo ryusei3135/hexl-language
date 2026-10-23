@@ -84,10 +84,7 @@ impl Parser {
         span: Rc<err::Span>,
     ) -> Result<Expr, err::ErrKind> {
         let var = Expr::new(ExprNode::Var(name.to_string()), span.clone());
-        Ok(Expr::new(
-            op(Expr::wrap(var, self.expr_branch()?)),
-            span,
-        ))
+        Ok(Expr::new(op(Expr::wrap(var, self.expr_branch()?)), span))
     }
 
     #[inline(always)]

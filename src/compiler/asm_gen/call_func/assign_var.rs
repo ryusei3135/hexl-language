@@ -8,16 +8,16 @@ impl AsmEmitter {
         dst: usize,
         value: usize,
         this_is_self: SelfPtrInfo,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         // 書き込み先のメモリのオペランド
-        let dst_operand = self.extract_operand_text(dst, this_is_self);
+        let dst_operand = self.extract_operand_text(dst, this_is_self)?;
         let dst_operand = if matches!(self.curr_inst[dst], inst::Inst::Pointer(..)) {
             format!("({})", dst_operand)
         } else {
             dst_operand
         };
         // 書き込む値のオペランド
-        let value_operand = self.extract_operand_text(value, this_is_self);
+        let value_operand = self.extract_operand_text(value, this_is_self)?;
 
         // ニーモニックのサイズ調整に使う型。
         //
@@ -28,10 +28,10 @@ impl AsmEmitter {
         let mnemonic_size = match &self.curr_inst[dst] {
             inst::Inst::RefStruct { .. } => match &self.curr_inst[value] {
                 inst::Inst::Num { size, .. } => size.clone(),
-                _ => self.get_var_ty(&name),
+                _ => self.get_var_ty(&name)?,
             },
             inst::Inst::Pointer(..) | inst::Inst::InsertArr { .. } => self.get_expr_ty(dst),
-            _ => self.get_var_ty(&name),
+            _ => self.get_var_ty(&name)?,
         };
 
         let text = if mnemonic_size.is_float() {
@@ -52,6 +52,7 @@ impl AsmEmitter {
         if let Some(reg) = self.arr_index_temp.take() {
             self.used_reg.release(&RegisterMode::Normal(reg));
         }
+        Ok(())
     }
 
     pub(super) fn assign_val_ty_is_ptr(
@@ -59,7 +60,7 @@ impl AsmEmitter {
         current_reg: RegisterMode,
         value: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let RegisterMode::Normal(_) = current_reg else {
             panic!("pointer variable is not stored in a normal register");
         };
@@ -67,12 +68,12 @@ impl AsmEmitter {
         // 再代入する場合は、アドレスを求める`lea`ではなく、ポインタの
         // サイズ(64bit)に合わせた`movq`でそのまま即値を書き込む
         if matches!(self.curr_inst[value], inst::Inst::Num { .. }) {
-            let dst_reg = self.reg64(&current_reg);
-            let value_operand = self.extract_operand_text(value, this_is_self);
-            return self.mov_line(&dst_reg, &value_operand, &Size::DQ, false);
+            let dst_reg = self.reg64(&current_reg)?;
+            let value_operand = self.extract_operand_text(value, this_is_self)?;
+            return Ok(self.mov_line(&dst_reg, &value_operand, &Size::DQ, false));
         }
 
-        let dst_reg = self.reg64(&current_reg);
+        let dst_reg = self.reg64(&current_reg)?;
 
         // `value`が実際に「メモリ上の場所」を指している場合のみ、その
         // アドレスを`lea`で求める必要がある。`value`が既にアドレス値
@@ -83,7 +84,7 @@ impl AsmEmitter {
         let (ptr_operand, needs_address) = match &self.curr_inst[value] {
             inst::Inst::GetPtr { stk, .. } => (self.rbp_ref(self.ptr_stk(value, *stk)), true),
             _ => {
-                let operand = self.extract_operand_text(value, this_is_self);
+                let operand = self.extract_operand_text(value, this_is_self)?;
                 let needs_address = self.check_node_is_mem_val(value).is_some();
                 (operand, needs_address)
             }
@@ -91,7 +92,7 @@ impl AsmEmitter {
 
         let opcode = if needs_address { "address" } else { "mov" };
 
-        self.tmpl_line(opcode, &dst_reg, &ptr_operand, &Size::DQ, false)
+        Ok(self.tmpl_line(opcode, &dst_reg, &ptr_operand, &Size::DQ, false))
     }
 
     pub(super) fn assign_val_is_not_ptr(
@@ -99,7 +100,7 @@ impl AsmEmitter {
         current_reg: RegisterMode,
         value: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let RegisterMode::Normal(current_reg) = current_reg else {
             panic!("non-floating-point value assigned to a floating-point register");
         };
@@ -117,7 +118,7 @@ impl AsmEmitter {
         value_idx: usize,
         size: &types::Size,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let RegisterMode::Float(index) = current_reg else {
             panic!("floating-point value assigned to a normal register");
         };
@@ -129,11 +130,12 @@ impl AsmEmitter {
                 size
             ),
         };
-        let dst = self.asm_fmt.get_fmt_float_reg(index, size);
-        let src = self.extract_operand_text(value_idx, this_is_self);
-        self.asm_fmt
+        let dst = self.asm_fmt.get_fmt_float_reg(index, size)?;
+        let src = self.extract_operand_text(value_idx, this_is_self)?;
+        Ok(self
+            .asm_fmt
             .get_opcode_tmpl(opcode)
             .replace("{src1}", &src)
-            .replace("{dst}", &dst)
+            .replace("{dst}", &dst))
     }
 }

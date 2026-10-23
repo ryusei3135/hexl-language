@@ -4,7 +4,9 @@ use super::*;
 
 impl Parser {
     /// 変数の定義の`=`が来るはずの位置などに、予期しないトークンがあった
-    pub(in crate::compiler::hexl_frontend::parse) fn unexpect_tkn_in_expr<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn unexpect_tkn_in_expr<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -16,7 +18,9 @@ impl Parser {
     }
 
     /// 式の途中でトークンが終わった
-    pub(in crate::compiler::hexl_frontend::parse) fn tkn_is_eof_in_expr<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn tkn_is_eof_in_expr<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -116,7 +120,9 @@ impl Parser {
     }
 
     /// `[name index else ..]`が`]`で閉じられていなかった
-    pub(in crate::compiler::hexl_frontend::parse) fn arr_rbracket_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn arr_rbracket_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -131,7 +137,9 @@ impl Parser {
     // ===== 範囲付きポインタ(`expr/range.rs`) =====
 
     /// 範囲付きポインタの`*`が無かった
-    pub(in crate::compiler::hexl_frontend::parse) fn range_ptr_mul_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn range_ptr_mul_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(err::ErrKind::UnexpectedToken)
     }

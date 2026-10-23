@@ -29,10 +29,10 @@ impl AsmEmitter {
         size: &Size,
         dst: usize,
         this_is_self: SelfPtrInfo,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let _ = (dst, this_is_self);
         // 構造体のメンバーの位置(`-4(%rbp)`など)が、添字の読み込み元になる
-        let member = self.ref_struct_txt(src, pos, size.to_bytes());
+        let member = self.ref_struct_txt(src, pos, size.to_bytes())?;
         self.ref_arr_indexed(name, &member, size)
     }
 
@@ -53,8 +53,8 @@ impl AsmEmitter {
         index: usize,
         index_size: &Size,
         this_is_self: SelfPtrInfo,
-    ) -> String {
-        let operand = self.extract_operand_text(index, this_is_self);
+    ) -> Result<String, err::ErrKind> {
+        let operand = self.extract_operand_text(index, this_is_self)?;
         self.ref_arr_indexed(name, &operand, index_size)
     }
 
@@ -67,7 +67,12 @@ impl AsmEmitter {
     /// 流れ: 前回の一時レジスタの解放 → 基準の取得(`arr_ref_base`) →
     /// 添字の読み込み(`load_index_reg`) → 符号の反転と補正(`adjust_index_reg`) →
     /// オペランドの組み立て
-    fn ref_arr_indexed(&mut self, name: &str, index_operand: &str, index_size: &Size) -> String {
+    fn ref_arr_indexed(
+        &mut self,
+        name: &str,
+        index_operand: &str,
+        index_size: &Size,
+    ) -> Result<String, err::ErrKind> {
         // 前回の添字用レジスタが解放されていなければ、ここで解放する
         if let Some(old) = self.arr_index_temp.take() {
             self.used_reg.release(&RegisterMode::Normal(old));
@@ -79,18 +84,23 @@ impl AsmEmitter {
             is_ptr,
             base,
             arr_len,
-        } = self.arr_ref_base(name);
+        } = self.arr_ref_base(name)?;
 
         // 添字を、添字用のレジスタへ読み込む
-        let reg_num = self.alloc_reg(&Size::DQ).unwrap_normal();
+        let RegisterMode::Normal(reg_num) = self.alloc_reg(&Size::DQ) else {
+            return Err(err::ErrKind::asm_emit_reg_not_normal(
+                "配列の添字用のレジスタ",
+            ));
+        };
         self.used_reg.mark_used(&RegisterMode::Normal(reg_num));
         self.arr_index_temp = Some(reg_num);
 
-        let reg64 = self.reg64(&RegisterMode::Normal(reg_num));
+        let reg64 = self.reg64(&RegisterMode::Normal(reg_num))?;
         self.load_index_reg(index_operand, index_size, reg_num, &reg64);
         let offset = self.adjust_index_reg(&reg64, is_ptr, arr_len, arr_base, elem_size);
-        self.asm_fmt
-            .fmt_ref_operand_indexed(&base, &reg64, elem_size, offset)
+        Ok(self
+            .asm_fmt
+            .fmt_ref_operand_indexed(&base, &reg64, elem_size, offset))
     }
 
     /// 配列(またはポインタ)の変数`name`の、添字付きアドレッシングの基準を調べる
@@ -98,9 +108,9 @@ impl AsmEmitter {
     /// - ローカル配列: ベースは`%rbp`(`dst`のオペランドは`-4(%rbp)`のような
     ///   メモリ参照になるため使わない。使うと`-4(-4(%rbp), ..)`になる)
     /// - ポインタ: ポインタ自身を持つ64bitレジスタがベース
-    fn arr_ref_base(&self, name: &str) -> ArrRefBase {
-        let var_info = self.var_info(name);
-        match &var_info.size {
+    fn arr_ref_base(&self, name: &str) -> Result<ArrRefBase, err::ErrKind> {
+        let var_info = self.get_var_all_info(name)?;
+        Ok(match &var_info.size {
             Size::Array { size, len } => ArrRefBase {
                 elem_size: size.to_bytes(),
                 arr_base: var_info.arr_base,
@@ -112,7 +122,7 @@ impl AsmEmitter {
                 elem_size: ty.to_bytes(),
                 arr_base: 0,
                 is_ptr: true,
-                base: self.reg64(&var_info.reg),
+                base: self.reg64(&var_info.reg)?,
                 arr_len: 0,
             },
             other => ArrRefBase {
@@ -122,7 +132,7 @@ impl AsmEmitter {
                 base: FRAME_BASE_REG.to_string(),
                 arr_len: 1,
             },
-        }
+        })
     }
 
     /// 構造体のメンバー`member`(サイズ`size`)を、レジスタ`reg_num`へ
@@ -130,7 +140,13 @@ impl AsmEmitter {
     ///
     /// 符号付きの添字は符号拡張(`movs?q`)、符号なしの添字は
     /// ゼロ拡張(`movz?q`)する
-    fn load_index_reg(&mut self, member: &str, size: &Size, reg_num: usize, reg64: &str) {
+    fn load_index_reg(
+        &mut self,
+        member: &str,
+        size: &Size,
+        reg_num: usize,
+        reg64: &str,
+    ) -> Result<(), err::ErrKind> {
         let unsigned = size.is_unsigned();
         let idx_size = Self::value_reg_size(size);
         match idx_size {
@@ -156,7 +172,7 @@ impl AsmEmitter {
             //   movl だけでよい):
             //     movl -28(%rbp), %ecx
             Size::DD => {
-                let reg32 = self.asm_fmt.get_fmt_reg(reg_num, &Size::DD);
+                let reg32 = self.asm_fmt.get_fmt_reg(reg_num, &Size::DD)?;
                 let load = self.mov_line(&reg32, member, &Size::DD, true);
                 self.asm_text.push_str(&load);
                 if !unsigned {
@@ -170,6 +186,7 @@ impl AsmEmitter {
                 self.asm_text.push_str(&load);
             }
         }
+        Ok(())
     }
 
     /// 添字のレジスタ`reg64`の符号を反転し、配列なら`要素数 - 1 - 添字`に

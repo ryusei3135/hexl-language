@@ -269,8 +269,7 @@ mod test_access_arr_node {
     fn first_stmt(stmt: &str) -> Group2Node {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes(&format!("main(): int {{ {} }}", stmt));
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -313,8 +312,7 @@ mod test_access_arr_node {
     fn check_arr_node_without_else() {
         assert_eq!(
             first_stmt("[arr 0] = 10"),
-            AssignVar::new("arr", ref_arr("arr", num("0"), None), num("10"), sp())
-                .wrap_group2()
+            AssignVar::new("arr", ref_arr("arr", num("0"), None), num("10"), sp()).wrap_group2()
         );
     }
 
@@ -348,10 +346,7 @@ mod test_access_arr_node {
 
     #[test]
     fn check_arr_node_calc_index() {
-        let index = ex(ExprNode::Add((
-            Box::new(var("i")),
-            Box::new(num("1")),
-        )));
+        let index = ex(ExprNode::Add((Box::new(var("i")), Box::new(num("1")))));
         assert_eq!(
             first_stmt("[arr i + 1 else 0] = 1"),
             AssignVar::new("arr", ref_arr("arr", index, Some(num("0"))), num("1"), sp())
@@ -398,11 +393,7 @@ mod test_access_arr_node {
     }
 
     /// `[ptr index else else_idx].member`のノード
-    fn ptr_member(
-        index: Expr,
-        else_idx: Option<Expr>,
-        target: Expr,
-    ) -> Expr {
+    fn ptr_member(index: Expr, else_idx: Option<Expr>, target: Expr) -> Expr {
         ex(ExprNode::PtrMember {
             name: "ptr".to_string(),
             index: Some(Box::new(index)),

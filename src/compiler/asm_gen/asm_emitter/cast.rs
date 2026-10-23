@@ -45,10 +45,10 @@ impl AsmEmitter {
         node_idx: usize,
         src: usize,
         after: &Size,
-    ) {
+    ) -> Result<(), err::ErrKind> {
         let before = self.get_expr_ty(src);
         // 変換元の値のオペランド(レジスタ/メモリ/即値)
-        let operand = self.extract_operand_text(src, None);
+        let operand = self.extract_operand_text(src, None)?;
         let is_imm = matches!(self.inst_at(src), inst::Inst::Num { .. });
         let is_mem = self.check_node_is_mem_val(src).is_some();
 
@@ -58,16 +58,19 @@ impl AsmEmitter {
         self.reg_idx = dst.index();
 
         let asm = match (before.is_float(), after.is_float()) {
-            (false, false) => self.cast_int_to_int(&operand, &before, after, dst, is_imm, is_mem),
-            (false, true) => self.cast_int_to_float(&operand, &before, after, dst, is_imm),
-            (true, false) => self.cast_float_to_int(&operand, &before, after, dst),
-            (true, true) => self.cast_float_to_float(&operand, &before, after, dst),
+            (false, false) => {
+                self.cast_int_to_int(&operand, &before, after, dst, is_imm, is_mem)?
+            }
+            (false, true) => self.cast_int_to_float(&operand, &before, after, dst, is_imm)?,
+            (true, false) => self.cast_float_to_int(&operand, &before, after, dst)?,
+            (true, true) => self.cast_float_to_float(&operand, &before, after, dst)?,
         };
         self.asm_text.push_str(&asm);
 
         self.last_inst_idx.push((node_idx, dst));
         // キャスト元が式の一時的な結果なら、使い終わったので解放する
         self.release_expr_temp(src);
+        Ok(())
     }
 
     /// 整数 → 整数
@@ -79,7 +82,7 @@ impl AsmEmitter {
         dst: RegisterMode,
         is_imm: bool,
         is_mem: bool,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let before_bytes = before.to_bytes();
         let after_bytes = after.to_bytes();
         let after_reg = Self::value_reg_size(after);
@@ -87,30 +90,30 @@ impl AsmEmitter {
 
         // 即値は、キャスト先の幅でそのまま置く
         if is_imm {
-            let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &after_reg);
-            return self.mov_line(&dst_txt, operand, &after_reg, false);
+            let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &after_reg)?;
+            return Ok(self.mov_line(&dst_txt, operand, &after_reg, false));
         }
 
         // 小さくする(同じ幅も含む): 元の幅で読み込み、結果は小さい幅の名前で参照する
         if after_bytes <= before_bytes {
-            let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &before_reg);
-            return self.mov_line(&dst_txt, operand, &before_reg, is_mem);
+            let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &before_reg)?;
+            return Ok(self.mov_line(&dst_txt, operand, &before_reg, is_mem));
         }
 
         // 大きくする
-        let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &after_reg);
+        let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &after_reg)?;
         // 符号なしの32bit → 64bitは、32bitレジスタへの`mov`で上位32bitが0になる
         if before.is_unsigned() && before_bytes == 4 {
-            let dst32 = self.asm_fmt.get_fmt_reg(dst.index(), &Size::DD);
+            let dst32 = self.asm_fmt.get_fmt_reg(dst.index(), &Size::DD)?;
             return self.mov_line(&dst32, operand, &Size::DD, is_mem);
         }
-        self.asm_fmt.get_int_extend(
+        Ok(self.asm_fmt.get_int_extend(
             !before.is_unsigned(),
             width_suffix(before_bytes),
             width_suffix(after_bytes),
             operand,
             &dst_txt,
-        )
+        ))
     }
 
     /// 整数 → 浮動小数点数(`cvtsi2ss`/`cvtsi2sd`)
@@ -121,7 +124,7 @@ impl AsmEmitter {
         after: &Size,
         dst: RegisterMode,
         is_imm: bool,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let bytes = before.to_bytes();
         let unsigned = before.is_unsigned();
         // `cvtsi2ss`は32bit/64bitの整数だけを受け付け、即値も受け付けない。
@@ -133,11 +136,11 @@ impl AsmEmitter {
         let mut asm = String::new();
         let src_txt = if need_tmp {
             let tmp = self.alloc_reg(&Size::DQ);
-            let tmp32 = self.asm_fmt.get_fmt_reg(tmp.index(), &Size::DD);
+            let tmp32 = self.asm_fmt.get_fmt_reg(tmp.index(), &Size::DD)?;
             if is_imm {
                 // 即値: 32bitまでは`movl`、64bitは`movq`で置く
                 let size = if bytes == 8 { Size::DQ } else { Size::DD };
-                let tmp_txt = self.asm_fmt.get_fmt_reg(tmp.index(), &size);
+                let tmp_txt = self.asm_fmt.get_fmt_reg(tmp.index(), &size)?;
                 asm.push_str(&self.mov_line(&tmp_txt, operand, &size, false));
             } else if bytes < 4 {
                 // 8/16bit: 32bitへ拡張する
@@ -153,7 +156,7 @@ impl AsmEmitter {
                 asm.push_str(&self.mov_line(&tmp32, operand, &Size::DD, false));
             }
             let size = if use_q { Size::DQ } else { Size::DD };
-            self.asm_fmt.get_fmt_reg(tmp.index(), &size)
+            self.asm_fmt.get_fmt_reg(tmp.index(), &size)?
         } else {
             operand.to_string()
         };
@@ -164,9 +167,9 @@ impl AsmEmitter {
             (_, false) => "cvtsi2sdl",
             (_, true) => "cvtsi2sdq",
         };
-        let dst_txt = self.asm_fmt.get_fmt_float_reg(dst.index(), after);
+        let dst_txt = self.asm_fmt.get_fmt_float_reg(dst.index(), after)?;
         asm.push_str(&self.fill_tmpl(key, &dst_txt, &src_txt));
-        asm
+        Ok(asm)
     }
 
     /// 浮動小数点数 → 整数(`cvttss2si`/`cvttsd2si`。小数点以下は切り捨て)
@@ -176,7 +179,7 @@ impl AsmEmitter {
         before: &Size,
         after: &Size,
         dst: RegisterMode,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let key = if matches!(before, Size::F32) {
             "cvttss2si"
         } else {
@@ -187,8 +190,8 @@ impl AsmEmitter {
         let after_bytes = after.to_bytes();
         let wide = after_bytes == 8 || (after_bytes == 4 && after.is_unsigned());
         let conv_size = if wide { Size::DQ } else { Size::DD };
-        let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &conv_size);
-        self.fill_tmpl(key, &dst_txt, operand)
+        let dst_txt = self.asm_fmt.get_fmt_reg(dst.index(), &conv_size)?;
+        Ok(self.fill_tmpl(key, &dst_txt, operand))
     }
 
     /// 浮動小数点数 → 浮動小数点数(`float` ⇔ `f64`)
@@ -198,14 +201,14 @@ impl AsmEmitter {
         before: &Size,
         after: &Size,
         dst: RegisterMode,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let key = match (before, after) {
             (Size::F32, Size::F64) => "cvtss2sd",
             (Size::F64, Size::F32) => "cvtsd2ss",
             (Size::F32, _) => "float_mov",
             _ => "f64_mov",
         };
-        let dst_txt = self.asm_fmt.get_fmt_float_reg(dst.index(), after);
-        self.fill_tmpl(key, &dst_txt, operand)
+        let dst_txt = self.asm_fmt.get_fmt_float_reg(dst.index(), after)?;
+        Ok(self.fill_tmpl(key, &dst_txt, operand))
     }
 }

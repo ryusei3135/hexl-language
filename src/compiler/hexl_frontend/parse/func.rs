@@ -602,11 +602,7 @@ mod generic_tests {
     }
 
     /// `name`で、`<>`の中身が`temp_ty`の関数を探す
-    fn find<'a>(
-        nodes: &'a Vec<Group1Node>,
-        name: &str,
-        temp_ty: Vec<TyNode>,
-    ) -> &'a FuncDefine {
+    fn find<'a>(nodes: &'a Vec<Group1Node>, name: &str, temp_ty: Vec<TyNode>) -> &'a FuncDefine {
         funcs(nodes)
             .into_iter()
             .find(|f| f.name == name && f.temp_ty == temp_ty)
@@ -660,10 +656,7 @@ mod generic_tests {
                 f.body[0].get_node(),
                 gen_var_node("var", "10", t, 0).get_node()
             );
-            assert_eq!(
-                f.body[1].get_node(),
-                &StmtNode::Return(var("var")).wrap()
-            );
+            assert_eq!(f.body[1].get_node(), &StmtNode::Return(var("var")).wrap());
             assert!(!f.public);
         }
     }
@@ -949,10 +942,9 @@ mod generic_tests {
         };
         assert_eq!(
             *v.value,
-            ex(ExprNode::LessThen((
-                Box::new(var("a")),
-                Box::new(num("3")),
-            )))
+            ex(ExprNode::LessThen(
+                (Box::new(var("a")), Box::new(num("3")),)
+            ))
         );
     }
 

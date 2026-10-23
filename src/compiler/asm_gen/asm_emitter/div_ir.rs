@@ -35,7 +35,10 @@ impl AsmEmitter {
     /// 結果は`self.reg_idx`のレジスタに置く。
     /// (`gen_expr_asm`が、`%rax`/`%rdx`以外の空きレジスタを
     /// `self.reg_idx`へ設定してから呼ぶ)
-    pub(super) fn format_div_expr_inst(&mut self, expr: &inst::ExprInst) -> String {
+    pub(super) fn format_div_expr_inst(
+        &mut self,
+        expr: &inst::ExprInst,
+    ) -> Result<String, err::ErrKind> {
         let dst = self.reg_idx;
         let ty = self.get_expr_ty(expr.ls);
         let wrap_size = ty.wrap_dst_size();
@@ -51,22 +54,22 @@ impl AsmEmitter {
         };
 
         // オペランドのテキストは、レジスタなら計算サイズに揃える
-        let src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref());
-        let src1 = self.asm_fmt.resize_reg_operand(&src1, &calc);
-        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref());
-        let src2 = self.asm_fmt.resize_reg_operand(&src2, &calc);
+        let src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
+        let src1 = self.asm_fmt.resize_reg_operand(&src1, &calc)?;
+        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
+        let src2 = self.asm_fmt.resize_reg_operand(&src2, &calc)?;
         let mem1 = self.check_node_is_mem_val(expr.ls).is_some();
         let mem2 = self.check_node_is_mem_val(expr.rs).is_some();
 
-        let rax = self.asm_fmt.get_fmt_reg(0, &calc);
-        let dst_txt = self.asm_fmt.get_fmt_reg(dst, &calc);
+        let rax = self.asm_fmt.get_fmt_reg(0, &calc)?;
+        let dst_txt = self.asm_fmt.get_fmt_reg(dst, &calc)?;
 
         // === 書き換えられる`%rax`/`%rdx`のうち、使用中の物を退避 ===
         let saved = self.live_reserved_regs(dst);
         let mut asm = saved
             .iter()
-            .map(|reg| {
-                let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+            .try_map(|reg| {
+                let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
                 self.asm_fmt.get_push(&name)
             })
             .collect::<String>();
@@ -83,7 +86,7 @@ impl AsmEmitter {
         // - 符号なし: `%rdx`を0にして`div`
         let div_mnemonic = if unsigned { "div" } else { "idiv" };
         if unsigned {
-            let rdx = self.asm_fmt.get_fmt_reg(2, &calc);
+            let rdx = self.asm_fmt.get_fmt_reg(2, &calc)?;
             let clear = format!("{{space}}xor {}, {}\n", rdx, rdx);
             asm.push_str(&self.asm_fmt.fmt_mnemonic_resize("xor", &clear, &calc));
         } else {
@@ -105,7 +108,7 @@ impl AsmEmitter {
         } else {
             2
         };
-        let result = self.asm_fmt.get_fmt_reg(result_reg, &calc);
+        let result = self.asm_fmt.get_fmt_reg(result_reg, &calc)?;
         asm.push_str(&self.mov_line(&dst_txt, &result, &calc, false));
 
         // === 退避したレジスタを逆順に復元 ===
@@ -114,12 +117,12 @@ impl AsmEmitter {
                 .iter()
                 .rev()
                 .map(|reg| {
-                    let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ);
+                    let name = self.asm_fmt.get_fmt_reg(*reg, &Size::DQ)?;
                     self.asm_fmt.get_pop(&name)
                 })
                 .collect::<String>()
                 .as_str(),
         );
-        asm
+        Ok(asm)
     }
 }

@@ -86,12 +86,8 @@ impl IR {
             // `(ty)expr`: 組み込み型へのキャスト
             // `src/ir/builder/expr_node.rs`
             ast::ExprNode::Cast((ty, target)) => self.build_cast_inst::<M>(&ty, &*target)?,
-            ast::ExprNode::Inc(var) => {
-                self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Inc)?
-            }
-            ast::ExprNode::Dec(var) => {
-                self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Dec)?
-            }
+            ast::ExprNode::Inc(var) => self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Inc)?,
+            ast::ExprNode::Dec(var) => self.build_inc_dec_expr::<M>(&*var, &inst::ExprKind::Dec)?,
 
             ast::ExprNode::Add(node) => {
                 self.build_expr_inst::<M>(node, &expect_byte, inst::ExprKind::Add)?
@@ -458,7 +454,8 @@ mod unary_expr_ir_tests {
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
         let nodes = parse_test_source(src);
         let mut ir = IR::new();
-        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
         ir.test_only_get_func_body("main").to_vec()
     }
 

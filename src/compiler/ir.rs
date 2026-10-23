@@ -17,8 +17,8 @@ mod param;
 mod result_mod;
 
 use crate::compiler::err::{self, undef::UndefKind::*};
+use crate::compiler::{err::*, hexl_frontend::parse, models::Body};
 pub use result_mod::*;
-use crate::compiler::{err::*, models::Body, hexl_frontend::parse};
 
 #[derive(Debug)]
 pub struct IR {

@@ -98,13 +98,13 @@ IRの並び(`gen_ternary_select_ir` / `gen_ternary_cond_ir`)
 | 5 | `Expr { kind: Ternary, ls: 左辺, rs: 右辺 }`(番号`n`) | `mov 右辺, dst` → `cmov<cc> 左辺, dst`(`gen_ternary_select_asm`) |
 
 - 左辺・右辺は条件より先に生成する。`add`/`sub`は`cmp`のフラグを壊すため、`cmp`は選ぶ命令の直前に置く(`mov`はフラグを変えない)。
-- `Ternary`は直前(番号`n-1`)が`Ternary<比較>`であることを前提にする(違えばpanic)。
+- `Ternary`は直前(番号`n-1`)が`Ternary<比較>`であることを前提にする(違えば`Err(AsmEmitTernaryCondNotFound)`)。
 - `&&`/`||`は、各比較を通常の比較(0/1)で作って`and`/`or`で畳み込み、最後に`TernaryNotEq(結果, 0)`を比較する。`!(..)`は`TernaryEqual(結果, 0)`。
 - 符号なし整数(どちらかのオペランドが符号なし)の`<` `>` `<=` `>=`は`cmovb`/`cmova`/`cmovbe`/`cmovae`(`get_unsigned_cmov_tmpl`)。
 - `cmp`の比較される側・`cmov`の元は即値にできないので、即値のときは一時レジスタへ`mov`してから使う。
 - `cmov`は8bitのレジスタを使えないので、8bitの値は32bitのレジスタ名で操作する。
 - `cmov`のテンプレートにはサイズ接尾辞を付けない(`fmt_mnemonic_resize`の`mov`の置き換えが`cmov`にも当たるため通さない)。
-- 小数は使えない(panic)。IR側が小数を含む三項演算子を条件分岐へ回す。
+- 小数は使えない(`Err(AsmEmitFloatNotSupported)`)。IR側が小数を含む三項演算子を条件分岐へ回す。
 - 未使用の変数の初期値が三項演算子のときは、条件(`n-1`)も一緒に生成しない(`reg_mnger.rs`の`collect_pure_expr_vars`)。
 - フォーマット(`asm_fmt/x64.rs`)のキー: `tcmp`(`cmp`のみ)、`cmov_l`/`cmov_g`/`cmov_l_e`/`cmov_g_e`/`cmov_e`/`cmov_ne`、符号なし用の`cmov_b`/`cmov_a`/`cmov_b_e`/`cmov_a_e`。
   以前の`cmov_*`は`mov`+`cmov`の2行で、`cmp`が無くフラグが未設定のまま`cmov`していたため、`cmov`の1行にした。
@@ -121,7 +121,29 @@ movzbl dst8, dst32     # movzbl(上位32bitも0になる)
 
 - 結果のレジスタは`ls`/`rs`のレジスタとは別に確保する。`ls`が即値なら、結果のレジスタへ`mov`してから`cmp`する。
 - どちらかのオペランドが符号なしの`<` `>` `<=` `>=`は`setb`/`seta`/`setbe`/`setae`(`get_unsigned_set_tmpl`。`set_b`などのキーがあればそれを使う)。
-- `setcc`/`movzbl`にはサイズ接尾辞を付けない。小数は使えない(panic)。
+- `setcc`/`movzbl`にはサイズ接尾辞を付けない。小数は使えない(`Err(AsmEmitFloatNotSupported)`)。
 - フォーマット(`asm_fmt/x64.rs`)のキー: `set_l`/`set_g`/`set_l_e`/`set_g_e`/`set_e`/`set_ne`、符号なし用の`set_b`/`set_a`/`set_b_e`/`set_a_e`、`movzbl`。
 - `asm_fmt/x64.rs`の8bitレジスタ(`db`)の並びが、他(`dw`/`dd`/`dq`)と1つずれていた(`spl`/`bpl`が入っていて、`db[4]`が`sil`ではなく`spl`だった)。
   `setcc`で8bitレジスタ名を使うため`spl`/`bpl`を除いた。`asm_fmts/gcc_x64.yaml`に同じ並びがあれば直す。
+
+## panic/unwrapのResult化(2026-10-23)
+このモジュールの`panic!`/`unwrap`/`expect`/`unreachable!`/添字の直接参照を、`Result<_, err::ErrKind>`で返すようにした。
+**生成されるアセンブリは変えていない**。追加したエラーは`compile.rs`の`CompileErrKind::AsmEmit*`(コード`E0017`〜`E0032`)にあり、`err::ErrKind::asm_emit_xxx(..)`で作る(位置は`Span::unknown()`)。
+
+| 関数 | 戻り値 | Errになる場合 |
+|------|--------|---------------|
+| `emit_struct_init_asm` / `emit_data_variant_init_asm` | `Result<String, _>` | メンバーが`MemoryInst::Member`でない(`AsmEmitNotMemberInst`)、値が空なのに`InitArr`でない(`AsmEmitNotInitArr`) |
+| `make_member_offset` | `Result<usize, _>` | 累積サイズがメンバーのサイズより小さい(`AsmEmitMemberOffsetUnderflow`) |
+| `expr_tmpl_key` / `expr_mnemonic` | `Result<&str, _>` | `Ternary`/`Set<比較>`/`Div`など、別の場所で生成する種類が来た(`AsmEmitUnexpectedExprKind`) |
+| `replace_insert_fmt_reg` | `Result<String, _>` | `%{..}`の中身が数字でない(`AsmEmitInvalidRegPlaceholder`) |
+| `param_ref` / `ref_struct_txt` / `get_var_ty` | `Result<_, _>` | 変数が無い(`get_var_all_info`のErr) |
+| `string_mem_ref` / `ref_mem_value_txt` | `Result<String, _>` | staticのラベルが無い(`AsmEmitLabelNotFound`) |
+| `insert_arr_txt` | `Result<String, _>` | 添字が数字でない(`AsmEmitArrayIndexNotNumber`)、添字のノードが未対応(`AsmEmitInvalidArrayIndexNode`) |
+| `init_arr_txt` | `Result<String, _>` | 要素が空(`AsmEmitEmptyArrayInit`)、先頭の要素が`Num`でない(`AsmEmitInvalidArrayElemNode`) |
+| `gen_mov_code` | `Result<String, _>` | 変数名が`None`(`AsmEmitVarNameMissing`) |
+| `ref_arr_for_*` / `ref_arr_indexed` / `arr_ref_base` | `Result<_, _>` | 添字用のレジスタが`Normal`でない(`AsmEmitRegNotNormal`) |
+| `gen_set_cc_asm` / `gen_ternary_cmp_asm` / `gen_ternary_select_asm` | `Result<(), _>` | 小数(`AsmEmitFloatNotSupported`)、種類が違う(`AsmEmitNotSetCcKind`/`AsmEmitNotTernaryCondKind`)、条件の命令が無い(`AsmEmitTernaryCondNotFound`) |
+| `gen_cast_asm` / `format_div_expr_inst` | `Result<_, _>` | `extract_operand_text`のErr |
+
+- `extract_operand_text`が`Result<String, _>`になる前提で、呼び出し側はすべて`?`で伝播する。
+- `set_cc`/`ternary`は、レジスタを確保する前に種類と小数を確認する(Errを返したときにレジスタを使用中のまま残さない)。

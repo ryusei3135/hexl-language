@@ -37,8 +37,7 @@ impl IR {
     ) {
         for n in nodes.iter() {
             match n.get_node() {
-                Group2Node::Expr(expr)
-                | Group2Node::Stmt(StmtNode::Return(expr)) => {
+                Group2Node::Expr(expr) | Group2Node::Stmt(StmtNode::Return(expr)) => {
                     Self::scan_loop_expr(func_name, &expr, scope);
                 }
                 _ => {}

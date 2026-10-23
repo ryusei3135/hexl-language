@@ -14,12 +14,12 @@ mod preproc;
 /// 構造体、列挙型のノードを作成するAPIを提供
 mod typedef;
 
+use crate::compiler::ast::*;
 use crate::compiler::{err, hexl_frontend::lex};
 use stmt::*;
-use crate::compiler::ast::*;
 
-pub use stmt::Parser;
 use crate::compiler::ast;
+pub use stmt::Parser;
 
 pub(in crate::compiler::hexl_frontend::parse) use parse_loop_control::*;
 

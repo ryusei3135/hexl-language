@@ -83,7 +83,8 @@ mod mem_var_tests {
     fn build_func_body(src: &str) -> Vec<inst::Inst> {
         let nodes = parse_test_source(src);
         let mut ir = IR::new();
-        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes).unwrap();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
         ir.test_only_get_func_body("main").to_vec()
     }
 

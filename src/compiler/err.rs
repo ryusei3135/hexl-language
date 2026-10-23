@@ -9,6 +9,7 @@ pub mod undef;
 pub use syntax_err::*;
 pub mod compile;
 pub use compile::*;
+pub mod compiler_err;
 pub mod err_pool;
 
 // ---------------------------------------------------------------------

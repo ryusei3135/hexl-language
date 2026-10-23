@@ -68,7 +68,9 @@ impl Parser {
     }
 
     /// 反復処理の条件の後に`{`が無かった
-    pub(in crate::compiler::hexl_frontend::parse) fn loop_lbrace_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn loop_lbrace_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

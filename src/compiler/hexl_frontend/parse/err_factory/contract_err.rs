@@ -17,7 +17,9 @@ impl Parser {
     }
 
     /// `must=`の次のトークンが無かった(EOF)
-    pub(in crate::compiler::hexl_frontend::parse) fn must_name_is_eof<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn must_name_is_eof<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

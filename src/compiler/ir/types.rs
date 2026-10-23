@@ -68,9 +68,7 @@ impl TryFrom<&TyNode> for Size {
             TyNode::SelfTy(..) => Self::DQ,
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
-            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
-                ty.unwrap_ty().try_into()?
-            }
+            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => ty.unwrap_ty().try_into()?,
             t => panic!("{:?}", t),
         };
         Ok(size_ty)
@@ -108,9 +106,7 @@ impl TryFrom<TyNode> for Size {
             TyNode::SelfTy(..) => Self::DQ,
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
-            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
-                ty.unwrap_ty().try_into()?
-            }
+            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => ty.unwrap_ty().try_into()?,
             t => panic!("{:?}", t),
         };
         Ok(size_ty)
@@ -410,9 +406,7 @@ impl IR {
             // `Self`はIRへ変換する前に、実際の構造体の型
             // (`TyNode::Ty`)やポインタ型へ解決されている必要がある
             TyNode::SelfTy(name) => self.size_of(&TyNode::Ty(name.to_string())),
-            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
-                self.size_of(&ty.unwrap_ty())
-            }
+            TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => self.size_of(&ty.unwrap_ty()),
         }
     }
 }

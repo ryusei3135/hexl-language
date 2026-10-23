@@ -20,8 +20,7 @@ impl Parser {
         // 3. `advance_tkn` の戻り値を `match` で安全かつスマートに分解
         match self.advance_tkn() {
             Some(lex::Tkn::Name(val)) => {
-                let ty =
-                    ConstractTy::new::<{ IS_MUST }>(Some(val), None, Box::new(base_ty));
+                let ty = ConstractTy::new::<{ IS_MUST }>(Some(val), None, Box::new(base_ty));
                 Ok(ty)
             }
             // `Name` 以外が来た、または EOF の場合（パニックさせずエラーを返す）
@@ -46,8 +45,7 @@ impl Parser {
 
         match self.next_tkn(&["name"])? {
             lex::Tkn::Name(val) => {
-                let ty: TyNode =
-                    ConstractTy::new::<{ IS_OF }>(None, Some(val), Box::new(base_ty));
+                let ty: TyNode = ConstractTy::new::<{ IS_OF }>(None, Some(val), Box::new(base_ty));
                 Ok(ty)
             }
             found => return crate::err_at!(self.missing_ident_after_of(found)),
@@ -87,8 +85,7 @@ mod test {
     fn check_constract_must() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int must=a = 10 }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };

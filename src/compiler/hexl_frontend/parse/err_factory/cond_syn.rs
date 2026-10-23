@@ -103,7 +103,9 @@ impl Parser {
     }
 
     /// `else =>`の次に`{`が無かった
-    pub(in crate::compiler::hexl_frontend::parse) fn cond_else_lbrace<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn cond_else_lbrace<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::cond_err!(
             self.build_err_span(),
@@ -113,7 +115,9 @@ impl Parser {
     }
 
     /// `else`が無かった
-    pub(in crate::compiler::hexl_frontend::parse) fn cond_else_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn cond_else_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::cond_err!(
             self.build_err_span(),

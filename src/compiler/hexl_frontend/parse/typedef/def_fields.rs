@@ -1,6 +1,5 @@
 //! 構造体や共用体などのフィールドを生成するAPIを提供
 
-
 use std::rc::Rc;
 
 use super::*;
@@ -19,9 +18,7 @@ impl Parser {
     /// `name: ty`形式のメンバーとメゾットを解析する共通処理
     /// (構造体と、`unsafe`の共用体で使う)
     /// 呼び出し時、終了時ともに current_tkn() は `LBrace` / `RBrace`
-    fn define_colon_fields<T: Field>(
-        &mut self,
-    ) -> Result<(Vec<T>, Vec<Group1Node>), err::ErrKind> {
+    fn define_colon_fields<T: Field>(&mut self) -> Result<(Vec<T>, Vec<Group1Node>), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::LBrace {
             return crate::err_at!(self.fields_lbrace_not_found());
         }
@@ -121,9 +118,7 @@ impl Parser {
     /// ```text
     /// variant A { Mem  Mem1(int)  func(self: Self) {} }
     /// ```
-    fn safe_variant_field(
-        &mut self,
-    ) -> Result<(Vec<VariantField>, Vec<Group1Node>), err::ErrKind> {
+    fn safe_variant_field(&mut self) -> Result<(Vec<VariantField>, Vec<Group1Node>), err::ErrKind> {
         let mut fields = Vec::<VariantField>::new();
         let mut methods = Vec::new();
         let mut pub_flag = false;

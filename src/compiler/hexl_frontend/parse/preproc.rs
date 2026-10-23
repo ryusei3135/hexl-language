@@ -12,10 +12,7 @@ use regex::{Captures, Regex};
 // }
 
 impl Parser {
-    pub(super) fn make_preproc(
-        &mut self,
-        proc_name: &str,
-    ) -> Result<Group2Node, err::ErrKind> {
+    pub(super) fn make_preproc(&mut self, proc_name: &str) -> Result<Group2Node, err::ErrKind> {
         let result = match proc_name {
             "include" => Group2Node::Include(self.build_include_path()?),
             // "preserve" => {
@@ -316,12 +313,12 @@ mod inline_asm_tests {
         assert_eq!(
             lines[0].operands,
             vec![
-                ex(ExprNode::ConnectAddr(Box::new(ex(
-                    ExprNode::Var("p".to_string())
-                )))),
-                ex(ExprNode::GetAddress(Box::new(ex(
-                    ExprNode::Var("p".to_string())
-                )))),
+                ex(ExprNode::ConnectAddr(Box::new(ex(ExprNode::Var(
+                    "p".to_string()
+                ))))),
+                ex(ExprNode::GetAddress(Box::new(ex(ExprNode::Var(
+                    "p".to_string()
+                ))))),
             ]
         );
     }

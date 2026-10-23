@@ -84,7 +84,11 @@ impl IR {
 
             let needs_self_area = self
                 .func_tree
-                .get_with_temp(&call_func_node.name, Some(struct_name), &call_func_node.temp_ty)
+                .get_with_temp(
+                    &call_func_node.name,
+                    Some(struct_name),
+                    &call_func_node.temp_ty,
+                )
                 .or_else(|| {
                     self.extern_func_tree
                         .iter()

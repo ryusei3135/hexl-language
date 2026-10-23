@@ -66,8 +66,11 @@ impl VarIndexInfo {
 
 impl AsmEmitter {
     /// 指定された名前の変数の型を返す
-    pub(in crate::compiler::asm_gen) fn get_var_ty(&self, var_name: &str) -> Size {
-        self.var_info(var_name).size.clone()
+    pub(in crate::compiler::asm_gen) fn get_var_ty(
+        &self,
+        var_name: &str,
+    ) -> Result<Size, err::ErrKind> {
+        Ok(self.get_var_all_info(var_name)?.size.clone())
     }
 
     #[inline(always)]

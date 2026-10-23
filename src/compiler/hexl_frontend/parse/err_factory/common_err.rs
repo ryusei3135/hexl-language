@@ -57,7 +57,9 @@ impl Parser {
     }
 
     /// 構造体/バリアントの外で`Self`が使われた
-    pub(in crate::compiler::hexl_frontend::parse) fn self_outside_of_type<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn self_outside_of_type<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),

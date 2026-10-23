@@ -13,11 +13,14 @@ mod lazy_spill;
 mod reg_mnger;
 mod sign;
 
+use crate::compiler::err::err_pool;
 use crate::compiler::ir::{def_tree, inst, types::Size};
 use crate::compiler::models::AsmFmtData;
 use sign::SizeSign;
 use std::collections::HashMap;
 use std::mem;
+
+use std::cell::RefCell;
 use std::rc::Rc;
 
 pub type SelfPtrInfo<'a> = Option<&'a Size>;
@@ -142,4 +145,6 @@ pub struct AsmEmitter {
     caller_saved: Rc<Vec<usize>>,
     float_callee_saved: Rc<Vec<usize>>,
     float_caller_saved: Rc<Vec<usize>>,
+
+    err_pool: Rc<RefCell<err_pool::ErrPool>>,
 }

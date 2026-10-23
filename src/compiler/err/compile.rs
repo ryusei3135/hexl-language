@@ -62,6 +62,48 @@ pub enum CompileErrKind {
 
     VariableConstractExpired(String),
     ReassignActiveContract(String),
+
+    // ---- asm_emitter(アセンブリ生成)で、以前は`panic`していた状況 ----
+    /// 構造体/バリアントのメンバーが`MemoryInst::Member`ではない(中身はデバッグ表示)
+    AsmEmitNotMemberInst(String),
+    /// 値のオペランドが空なのに、そのノードが`Inst::InitArr`ではない(ノードのid)
+    AsmEmitNotInitArr(usize),
+    /// メンバーのオフセットの計算で、累積サイズがメンバーのサイズより小さい
+    AsmEmitMemberOffsetUnderflow {
+        total: usize,
+        member: usize,
+    },
+    /// そこでは生成しない種類の式(`Ternary`/`Set<比較>`/`Div`など)が来た
+    AsmEmitUnexpectedExprKind(String),
+    /// `%{..}`の中身が数字ではない(または、正規表現を作れない)
+    AsmEmitInvalidRegPlaceholder(String),
+    /// staticな変数/文字列のラベルが見つからない
+    AsmEmitLabelNotFound {
+        kind: String,
+        parent_id: usize,
+    },
+    /// 配列の添字(`Inst::Num`)が数字として読めない
+    AsmEmitArrayIndexNotNumber(String),
+    /// 配列の添字のノードが、数字・変数・構造体のメンバーのどれでもない
+    AsmEmitInvalidArrayIndexNode(String),
+    /// 変数への代入なのに、変数名がない(`src`は値のノードのid)
+    AsmEmitVarNameMissing {
+        src: usize,
+    },
+    /// 要素が1つもない配列リテラルを展開しようとした
+    AsmEmitEmptyArrayInit,
+    /// 配列リテラルの先頭の要素が`Inst::Num`ではない
+    AsmEmitInvalidArrayElemNode(String),
+    /// 整数用のレジスタ(`RegisterMode::Normal`)が必要な場所で、そうでないレジスタが来た
+    AsmEmitRegNotNormal(String),
+    /// `Set<比較>`ではない種類を`setcc`として生成しようとした
+    AsmEmitNotSetCcKind(String),
+    /// 三項演算子の条件(`Ternary<比較>`)ではない種類を`cmov`として生成しようとした
+    AsmEmitNotTernaryCondKind(String),
+    /// `Ternary`の直前に、条件(`Ternary<比較>`)の命令がない
+    AsmEmitTernaryCondNotFound(String),
+    /// 小数は使えない箇所(`setcc`の比較/三項演算子の条件・値)で小数が来た
+    AsmEmitFloatNotSupported(String),
 }
 
 /// `GenCompileErr!(Kind, msg, span)`
@@ -229,6 +271,86 @@ impl CompileErr {
     }
 }
 
+/// `asm_emitter`のエラーを作る関数
+///
+/// アセンブリを生成する段階では、元のソースの位置(`span`)を持っていないので、
+/// 位置は`Span::unknown()`になる。`err::ErrKind::asm_emit_xxx(..)`の形で呼び出す
+impl err::ErrKind {
+    fn asm_emit(kind: CompileErrKind) -> Self {
+        Self::CompileErr(Box::new(CompileErr {
+            kind,
+            span: Rc::new(err::Span::unknown()),
+        }))
+    }
+
+    pub fn asm_emit_not_member_inst(found: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitNotMemberInst(found))
+    }
+
+    pub fn asm_emit_not_init_arr(node_id: usize) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitNotInitArr(node_id))
+    }
+
+    pub fn asm_emit_member_offset_underflow(total: usize, member: usize) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitMemberOffsetUnderflow { total, member })
+    }
+
+    pub fn asm_emit_unexpected_expr_kind(kind: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitUnexpectedExprKind(kind))
+    }
+
+    pub fn asm_emit_invalid_reg_placeholder(inner: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitInvalidRegPlaceholder(inner))
+    }
+
+    pub fn asm_emit_label_not_found(kind: &str, parent_id: usize) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitLabelNotFound {
+            kind: kind.to_string(),
+            parent_id,
+        })
+    }
+
+    pub fn asm_emit_array_index_not_number(value: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitArrayIndexNotNumber(value))
+    }
+
+    pub fn asm_emit_invalid_array_index_node(node: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitInvalidArrayIndexNode(node))
+    }
+
+    pub fn asm_emit_var_name_missing(src: usize) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitVarNameMissing { src })
+    }
+
+    pub fn asm_emit_empty_array_init() -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitEmptyArrayInit)
+    }
+
+    pub fn asm_emit_invalid_array_elem_node(node: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitInvalidArrayElemNode(node))
+    }
+
+    pub fn asm_emit_reg_not_normal(place: &str) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitRegNotNormal(place.to_string()))
+    }
+
+    pub fn asm_emit_not_set_cc_kind(kind: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitNotSetCcKind(kind))
+    }
+
+    pub fn asm_emit_not_ternary_cond_kind(kind: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitNotTernaryCondKind(kind))
+    }
+
+    pub fn asm_emit_ternary_cond_not_found(found: String) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitTernaryCondNotFound(found))
+    }
+
+    pub fn asm_emit_float_not_supported(place: &str) -> Self {
+        Self::asm_emit(CompileErrKind::AsmEmitFloatNotSupported(place.to_string()))
+    }
+}
+
 impl CompileErrKind {
     /// エラーコード(`E0001`形式)
     pub fn code(&self) -> &'static str {
@@ -249,6 +371,22 @@ impl CompileErrKind {
             Self::IncDecRequiresInteger(..) => "E0014",
             Self::VariableConstractExpired(..) => "E0015",
             Self::ReassignActiveContract(..) => "E0016",
+            Self::AsmEmitNotMemberInst(..) => "E0017",
+            Self::AsmEmitNotInitArr(..) => "E0018",
+            Self::AsmEmitMemberOffsetUnderflow { .. } => "E0019",
+            Self::AsmEmitUnexpectedExprKind(..) => "E0020",
+            Self::AsmEmitInvalidRegPlaceholder(..) => "E0021",
+            Self::AsmEmitLabelNotFound { .. } => "E0022",
+            Self::AsmEmitArrayIndexNotNumber(..) => "E0023",
+            Self::AsmEmitInvalidArrayIndexNode(..) => "E0024",
+            Self::AsmEmitVarNameMissing { .. } => "E0025",
+            Self::AsmEmitEmptyArrayInit => "E0026",
+            Self::AsmEmitInvalidArrayElemNode(..) => "E0027",
+            Self::AsmEmitRegNotNormal(..) => "E0028",
+            Self::AsmEmitNotSetCcKind(..) => "E0029",
+            Self::AsmEmitNotTernaryCondKind(..) => "E0030",
+            Self::AsmEmitTernaryCondNotFound(..) => "E0031",
+            Self::AsmEmitFloatNotSupported(..) => "E0032",
         }
     }
 
@@ -318,6 +456,50 @@ impl CompileErrKind {
             Self::ReassignActiveContract(name) => {
                 format!("契約が有効なままの変数`{name}`に再代入しています")
             }
+            Self::AsmEmitNotMemberInst(found) => {
+                format!("メンバーの命令(`MemoryInst::Member`)ではありません: {found}")
+            }
+            Self::AsmEmitNotInitArr(id) => {
+                format!("値が空ですが、配列の初期化(`InitArr`)のノードでもありません: node {id}")
+            }
+            Self::AsmEmitMemberOffsetUnderflow { total, member } => format!(
+                "メンバーのオフセットを計算できません(累積サイズ{total}byte < メンバーのサイズ{member}byte)"
+            ),
+            Self::AsmEmitUnexpectedExprKind(kind) => {
+                format!("この場所では生成しない種類の式です: {kind}")
+            }
+            Self::AsmEmitInvalidRegPlaceholder(inner) => {
+                format!("レジスタの埋め込み`%{{..}}`の中身が不正です: {inner}")
+            }
+            Self::AsmEmitLabelNotFound { kind, parent_id } => {
+                format!("{kind}のラベルが見つかりません: node {parent_id}")
+            }
+            Self::AsmEmitArrayIndexNotNumber(value) => {
+                format!("配列の添字`{value}`は数字である必要があります")
+            }
+            Self::AsmEmitInvalidArrayIndexNode(node) => {
+                format!("配列の添字には数字・変数・構造体のメンバーのノードが必要です: {node}")
+            }
+            Self::AsmEmitVarNameMissing { src } => {
+                format!("変数の名前がありません: 値のnode {src}")
+            }
+            Self::AsmEmitEmptyArrayInit => "要素のない配列は展開できません".to_string(),
+            Self::AsmEmitInvalidArrayElemNode(node) => {
+                format!("配列の要素には数字のノードが必要です: {node}")
+            }
+            Self::AsmEmitRegNotNormal(place) => {
+                format!("整数用のレジスタが必要です: {place}")
+            }
+            Self::AsmEmitNotSetCcKind(kind) => format!("setccの式ではありません: {kind}"),
+            Self::AsmEmitNotTernaryCondKind(kind) => {
+                format!("三項演算子の条件ではありません: {kind}")
+            }
+            Self::AsmEmitTernaryCondNotFound(found) => {
+                format!("三項演算子の直前に条件の命令がありません: {found}")
+            }
+            Self::AsmEmitFloatNotSupported(place) => {
+                format!("{place}に小数は使えません")
+            }
         }
     }
 
@@ -355,6 +537,18 @@ impl CompileErrKind {
             Self::VariableConstractExpired(..) => {
                 "契約は`of`の引数として渡された時点で終了します".into()
             }
+            Self::AsmEmitFloatNotSupported(..) => {
+                "小数(`float`/`f64`)の比較は`comiss`/`comisd`のフラグの扱いが整数と違うため、ここでは生成できません".into()
+            }
+            Self::AsmEmitUnexpectedExprKind(..)
+            | Self::AsmEmitNotSetCcKind(..)
+            | Self::AsmEmitNotTernaryCondKind(..)
+            | Self::AsmEmitTernaryCondNotFound(..)
+            | Self::AsmEmitNotMemberInst(..)
+            | Self::AsmEmitNotInitArr(..)
+            | Self::AsmEmitMemberOffsetUnderflow { .. } => {
+                "IRの並びがアセンブリ生成の前提と合っていません。コンパイラ内部の問題の可能性があります".into()
+            }
             _ => return None,
         })
     }
@@ -384,6 +578,10 @@ impl CompileErrKind {
                 format!("`{var_name}`を`of`の引数として関数へ渡してください")
             }
             Self::IncDecRequiresInteger(..) => "整数型の変数に使ってください".into(),
+            Self::AsmEmitArrayIndexNotNumber(..) => {
+                "添字を数字にするか、変数・構造体のメンバーを使ってください".into()
+            }
+            Self::AsmEmitFloatNotSupported(..) => "整数の式に書き換えてください".into(),
             _ => return None,
         })
     }

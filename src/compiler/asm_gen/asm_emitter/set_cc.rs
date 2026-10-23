@@ -38,24 +38,34 @@ impl AsmEmitter {
     }
 
     /// 種類から、`setcc`のテンプレートを引くキーを返す
-    fn set_cc_key(kind: &inst::ExprKind) -> &'static str {
-        match kind {
+    fn set_cc_key(kind: &inst::ExprKind) -> Result<&'static str, err::ErrKind> {
+        Ok(match kind {
             inst::ExprKind::SetLessThen => "set_l",
             inst::ExprKind::SetGreaterThen => "set_g",
             inst::ExprKind::SetLessThenEq => "set_l_e",
             inst::ExprKind::SetGreaterThenEq => "set_g_e",
             inst::ExprKind::SetEqual => "set_e",
             inst::ExprKind::SetNotEq => "set_ne",
-            other => panic!("setccの式ではありません: {:?}", other),
-        }
+            other => {
+                return Err(err::ErrKind::asm_emit_not_set_cc_kind(format!(
+                    "{:?}",
+                    other
+                )));
+            }
+        })
     }
 
     /// `Set<比較>`: `cmp` → `setcc` → `movzbl`で、結果の0/1をレジスタへ置く
-    pub(in crate::compiler::asm_gen) fn gen_set_cc_asm(&mut self, expr: &inst::ExprInst) {
+    pub(in crate::compiler::asm_gen) fn gen_set_cc_asm(
+        &mut self,
+        expr: &inst::ExprInst,
+    ) -> Result<(), err::ErrKind> {
         let ls_ty = self.get_expr_ty(expr.ls);
         if ls_ty.is_float() || self.get_expr_ty(expr.rs).is_float() {
-            panic!("setccの比較に小数は使えません");
+            return Err(err::ErrKind::asm_emit_float_not_supported("setccの比較"));
         }
+        // レジスタを確保する前に、`setcc`の種類を確認する
+        let key = Self::set_cc_key(&expr.kind)?;
         let size = Self::value_reg_size(&ls_ty);
         let wrap_size = size.wrap_dst_size();
 
@@ -64,11 +74,11 @@ impl AsmEmitter {
         let dst = self.alloc_reg(&Size::DD);
         self.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
-        let dst8 = self.get_reg(Some(dst.index()), &Size::DB);
-        let dst32 = self.get_reg(Some(dst.index()), &Size::DD);
+        let dst8 = self.get_reg_txt(Some(dst.index()), &Size::DB)?;
+        let dst32 = self.get_reg_txt(Some(dst.index()), &Size::DD)?;
 
-        let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref());
-        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref());
+        let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
+        let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
             || self.check_node_is_mem_val(expr.rs).is_some();
 
@@ -76,7 +86,7 @@ impl AsmEmitter {
         // `cmp`の比較される側(`src1`)は即値にできないので、結果のレジスタへ移す
         // (`setcc`で上書きするので、そのレジスタは一時的に使える)
         if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
-            let reg_txt = self.get_reg(Some(dst.index()), &size);
+            let reg_txt = self.get_reg_txt(Some(dst.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &src1, &size, false));
             src1 = reg_txt;
         }
@@ -96,7 +106,6 @@ impl AsmEmitter {
                 | inst::ExprKind::SetLessThenEq
                 | inst::ExprKind::SetGreaterThenEq
         ) && (ls_ty.is_unsigned() || self.get_expr_ty(expr.rs).is_unsigned());
-        let key = Self::set_cc_key(&expr.kind);
         let set_tmpl = if is_unsigned_cmp {
             self.asm_fmt.get_unsigned_set_tmpl(key)
         } else {
@@ -118,5 +127,6 @@ impl AsmEmitter {
         // 比較し終わったので、オペランドの一時的な結果のレジスタを解放する
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);
+        Ok(())
     }
 }

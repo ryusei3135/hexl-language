@@ -8,7 +8,9 @@ use stmt::*;
 
 impl Parser {
     /// 現在の位置から1つ先のトークンを取得する。
-    pub(in crate::compiler::hexl_frontend::parse) fn peek_tkn(&self) -> Result<lex::Tkn, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn peek_tkn(
+        &self,
+    ) -> Result<lex::Tkn, err::ErrKind> {
         if let Some(tkn) = &self.tkns {
             if let Some(r) = tkn.get(self.idx + 1).map(|v| v.tkn.clone()) {
                 Ok(r)

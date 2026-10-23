@@ -1,7 +1,9 @@
 use super::*;
 
 impl Parser {
-    pub(in crate::compiler::hexl_frontend::parse) fn fn_unexpect_tkn<R>(&self) -> Result<R, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn fn_unexpect_tkn<R>(
+        &self,
+    ) -> Result<R, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -14,7 +16,9 @@ impl Parser {
         )
     }
 
-    pub(in crate::compiler::hexl_frontend::parse) fn not_found_lparen(&self) -> Result<Expr, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn not_found_lparen(
+        &self,
+    ) -> Result<Expr, err::ErrKind> {
         crate::err_generated_by!();
         crate::syntax_err!(
             self.build_err_span(),
@@ -71,7 +75,9 @@ impl Parser {
     }
 
     /// 引数の定義の後ろが`{`ではなかった(戻り値の型の後ろなど)
-    pub(in crate::compiler::hexl_frontend::parse) fn fn_lbrace_not_found<T>(&self) -> Result<T, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn fn_lbrace_not_found<T>(
+        &self,
+    ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
         Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
     }
@@ -204,7 +210,9 @@ impl Parser {
     }
 
     /// ジェネリクス関数の型引数の後ろが、`,`でも`>`でもなかった
-    pub(in crate::compiler::hexl_frontend::parse) fn generic_type_args_comma_or_rangle_not_found<T>(
+    pub(in crate::compiler::hexl_frontend::parse) fn generic_type_args_comma_or_rangle_not_found<
+        T,
+    >(
         &self,
         found: lex::Tkn,
     ) -> Result<T, err::ErrKind> {

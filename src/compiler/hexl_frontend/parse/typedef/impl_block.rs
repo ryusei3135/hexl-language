@@ -11,7 +11,9 @@ impl Parser {
     /// `impl Name { メゾット.. }`を解析する
     /// 呼び出し時は current_tkn() が `KeyWordImpl`、
     /// 終了時は`impl`を閉じる`}`を指す(`struct_node`と同じ)
-    pub(in crate::compiler::hexl_frontend::parse) fn impl_node(&mut self) -> Result<(), err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn impl_node(
+        &mut self,
+    ) -> Result<(), err::ErrKind> {
         if self.current_tkn() != &lex::Tkn::KeyWordImpl {
             return crate::err_at!(self.expected_at_current("impl"));
         }
@@ -100,8 +102,8 @@ impl Parser {
 #[cfg(test)]
 mod impl_block_test {
     use crate::compiler::{
-        hexl_frontend::lex,
         ast::{self, *},
+        hexl_frontend::lex,
         hexl_frontend::parse,
     };
 

@@ -31,6 +31,7 @@ pub enum UndefKind {
     UndefMemberInFn,
     UndefVariant,
     UndefVariantField,
+    UndefInlineAsm,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,6 +65,7 @@ impl UndefKind {
             Self::UndefMemberInFn => "E0108",
             Self::UndefVariant => "E0109",
             Self::UndefVariantField => "E0110",
+            Self::UndefInlineAsm => "E111",
         }
     }
 
@@ -80,6 +82,7 @@ impl UndefKind {
             Self::UndefMemberInFn => "関数のメンバー",
             Self::UndefVariant => "バリアント型",
             Self::UndefVariantField => "バリアントのフィールド",
+            Self::UndefInlineAsm => "インラインアセンブラの名前",
         }
     }
 
@@ -104,6 +107,7 @@ impl UndefKind {
             Self::UndefVar => {
                 "変数を使う前に定義しているか、スコープの外で使っていないか確認してください"
             }
+            Self::UndefInlineAsm => "インラインアセンブラが定義されていません",
             Self::UndefFunc => "関数名の綴りを確認するか、呼び出す前に関数を定義してください",
             Self::UndefStruct => "構造体の名前の綴りを確認するか、先に構造体を定義してください",
             Self::UndefVariant => "バリアント型の名前の綴りを確認するか、先に定義してください",

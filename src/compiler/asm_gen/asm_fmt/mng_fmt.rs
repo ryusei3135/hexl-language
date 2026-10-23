@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use super::*;
+use crate::compiler::err::{self, compiler_err::CompilerErr};
 use crate::compiler::ir::types;
 use crate::compiler::models::AsmFmtData;
 use crate::{asm_setting, compiler::asm_gen::RegisterMode};
@@ -60,18 +61,18 @@ impl MngAsmFmt {
         &self,
         param_idx: usize,
         size: &Size,
-    ) -> R {
+    ) -> Result<R, err::ErrKind> {
         if TypeId::of::<R>() != TypeId::of::<usize>() && TypeId::of::<R>() != TypeId::of::<String>()
         {
             panic!("この型は無効です,")
         }
 
-        if TypeId::of::<R>() == TypeId::of::<String>() {
+        Ok(if TypeId::of::<R>() == TypeId::of::<String>() {
             let result: Box<dyn Any> = Box::new(
                 if size.is_float() {
-                    self.get_fmt_float_reg(self.param_fmt[param_idx], &size)
+                    self.get_fmt_float_reg(self.param_fmt[param_idx], &size)?
                 } else {
-                    self.get_fmt_reg(self.param_fmt[param_idx], &size)
+                    self.get_fmt_reg(self.param_fmt[param_idx], &size)?
                 }
                 .to_string(),
             );
@@ -79,7 +80,7 @@ impl MngAsmFmt {
         } else {
             let result: Box<dyn Any> = Box::new(self.param_fmt[param_idx]);
             result.downcast::<R>().ok().map(|b| *b).unwrap()
-        }
+        })
     }
 
     pub(in crate::compiler::asm_gen) fn fmt_ref_operand(&self, reg: &str, size: usize) -> String {
@@ -506,38 +507,48 @@ impl MngAsmFmt {
         self.fmt.func.call.replace("{name}", func_name)
     }
 
-    pub(in crate::compiler::asm_gen) fn get_fmt_reg(&self, reg_num: usize, size: &Size) -> String {
+    pub(in crate::compiler::asm_gen) fn get_fmt_reg(
+        &self,
+        reg_num: usize,
+        size: &Size,
+    ) -> Result<String, err::ErrKind> {
         let reg = match &size {
             Size::DB | Size::UDB => &self.reg_fmt.db,
             Size::DW | Size::UDW => &self.reg_fmt.dw,
             Size::DD | Size::UDD => &self.reg_fmt.dd,
             Size::DQ | Size::UDQ => &self.reg_fmt.dq,
             Size::Pointer { .. } => &self.reg_fmt.dq,
-            t => panic!("レジスタに変換できない型 {:?}", t),
+            t => {
+                return Err(CompilerErr::ThisTyIsCantConvertRegsiter(size.clone()));
+            }
         };
-        self.fmt
+        Ok(self
+            .fmt
             .fmt
             .reg
             .replace("{}", reg[reg_num].as_str())
-            .to_string()
+            .to_string())
     }
 
     pub(in crate::compiler::asm_gen) fn get_fmt_float_reg(
         &self,
         reg_num: usize,
         size: &Size,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         let reg = match &size {
             Size::F32 => &self.reg_fmt.xmm,
             Size::F64 => &self.reg_fmt.xmm,
             Size::Pointer { .. } => &self.reg_fmt.dq,
-            _ => panic!(),
+            _ => {
+                return Err(CompilerErr::ThisTyIsCantConvertRegsiter(size.clone()));
+            }
         };
-        self.fmt
+        Ok(self
+            .fmt
             .fmt
             .reg
             .replace("{}", reg[reg_num].as_str())
-            .to_string()
+            .to_string())
     }
 
     // /// レジスタ文字列からレジスタのサイズを取得する
@@ -572,7 +583,7 @@ impl MngAsmFmt {
         &self,
         operand: &str,
         size: &Size,
-    ) -> String {
+    ) -> Result<String, err::ErrKind> {
         for (_, registers) in [
             (Size::DB, &self.reg_fmt.db),
             (Size::DW, &self.reg_fmt.dw),
@@ -586,7 +597,7 @@ impl MngAsmFmt {
                 }
             }
         }
-        operand.to_string()
+        Ok(operand.to_string())
     }
 
     /// 確保されているレジスタの本数
@@ -601,13 +612,15 @@ impl MngAsmFmt {
 
     /// `(レジスタ番号, レジスタ名)`のペアを、確保されている
     /// 全レジスタ・全サイズ分列挙する。
-    pub(in crate::compiler::asm_gen) fn all_reg_names(&self) -> Vec<(RegisterMode, String)> {
+    pub(in crate::compiler::asm_gen) fn all_reg_names(
+        &self,
+    ) -> Result<Vec<(RegisterMode, String)>, err::ErrKind> {
         let mut result = Vec::new();
         for reg_idx in 0..self.reg_count() {
             for size in [Size::DQ, Size::DD, Size::DW, Size::DB] {
                 result.push((
                     RegisterMode::Normal(reg_idx),
-                    self.get_fmt_reg(reg_idx, &size),
+                    self.get_fmt_reg(reg_idx, &size)?,
                 ));
             }
         }
@@ -615,11 +628,11 @@ impl MngAsmFmt {
             for size in [Size::F32, Size::F64] {
                 result.push((
                     RegisterMode::Float(reg_idx),
-                    self.get_fmt_float_reg(reg_idx, &size),
+                    self.get_fmt_float_reg(reg_idx, &size)?,
                 ));
             }
         }
-        result
+        Ok(result)
     }
 
     /// 先頭から`count`個の引数が渡されるレジスタの番号

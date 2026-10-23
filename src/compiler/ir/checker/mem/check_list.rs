@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::err::{self, CompileErr, CompileErrKind};
 use crate::compiler::ast::{Expr, TyNode};
+use crate::compiler::err::{self, CompileErr, CompileErrKind};
 
 pub(in crate::compiler::ir::checker::mem) trait IndexCheckList {
     fn num_check(val: &str, span: &Rc<err::Span>) -> Result<(), err::ErrKind>;

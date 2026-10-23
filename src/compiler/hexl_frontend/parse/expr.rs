@@ -114,9 +114,7 @@ impl Parser {
             if matches!(self.current_tkn(), lex::Tkn::RBracket) {
                 if matches!(self.next_tkn(&["="])?, lex::Tkn::Equal) {
                     let value = mk(ExprNode::ConnectAddr(Box::new(self.expr_branch()?)));
-                    return Ok(
-                        DefineVar::new(&name, value, &ty_node, var_attr).wrap(start.clone())
-                    );
+                    return Ok(DefineVar::new(&name, value, &ty_node, var_attr).wrap(start.clone()));
                 }
             }
 
@@ -133,17 +131,15 @@ impl Parser {
     }
 
     /// 二項演算のノードを作る。位置は、左のオペランドの先頭
-    fn binary_expr(
-        ctor: fn((Box<Expr>, Box<Expr>)) -> ExprNode,
-        left: Expr,
-        right: Expr,
-    ) -> Expr {
+    fn binary_expr(ctor: fn((Box<Expr>, Box<Expr>)) -> ExprNode, left: Expr, right: Expr) -> Expr {
         let span = left.span.clone();
         Expr::new(ctor(Expr::wrap(left, right)), span)
     }
 
     /// 式に代入する物が、構文の式 例(match)かどうかで
-    pub(in crate::compiler::hexl_frontend::parse) fn expr_branch(&mut self) -> Result<Expr, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn expr_branch(
+        &mut self,
+    ) -> Result<Expr, err::ErrKind> {
         if matches!(self.next_tkn_ref(&["match"])?, lex::Tkn::KeyWordCond) {
             self.next_tkn(&[])?;
             self.expr_match()
@@ -287,21 +283,15 @@ impl Parser {
                 lex::Tkn::LAngleBracket => {
                     Self::binary_expr(ExprNode::LessThen, left, self.expr_shift(ini_struct)?)
                 }
-                lex::Tkn::RAngleBracket => Self::binary_expr(
-                    ExprNode::GreaterThen,
-                    left,
-                    self.expr_shift(ini_struct)?,
-                ),
-                lex::Tkn::LessThanEq => Self::binary_expr(
-                    ExprNode::LessThenEq,
-                    left,
-                    self.expr_shift(ini_struct)?,
-                ),
-                lex::Tkn::GreaterThanEq => Self::binary_expr(
-                    ExprNode::GreaterThenEq,
-                    left,
-                    self.expr_shift(ini_struct)?,
-                ),
+                lex::Tkn::RAngleBracket => {
+                    Self::binary_expr(ExprNode::GreaterThen, left, self.expr_shift(ini_struct)?)
+                }
+                lex::Tkn::LessThanEq => {
+                    Self::binary_expr(ExprNode::LessThenEq, left, self.expr_shift(ini_struct)?)
+                }
+                lex::Tkn::GreaterThanEq => {
+                    Self::binary_expr(ExprNode::GreaterThenEq, left, self.expr_shift(ini_struct)?)
+                }
                 _ => break,
             };
         }
@@ -336,12 +326,8 @@ impl Parser {
         // expr_mulですでにトークンを進めているので現在のトークンを参照
         loop {
             left = match self.current_tkn() {
-                lex::Tkn::Add => {
-                    Self::binary_expr(ExprNode::Add, left, self.expr_mul(ini_struct)?)
-                }
-                lex::Tkn::Sub => {
-                    Self::binary_expr(ExprNode::Sub, left, self.expr_mul(ini_struct)?)
-                }
+                lex::Tkn::Add => Self::binary_expr(ExprNode::Add, left, self.expr_mul(ini_struct)?),
+                lex::Tkn::Sub => Self::binary_expr(ExprNode::Sub, left, self.expr_mul(ini_struct)?),
                 _ => break,
             };
         }
@@ -553,8 +539,7 @@ impl Parser {
         fn already_positioned_after_call(v: &Expr) -> bool {
             match &v.node {
                 ExprNode::CallFunc(..) | ExprNode::Scope { .. } => true,
-                ExprNode::Member { target, .. }
-                | ExprNode::PtrMember { target, .. } => {
+                ExprNode::Member { target, .. } | ExprNode::PtrMember { target, .. } => {
                     matches!(target.node, ExprNode::CallFunc(..))
                 }
                 _ => false,

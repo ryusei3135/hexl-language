@@ -21,6 +21,8 @@
 //!   (`ExpectJmp`の後)は、退避したままにせず、直後に復元する。
 //! - `Ret`の後・`EndScope`で解放されたレジスタの退避は、捨てる(復元しない)。
 
+use crate::compiler::err;
+
 use super::*;
 use std::collections::HashSet;
 
@@ -38,35 +40,39 @@ impl AsmEmitter {
     }
 
     /// レジスタ`reg`を領域`slot`へ退避する命令
-    fn spill_store_asm(&self, reg: RegisterMode, slot: usize) -> String {
+    fn spill_store_asm(&self, reg: RegisterMode, slot: usize) -> Result<String, err::ErrKind> {
         let slot_ref = self.rbp_ref(slot);
-        match reg {
-            RegisterMode::Normal(_) => self.mov_line(&slot_ref, &self.reg64(&reg), &Size::DQ, true),
+        Ok(match reg {
+            RegisterMode::Normal(_) => {
+                self.mov_line(&slot_ref, &self.reg64(&reg)?, &Size::DQ, true)
+            }
             RegisterMode::Float(_) => {
                 let size = self.float_reg_size(reg);
                 let opcode = Self::float_move_opcode(&size);
                 self.asm_fmt
                     .get_opcode_tmpl(opcode)
-                    .replace("{src1}", &self.reg_mode_operand(reg, &size))
+                    .replace("{src1}", &self.reg_mode_operand(reg, &size)?)
                     .replace("{dst}", &slot_ref)
             }
-        }
+        })
     }
 
     /// 領域`slot`からレジスタ`reg`へ復元する命令
-    fn spill_load_asm(&self, reg: RegisterMode, slot: usize) -> String {
+    fn spill_load_asm(&self, reg: RegisterMode, slot: usize) -> Result<String, err::ErrKind> {
         let slot_ref = self.rbp_ref(slot);
-        match reg {
-            RegisterMode::Normal(_) => self.mov_line(&self.reg64(&reg), &slot_ref, &Size::DQ, true),
+        Ok(match reg {
+            RegisterMode::Normal(_) => {
+                self.mov_line(&self.reg64(&reg)?, &slot_ref, &Size::DQ, true)
+            }
             RegisterMode::Float(_) => {
                 let size = self.float_reg_size(reg);
                 let opcode = Self::float_move_opcode(&size);
                 self.asm_fmt
                     .get_opcode_tmpl(opcode)
                     .replace("{src1}", &slot_ref)
-                    .replace("{dst}", &self.reg_mode_operand(reg, &size))
+                    .replace("{dst}", &self.reg_mode_operand(reg, &size)?)
             }
-        }
+        })
     }
 
     /// 生きている変数(スコープが終わっていない)で、レジスタ`reg`に置かれているものの名前
@@ -84,11 +90,12 @@ impl AsmEmitter {
     }
 
     /// 退避しているレジスタ`reg`を復元する(退避していなければ何もしない)
-    fn reload_reg(&mut self, reg: RegisterMode) {
+    fn reload_reg(&mut self, reg: RegisterMode) -> Result<(), err::ErrKind> {
         if let Some(slot) = self.spilled_regs.remove(&reg) {
-            let asm = self.spill_load_asm(reg, slot);
+            let asm = self.spill_load_asm(reg, slot)?;
             self.asm_text.push_str(&asm);
         }
+        Ok(())
     }
 
     /// 退避しているレジスタを全て復元する
@@ -269,27 +276,33 @@ impl AsmEmitter {
     }
 
     /// 呼び出しの前に`regs`を領域へ退避する命令を返す
-    pub(super) fn spill_store_regs(&mut self, regs: &[RegisterMode]) -> String {
+    pub(super) fn spill_store_regs(
+        &mut self,
+        regs: &[RegisterMode],
+    ) -> Result<String, err::ErrKind> {
         let mut asm = String::new();
         for reg in regs {
             let slot = self.spill_slot(*reg);
-            asm.push_str(&self.spill_store_asm(*reg, slot));
+            asm.push_str(&self.spill_store_asm(*reg, slot)?);
         }
-        asm
+        Ok(asm)
     }
 
     /// 呼び出しの後に、`regs`のうち今のノードが参照するものは復元し、
     /// 残りは退避したまま(`spilled_regs`)にする。復元する命令を返す
-    pub(super) fn after_call_spills(&mut self, regs: &[RegisterMode]) -> String {
+    pub(super) fn after_call_spills(
+        &mut self,
+        regs: &[RegisterMode],
+    ) -> Result<String, err::ErrKind> {
         let mut asm = String::new();
         for reg in regs {
             let slot = self.spill_slot(*reg);
             if self.spill_needed_now(*reg) {
-                asm.push_str(&self.spill_load_asm(*reg, slot));
+                asm.push_str(&self.spill_load_asm(*reg, slot)?);
             } else {
                 self.spilled_regs.insert(*reg, slot);
             }
         }
-        asm
+        Ok(asm)
     }
 }

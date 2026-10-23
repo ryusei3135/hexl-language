@@ -1,4 +1,4 @@
-use crate::compiler::{err, ast};
+use crate::compiler::{ast, err};
 
 use super::*;
 

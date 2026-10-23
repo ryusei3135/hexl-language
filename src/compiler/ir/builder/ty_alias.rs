@@ -110,9 +110,7 @@ fn group1(node: &mut ast::Group1Node, map: &AliasMap) {
             }
             v.methods.iter_mut().for_each(|m| group1(m, map));
         }
-        ast::Group1Node::TypeAlias(_)
-        | ast::Group1Node::Include(_)
-        | ast::Group1Node::Line(_) => {}
+        ast::Group1Node::TypeAlias(_) | ast::Group1Node::Include(_) | ast::Group1Node::Line(_) => {}
     }
 }
 
@@ -124,9 +122,7 @@ fn body(b: &mut Body, map: &AliasMap) {
 
 fn group2(node: &mut ast::Group2Node, map: &AliasMap) {
     match node {
-        ast::Group2Node::Expr(e) | ast::Group2Node::Stmt(StmtNode::Return(e)) => {
-            expr(e, map)
-        }
+        ast::Group2Node::Expr(e) | ast::Group2Node::Stmt(StmtNode::Return(e)) => expr(e, map),
         _ => {}
     }
 }

@@ -16,7 +16,7 @@ pub(in crate::compiler) use test_utils::*;
 #[cfg(test)]
 pub mod zero_span;
 
-use crate::compiler::{models::Body, hexl_frontend::parse::VarMutAttr};
+use crate::compiler::{hexl_frontend::parse::VarMutAttr, models::Body};
 
 pub const IS_MUST: usize = 0;
 pub const IS_OF: usize = 1;

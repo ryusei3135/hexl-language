@@ -96,11 +96,7 @@ impl IR {
     /// `index`はその添字部分のAST。
     /// 添字が定数式でない場合や、`name`が範囲指定付きのポインタ型
     /// でない場合は判定できないため`true`を返す
-    pub(in crate::compiler::ir) fn range_ptr_checker(
-        &mut self,
-        name: &str,
-        index: &Expr,
-    ) -> bool {
+    pub(in crate::compiler::ir) fn range_ptr_checker(&mut self, name: &str, index: &Expr) -> bool {
         if self.is_const_index(index) == false {
             return true;
         }

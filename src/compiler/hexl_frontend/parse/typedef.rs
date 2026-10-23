@@ -280,46 +280,45 @@ impl Parser {
             lex::Tkn::Name(name) => {
                 // 契約型かを調べる
                 let base_ty = self.is_constract_ty(TyNode::Ty(name.clone()))?;
-                let ty = match self.next_tkn(&["<", "*", "["])? {
-                    // ジェネリクスな構造体/バリアント: `Name<int>`
-                    lex::Tkn::LAngleBracket => {
-                        if !self.generic_types.contains_key(&name) {
-                            return crate::err_at!(self.generics_not_supported_yet());
-                        }
-                        // その型引数の構造体/バリアントを(まだ無ければ)作り、
-                        // 作った型の名前の型にする。終了時は`>`を指す
-                        let generic_name = self.generic_type_ref(&name)?;
-                        let generic_ty = self.is_constract_ty(TyNode::Ty(generic_name))?;
-                        match self.next_tkn(&["*", "["])? {
-                            lex::Tkn::LBracket => {
-                                self.next_tkn(&["["])?;
-                                self.make_range_ptr_node(generic_ty)?
+                let ty =
+                    match self.next_tkn(&["<", "*", "["])? {
+                        // ジェネリクスな構造体/バリアント: `Name<int>`
+                        lex::Tkn::LAngleBracket => {
+                            if !self.generic_types.contains_key(&name) {
+                                return crate::err_at!(self.generics_not_supported_yet());
                             }
-                            lex::Tkn::Mul => self.ptr_ty_node(generic_ty)?,
-                            _ => generic_ty,
+                            // その型引数の構造体/バリアントを(まだ無ければ)作り、
+                            // 作った型の名前の型にする。終了時は`>`を指す
+                            let generic_name = self.generic_type_ref(&name)?;
+                            let generic_ty = self.is_constract_ty(TyNode::Ty(generic_name))?;
+                            match self.next_tkn(&["*", "["])? {
+                                lex::Tkn::LBracket => {
+                                    self.next_tkn(&["["])?;
+                                    self.make_range_ptr_node(generic_ty)?
+                                }
+                                lex::Tkn::Mul => self.ptr_ty_node(generic_ty)?,
+                                _ => generic_ty,
+                            }
                         }
-                    }
-                    // 境界付きポインタ
-                    lex::Tkn::LBracket => {
-                        self.next_tkn(&["["])?;
-                        self.make_range_ptr_node(base_ty)?
-                    }
-                    // ポインタの型
-                    // var: *.. の `*`
-                    lex::Tkn::Mul => self.ptr_ty_node(base_ty)?,
-                    _ => {
-                        // ジェネリクスに定義ずみの型がある
-                        if self
-                            .other_stk
-                            .iter()
-                            .any(|(stk_name, info)| stk_name == &name && info == &StkInfo::Generics)
-                        {
-                            TyNode::make_ref_ty(&name)
-                        } else {
-                            base_ty
+                        // 境界付きポインタ
+                        lex::Tkn::LBracket => {
+                            self.next_tkn(&["["])?;
+                            self.make_range_ptr_node(base_ty)?
                         }
-                    }
-                };
+                        // ポインタの型
+                        // var: *.. の `*`
+                        lex::Tkn::Mul => self.ptr_ty_node(base_ty)?,
+                        _ => {
+                            // ジェネリクスに定義ずみの型がある
+                            if self.other_stk.iter().any(|(stk_name, info)| {
+                                stk_name == &name && info == &StkInfo::Generics
+                            }) {
+                                TyNode::make_ref_ty(&name)
+                            } else {
+                                base_ty
+                            }
+                        }
+                    };
                 Ok(ty)
             }
             // スタック領域: `[ty]` / `[ty 4]`
@@ -383,14 +382,16 @@ impl Parser {
 mod ty_tests {
     use super::*;
     use crate::compiler::Field;
+    use crate::compiler::ast::zero_span::ZeroSpan;
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    /// テストで組み立てるノードに付ける位置
+    /// テストで組み立てるノードに付ける位置(`line`も`pos`も0)
     fn sp() -> Rc<err::Span> {
-        Parser::new_for_test().build_err_span()
+        Rc::new(err::Span::new(0, 0, String::new()))
     }
 
+    /// パース結果。すべての`span`と`Group2Info.line`を0にして返す
     fn build(value: &str) -> Vec<Group1Node> {
         let mut lex = lex::Lexer::new();
         let _ = lex.analy(&value.to_string()).unwrap();
@@ -399,6 +400,14 @@ mod ty_tests {
             .parser_for_test(&lex.gen_tkns.clone())
             .unwrap()
             .to_vec()
+            .zeroed_spans()
+    }
+
+    /// `unsafe`共用体のメンバー(`mode`が`Unsafe`)を作る
+    fn unsafe_field(name: &str, ty: &str) -> VariantField {
+        let mut field = VariantField::new(name.to_string(), TyNode::Ty(ty.to_string()), sp());
+        field.mode = VariantMode::Unsafe;
+        field
     }
 
     /// 構文解析がエラーになるかどうか
@@ -458,7 +467,7 @@ mod ty_tests {
                 }
                 .with_span(sp()),
             )
-            .gen_group_info(1, sp()),
+            .gen_group_info(0, sp()),
         );
         assert_eq!(
             &build("main(): int { Name { name: 1 name2: 1 } }"),
@@ -557,18 +566,7 @@ mod ty_tests {
             &build("variant \"unsafe\" Name { a: int b: i64 }"),
             &vec![VariantDefine::new(
                 "Name".to_string(),
-                vec![
-                    VariantField::new(
-                        "a".to_string(),
-                        TyNode::Ty("int".to_string()),
-                        sp(),
-                    ),
-                    VariantField::new(
-                        "b".to_string(),
-                        TyNode::Ty("i64".to_string()),
-                        sp(),
-                    ),
-                ],
+                vec![unsafe_field("a", "int"), unsafe_field("b", "i64")],
                 Vec::new(),
                 sp()
             )]

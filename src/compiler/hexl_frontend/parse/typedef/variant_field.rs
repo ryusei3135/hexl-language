@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 
 use super::*;
@@ -121,8 +120,8 @@ impl Parser {
 #[cfg(test)]
 mod variant_node_test {
     use crate::compiler::{
-        hexl_frontend::lex,
         ast::{self, *},
+        hexl_frontend::lex,
         hexl_frontend::parse,
     };
 

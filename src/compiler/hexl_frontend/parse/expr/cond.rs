@@ -2,7 +2,9 @@ use super::*;
 
 impl Parser {
     /// 最初にキーワードのcondが来る必要がある
-    pub(in crate::compiler::hexl_frontend::parse) fn expr_match(&mut self) -> Result<Expr, err::ErrKind> {
+    pub(in crate::compiler::hexl_frontend::parse) fn expr_match(
+        &mut self,
+    ) -> Result<Expr, err::ErrKind> {
         const STRUCT_NOT_INIT: bool = false;
 
         if self.current_tkn() != &lex::Tkn::KeyWordCond {

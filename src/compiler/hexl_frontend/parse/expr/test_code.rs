@@ -4,12 +4,13 @@ use super::*;
 
 #[cfg(test)]
 mod expr_tests {
+    use crate::compiler::ast::zero_span::ZeroSpan;
     use crate::compiler::{
-        err, hexl_frontend::lex,
         ast::{self, *},
+        err,
+        hexl_frontend::lex,
         hexl_frontend::parse,
     };
-    use crate::compiler::ast::zero_span::ZeroSpan;
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp(line: usize) -> std::rc::Rc<err::Span> {
@@ -31,8 +32,7 @@ mod expr_tests {
     fn check_get_address_var() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int* = [b] }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -40,9 +40,9 @@ mod expr_tests {
             node.body[0].get_node(),
             &ex(ExprNode::DefVar(DefineVar {
                 name: "a".to_string(),
-                value: Box::new(ex(ExprNode::GetAddress(Box::new(ex(
-                    ExprNode::Var("b".to_string())
-                ))))),
+                value: Box::new(ex(ExprNode::GetAddress(Box::new(ex(ExprNode::Var(
+                    "b".to_string()
+                )))))),
                 ty: TyNode::Pointer {
                     is_const: false,
                     ty_name: Box::new(TyNode::Ty("int".to_string())),
@@ -58,8 +58,7 @@ mod expr_tests {
     fn check_call_func_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a(10, a) }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -81,8 +80,7 @@ mod expr_tests {
     fn check_float_literal_arg() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a(1.5, 2) }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -152,8 +150,7 @@ mod expr_tests {
     fn check_stack_var_single() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: [int] = 100 }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -176,8 +173,7 @@ mod expr_tests {
     fn check_stack_var_array() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: [int 4] = {100, 100, 100, 100} }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -205,8 +201,7 @@ mod expr_tests {
     fn check_static_var_single() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: static[int] = 100 }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -242,8 +237,7 @@ mod expr_tests {
             }
             ",
         );
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -278,8 +272,7 @@ mod expr_tests {
             }
             ",
         );
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -323,8 +316,7 @@ mod expr_tests {
             }
             ",
         );
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -356,8 +348,7 @@ mod expr_tests {
         // ポインタが指す構造体のメンバーへの代入: `[ptr].name = 10`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { [ptr].name = 10 }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -382,8 +373,7 @@ mod expr_tests {
         // ポインタが指す構造体のメゾットの呼び出し: `[ptr].f()`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { [ptr].f() }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -409,8 +399,7 @@ mod expr_tests {
         // `a: int = [ptr].name`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): b1 { a: int = [ptr].name }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -436,8 +425,7 @@ mod expr_tests {
         // キャスト: `(T)var` -> `Cast((T, Box(var)))`
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: i64 = (i64)b ret 1 }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -460,8 +448,7 @@ mod expr_tests {
     fn check_enum_variant_expr() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a: Color = Color::Green }");
-        let Group1Node::FuncDefine(ref node) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -484,17 +471,13 @@ mod expr_tests {
     fn check_postfix_increment_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a++ }");
-        let Group1Node::FuncDefine(ref func) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref func) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             func.body[0].get_node(),
-            &ex(ExprNode::Inc(Box::new(ex(ExprNode::Var(
-                "a".to_string()
-            )))))
-            .wrap_group2()
+            &ex(ExprNode::Inc(Box::new(ex(ExprNode::Var("a".to_string()))))).wrap_group2()
         );
     }
 
@@ -502,17 +485,13 @@ mod expr_tests {
     fn check_postfix_decrement_node() {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes("main(): int { a-- }");
-        let Group1Node::FuncDefine(ref func) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref func) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
         assert_eq!(
             func.body[0].get_node(),
-            &ex(ExprNode::Dec(Box::new(ex(ExprNode::Var(
-                "a".to_string()
-            )))))
-            .wrap_group2()
+            &ex(ExprNode::Dec(Box::new(ex(ExprNode::Var("a".to_string()))))).wrap_group2()
         );
     }
 
@@ -528,8 +507,7 @@ mod expr_tests {
     fn parse_value_of(src: &str) -> Expr {
         let mut p = parse::Parser::new_for_test();
         let tkns = gen_nodes(src);
-        let Group1Node::FuncDefine(ref func) =
-            p.parser_for_test(&tkns).expect("node is err")[0]
+        let Group1Node::FuncDefine(ref func) = p.parser_for_test(&tkns).expect("node is err")[0]
         else {
             panic!("not func");
         };
@@ -588,9 +566,9 @@ mod expr_tests {
         // `!~b` / `- -b`
         assert_eq!(
             parse_value_of("main(): int { a: int = !~b }"),
-            ex(ExprNode::CmpNot(Box::new(ex(
-                ExprNode::Inversion(var("b"))
-            ))))
+            ex(ExprNode::CmpNot(Box::new(ex(ExprNode::Inversion(var(
+                "b"
+            ))))))
         );
         assert_eq!(
             parse_value_of("main(): int { a: int = - -b }"),

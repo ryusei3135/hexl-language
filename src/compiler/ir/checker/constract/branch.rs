@@ -58,9 +58,7 @@ impl IR {
     fn ends_with_exit(body: &Body) -> bool {
         matches!(
             body.iter().last().map(|n| n.get_node()),
-            Some(Group2Node::Stmt(
-                StmtNode::Return(_) | StmtNode::Break(_)
-            ))
+            Some(Group2Node::Stmt(StmtNode::Return(_) | StmtNode::Break(_)))
         )
     }
 
