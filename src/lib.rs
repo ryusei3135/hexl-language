@@ -44,6 +44,7 @@ pub struct OptSettings {
     /// `dump <file>` 形式で指定されたか（dump のみ行いビルドしない）
     pub dump_only: bool,
     pub os: Option<String>,
+    pub emit_asm: bool,
 
     opt_flags: Option<OptFlags>,
 }
@@ -56,6 +57,7 @@ impl OptSettings {
             dump: false,
             dump_only: false,
             os: None,
+            emit_asm: false,
 
             opt_flags: Some(first_flag),
         }
@@ -68,6 +70,7 @@ impl OptSettings {
             dump: self.dump,
             dump_only: self.dump_only,
             os: None,
+            emit_asm: false,
             opt_flags: Some(OptFlags::SetFile),
         }
     }
@@ -128,6 +131,7 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
             "dump" => settings.dump = true,
             "--linux" => settings.os = Some("linux".to_string()),
             "--windows" => settings.os = Some("windows".to_string()),
+            "-S" => settings.emit_asm = true,
             val => {
                 if val.ends_with(".hexl") {
                     settings.file_name = Some(val.to_string());
@@ -259,16 +263,18 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
     // エラーメッセージを表示
     err_pool.borrow().view();
 
-    // 出力先のアセンブリ言語のファイル
-    let asm_file = file_name.replace(".hexl", "");
-    fs::write(format!("{}.s", asm_file), &asm_text)
-        .map_err(|e| format!("ファイル`{}.s`へ書き込めません: {}", asm_file, e))?;
+    if settings.emit_asm {
+        // 出力先のアセンブリ言語のファイル
+        let asm_file = file_name.replace(".hexl", "");
+        fs::write(format!("{}.s", asm_file), &asm_text)
+            .map_err(|e| format!("ファイル`{}.s`へ書き込めません: {}", asm_file, e))?;
+    }
 
     // 再配置可能オブジェクトファイル(ELF, `-o`)を生成する。
     // `#include` したファイルも同じ関数を通るので、ファイルごとに
     // `<ファイル名>.o` が作られる (出力名を分けないと互いに上書きしてしまう)。
     // `.s` は先に書き出してあるので、失敗しても内容は確認できる。
-    let obj_file = format!("{}.o", asm_file);
+    let obj_file = file_name.replace(".hexl", ".o");
     let obj_path =
         assembler::x64::emitter_x64_to("-o", &asm_text, &os, Some(&obj_file)).map_err(|e| {
             format!(
