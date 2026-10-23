@@ -7,8 +7,11 @@ Hexl は、低レベルな制御を保ちながら、コンパイル時の検査
 ## 1. 基本的なプログラム
 
 ```hexl
+#include io="library/os/io.hexl"
 _start(): int {
-    ret 0
+    msg: byte* = "hello world\n"
+    io::print_line(msg, 12)
+    io::exit()
 }
 ```
 

@@ -1,0 +1,76 @@
+
+
+#if #linux
+stdout_os_write(data: byte*, len: i64): i64 {
+    result: i64 = -1
+    #asm(gcc_x64) {
+        "movq $1, %rax"
+        "movq $1, %rdi"
+        "leaq ${data}, %rsi"
+        "movq ${len}, %rdx"
+        "syscall"
+        "movq %rax, ${result}"
+    }
+    ret result
+}
+
+pub exit() {
+    #asm(gcc_x64) {
+        "movq $60, %rax"
+        "movq $0, %rdi"
+        "syscall"
+    }
+}
+
+#elif #windows
+// Windows x64 ABI backend. GetStdHandle / WriteFile must be available as
+// imported Kernel32 symbols in the final PE link.
+stdout_os_write(data: byte*, len: i64): i64 {
+    written: i64 = 0
+    ok: i64 = 0
+    #asm(gcc_x64) {
+        // Reserve 32-byte Win64 shadow space + 8-byte fifth argument slot.
+        "subq $40, %rsp"
+        // GetStdHandle(STD_OUTPUT_HANDLE = -11)
+        "movq $-11, %rcx"
+        "call GetStdHandle"
+        // WriteFile(handle, data, len, &written, NULL)
+        "movq %rax, %rcx"
+        "movq ${data + 0}, %rdx"
+        "movq ${len}, %r8"
+        "leaq ${[written]}, %r9"
+        "movq $0, 32(%rsp)"
+        "call WriteFile"
+        "movq %rax, ${ok}"
+        "addq $40, %rsp"
+    }
+
+    cond ok == 0 {
+        ret -1
+    }
+    ret written
+}
+#else
+stdout_os_write(data: byte*, len: i64): i64 {
+    ret -1
+}
+#endif
+
+// Hexl standard output library.
+// Build with --linux or --windows so the preprocessor selects one backend.
+// Return convention: 0 = success, non-zero = error.
+
+
+pub print(data: byte*, len: i64): int {
+    offset mut: i64 = 0
+
+    written: i64 = stdout_os_write(data, len)
+    ret 0
+}
+
+pub print_line(data: byte*, len: i64): int {
+    result: int = print(data, len)
+
+    newline: byte = 10
+    ret print([newline], 1)
+}

@@ -12,9 +12,9 @@ log.txt
 hexl/
 *.elf
 *.exe
-library
 build.rs
 hexl_d
 *.o
 a
+library/os/*.md
 documents/docs.md

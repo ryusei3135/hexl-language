@@ -1,0 +1,7 @@
+
+
+
+variant Result<R, E> {
+    Ok(R)
+    Err(E)
+}
