@@ -172,15 +172,15 @@ mod variant_bind_tests {
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
         let mut p = parse::Parser::new_for_test();
-        let nodes = p.parser_for_test(&tkns).map_err(|_| ())?;
+        let nodes = p.parser_for_test(&tkns).unwrap();
         for n in nodes {
             if let Group1Node::FuncDefine(func) = n {
-                if func.name == "main" {
+                if func.name == "_start" {
                     return Ok(func.body.clone());
                 }
             }
         }
-        panic!("main is not found");
+        panic!("_start is not found");
     }
 
     /// `main`の最初の文の`Match`のアームの条件式を取り出す
@@ -210,7 +210,7 @@ mod variant_bind_tests {
         let body = gen_main_body(
             "
             variant A { M(int) N }
-            main(): int {
+            _start(): int {
               cond M(val) := a {
                 x: int = 1
               } else {
@@ -235,7 +235,7 @@ mod variant_bind_tests {
         let body = gen_main_body(
             "
             variant A { M(int) N }
-            main(): int {
+            _start(): int {
               cond M(val): int = a {
                 x: int = 1
               } else {
@@ -266,7 +266,7 @@ mod variant_bind_tests {
         let body = gen_main_body(
             "
             variant A { M(int) N }
-            main(): int {
+            _start(): int {
               cond {
                 M(val) := a => {
                   x: int = 1
@@ -293,7 +293,7 @@ mod variant_bind_tests {
         // `f(a) == 1`は、パターン束縛ではなく通常の関数呼び出しの比較
         let body = gen_main_body(
             "
-            main() {
+            _start() {
               cond f(a) == 1 {
                 x: int = 1
               } else {
@@ -310,8 +310,8 @@ mod variant_bind_tests {
     #[test]
     fn check_bind_outside_cond_is_err() {
         // `cond`の条件式の外では使えない
-        assert!(gen_main_body("main(): int { M(val) := a }").is_err());
-        assert!(gen_main_body("main(): int { loop M(val) := a { break } }").is_err());
+        assert!(gen_main_body("_start(): int { M(val) := a }").is_err());
+        assert!(gen_main_body("_start(): int { loop M(val) := a { break } }").is_err());
     }
 
     #[test]
@@ -320,7 +320,7 @@ mod variant_bind_tests {
         assert!(
             gen_main_body(
                 "
-            main(): int {
+            _start(): int {
               cond a {
                 M(val) := b => {
                   x: int = 1
@@ -342,7 +342,7 @@ mod variant_bind_tests {
         let body = gen_main_body(
             "
             variant A { M(int) N }
-            main(): int {
+            _start(): int {
               cond A::M(val) := a {
                 x: int = 1
               } else {
@@ -370,7 +370,7 @@ mod variant_bind_tests {
             let body = gen_main_body(&format!(
                 "
                 variant A {{ M(int) N }}
-                main(): int {{
+                _start(): int {{
                   cond {} {{
                     val += 1
                   }} else {{

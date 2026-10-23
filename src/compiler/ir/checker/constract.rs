@@ -200,7 +200,7 @@ g(v: int must=d) { d(v) }
 
     /// `main`の本体が`body`のソース全体を作る
     fn main_with(body: &str) -> String {
-        format!("{DEFS}\nmain(): int {{\n{body}\nret 0\n}}")
+        format!("{DEFS}\n_start(): int {{\n{body}\nret 0\n}}")
     }
 
     /// ソースをIRにする。構文エラーはここで失敗させる(コンパイルエラーの
@@ -482,7 +482,7 @@ g(v: int must=d) { d(v) }
     fn plain_call_result_passed_to_of_param_is_error() {
         // 契約のない関数の戻り値は`of`に渡せない
         assert_err(&format!(
-            "{DEFS}\nb(): int {{ ret 1 }}\nmain(): int {{\n c(b())\n ret 0\n}}"
+            "{DEFS}\nb(): int {{ ret 1 }}\n_start(): int {{\n c(b())\n ret 0\n}}"
         ));
     }
 
@@ -507,11 +507,11 @@ g(v: int must=d) { d(v) }
     fn return_with_unfinished_contract_is_error() {
         // `ret`の前にも後にも終了していない
         assert_err(&format!(
-            "{DEFS}\nmain(): int {{\n x: int must=c = a()\n ret 0\n}}"
+            "{DEFS}\n_start(): int {{\n x: int must=c = a()\n ret 0\n}}"
         ));
         // `ret`の前に終了していれば成功
         assert_ok(&format!(
-            "{DEFS}\nmain(): int {{\n x: int must=c = a()\n c(x)\n ret 0\n}}"
+            "{DEFS}\n_start(): int {{\n x: int must=c = a()\n c(x)\n ret 0\n}}"
         ));
     }
 
