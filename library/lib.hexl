@@ -5,3 +5,12 @@ variant Result<R, E> {
     Ok(R)
     Err(E)
 }
+
+#define main {body} {{
+_main() {
+    body
+}
+_start() {
+    _main()
+}
+}}

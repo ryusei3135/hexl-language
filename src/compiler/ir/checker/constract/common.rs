@@ -133,8 +133,8 @@ impl IR {
                 }
                 Ok(ends)
             }
-            // 条件分岐は`branch.rs`、反復処理は`loop_check.rs`で扱う
-            ExprNode::Match { .. } => self.tracking_cond_expr_node(expr, must_vars, fn_name),
+            // 条件分岐(ループの外)は`branch.rs`の`walk_match`、反復処理は`loop_check.rs`で扱う
+            ExprNode::Match { .. } => self.walk_match(expr, must_vars, fn_name),
             ExprNode::Loop { .. } => self.walk_loop(expr, must_vars, fn_name),
             // それ以外は子の式を順に辿る(`try_for_each_child`を`scan_loop_expr`と共有する)
             _ => {
@@ -152,7 +152,7 @@ impl IR {
     pub(super) fn as_expr(expr: &Expr) -> &Expr {
         expr
     }
-    
+
     /// 式の中で終了される(関数の引数として渡される)`must_vars`の変数名
     pub(super) fn ended_by(
         &mut self,
@@ -199,9 +199,9 @@ impl IR {
                 f(Self::as_expr(&pair.0))?;
                 f(Self::as_expr(&pair.1))
             }
-            ExprNode::InitStruct { fields, .. } => fields
-                .values()
-                .try_for_each(|val| f(Self::as_expr(val))),
+            ExprNode::InitStruct { fields, .. } => {
+                fields.values().try_for_each(|val| f(Self::as_expr(val)))
+            }
             ExprNode::Array(values) => values.iter().try_for_each(|val| f(Self::as_expr(val))),
             ExprNode::RefArray { dst, index, .. } => {
                 f(Self::as_expr(dst))?;

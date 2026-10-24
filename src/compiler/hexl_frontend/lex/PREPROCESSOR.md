@@ -43,6 +43,9 @@ ret #A + 1      // ret 10 + 1
     - `#if #NAME`は、関数形式マクロも「定義済み」として扱う。
     - 値のマクロの値は、従来どおり再展開しない(`#define B #A`の`#A`はそのまま残る)。
 
+### `{}`形式の関数マクロ(2026-10-24)
+`#define M{a, b} BODY`と書き、`#M { x, y }`と呼び出す。詳細は`NOTE.md`。
+
 ### 複数行の`#define`(2026-10-11)
 ```
 #define N {{
@@ -113,7 +116,7 @@ ret #A + 1      // ret 10 + 1
 |------|------|
 | `#define`の読み取り(値/関数形式の判定) | `sort_preproc` → `parse_define_fn` |
 | 複数行の`#define`(`{{ .. }}`)の読み取り | `read_multiline_define` / `is_define_header` |
-| 呼び出しの実引数の読み取り | `parse_macro_args` |
+| 呼び出しの実引数の読み取り(`()`/`{}`) | `parse_macro_args` |
 | 仮引数の置き換え | `substitute_params` |
 | 展開(実引数→置き換え→再展開) | `Preprocessor::expand_fn_macro` / `expand_inline` |
 | `#include "file.c"`の判定 | `plain_include_path` |

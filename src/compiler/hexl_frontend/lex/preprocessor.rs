@@ -29,8 +29,15 @@ pub(in crate::compiler::hexl_frontend::lex) enum PreprocKind {
     /// `#define NAME(arg, arg2, ..) BODY`
     ///
     /// `#NAME(a, b)`で呼び出すと、`BODY`の中の仮引数(`arg`など)を
-    /// 実引数のテキストに置き換えたものに展開される
-    DefineFn { params: Vec<String>, body: String },
+    /// 実引数のテキストに置き換えたものに展開される。
+    ///
+    /// `#define NAME{arg, arg2, ..} BODY`(`brace`が`true`)は、`()`の代わりに
+    /// `{}`で引数を囲む形式で、`#NAME { a, b }`と呼び出す
+    DefineFn {
+        params: Vec<String>,
+        body: String,
+        brace: bool,
+    },
 }
 
 pub(in crate::compiler::hexl_frontend::lex) struct Preprocessor {
@@ -161,8 +168,12 @@ impl Preprocessor {
                     } else {
                         match self.resolve(&name) {
                             PreprocKind::Define(ReplaceVal::Str(value)) => out.push_str(value),
-                            PreprocKind::DefineFn { params, body } => {
-                                let (args, end) = parse_macro_args(&chars, j, &name);
+                            PreprocKind::DefineFn {
+                                params,
+                                body,
+                                brace,
+                            } => {
+                                let (args, end) = parse_macro_args(&chars, j, &name, *brace);
                                 out.push_str(&self.expand_fn_macro(
                                     &name,
                                     params,
@@ -196,6 +207,8 @@ impl Preprocessor {
     /// - `#define NAME VALUE`: `Preprocessor` に登録する
     /// - `#define NAME {{ ... }}` / `#define NAME(args..) {{ ... }}`:
     ///   `{{`から最初の`}}`までを本体として、複数行にまたがって書ける
+    /// - `#define NAME{arg, arg2, ..} BODY`: `()`の代わりに`{}`を使う関数形式マクロ。
+    ///   `#NAME { a, b }`と呼び出す(`{{ ... }}`の複数行の本体も使える)
     /// - `#define NAME(arg, arg2, ..) BODY`: 関数形式マクロとして登録する。
     ///   `#NAME(a, b)`と書くと、`BODY`の仮引数を実引数に置き換えて展開する
     ///   (名前と`(`の間に空白を入れると、`NAME VALUE`の形式になる)
@@ -380,9 +393,14 @@ impl Preprocessor {
                                 PreprocKind::Define(ReplaceVal::Str(value)) => {
                                     output.push_str(value);
                                 }
-                                PreprocKind::DefineFn { params, body } => {
-                                    // `#NAME(a, b)`: `(`から対応する`)`までを実引数として読む
-                                    let (args, end) = parse_macro_args(&chars, j, &name);
+                                PreprocKind::DefineFn {
+                                    params,
+                                    body,
+                                    brace,
+                                } => {
+                                    // `#NAME(a, b)` / `#NAME { a, b }`:
+                                    // 開き括弧から対応する閉じ括弧までを実引数として読む
+                                    let (args, end) = parse_macro_args(&chars, j, &name, *brace);
                                     output.push_str(&self.expand_fn_macro(
                                         &name,
                                         params,
@@ -479,20 +497,33 @@ fn is_name_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-/// `NAME(arg, arg2, ..) BODY`(`#define`の後ろ)を、関数形式マクロとして読む。
-/// 名前の直後(空白なし)に`(`が続かない場合は`None`(=従来の`NAME VALUE`)
+/// `NAME(arg, arg2, ..) BODY` / `NAME{arg, arg2, ..} BODY`(`#define`の後ろ)を、
+/// 関数形式マクロとして読む。
+/// 名前の直後(空白なし)に`(`か`{`が続かない場合は`None`(=従来の`NAME VALUE`)。
+/// `NAME{{`は複数行の値のマクロの書き出しなので、ここでは扱わない
 ///
-/// 仮引数が識別子でない/重複している/`)`が無い場合は panic する。
+/// 仮引数が識別子でない/重複している/閉じ括弧が無い場合は panic する。
 fn parse_define_fn(text: &str) -> Option<(&str, PreprocKind)> {
     let name_end = text.find(|c: char| !is_name_char(c)).unwrap_or(text.len());
-    if name_end == 0 || !text[name_end..].starts_with('(') {
+    if name_end == 0 {
         return None;
     }
+    let (brace, close_ch) = match &text[name_end..] {
+        rest if rest.starts_with("{{") => return None,
+        rest if rest.starts_with('(') => (false, ')'),
+        rest if rest.starts_with('{') => (true, '}'),
+        _ => return None,
+    };
     let name = &text[..name_end];
     let after_open = &text[name_end + 1..];
-    let close = match after_open.find(')') {
+    let close = match after_open.find(close_ch) {
         Some(close) => close,
-        None => panic!("`#define {}(` is missing `)`", name),
+        None => panic!(
+            "`#define {}{}` is missing `{}`",
+            name,
+            if brace { '{' } else { '(' },
+            close_ch
+        ),
     };
 
     let params_src = after_open[..close].trim();
@@ -500,28 +531,44 @@ fn parse_define_fn(text: &str) -> Option<(&str, PreprocKind)> {
     if !params_src.is_empty() {
         for param in params_src.split(',').map(str::trim) {
             if param.is_empty() || !param.chars().all(is_name_char) {
-                panic!("invalid parameter `{}` in `#define {}(..)`", param, name);
+                panic!("invalid parameter `{}` in `#define {}`", param, name);
             }
             if params.iter().any(|p| p == param) {
-                panic!("duplicate parameter `{}` in `#define {}(..)`", param, name);
+                panic!("duplicate parameter `{}` in `#define {}`", param, name);
             }
             params.push(param.to_string());
         }
     }
     let body = after_open[close + 1..].trim().to_string();
-    Some((name, PreprocKind::DefineFn { params, body }))
+    Some((
+        name,
+        PreprocKind::DefineFn {
+            params,
+            body,
+            brace,
+        },
+    ))
 }
 
-/// `#NAME(a, b)`の実引数を読む。`open`は`(`の位置(=`NAME`の直後)。
-/// 戻り値は`(実引数のテキスト, 対応する`)`の次の位置)`
+/// `#NAME(a, b)` / `#NAME { a, b }`の実引数を読む。`open`は`NAME`の直後の位置。
+/// 戻り値は`(実引数のテキスト, 対応する閉じ括弧の次の位置)`
 ///
-/// `,`で区切るのは括弧(`()`/`[]`/`{}`)の外側だけで、文字列リテラルの中は読み飛ばす。
-/// `(`が無い/`)`で閉じていない場合は panic する。
-fn parse_macro_args(chars: &[char], open: usize, name: &str) -> (Vec<String>, usize) {
-    if chars.get(open) != Some(&'(') {
+/// `brace`が`false`なら`(`から`)`まで、`true`なら`{`から`}`まで(名前と`{`の間の
+/// 空白・タブは読み飛ばす)。`,`で区切るのは括弧(`()`/`[]`/`{}`)の外側だけで、
+/// 文字列リテラルの中は読み飛ばす。
+/// 開き括弧が無い/対応する閉じ括弧で閉じていない場合は panic する。
+fn parse_macro_args(chars: &[char], open: usize, name: &str, brace: bool) -> (Vec<String>, usize) {
+    let (open_ch, close_ch) = if brace { ('{', '}') } else { ('(', ')') };
+    let mut open = open;
+    if brace {
+        while matches!(chars.get(open), Some(' ') | Some('\t')) {
+            open += 1;
+        }
+    }
+    if chars.get(open) != Some(&open_ch) {
         panic!(
-            "preprocessor macro `{}` requires arguments: `#{}(..)`",
-            name, name
+            "preprocessor macro `{}` requires arguments: `#{} {}..{}`",
+            name, name, open_ch, close_ch
         );
     }
     let mut args: Vec<String> = Vec::new();
@@ -555,6 +602,12 @@ fn parse_macro_args(chars: &[char], open: usize, name: &str) -> (Vec<String>, us
             ')' | ']' | '}' => {
                 depth -= 1;
                 if depth == 0 {
+                    if c != close_ch {
+                        panic!(
+                            "preprocessor macro `{}`: arguments must be closed with `{}`",
+                            name, close_ch
+                        );
+                    }
                     args.push(cur.trim().to_string());
                     return (args, k + 1);
                 }
@@ -569,8 +622,8 @@ fn parse_macro_args(chars: &[char], open: usize, name: &str) -> (Vec<String>, us
         k += 1;
     }
     panic!(
-        "preprocessor macro `{}`: arguments are not closed with `)`",
-        name
+        "preprocessor macro `{}`: arguments are not closed with `{}`",
+        name, close_ch
     );
 }
 
@@ -620,13 +673,14 @@ fn substitute_params(body: &str, params: &[String], args: &[String]) -> String {
     out
 }
 
-/// `#define`の見出し(`NAME` または `NAME(arg, ..)`)として正しい形か
+/// `#define`の見出し(`NAME` / `NAME(arg, ..)` / `NAME{arg, ..}`)として正しい形か
 fn is_define_header(head: &str) -> bool {
     if head.is_empty() {
         return false;
     }
-    if head.ends_with(')') {
-        match head.find('(') {
+    if head.ends_with(')') || head.ends_with('}') {
+        let open_ch = if head.ends_with(')') { '(' } else { '{' };
+        match head.find(open_ch) {
             Some(k) if k > 0 => head[..k].chars().all(is_name_char),
             _ => false,
         }
@@ -636,7 +690,8 @@ fn is_define_header(head: &str) -> bool {
     }
 }
 
-/// `#define NAME {{ BODY }}` / `#define NAME(args..) {{ BODY }}` を読む。
+/// `#define NAME {{ BODY }}` / `#define NAME(args..) {{ BODY }}` /
+/// `#define NAME{args..} {{ BODY }}` を読む。
 ///
 /// `head_start`は`#define`の直後、`line_end`はその行の末尾の位置。
 /// 見出しの後ろに`{{`が無い場合は`None`(=従来の単一行の`#define`)。

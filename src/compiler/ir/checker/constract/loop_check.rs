@@ -6,9 +6,12 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
+use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
 use crate::compiler::ir::def_tree::VarLife::EndConstract;
-use crate::err::{self, ErrKind, Span, compile::{self, CompileErrKind::ConstractUnterminableScope}};
+use crate::err::{
+    self, ErrKind, Span,
+    compile::{self, CompileErrKind::ConstractUnterminableScope},
+};
 
 impl IR {
     /// 反復処理(`Expr::Loop`)の追跡
@@ -31,7 +34,10 @@ impl IR {
         if let Some(pattern) = pattern {
             Self::push_ends(&mut ends, self.walk_expr(&pattern, must_vars, fn_name)?);
         }
-        Self::push_ends(&mut ends, self.walk_group2_nodes(&body, must_vars, fn_name)?);
+        Self::push_ends(
+            &mut ends,
+            self.walk_group2_nodes(&body, must_vars, fn_name)?,
+        );
         // Loopの中で新たに契約したのにloopで契約を終了していない場合エラー
         self.emit_scope_constract_errs(scope_start, must_vars, fn_name);
 
@@ -123,8 +129,16 @@ impl IR {
                     }
                 }
             }
-            ExprNode::Match { .. } => {
-                self.tracking_cond_expr_node(expr, scope, fn_name)?;
+            ExprNode::Match {
+                pattern,
+                arms,
+                arm_else,
+            } => {
+                // ここはループの外。分岐の中にあるループを探すだけで、
+                // ループ専用の制約(`tracking_cond_expr_node`)は使わない。
+                // 分岐の式(`cond`の条件など)は分岐の前に評価されるので、
+                // 分岐前の`scope`に対して走査する
+                self.scan_cond_in_loop(pattern.as_deref(), &arms, &arm_else, scope, fn_name)?;
             }
             ExprNode::Loop { body, .. } => {
                 let guarded = Self::fork_vars(scope);
@@ -168,6 +182,51 @@ impl IR {
         let mut state = local.borrow().clone();
         state.truncate(outer_len);
         Ok(state)
+    }
+
+    /// 条件分岐の中にある反復処理を探す関数
+    #[inline(always)]
+    fn scan_cond_in_loop(
+        &mut self,
+        pattern: Option<&Expr>,
+        arms: &[MatchArm],
+        arm_else: &Option<Body>,
+        scope: &MustVarsTy,
+        fn_name: &str,
+    ) -> Result<(), err::ErrKind> {
+        // ここはループの外。分岐の中にあるループを探すだけで、
+        // ループ専用の制約(`tracking_cond_expr_node`)は使わない。
+        // 分岐の式(`cond`の条件など)は分岐の前に評価されるので、
+        // 分岐前の`scope`に対して走査する
+        if let Some(pattern) = pattern {
+            self.scan_loop_expr(fn_name, Self::as_expr(pattern), scope)?;
+        }
+        // 各分岐は分岐前の状態のコピーに対して解析し、分岐の中で
+        // 定義した変数は外側の変数とは別に扱って、分岐の終わりで捨てる
+        let mut branches: Vec<Vec<MustVar>> = Vec::new();
+        for arm in arms.iter() {
+            // 各アームのパターン式は、そのアームの状態の中で評価される
+            branches.push(self.scan_loop_branch(
+                fn_name,
+                Some(Self::as_expr(&arm.pattern)),
+                &arm.body,
+                scope,
+            )?);
+        }
+        if let Some(body) = arm_else {
+            branches.push(self.scan_loop_branch(fn_name, None, body, scope)?);
+        }
+        // 外側の変数ごとに分岐の結果を合流させる。
+        // どれか一つの分岐でも終了していれば、その先では終了済みの
+        // 可能性があるものとして扱う(一部の分岐でしか終了しない場合の
+        // エラーは、`walk_match`が報告する)
+        scope
+            .borrow_mut()
+            .iter_mut()
+            .enumerate()
+            .filter(|(i, var)| var.tracked && branches.iter().any(|branch| branch[*i].used))
+            .for_each(|var| var.1.used = true);
+        Ok(())
     }
 
     /// ループ本体(や、その中の分岐の本体)の検査

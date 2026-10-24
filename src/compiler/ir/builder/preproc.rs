@@ -1,8 +1,8 @@
 use crate::compiler::ast::Expr;
 
 use super::*;
-use crate::compiler::hexl_frontend::include_root;
 use crate::compiler::ast::{ExprNode, ImportKind, InlineAsm, ModPath};
+use crate::compiler::hexl_frontend::include_root;
 
 impl IR {
     pub(super) fn include_proc(

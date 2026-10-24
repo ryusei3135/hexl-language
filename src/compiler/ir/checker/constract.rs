@@ -1,6 +1,5 @@
-
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use super::*;
 use crate::compiler::ast::{ArgsNode, ConstractTy, Expr, ExprNode, FuncDefine, TyNode};
@@ -427,7 +426,6 @@ g(v: int must=d) { d(v) }
     }
 
     #[test]
-    #[ignore = "未実装: 各分岐で一度ずつ終了しているのに、2つ目の分岐が`二重終了`として弾かれる"]
     fn each_branch_may_end_the_contract_once() {
         assert_ok(&main_with(
             "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {\n c(x)\n}",

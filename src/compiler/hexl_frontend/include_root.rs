@@ -59,15 +59,24 @@ mod tests {
     #[test]
     fn resolve_is_relative_to_root_even_when_nested() {
         set_root_from_file(Path::new("proj/src/main.hexl"));
-        assert_eq!(resolve("lib/a.hexl"), Path::new("proj/src").join("lib/a.hexl").to_string_lossy());
+        assert_eq!(
+            resolve("lib/a.hexl"),
+            Path::new("proj/src").join("lib/a.hexl").to_string_lossy()
+        );
         {
             let _g = enter_include();
             // 取り込み先のファイルを処理中でも、ROOTは変わらない
             set_root_from_file(Path::new("proj/src/lib/a.hexl"));
-            assert_eq!(resolve("lib/b.hexl"), Path::new("proj/src").join("lib/b.hexl").to_string_lossy());
+            assert_eq!(
+                resolve("lib/b.hexl"),
+                Path::new("proj/src").join("lib/b.hexl").to_string_lossy()
+            );
         }
         // 外に出たら、次の最外ファイルで更新できる
         set_root_from_file(Path::new("other/main.hexl"));
-        assert_eq!(resolve("x.hexl"), Path::new("other").join("x.hexl").to_string_lossy());
+        assert_eq!(
+            resolve("x.hexl"),
+            Path::new("other").join("x.hexl").to_string_lossy()
+        );
     }
 }

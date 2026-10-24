@@ -130,9 +130,9 @@ impl Lexer {
         if (*file).ends_with(".c") || (*file).ends_with(".h") {
             self.include_c_file_list.push(file.to_string());
         } else {
-            crate::compiler::hexl_frontend::include_root::set_root_from_file(
-                std::path::Path::new((*file).as_str()),
-            );
+            crate::compiler::hexl_frontend::include_root::set_root_from_file(std::path::Path::new(
+                (*file).as_str(),
+            ));
         }
     }
 
@@ -950,6 +950,78 @@ mod tests {
                 Tkn::Number("10".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn check_preprocessor_brace_fn_macro() {
+        // `#define M{a, b} BODY`は`#M { x, y }`と呼び出す(空白は省略もできる)
+        let src = "#define SET{a, b} a = b + 1\n#SET { x, 2 }\n#SET{y, 3}";
+        assert_eq!(
+            lex_tkns(src),
+            vec![
+                Tkn::Name("x".to_string()),
+                Tkn::Equal,
+                Tkn::Number("2".to_string()),
+                Tkn::Add,
+                Tkn::Number("1".to_string()),
+                Tkn::Name("y".to_string()),
+                Tkn::Equal,
+                Tkn::Number("3".to_string()),
+                Tkn::Add,
+                Tkn::Number("1".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_preprocessor_brace_fn_macro_multiline_body() {
+        // `#define M{} {{ ... }}`: 引数なしで、本体が複数行
+        let src = "#define M{} {{\n  expr = 10\n  expr2 = 10\n}}\n#M {}";
+        assert_eq!(
+            lex_tkns(src),
+            vec![
+                Tkn::Name("expr".to_string()),
+                Tkn::Equal,
+                Tkn::Number("10".to_string()),
+                Tkn::Name("expr2".to_string()),
+                Tkn::Equal,
+                Tkn::Number("10".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn check_preprocessor_brace_fn_macro_multiline_with_params() {
+        // 引数は`{}`の中の`,`で区切り、括弧の中の`,`は区切りにならない
+        let src = "#define ADD{a, b} {{\n  a + b\n}}\nret #ADD { f(1, 2), 3 }";
+        assert_eq!(
+            lex_tkns(src),
+            vec![
+                Tkn::KeyWordRet,
+                Tkn::Name("f".to_string()),
+                Tkn::LParen,
+                Tkn::Number("1".to_string()),
+                Tkn::Comma,
+                Tkn::Number("2".to_string()),
+                Tkn::RParen,
+                Tkn::Add,
+                Tkn::Number("3".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn check_preprocessor_brace_fn_macro_without_braces_panics() {
+        let mut lex = lexer();
+        let _ = lex.analy(&"#define M{a} a\n#M(1)".to_string());
+    }
+
+    #[test]
+    #[should_panic]
+    fn check_preprocessor_brace_fn_macro_wrong_arg_count_panics() {
+        let mut lex = lexer();
+        let _ = lex.analy(&"#define M{a, b} a\n#M { 1 }".to_string());
     }
 
     #[test]
