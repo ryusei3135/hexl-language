@@ -16,9 +16,6 @@ pub(super) struct MustVar {
     /// 条件分岐の一部の分岐でしか契約を終了していなければ`true`
     /// (すべての分岐で終了する必要があるのでエラー)
     pub(super) branch_mismatch: bool,
-    /// `ret`/`break`で関数やループを抜ける分岐の中でだけ終了していれば`true`
-    /// (抜けない側の分岐が終了しなくても、分岐の不一致とは扱わない)
-    pub(super) ended_on_exit: bool,
     /// `false`なら契約を持たない変数が、同名の契約変数を隠している印
     /// (`x: int = 1`が外側の`must`の`x`をシャドーイングした場合など)。
     /// 名前の検索でこの要素に当たった変数は契約の対象ではないので、
@@ -33,7 +30,6 @@ impl MustVar {
             name,
             used: false,
             branch_mismatch: false,
-            ended_on_exit: false,
             tracked: true,
             span: Rc::clone(&span),
         }
@@ -70,15 +66,18 @@ impl IR {
         nodes: &Body,
         must_vars: &MustVarsTy,
         fn_name: &str,
+        in_loop: bool,
     ) -> Result<Vec<String>, err::ErrKind> {
         let mut ends: Vec<String> = Vec::new();
         for n in nodes.iter() {
             match n.get_node() {
                 Group2Node::Expr(expr) => {
-                    Self::push_ends(&mut ends, self.walk_expr(&expr, must_vars, fn_name)?);
+                    let found = self.walk_expr(&expr, must_vars, fn_name, in_loop)?;
+                    Self::push_ends(&mut ends, found);
                 }
                 Group2Node::Stmt(StmtNode::Return(expr)) => {
-                    Self::push_ends(&mut ends, self.walk_expr(&expr, must_vars, fn_name)?);
+                    let found = self.walk_expr(&expr, must_vars, fn_name, in_loop)?;
+                    Self::push_ends(&mut ends, found);
                 }
                 Group2Node::Stmt(StmtNode::Continue | StmtNode::Break(..)) => {}
                 _ => {}
@@ -88,17 +87,20 @@ impl IR {
     }
 
     /// 式を辿り、この式の中で新しく終了した(`used`になった)契約の変数名を返す
+    ///
+    /// `in_loop`は反復処理の中か(条件分岐が`break`で抜けてよいかの判断に使う)
     pub(super) fn walk_expr(
         &mut self,
         expr: &Expr,
         must_vars: &MustVarsTy,
         fn_name: &str,
+        in_loop: bool,
     ) -> Result<Vec<String>, err::ErrKind> {
         match &expr.node {
             // 変数の定義: `must`の型ならここから追跡を始める
             ExprNode::DefVar(var) => {
                 // 初期値の中で終了した契約(定義した変数自身はまだ終了していない)
-                let ends = self.walk_expr(&var.value, must_vars, fn_name)?;
+                let ends = self.walk_expr(&var.value, must_vars, fn_name, in_loop)?;
                 if var.ty.is_constract_must() {
                     // 同名の契約変数が外側にあっても、既存の要素は書き換えず
                     // 新しい要素を積む。名前の検索は後ろから行うので内側が優先され、
@@ -129,18 +131,20 @@ impl IR {
                             Self::push_ends(&mut ends, vec![name.clone()]);
                         }
                     }
-                    Self::push_ends(&mut ends, self.walk_expr(arg, must_vars, fn_name)?);
+                    let found = self.walk_expr(arg, must_vars, fn_name, in_loop)?;
+                    Self::push_ends(&mut ends, found);
                 }
                 Ok(ends)
             }
             // 条件分岐(ループの外)は`branch.rs`の`walk_match`、反復処理は`loop_check.rs`で扱う
-            ExprNode::Match { .. } => self.walk_match(expr, must_vars, fn_name),
+            ExprNode::Match { .. } => self.walk_match(expr, must_vars, fn_name, in_loop),
             ExprNode::Loop { .. } => self.walk_loop(expr, must_vars, fn_name),
             // それ以外は子の式を順に辿る(`try_for_each_child`を`scan_loop_expr`と共有する)
             _ => {
                 let mut ends: Vec<String> = Vec::new();
                 Self::try_for_each_child::<err::ErrKind>(expr, &mut |child| {
-                    Self::push_ends(&mut ends, self.walk_expr(child, must_vars, fn_name)?);
+                    let found = self.walk_expr(child, must_vars, fn_name, in_loop)?;
+                    Self::push_ends(&mut ends, found);
                     Ok(())
                 })?;
                 Ok(ends)
@@ -162,7 +166,8 @@ impl IR {
     ) -> Result<Vec<String>, err::ErrKind> {
         // `walk_expr`は、この式で新しく終了した変数だけを返す
         // (前の文で終了した変数が、あとの文すべてで終了したことにならない)
-        self.walk_expr(expr, must_vars, fn_name)
+        // `ended_by`はループの本体の検査でだけ使うので、反復処理の中として辿る
+        self.walk_expr(expr, must_vars, fn_name, true)
     }
 
     /// 式の子の式を、評価する順に`f`へ渡す

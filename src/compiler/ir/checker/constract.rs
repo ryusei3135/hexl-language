@@ -194,7 +194,7 @@ impl IR {
                     .push(MustVar::new(param.name.clone(), &func.span));
             });
 
-        self.walk_group2_nodes(&func.body, &must_vars, &func.name)?;
+        self.walk_group2_nodes(&func.body, &must_vars, &func.name, false)?;
 
         // // ループの中での契約の終了は、`ret`/`break`の前にしか置けない
         // let mut scope: Vec<String> = must_vars.iter().map(|v| v.name.clone()).collect();
@@ -211,7 +211,7 @@ impl IR {
         for var in must_vars
             .borrow()
             .iter()
-            .filter(|var| var.tracked && ((!var.used && !var.ended_on_exit) || var.branch_mismatch))
+            .filter(|var| var.tracked && (!var.used || var.branch_mismatch))
         {
             (*self.err_pool.borrow_mut()).push_err_node(
                 CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span))
@@ -432,6 +432,41 @@ g(v: int must=d) { d(v) }
         ));
     }
 
+    #[test]
+    fn ending_contract_in_branch_that_returns_is_ok_without_marking_it_ended() {
+        // 契約を終了して`ret`する分岐は比較から外す。終了したことにはしないので、
+        // 抜けない側の経路であとから終了する
+        assert_ok(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n ret 1\n}\nc(x)",
+        ));
+        // あとで終了しなければ、未終了のエラー
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n ret 1\n}",
+        ));
+        // `ret`も`break`も無ければ、これまでどおりエラー
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n}\nc(x)",
+        ));
+        // 反復処理の外の`break`は、抜ける分岐として認めない
+        assert_err(&main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n break\n}\nc(x)",
+        ));
+    }
+
+    #[test]
+    fn ending_contract_in_branch_that_breaks_in_loop_is_ok_without_marking_it_ended() {
+        // 反復処理の中では`break`でも認める(終了したことにはしない)
+        assert_ok(&main_with(
+            "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n break\n }\n c(x)\n break\n}",
+        ));
+        assert_ok(&main_with(
+            "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n ret 1\n }\n c(x)\n break\n}",
+        ));
+        assert_err(&main_with(
+            "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n break\n }\n break\n}",
+        ));
+    }
+
     // ------------------------------------------------------------------
     // 8. ループ内で契約を繰り返し終了する -> 二重終了を許可しない
     // ------------------------------------------------------------------
@@ -453,7 +488,11 @@ g(v: int must=d) { d(v) }
             "x: int must=c = a()\nloop {\n c(x)\n y: int = 1\n break\n}",
         ));
         // 分岐の中でも、その分岐の中の`ret`/`break`の前でなければならない
+        // (抜ける分岐で終了しても終了したことにはしないので、抜けない側でも終了する)
         assert_ok(&main_with(
+            "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n break\n } else {}\n c(x)\n break\n}",
+        ));
+        assert_err(&main_with(
             "x: int must=c = a()\nloop {\n cond 1 == 1 {\n c(x)\n break\n } else {}\n break\n}",
         ));
         assert_err(&main_with(
@@ -617,9 +656,9 @@ g(v: int must=d) { d(v) }
     fn nested_branch_that_always_exits_is_treated_like_direct_exit() {
         // 末尾が直接`ret`の分岐と、末尾が「内側の全経路が`ret`する分岐」の分岐は
         // 同じ結果になる(以前は後者だけ脱出と認識されなかった)
-        let direct = main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n ret 1\n} else {}");
+        let direct = main_with("x: int must=c = a()\ncond 1 == 1 {\n c(x)\n ret 1\n} else {}\nc(x)");
         let nested = main_with(
-            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n cond 2 == 2 {\n ret 1\n } else {\n ret 2\n }\n} else {}",
+            "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n cond 2 == 2 {\n ret 1\n } else {\n ret 2\n }\n} else {}\nc(x)",
         );
         assert_eq!(compile(&direct).is_ok(), compile(&nested).is_ok());
         // 内側の一方が抜けない(`else {}`)なら脱出とは認めず、分岐の不一致になる

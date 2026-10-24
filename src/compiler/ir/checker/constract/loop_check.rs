@@ -32,11 +32,12 @@ impl IR {
         let scope_start = must_vars.borrow().len();
         let mut ends: Vec<String> = Vec::new();
         if let Some(pattern) = pattern {
-            Self::push_ends(&mut ends, self.walk_expr(&pattern, must_vars, fn_name)?);
+            let found = self.walk_expr(&pattern, must_vars, fn_name, true)?;
+            Self::push_ends(&mut ends, found);
         }
         Self::push_ends(
             &mut ends,
-            self.walk_group2_nodes(&body, must_vars, fn_name)?,
+            self.walk_group2_nodes(&body, must_vars, fn_name, true)?,
         );
         // Loopの中で新たに契約したのにloopで契約を終了していない場合エラー
         self.emit_scope_constract_errs(scope_start, must_vars, fn_name);

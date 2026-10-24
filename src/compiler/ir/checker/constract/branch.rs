@@ -41,12 +41,16 @@ impl IR {
     /// ループ専用の制約(契約を終了した直後に`ret`/`break`が必要)は、ここでは見ない。
     /// それは`tracking_cond_expr_node`が、ループの本体の中の分岐に対してだけ行う。
     ///
+    /// 契約を終了した分岐が`ret`(`in_loop`なら`break`も)で必ず抜けるなら、その分岐は
+    /// 比較から外し、契約を終了したことにはしない(抜けない側の経路で、あとから終了する)。
+    ///
     /// 戻り値は、この分岐式の全体で新しく終了した変数名
     pub(super) fn walk_match(
         &mut self,
         expr: &Expr,
         must_vars: &MustVarsTy,
         fn_name: &str,
+        in_loop: bool,
     ) -> Result<Vec<String>, err::ErrKind> {
         let ExprNode::Match {
             pattern,
@@ -58,27 +62,29 @@ impl IR {
         };
         let used_before: Vec<bool> = must_vars.borrow().iter().map(|v| v.used).collect();
         if let Some(pattern) = pattern {
-            self.walk_expr(pattern, must_vars, fn_name)?;
+            self.walk_expr(pattern, must_vars, fn_name, in_loop)?;
         }
         // (分岐の解析結果, 全経路が`ret`/`break`で抜ける分岐なら、その脱出先)
         let mut branches: Vec<(Vec<MustVar>, Option<Exits>)> = Vec::new();
         for arm in arms.iter() {
             let state = Self::walk_branch(must_vars, |vars| {
-                self.walk_expr(&arm.pattern, vars, fn_name)?;
-                self.walk_group2_nodes(&arm.body, vars, fn_name).map(|_| ())
+                self.walk_expr(&arm.pattern, vars, fn_name, in_loop)?;
+                self.walk_group2_nodes(&arm.body, vars, fn_name, in_loop)
+                    .map(|_| ())
             })?;
             branches.push((state, Self::body_exits(&arm.body)));
         }
         if let Some(body) = arm_else {
             let state = Self::walk_branch(must_vars, |vars| {
-                self.walk_group2_nodes(body, vars, fn_name).map(|_| ())
+                self.walk_group2_nodes(body, vars, fn_name, in_loop)
+                    .map(|_| ())
             })?;
             branches.push((state, Self::body_exits(body)));
         } else if pattern.is_none() {
             // `else`の無い条件分岐は、何もしない分岐があるのと同じ
             branches.push((must_vars.borrow().clone(), None));
         }
-        Self::merge_branches(must_vars, &branches);
+        Self::merge_branches(must_vars, &branches, in_loop);
         // 分岐の前に終了済みでなかったのに、終了済みになった変数
         Ok(must_vars
             .borrow()
@@ -108,9 +114,20 @@ impl IR {
     /// - すべての分岐で終了 -> 終了済み
     /// - 一部の分岐でだけ終了 -> 終了済みにしたうえで`branch_mismatch`を立てる
     /// - どの分岐でも終了していない -> 変化なし
-    /// - `ret`/`break`で抜ける分岐で終了している場合は、その分岐を比較から外す
-    ///   (`cond c { f(x)\n break } else {}`のように、抜けない側は後で終了できる)
-    fn merge_branches(must_vars: &MustVarsTy, branches: &[(Vec<MustVar>, Option<Exits>)]) {
+    /// - `ret`(`in_loop`なら`break`も)で必ず抜ける分岐で終了している場合は、
+    ///   その分岐を比較から外し、終了したことにはしない
+    ///   (`cond c { f(x)\n break } else {}`のように、抜けない側は後で終了する。
+    ///   終了しないまま関数の最後まで来たら、未終了のエラーになる)
+    fn merge_branches(
+        must_vars: &MustVarsTy,
+        branches: &[(Vec<MustVar>, Option<Exits>)],
+        in_loop: bool,
+    ) {
+        // この文脈で「契約を終了したまま抜けてよい」分岐か
+        // (反復処理の外では`break`で抜けても認めない)
+        let leaves = |br: &(Vec<MustVar>, Option<Exits>)| {
+            br.1.is_some_and(|e| e.ret || (in_loop && e.brk))
+        };
         for (i, var) in must_vars.borrow_mut().iter_mut().enumerate() {
             // 分岐の前に終了済みなら、分岐ごとの確認は不要
             if var.used {
@@ -119,13 +136,10 @@ impl IR {
             if branches.iter().any(|br| br.0[i].branch_mismatch) {
                 var.branch_mismatch = true;
             }
-            if branches.iter().any(|br| br.0[i].ended_on_exit) {
-                var.ended_on_exit = true;
-            }
-            let exit_ended = branches.iter().any(|br| br.1.is_some() && br.0[i].used);
+            // 抜ける分岐で終了していても、その分岐は比較に入れない
             let rest: Vec<&(Vec<MustVar>, Option<Exits>)> = branches
                 .iter()
-                .filter(|br| !(br.1.is_some() && br.0[i].used))
+                .filter(|br| !(leaves(br) && br.0[i].used))
                 .collect();
             let used_count = rest.iter().filter(|br| br.0[i].used).count();
             if used_count > 0 {
@@ -133,8 +147,6 @@ impl IR {
                 if used_count < rest.len() {
                     var.branch_mismatch = true;
                 }
-            } else if exit_ended {
-                var.ended_on_exit = true;
             }
         }
     }
@@ -170,7 +182,7 @@ impl IR {
                 Self::mark_used(e, must_vars);
             }
         }
-        let mut fork_must_list = Vec::new();
+        let mut fork_must_list: Vec<(Vec<MustVar>, Option<Exits>)> = Vec::new();
         for arm in arms.iter() {
             // アームのパターン式で終了するなら、この文で終了する
             // (アームごとに分岐前の状態の複製で調べ、`must_vars`は変えない)
@@ -185,18 +197,23 @@ impl IR {
                     );
                 }
             }
-            
-            fork_must_list.push(((*scope_must_vars.borrow()).clone(), Self::body_exits(&arm.body)));
-            self.check_loop_block(fn_name, &arm.body, &Self::fork_vars(must_vars))?;
+
+            // 本体も同じ複製で検査し、本体で終了した契約を合流に使う
+            self.check_loop_block(fn_name, &arm.body, &scope_must_vars)?;
+            fork_must_list.push((
+                scope_must_vars.borrow().clone(),
+                Self::body_exits(&arm.body),
+            ));
         }
 
         if let Some(body) = arm_else {
             let else_fork = Self::fork_vars(must_vars);
             self.check_loop_block(fn_name, body, &else_fork)?;
-            fork_must_list.push(((*else_fork.borrow()).clone(), Self::body_exits(&body)));
+            fork_must_list.push((else_fork.borrow().clone(), Self::body_exits(body)));
         }
         // 条件分岐のスコープで終了した契約を合流
-        Self::merge_branches(&must_vars, &fork_must_list);
+        // (ループの本体の中なので、`break`で抜ける分岐も認める)
+        Self::merge_branches(must_vars, &fork_must_list, true);
         Ok(ends)
     }
 
