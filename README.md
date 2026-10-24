@@ -30,6 +30,7 @@ c言語を書きたいけどメモリの管理がめんどくさい
 - **契約システム**
 - **範囲付きポインタ**
 
+
 ## 目的（Motivation）
 - プログラミングをしているとめんどくさくなることがあるから
 - 極限までキーワードを減らしシンプルな構文
@@ -44,6 +45,14 @@ c言語を書きたいけどメモリの管理がめんどくさい
 ./build.sh
 ./hexl ソースコード.hexl
 ./a.out
+
+// src
+#include io="library/os/io.hexl"
+_start(): int {
+    msg: byte* = "hello world\n"
+    io::print_line(msg, 12)
+    io::exit()
+}
 ```
 - これで実行ファイルが作成可能
 * 注意  まだlinuxにしか対応していない windowsの場合はwslを使うことを
