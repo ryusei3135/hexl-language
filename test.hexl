@@ -84,7 +84,7 @@ func6(a: int must=func5, f: float) {
 
 
 add(a mut: int, b: int): Option<int> {
-    c_func()
+    t::c_func()
     c: byte* = "hello world\n"
     d: byte* = "tomato\n"
 

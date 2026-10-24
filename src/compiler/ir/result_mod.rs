@@ -15,12 +15,16 @@
 use crate::compiler::err;
 
 /// `Result`の`Err`の扱い方
-pub(in crate::compiler::ir) trait ResultMod {
+pub(crate) trait ResultMod {
     /// `result`が`Err`のときの扱いを決める
     fn handle<T>(result: Result<T, err::ErrKind>) -> Result<T, err::ErrKind>;
 }
 
 /// `Err`をそのまま返す(エラーを呼び出し側へ伝える)
+///
+/// 型引数(`builder::<ReturnErr>`)としてだけ使う。テスト以外の呼び出しは
+/// `PanicErr`なので、通常のビルドでは構築されない警告を出さない
+#[allow(dead_code)]
 pub struct ReturnErr;
 
 impl ResultMod for ReturnErr {

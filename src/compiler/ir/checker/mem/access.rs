@@ -282,7 +282,7 @@ impl IR {
             ExprNode::Var(name) => self.ptr_range(name).map(|range| (name, range)),
             _ => None,
         };
-        let Some((name, range)) = ptr_range_of(l).or_else(|| ptr_range_of(r)) else {
+        let Some((_, range)) = ptr_range_of(l).or_else(|| ptr_range_of(r)) else {
             return Ok(());
         };
         if self.is_const_index(whole) == false {

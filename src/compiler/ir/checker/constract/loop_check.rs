@@ -7,10 +7,8 @@ use std::rc::Rc;
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
-use crate::compiler::ir::def_tree::VarLife::EndConstract;
 use crate::err::{
-    self, ErrKind, Span,
-    compile::{self, CompileErrKind::ConstractUnterminableScope},
+    self, Span,
 };
 
 impl IR {
@@ -97,7 +95,8 @@ impl IR {
             let result: Result<(), err::ErrKind> = crate::GenCompileErr2!(
                 CompileErrKind::ContractMustNotUsed {
                     fn_name: fn_name.to_string(),
-                    var_name
+                    var_name,
+                    end_fn: Some(fn_name.to_string()),
                 },
                 span
             );

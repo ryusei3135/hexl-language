@@ -273,7 +273,7 @@ impl Size {
             let idx = fields
                 .iter()
                 .enumerate()
-                .max_by_key(|(idx, val)| (*val).1.to_bytes());
+                .max_by_key(|(_, val)| (*val).1.to_bytes());
             &(*fields[idx.unwrap().0]).1
         } else {
             panic!();

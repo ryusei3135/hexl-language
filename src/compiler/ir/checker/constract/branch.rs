@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
-use crate::err::compile::CompileErrKind::ConstractUnterminableScope;
+use crate::err::compile::CompileErrKind::{BreakOutsideLoop};
 
 /// 本体が必ず抜ける先(`ret`は関数、`break`は反復処理を抜ける)
 ///
@@ -72,7 +72,20 @@ impl IR {
                 self.walk_group2_nodes(&arm.body, vars, fn_name, in_loop)
                     .map(|_| ())
             })?;
-            branches.push((state, Self::body_exits(&arm.body)));
+
+            let result = Self::body_exits(&arm.body);
+
+            match &result {
+                // 反復処理がないのに`break`で抜ける分岐(入れ子の分岐の中の`break`も含む)
+                Some(e) if e.brk && !in_loop => {
+                    return crate::GenCompileErr2!(BreakOutsideLoop, Rc::clone(&expr.span));
+                }
+                Some(Exits::RETURN) => {
+                    self.check_all_end_constract(must_vars, fn_name, &expr.span)?;
+                }
+                _ => {}
+            }
+            branches.push((state, result));
         }
         if let Some(body) = arm_else {
             let state = Self::walk_branch(must_vars, |vars| {

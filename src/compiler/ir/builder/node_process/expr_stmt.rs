@@ -297,7 +297,7 @@ impl IR {
                 }
             }
             // これは呼び出し元が`resolve_expect_byte`で代入先がメンバーかを調べているので、Noneっを返す
-            n => return Ok(None),
+            _ => return Ok(None),
         };
         if is_arr_elem {
             // 配列メンバーは要素1つ分の型にする(`member_is_arr_ref`と同じ)
@@ -632,7 +632,7 @@ impl IR {
             }
 
             // 比較ではない式: 0でないか
-            other => {
+            _ => {
                 let value = self.gen_expr_ir::<M>(cond, Some(&size))?;
                 let zero = self.push_ternary_inst(inst::Inst::gen_num(
                     &"0".to_string(),
@@ -675,7 +675,7 @@ impl IR {
             ExprNode::CmpNot(target) => {
                 is_bool || Self::is_cmp_expr(target) || Self::is_logic_expr(target)
             }
-            other => is_bool && Self::is_cmp_expr(expr),
+            _ => is_bool && Self::is_cmp_expr(expr),
         }
     }
 

@@ -15,11 +15,12 @@ pub(in crate::compiler) trait Field {
 
 // === 型エイリアス =====
 
-/// `type Name = BaseTy`
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeAlias {
     pub name: String,
     pub ty: TyNode,
+    /// 所属するモジュールのパス(`a::b`)
+    pub module: Option<String>,
     /// `type`の位置
     pub span: Rc<err::Span>,
 }
@@ -27,7 +28,12 @@ pub struct TypeAlias {
 impl TypeAlias {
     #[inline(always)]
     pub const fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Group1Node {
-        Group1Node::TypeAlias(Self { name, ty, span })
+        Group1Node::TypeAlias(Self {
+            name,
+            ty,
+            module: None,
+            span,
+        })
     }
 }
 
@@ -59,6 +65,8 @@ pub struct StructDefine {
     pub name: String,
     pub fields: Vec<StructField>,
     pub methods: Vec<Group1Node>,
+    /// 所属するモジュールのパス(`a::b`)
+    pub module: Option<String>,
     /// `struct Name`の位置
     pub span: Rc<err::Span>,
 }
@@ -75,6 +83,7 @@ impl StructDefine {
             name,
             fields,
             methods,
+            module: None,
             span,
         })
     }
@@ -160,9 +169,12 @@ pub struct VariantDefine {
     pub name: String,
     pub fields: Vec<VariantField>,
     pub methods: Vec<Group1Node>,
+    /// 所属するモジュールのパス(`a::b`)
+    pub module: Option<String>,
     /// `variant Name`の位置
     pub span: Rc<err::Span>,
 }
+
 
 impl VariantDefine {
     #[inline(always)]
@@ -176,6 +188,7 @@ impl VariantDefine {
             name,
             fields,
             methods,
+            module: None,
             span,
         })
     }

@@ -166,8 +166,42 @@ pub enum Group1Node {
     Line(String),
 }
 
+
 impl Group1Node {
     pub fn wrap_variant_field_kind(self) -> VariantFieldKind {
         VariantFieldKind::Method(self)
+    }
+
+    /// ノードに、モジュールのパスを(外側として)足す
+    ///
+    /// 空のパスなら何もしない。`Include`と`Line`はモジュールを持たないので何もしない
+    pub fn add_mod_path(&mut self, path: Vec<String>) {
+        if path.is_empty() {
+            return;
+        }
+        match self {
+            Self::FuncDefine(n) => Self::prepend_mod_path(&mut n.module, &path),
+            Self::StructDefine(n) => Self::prepend_mod_path(&mut n.module, &path),
+            Self::VariantDefine(n) => Self::prepend_mod_path(&mut n.module, &path),
+            Self::TypeAlias(n) => Self::prepend_mod_path(&mut n.module, &path),
+            Self::Include(_) | Self::Line(_) => {}
+        }
+    }
+
+    /// ノードにモジュールのパスを一つ追加する
+    /// func -> mod::func
+    pub fn add_mod_name(&mut self, name: String) {
+        self.add_mod_path(vec![name]);
+    }
+    
+    /// 現在のモジュール(`Option<String>`)の外側に、パスを足す
+    /// 現在が`b`で`["a", "x"]`なら`a::x::b`、現在がなければ`a::x`
+    fn prepend_mod_path(module: &mut Option<String>, path: &[String]) {
+        let mut full = path.join("::");
+        if let Some(cur) = module.take() {
+            full.push_str("::");
+            full.push_str(&cur);
+        }
+        *module = Some(full);
     }
 }

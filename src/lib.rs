@@ -11,6 +11,7 @@ mod compiler;
 mod dump;
 mod linker;
 mod macros;
+mod updater;
 
 #[cfg(target_os = "windows")]
 const DEFAULT: &str = "windows";
@@ -24,6 +25,8 @@ const DEFAULT: &str = "linux";
 use compiler::{Lexer, Parser, asm_gen, ast, err, ir};
 
 use std::{error::Error, fs, process, sync::Mutex};
+
+use crate::compiler::stmt_node::StmtNode::Continue;
 
 // ---------------------------------------------------------------------------
 // コマンドラインオプション
@@ -114,10 +117,31 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
                 // `dump <file>` 形式: 次の引数がファイル名になる
                 // (opt_flags は初期状態の SetFile のまま残るので、
                 //  次の引数が file_name に入る)
-                if *opt == "dump" {
-                    settings.dump = true;
-                    settings.dump_only = true;
-                    continue;
+                match *opt {
+                    "dump" => {
+                        settings.dump = true;
+                        settings.dump_only = true;
+                        continue;
+                    }
+                    "update" => {
+                        println!("アップデートを確認中...");
+                        match updater::handle_update() {
+                            Ok(true) => {
+                                println!("更新が成功しました。新しい機能をお楽しみください！");
+                                std::process::exit(0);
+                            }
+                            Ok(false) => {
+                                // すでに最新
+                                std::process::exit(0);
+                            }
+                            Err(e) => {
+                                eprintln!("アップデートに失敗しました: {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                        Continue;
+                    }
+                    _ => {}
                 }
                 if let Err(ref e) = settings.set_value(opt.to_string()) {
                     eprintln!("警告: コマンドライン引数`{}`を無視しました: {}", opt, e);
@@ -223,20 +247,29 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
 
     // エラーメッセージを蓄積する
     let mut err_pool = Rc::new(RefCell::new(err::err_pool::ErrPool::new()));
-    // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
-    // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
-    let mut lexer = Lexer::with_os(&os);
-    let mut parser = Parser::new(&file_name, Rc::clone(&err_pool));
+    // c言語を処理
+    let nodes = if let Some(ref file_path) = settings.file_name {
+        if file_path.starts_with(".c") | file_path.starts_with(".h") {
+            compiler::c_frontend::emit_c_node(&file_path)
+        } else {
+            panic!();
+        }
+    } else {
+        // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
+        // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
+        let mut lexer = Lexer::with_os(&os);
+        let mut parser = Parser::new(&file_name, Rc::clone(&err_pool));
+
+        // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準
+        lexer.set_source_file(Rc::clone(&file_name));
+
+        // アセンブリ言語のデータを作成
+        lexer.analy(&content)?;
+        let c_file_list: &[String] = &lexer.include_c_file_list;
+
+        parser.parser(&lexer.gen_tkns, c_file_list)?.to_vec()
+    };
     let mut ir_builder = ir::IR::new(&err_pool);
-
-    // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準
-    lexer.set_source_file(Rc::clone(&file_name));
-
-    // アセンブリ言語のデータを作成
-    lexer.analy(&content)?;
-    let c_file_list: &[String] = &lexer.include_c_file_list;
-
-    let nodes = parser.parser(&lexer.gen_tkns, c_file_list)?;
 
     let func_def_meta_data = ir_builder
         .builder::<ir::PanicErr>(

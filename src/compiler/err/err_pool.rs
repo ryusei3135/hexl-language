@@ -44,6 +44,8 @@ struct Diag {
     notes: Vec<String>,
     /// `= help:`に出す直し方
     help: Option<String>,
+    /// 追加するコードの修正案(`(見出し, コード)`)。エラーの行の次の行に挿入する形で出す
+    suggestion: Option<(String, String)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -144,6 +146,7 @@ impl ErrPool {
                 label: Self::label(&n.kind),
                 notes: Vec::new(),
                 help: Self::help(&n.kind).map(|h| h.to_string()),
+                suggestion: None,
             },
             color,
         )
@@ -169,6 +172,7 @@ impl ErrPool {
                 label: String::new(),
                 notes: n.kind.note().into_iter().collect(),
                 help: n.kind.help(),
+                suggestion: n.kind.suggestion().map(|s| (s.message, s.code)),
             },
             color,
         )
@@ -189,6 +193,7 @@ impl ErrPool {
                 label: String::new(),
                 notes: n.note().into_iter().collect(),
                 help: Some(n.help()),
+                suggestion: None,
             },
             color,
         )
@@ -236,7 +241,7 @@ impl ErrPool {
             ));
         }
 
-        let has_tail = !d.notes.is_empty() || d.help.is_some();
+        let has_tail = !d.notes.is_empty() || d.help.is_some() || d.suggestion.is_some();
         match self.source_line(file, line_no).filter(|_| has_loc) {
             Some(src_line) => {
                 let (shown, caret_col) = expand_line(src_line, col_no - 1);
@@ -300,7 +305,61 @@ impl ErrPool {
                 help.replace('\n', &cont)
             ));
         }
+        if let Some((message, code)) = &d.suggestion {
+            out.push_str(&self.render_suggestion(d, message, code, color));
+        }
         out
+    }
+
+    /// 追加するコードの修正案を、Rustのように`+`の下線付きで出す
+    ///
+    /// ```text
+    /// help: 契約を終了するコードを追加してください
+    ///   |
+    /// 4 |     free(e)
+    ///   |     +++++++
+    /// ```
+    ///
+    /// エラーの行の次の行に、エラーの行と同じ字下げで挿入する。
+    /// ソースが無いときは、コードだけを`= help:`に出す
+    fn render_suggestion(&self, d: &Diag, message: &str, code: &str, color: bool) -> String {
+        let line_no = d.line.saturating_sub(LINE_BASE) + 1;
+        let src = self
+            .source_line(&d.file, line_no)
+            .filter(|_| !d.file.is_empty());
+        let Some(src_line) = src else {
+            return format!(
+                "  {} {}: {}: `{}`\n",
+                paint("=", BLUE_BOLD, color),
+                bold("help", color),
+                message,
+                code
+            );
+        };
+        let indent: String = src_line
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .map(|c| if c == '\t' { " ".repeat(TAB_WIDTH) } else { " ".to_string() })
+            .collect();
+        let new_line_no = line_no + 1;
+        let pad = " ".repeat(new_line_no.to_string().len());
+        let bar = paint("|", BLUE_BOLD, color);
+        let plus_len: usize = code.chars().map(char_width).sum();
+        format!(
+            "{}{}\n{} {}\n{} {} {}{}\n{} {} {}{}\n",
+            paint("help", GREEN_BOLD, color),
+            bold(&format!(": {}", message), color),
+            pad,
+            bar,
+            paint(&new_line_no.to_string(), BLUE_BOLD, color),
+            bar,
+            indent,
+            code,
+            pad,
+            bar,
+            indent,
+            paint(&"+".repeat(plus_len), GREEN_BOLD, color)
+        )
     }
 
     /// 登録されたソースコードの`line_no`行目(1始まり)
@@ -378,6 +437,7 @@ impl ErrPool {
 
 const RED_BOLD: &str = "1;31";
 const BLUE_BOLD: &str = "1;34";
+const GREEN_BOLD: &str = "1;32";
 
 fn paint(text: &str, code: &str, color: bool) -> String {
     if color {

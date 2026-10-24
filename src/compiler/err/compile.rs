@@ -54,6 +54,8 @@ pub enum CompileErrKind {
     ContractMustNotUsed {
         fn_name: String,
         var_name: String,
+        /// 契約を終了する関数の名前(分かるなら、`end_fn(var)`の修正案を出す)
+        end_fn: Option<String>,
     },
     ConstractUnterminableScope(String),
     /// `must`の契約を持つ変数へ再代入しようとした
@@ -63,6 +65,8 @@ pub enum CompileErrKind {
 
     VariableConstractExpired(String),
     ReassignActiveContract(String),
+    /// 反復処理(`loop`)の外の条件分岐で`break`が使われた
+    BreakOutsideLoop,
 
     // ---- asm_emitter(アセンブリ生成)で、以前は`panic`していた状況 ----
     /// 構造体/バリアントのメンバーが`MemoryInst::Member`ではない(中身はデバッグ表示)
@@ -105,6 +109,15 @@ pub enum CompileErrKind {
     AsmEmitTernaryCondNotFound(String),
     /// 小数は使えない箇所(`setcc`の比較/三項演算子の条件・値)で小数が来た
     AsmEmitFloatNotSupported(String),
+}
+
+/// 「このコードを追加してください」という修正案(Rustの`+++`表示用)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestion {
+    /// `help:`の見出し
+    pub message: String,
+    /// 追加するコード
+    pub code: String,
 }
 
 /// `GenCompileErr!(Kind, msg, span)`
@@ -237,6 +250,26 @@ impl CompileErr {
             CompileErrKind::ContractMustNotUsed {
                 fn_name: fn_name.to_string(),
                 var_name: var_name.to_string(),
+                end_fn: None,
+            },
+            span,
+        )
+    }
+
+    /// `must`の値が、一度も関数へ渡されていない(契約を終了する関数`end_fn`が分かる場合)
+    ///
+    /// 表示では`end_fn(var_name)`を追加する修正案を出す
+    pub fn constract_must_not_used_with_fn(
+        fn_name: &str,
+        var_name: &str,
+        end_fn: &str,
+        span: Rc<err::Span>,
+    ) -> Result<(), err::ErrKind> {
+        Self::err(
+            CompileErrKind::ContractMustNotUsed {
+                fn_name: fn_name.to_string(),
+                var_name: var_name.to_string(),
+                end_fn: Some(end_fn.to_string()),
             },
             span,
         )
@@ -389,6 +422,7 @@ impl CompileErrKind {
             Self::AsmEmitTernaryCondNotFound(..) => "E0031",
             Self::AsmEmitFloatNotSupported(..) => "E0032",
             Self::ConstractUnterminableScope(..) => "E0033",
+            Self::BreakOutsideLoop => "E0034",
         }
     }
 
@@ -443,7 +477,9 @@ impl CompileErrKind {
                 "契約の名前が一致しません(関数`{fn_name}`の引数`{param_name}`)\n\
                  期待: `of {of_name}` / 渡された値: `must {must_name}`"
             ),
-            Self::ContractMustNotUsed { fn_name, var_name } => {
+            Self::ContractMustNotUsed {
+                fn_name, var_name, ..
+            } => {
                 format!("`must`の変数`{var_name}`が、関数`{fn_name}`の中で一度も使われていません")
             }
             Self::ConstractUnterminableScope(name) => {
@@ -505,6 +541,7 @@ impl CompileErrKind {
             Self::AsmEmitFloatNotSupported(place) => {
                 format!("{place}に小数は使えません")
             }
+            Self::BreakOutsideLoop => "反復処理の外の条件分岐では`break`を使えません".to_string(),
         }
     }
 
@@ -541,6 +578,9 @@ impl CompileErrKind {
             Self::AssignToMustVar(..) => "`must`の変数は一度だけ`of`の引数として使えます".into(),
             Self::VariableConstractExpired(..) => {
                 "契約は`of`の引数として渡された時点で終了します".into()
+            }
+            Self::BreakOutsideLoop => {
+                "`break`は反復処理(`loop`)の本体の中でだけ使えます".into()
             }
             Self::AsmEmitFloatNotSupported(..) => {
                 "小数(`float`/`f64`)の比較は`comiss`/`comisd`のフラグの扱いが整数と違うため、ここでは生成できません".into()
@@ -579,7 +619,12 @@ impl CompileErrKind {
             Self::ContractMustRequiresOf { must_name, .. } => {
                 format!("`of {must_name}`の引数へ渡してください")
             }
-            Self::ContractMustNotUsed { var_name, .. } => {
+            // `end_fn`が分かるときは、`suggestion`でコードを出す
+            Self::ContractMustNotUsed {
+                var_name,
+                end_fn: None,
+                ..
+            } => {
                 format!("`{var_name}`を`of`の引数として関数へ渡してください")
             }
             Self::IncDecRequiresInteger(..) => "整数型の変数に使ってください".into(),
@@ -587,8 +632,28 @@ impl CompileErrKind {
                 "添字を数字にするか、変数・構造体のメンバーを使ってください".into()
             }
             Self::AsmEmitFloatNotSupported(..) => "整数の式に書き換えてください".into(),
+            Self::BreakOutsideLoop => {
+                "`break`を取り除くか、`loop`の中に移動してください".into()
+            }
             _ => return None,
         })
+    }
+
+    /// 追加するコードの修正案(Rustの`++++`表示)
+    ///
+    /// 表示側は、エラーの行の次の行に、同じ字下げで挿入する形で出す
+    pub fn suggestion(&self) -> Option<Suggestion> {
+        match self {
+            Self::ContractMustNotUsed {
+                var_name,
+                end_fn: Some(end_fn),
+                ..
+            } => Some(Suggestion {
+                message: "契約を終了するコードを追加してください".into(),
+                code: format!("{end_fn}({var_name})"),
+            }),
+            _ => None,
+        }
     }
 
     /// Rust風の表示を組み立てる。`location`は発生位置の文字列
@@ -604,6 +669,9 @@ impl CompileErrKind {
         }
         if let Some(help) = self.help() {
             out.push_str(&format!("\n   = help: {help}"));
+        }
+        if let Some(sg) = self.suggestion() {
+            out.push_str(&format!("\n   = help: {}: `{}`", sg.message, sg.code));
         }
         out
     }

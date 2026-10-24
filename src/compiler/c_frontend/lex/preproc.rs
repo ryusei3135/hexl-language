@@ -181,6 +181,7 @@ struct Found {
 // プリプロセッサ本体
 // ====================================================================
 
+#[derive(Debug)]
 pub struct Preprocessor {
     macros: HashMap<String, Macro>,
     include_dirs: Vec<PathBuf>,

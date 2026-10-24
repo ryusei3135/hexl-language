@@ -66,10 +66,8 @@ impl IR {
         // 添字が可変な配列アクセスのときは、範囲外のときの分岐を
         // IRに差し込むためのガードが返る
         let arr_guard = M::handle(self.check_mem_access::<M>(&expr))?;
-        if matches!(
-            &expr.node,
-            ast::ExprNode::CmpAnd(..) | ast::ExprNode::CmpOr(..)
-        ) {
+        // `&&` / `||`、`bool`型への比較など、0か1の値が必要な式は`Set*`命令にする
+        if Self::needs_setcc(&expr, Some(expect_byte)) {
             return self.gen_setcc_ir::<M>(&expr);
         }
         let inst = match &expr.node {

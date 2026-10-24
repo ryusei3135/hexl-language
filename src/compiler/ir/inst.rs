@@ -147,6 +147,8 @@ pub enum MemoryInst {
         kind: MemoryKind,
         dst: usize,
     },
+    /// 要素1つ分のバイト数(以前の配列の表現。今は`Memory`の`size`で表すので生成されない)
+    #[allow(dead_code)]
     Byte(usize),
 }
 

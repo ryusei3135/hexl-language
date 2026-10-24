@@ -2,7 +2,7 @@
 //! (`must`の変数の追跡状態と、式を辿る処理)
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
+use crate::{compiler::ast::{Expr, ExprNode, Group2Node, StmtNode}};
 
 /// 契約を持つ変数の一覧(共有して、あとから状態を書き換える)
 pub(super) type MustVarsTy = Rc<RefCell<Vec<MustVar>>>;
@@ -243,5 +243,22 @@ impl IR {
             }
         }
         false
+    }
+
+    /// 契約がすべて終了しているかを確認する関数
+    pub(super) fn check_all_end_constract(&mut self, must_vars: &MustVarsTy, fn_name: &str, span: &Rc<Span>) -> Result<(), err::ErrKind> {
+        // 一度も渡されていない変数、または条件分岐の一部でしか
+        // 契約を終了していない変数はエラー
+        for var in must_vars
+            .borrow()
+            .iter()
+            .filter(|var| var.tracked && (!var.used || var.branch_mismatch))
+        {
+            (*self.err_pool.borrow_mut()).push_err_node(
+                CompileErr::constract_must_not_used(&fn_name, &var.name, Rc::clone(&span))
+                    .unwrap_err(),
+            );
+        }
+        Ok(())
     }
 }

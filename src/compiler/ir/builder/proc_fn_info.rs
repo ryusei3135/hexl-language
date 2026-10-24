@@ -82,6 +82,7 @@ impl IR {
         meta_data: &CallInfo,
         return_var_name: Option<&String>,
     ) -> Result<inst::Inst, err::ErrKind> {
+        println!("{:?}", self.extern_func_tree);
         // 関数の定義を取得
         let defined_func_data: FnDefInfo = {
             if let Some(def_data) =

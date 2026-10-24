@@ -208,17 +208,7 @@ impl IR {
 
         // 一度も渡されていない変数、または条件分岐の一部でしか
         // 契約を終了していない変数はエラー
-        for var in must_vars
-            .borrow()
-            .iter()
-            .filter(|var| var.tracked && (!var.used || var.branch_mismatch))
-        {
-            (*self.err_pool.borrow_mut()).push_err_node(
-                CompileErr::constract_must_not_used(&func.name, &var.name, Rc::clone(&func.span))
-                    .unwrap_err(),
-            );
-        }
-        Ok(())
+        self.check_all_end_constract(&must_vars, &func.name, &func.span)
     }
 }
 

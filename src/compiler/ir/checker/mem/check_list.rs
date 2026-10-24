@@ -57,7 +57,8 @@ impl IndexCheckList for IsUnsigned {
 pub(in crate::compiler::ir::checker::mem) struct IsImmOrConst {}
 
 impl IndexCheckList for IsImmOrConst {
-    fn num_check(val: &str, span: &Rc<err::Span>) -> Result<(), err::ErrKind> {
+    fn num_check(_val: &str, _span: &Rc<err::Span>) -> Result<(), err::ErrKind> {
+        // 数値の即値は、そのまま定数として使える
         Ok(())
     }
 

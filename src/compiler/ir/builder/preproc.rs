@@ -124,6 +124,10 @@ impl IR {
     ) -> Result<(), err::ErrKind> {
         let full_path = include_root::resolve(&path.gen_path());
         self.check_include_file_exists(&full_path);
+        if full_path.ends_with(".c") {
+            println!("{}", full_path);
+            return Ok(());
+        }
 
         let _root_guard = include_root::enter_include();
 

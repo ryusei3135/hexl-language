@@ -39,6 +39,7 @@ const DEFAULT: &str = "linux";
 /// (`#if #windows` / `#if #linux` / `#elif #linux` で使う)
 const OS_NAMES: [&str; 2] = ["linux", "windows"];
 
+#[derive(Debug)]
 pub(in crate::compiler::hexl_frontend::lex) enum PreprocKind {
     /// `#define NAME VALUE`
     Define(ReplaceVal),
@@ -55,6 +56,8 @@ pub(in crate::compiler::hexl_frontend::lex) enum PreprocKind {
         brace: bool,
     },
 }
+
+#[derive(Debug)]
 
 pub(in crate::compiler::hexl_frontend::lex) struct Preprocessor {
     tables: HashMap<String, PreprocKind>,

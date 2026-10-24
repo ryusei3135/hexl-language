@@ -172,7 +172,15 @@ impl Parser {
 
         for f in include_c_list {
             let content = fs::read_to_string(f).unwrap();
-            let n = c_frontend::emit_c_node(&content);
+            let mut n = c_frontend::emit_c_node(&content);
+            // `dir/file.c` -> `file`
+            let gen_mod = Path::new(f)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .to_string();
+            n.iter_mut()
+                .for_each(|x| x.add_mod_path(vec![gen_mod.clone()]));
             self.gen_nodes.extend(n);
         }
         // 呼び出しが定義より前に書かれていても、その型の関数を

@@ -1,7 +1,6 @@
 //! その他: `Self`型の解決、メゾットの展開、エラーの報告、ラベル発番、テスト用の取得関数
 
 use super::*;
-use crate::compiler::ast::{ArgsNode, Expr, Group1Node};
 
 impl IR {
     /// テスト用のヘルパー。
