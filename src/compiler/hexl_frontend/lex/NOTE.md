@@ -29,7 +29,8 @@
   `}`で閉じていない、`{`の代わりに別の括弧で閉じている(`#M { 1 )`)。
 - 行番号の扱いは`()`形式と同じ(呼び出しが読み飛ばした改行は展開結果の後ろに出す)。
 
-## 実装の場所(`preprocessor.rs`)
+## 実装の場所(`preprocessor.rs`、`preprocessor/define.rs`)
+(2026-10-24にファイルを命令ごとに分割した。`PreprocKind`は`preprocessor.rs`、それ以外は`define.rs`)
 | 処理 | 変更 |
 |------|------|
 | `PreprocKind::DefineFn` | `brace: bool`を追加(`true`なら`{}`形式) |

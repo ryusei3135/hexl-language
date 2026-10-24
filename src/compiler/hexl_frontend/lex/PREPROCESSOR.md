@@ -112,16 +112,22 @@ ret #A + 1      // ret 10 + 1
 - `.c` / `.h`だけは、従来どおりプリプロセッサが名前を保存する(`take_c_files`)。
 
 ## 実装の場所
-| 処理 | 関数 |
-|------|------|
-| `#define`の読み取り(値/関数形式の判定) | `sort_preproc` → `parse_define_fn` |
-| 複数行の`#define`(`{{ .. }}`)の読み取り | `read_multiline_define` / `is_define_header` |
-| 呼び出しの実引数の読み取り(`()`/`{}`) | `parse_macro_args` |
-| 仮引数の置き換え | `substitute_params` |
-| 展開(実引数→置き換え→再展開) | `Preprocessor::expand_fn_macro` / `expand_inline` |
-| `#include "file.c"`の判定 | `plain_include_path` |
-| `#include`のROOT基準のパス解決 | `include_root::resolve` |
-| ソース全体の処理(行頭の`#define`/`#if`) | `Preprocessor::preprocess` |
+命令ごとにファイルを分けている(`preprocessor.rs`が振り分け、各処理は`preprocessor/`)。
+
+| ファイル | 処理 | 関数 |
+|------|------|------|
+| `preprocessor.rs` | 定義の表(`Preprocessor`)、ソース全体の処理(行頭の`#define`/`#if`などの振り分け) | `Preprocessor::preprocess` / `preprocess_text` |
+| `preprocessor/define.rs` | `#define`の読み取り(値/関数形式の判定) | `sort_preproc` → `parse_define_fn` |
+| | 複数行の`#define`(`{{ .. }}`)の読み取り | `read_multiline_define` / `is_define_header` |
+| | 呼び出しの実引数の読み取り(`()`/`{}`) | `parse_macro_args` |
+| | 仮引数の置き換え | `substitute_params` |
+| | 展開(実引数→置き換え→再展開) | `Preprocessor::expand_fn_macro` / `expand_inline` / `expand_call` |
+| | `#define`行の登録・無効な枝の読み飛ばし | `Preprocessor::define_directive` |
+| `preprocessor/include.rs` | `#include "file.c"`の判定と名前の保存 | `plain_include_path` / `Preprocessor::include_directive` |
+| | `#asm` / `#include`を展開せず残す判定 | `is_kept_directive` |
+| `preprocessor/cond.rs` | `#if` / `#elif` / `#else` / `#endif` | `cond_if` / `cond_elif` / `cond_else` / `cond_endif` / `is_active` |
+| `preprocessor/line.rs` | `#line`(行番号への置き換え) | `line_text` |
+| (別ファイル) | `#include`のROOT基準のパス解決 | `include_root::resolve` |
 
 ## コメント(2026-10-22)
 ```

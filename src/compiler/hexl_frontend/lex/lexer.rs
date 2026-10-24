@@ -130,9 +130,9 @@ impl Lexer {
         if (*file).ends_with(".c") || (*file).ends_with(".h") {
             self.include_c_file_list.push(file.to_string());
         } else {
-            crate::compiler::hexl_frontend::include_root::set_root_from_file(std::path::Path::new(
-                (*file).as_str(),
-            ));
+            crate::compiler::hexl_frontend::include_root::set_root_from_file(
+                std::path::Path::new((*file).as_str()),
+            );
         }
     }
 
