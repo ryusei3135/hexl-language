@@ -242,6 +242,8 @@ impl IR {
         guarded: &MustVarsTy,
     ) -> Result<(), err::ErrKind> {
         let mut locals: Vec<MustVar> = Vec::new();
+        // この関数が`guarded`に積んだ要素(マスクなど)は、終わりに取り除く
+        let start_len = guarded.borrow().len();
         // (この文が終了する変数, `ret`/`break`か, この文の位置)
         let mut stmts: Vec<(Vec<String>, bool, Rc<Span>)> = Vec::new();
 
@@ -259,7 +261,7 @@ impl IR {
             let mut ends: Vec<String> = Vec::new();
             if let Some(ref expr) = expr {
                 match &expr.node {
-                    // 分岐の本体は、それぞれ同じ規則で検査する(`cond_expr_tracking.rs`)
+                    // 分岐の本体は、それぞれ同じ規則で検査する(`branch.rs`の`tracking_cond_expr_node`)
                     ExprNode::Match { .. } => {
                         ends = self.tracking_cond_expr_node(expr, guarded, fn_name)?;
                     }
@@ -275,12 +277,37 @@ impl IR {
                         ends = self.ended_by(expr, guarded, fn_name)?;
                     }
                 }
-                // ループの中で定義した変数は、この周の中で終了するだけでよい
-                // (契約のない変数が外側の契約変数を隠す場合も、以降は外側の変数を見ない)
+                // ループの中で定義した変数は、この周の中で終了するだけでよい。
+                // 外側の同名の契約変数は消さず、内側の変数がそれを隠している間だけ
+                // 見えなくする(マスクを積む。積んだ分は関数の終わりで取り除く)
                 if let ExprNode::DefVar(ref var) = expr.node {
-                    guarded.borrow_mut().retain(|v| v.name != var.name);
+                    {
+                        let mut g = guarded.borrow_mut();
+                        if var.ty.is_constract_must() {
+                            // `ended_by`(`walk_expr`)が積んだ、この変数自身の要素は検査の対象外にする
+                            if let Some(own) = g
+                                .iter_mut()
+                                .rev()
+                                .find(|v| v.name == var.name && Rc::ptr_eq(&v.span, &expr.span))
+                            {
+                                own.tracked = false;
+                            }
+                        } else if g
+                            .iter()
+                            .rev()
+                            .find(|v| v.name == var.name)
+                            .is_some_and(|v| v.tracked)
+                        {
+                            // 契約のない変数が、外側の契約変数を隠す
+                            g.push(MustVar::mask(var.name.clone(), &expr.span));
+                        }
+                    }
+                    // この周で定義した契約変数(入れ子のループへ引き継ぐ)。
+                    // 同名の変数を定義し直したら、前の変数はマスクで隠す
                     if var.ty.is_constract_must() {
                         locals.push(MustVar::new(var.name.clone(), &expr.span));
+                    } else if locals.iter().any(|v| v.name == var.name) {
+                        locals.push(MustVar::mask(var.name.clone(), &expr.span));
                     }
                 }
             }
@@ -307,6 +334,8 @@ impl IR {
                 }
             }
         }
+        // 内側のスコープで積んだ要素だけを取り除く(外側の契約変数は残る)
+        guarded.borrow_mut().truncate(start_len);
         Ok(())
     }
 }

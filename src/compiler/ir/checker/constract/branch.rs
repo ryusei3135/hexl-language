@@ -185,17 +185,18 @@ impl IR {
                     );
                 }
             }
-            fork_must_list.push(scope_must_vars);
+            
+            fork_must_list.push(((*scope_must_vars.borrow()).clone(), Self::body_exits(&arm.body)));
             self.check_loop_block(fn_name, &arm.body, &Self::fork_vars(must_vars))?;
         }
 
         if let Some(body) = arm_else {
-            let forked = Self::fork_vars(must_vars);
-            self.check_loop_block(fn_name, body, &forked)?;
-            fork_must_list.push(forked);
+            let else_fork = Self::fork_vars(must_vars);
+            self.check_loop_block(fn_name, body, &else_fork)?;
+            fork_must_list.push(((*else_fork.borrow()).clone(), Self::body_exits(&body)));
         }
         // 条件分岐のスコープで終了した契約を合流
-        self.merge_branches(&must_vars, fork_must_list);
+        Self::merge_branches(&must_vars, &fork_must_list);
         Ok(ends)
     }
 
