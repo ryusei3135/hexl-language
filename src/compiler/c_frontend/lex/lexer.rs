@@ -663,7 +663,8 @@ fn parse_hex_float(s: &str) -> Option<f64> {
     Some(v * 2f64.powi(exp))
 }
 
-/// 厳密モードの字句解析(コンパイラ本体向け)
+/// 厳密モードの字句解析(テスト用。本体は`Preprocessor`が字句解析も行う)
+#[cfg(test)]
 pub(in crate::compiler::c_frontend) fn lex(src: &str) -> Result<Vec<TokenInfo>, LexError> {
     Lexer::new(src).tokenize()
 }

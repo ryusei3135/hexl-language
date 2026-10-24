@@ -128,6 +128,55 @@ impl Lowerer {
     // 型
     // ---------------------------------------------------------------
 
+    /// 型の`(大きさ, 境界)`(バイト、LP64)。決められなければ`None`
+    ///
+    /// 構造体は、メンバーを定義順に境界へ合わせて並べ、全体を最大の境界に切り上げる。
+    /// 共用体は最大のメンバーの大きさ(境界に切り上げ)。列挙型は`int`と同じ
+    fn size_align(&self, t: &CType) -> Option<(u64, u64)> {
+        self.size_align_in(t, &mut Vec::new())
+    }
+
+    /// `seen`は計算中のタグ(自分自身を含む構造体の無限再帰を止める)
+    fn size_align_in(&self, t: &CType, seen: &mut Vec<String>) -> Option<(u64, u64)> {
+        if let Some(r) = t.prim_size_align() {
+            return Some(r);
+        }
+        match t {
+            CType::Named { name, .. } => {
+                if seen.contains(name) {
+                    return None;
+                }
+                match self.tags.get(name)? {
+                    TagKind::Enum => Some((4, 4)),
+                    kind => {
+                        let info = self.structs.get(name)?;
+                        seen.push(name.clone());
+                        let mut offset = 0u64;
+                        let mut max_align = 1u64;
+                        let mut max_size = 0u64;
+                        for f in &info.fields {
+                            let (size, align) = self.size_align_in(&f.ty, seen)?;
+                            max_align = max_align.max(align);
+                            if *kind == TagKind::Union {
+                                max_size = max_size.max(size);
+                            } else {
+                                offset = offset.div_ceil(align) * align + size;
+                            }
+                        }
+                        seen.pop();
+                        let total = if *kind == TagKind::Union { max_size } else { offset };
+                        Some((total.div_ceil(max_align) * max_align, max_align))
+                    }
+                }
+            }
+            CType::Array { inner, len: Some(n) } => {
+                let (size, align) = self.size_align_in(inner, seen)?;
+                Some((size.checked_mul(*n as u64)?, align))
+            }
+            _ => None,
+        }
+    }
+
     fn to_ty(&self, t: &CType, line: usize) -> PResult<TyNode> {
         Ok(match t {
             CType::Named { name, .. } => TyNode::Ty(name.clone()),
@@ -978,10 +1027,20 @@ impl Lowerer {
                 let ty = self.to_ty(t, line)?;
                 ExprNode::Cast((ty, Box::new(self.lower_expr(a, true)?)))
             }
-            CExprKind::SizeofType(_) | CExprKind::SizeofExpr(_) => {
+            // 型の大きさは、定義が見えていればこの段階で決まるので数値にする(LP64)
+            CExprKind::SizeofType(t) => match self.size_align(t) {
+                Some((size, _)) => ExprNode::Number(size.to_string()),
+                None => {
+                    return unsup(
+                        line,
+                        "sizeof(大きさを決められない型: 定義が見えない構造体・void・関数型など)",
+                    );
+                }
+            },
+            CExprKind::SizeofExpr(_) => {
                 return unsup(
                     line,
-                    "sizeof(nodeにsizeofが無く、型の大きさはこの段階では決まらない)",
+                    "sizeof(式)(式の型はこの段階では決まらない。`sizeof(型)`は使える)",
                 );
             }
             CExprKind::Comma(_) => {

@@ -241,7 +241,7 @@ impl Preprocessor {
     }
 
     /// `-I dir`(`#include "..."` と `<...>` の両方で探す)
-    pub(in crate::compiler::c_frontend::lex) fn add_include_dir(
+    pub(in crate::compiler::c_frontend) fn add_include_dir(
         &mut self,
         dir: impl Into<PathBuf>,
     ) {
@@ -249,7 +249,7 @@ impl Preprocessor {
     }
 
     /// システムヘッダ用ディレクトリ(`-I` の後に探す)
-    pub(in crate::compiler::c_frontend::lex) fn add_system_include_dir(
+    pub(in crate::compiler::c_frontend) fn add_system_include_dir(
         &mut self,
         dir: impl Into<PathBuf>,
     ) {
@@ -257,7 +257,7 @@ impl Preprocessor {
     }
 
     /// メモリ上のヘッダを登録する(ファイルより優先。テストや組み込みヘッダ用)
-    pub(in crate::compiler::c_frontend::lex) fn add_virtual_file(
+    pub(in crate::compiler::c_frontend) fn add_virtual_file(
         &mut self,
         name: &str,
         contents: &str,
@@ -267,7 +267,7 @@ impl Preprocessor {
     }
 
     /// `-DNAME=VALUE` 相当。`define("F(x)", "x+1")` で関数形式も定義できる
-    pub(in crate::compiler::c_frontend::lex) fn define(
+    pub(in crate::compiler::c_frontend) fn define(
         &mut self,
         name: &str,
         value: &str,
@@ -299,7 +299,7 @@ impl Preprocessor {
     }
 
     /// `-UNAME` 相当
-    pub(in crate::compiler::c_frontend::lex) fn undef(&mut self, name: &str) {
+    pub(in crate::compiler::c_frontend) fn undef(&mut self, name: &str) {
         self.macros.remove(name);
     }
 
@@ -318,12 +318,12 @@ impl Preprocessor {
     }
 
     /// `#warning` やマクロ再定義などの警告
-    pub(in crate::compiler::c_frontend::lex) fn warnings(&self) -> &[String] {
+    pub(in crate::compiler::c_frontend) fn warnings(&self) -> &[String] {
         &self.warnings
     }
 
     /// 解釈しなかった `#pragma` の本文
-    pub(in crate::compiler::c_frontend::lex) fn pragmas(&self) -> &[String] {
+    pub(in crate::compiler::c_frontend) fn pragmas(&self) -> &[String] {
         &self.pragmas
     }
 
@@ -341,7 +341,7 @@ impl Preprocessor {
         self.run_main(file_name, file_name, src)
     }
 
-    pub(in crate::compiler::c_frontend::lex) fn preprocess_file(
+    pub(in crate::compiler::c_frontend) fn preprocess_file(
         &mut self,
         path: impl AsRef<Path>,
     ) -> Result<Vec<TokenInfo>, PpError> {

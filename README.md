@@ -49,7 +49,7 @@ c言語を書きたいけどメモリの管理がめんどくさい
 // src
 #include io="library/os/io.hexl"
 _start(): int {
-    msg: byte* = "hello world\n"
+    msg: char* = "hello world\n"
     io::print_line(msg, 12)
     io::exit()
 }

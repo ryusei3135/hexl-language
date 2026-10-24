@@ -746,7 +746,8 @@ fn global_variable_is_unsupported_but_prototypes_are_skipped() {
 fn unsupported_features() {
     for src in [
         "int f(int a) { goto end; end: return a; }",
-        "int f() { return sizeof(int); }",
+        "int f(int a) { return sizeof a; }",
+        "int f() { return sizeof(struct Undefined); }",
         "int f(int (*cb)(int)) { return 0; }",
         "int f(int n, ...) { return 0; }",
         "struct S { int a : 3; };",
@@ -849,4 +850,60 @@ fn realistic_program() {
     };
     assert_eq!(s.name, "Item");
     assert_eq!(s.fields[1].ty, ty("unsigned char"));
+}
+
+fn return_expr(n: &[Group1Node], name: &str) -> Expr {
+    let f = func(n, name);
+    let Group2Node::Stmt(StmtNode::Return(e)) = &f.body.last().unwrap().node else {
+        panic!()
+    };
+    e.clone()
+}
+
+#[test]
+fn sizeof_of_builtin_pointer_and_array_types() {
+    let n = parse(
+        "int a() { return sizeof(char); } int b() { return sizeof(long); } \
+         int c() { return sizeof(int *); } int d() { return sizeof(short[3]); }",
+    );
+    assert_eq!(return_expr(&n, "a").node, ExprNode::Number("1".into()));
+    assert_eq!(return_expr(&n, "b").node, ExprNode::Number("8".into()));
+    assert_eq!(return_expr(&n, "c").node, ExprNode::Number("8".into()));
+    assert_eq!(return_expr(&n, "d").node, ExprNode::Number("6".into()));
+}
+
+#[test]
+fn sizeof_of_struct_uses_alignment() {
+    let n = parse(
+        "struct S { char c; int i; char d; }; union U { char c; long l; }; \
+         int a() { return sizeof(struct S); } int b() { return sizeof(union U); }",
+    );
+    // char(1) + 詰め物3 + int(4) + char(1) + 詰め物3
+    assert_eq!(return_expr(&n, "a").node, ExprNode::Number("12".into()));
+    assert_eq!(return_expr(&n, "b").node, ExprNode::Number("8".into()));
+}
+
+#[test]
+fn sizeof_in_array_length_and_alignof() {
+    let n = parse("int f() { char buf[sizeof(int) * 2]; return _Alignof(double); }");
+    let f = func(&n, "f");
+    let es = exprs(&f);
+    let ExprNode::DefVar(d) = &es[0].node else {
+        panic!()
+    };
+    assert_eq!(
+        d.ty,
+        TyNode::Stack {
+            name: Box::new(ty("char")),
+            len: 8
+        }
+    );
+    assert_eq!(return_expr(&n, "f").node, ExprNode::Number("8".into()));
+}
+
+#[test]
+fn wide_char_constant_is_code_point() {
+    let n = parse("int f() { return L'\\x41'; } int g() { return U'a'; }");
+    assert_eq!(return_expr(&n, "f").node, ExprNode::Number("65".into()));
+    assert_eq!(return_expr(&n, "g").node, ExprNode::Number("97".into()));
 }

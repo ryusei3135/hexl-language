@@ -193,6 +193,7 @@ impl Size {
         matches!(
             name,
             "byte"
+                | "char"
                 | "i16"
                 | "int"
                 | "i64"
@@ -284,7 +285,7 @@ impl Size {
 #[inline(always)]
 fn embe_ty_sort(ty_name: &str) -> Result<Size, err::ErrKind> {
     match ty_name {
-        "byte" => Size::DB,
+        "byte" | "char" => Size::DB,
         "i16" => Size::DW,
         "int" => Size::DD,
         "i64" => Size::DQ,

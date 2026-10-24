@@ -331,7 +331,15 @@ impl Parser {
             return Ok(self.mk(line, CExprKind::SizeofExpr(Box::new(e))));
         }
         if self.is_kw("_Alignof") {
-            return Err(self.unsupported("_Alignof"));
+            // 組み込み型・ポインタ・配列だけ。構造体などは定義が要るので未対応
+            self.bump();
+            self.expect_punct("(")?;
+            let ty = self.parse_type_name()?;
+            self.expect_punct(")")?;
+            return match ty.prim_size_align() {
+                Some((_, align)) => Ok(self.mk(line, CExprKind::Int(align.to_string()))),
+                None => Err(self.unsupported("_Alignof(構造体・共用体・void・関数型)")),
+            };
         }
         self.parse_postfix()
     }
@@ -398,8 +406,9 @@ impl Parser {
                 Ok(self.mk(line, CExprKind::Float(fmt_float(value))))
             }
             Token::CharLiteral { prefix, body } => {
-                if !prefix.is_empty() {
-                    return Err(self.unsupported("ワイド文字定数(L'' u'' U'')"));
+                // `L'a'` `u'a'` `U'a'`は、コードポイントの値にする(`u8''`はC23なので未対応)
+                if !prefix.is_empty() && !matches!(&*prefix, "L" | "u" | "U") {
+                    return Err(self.unsupported("`u8`の文字定数(C23)"));
                 }
                 let v = decode_char(&body).map_err(|m| self.syntax(m))?;
                 self.bump();
@@ -500,7 +509,12 @@ impl Parser {
                     self.const_eval(b)?
                 }
             }
-            CExprKind::SizeofType(_) | CExprKind::SizeofExpr(_) => return Err(fail("sizeof")),
+            // 組み込み型・ポインタ・配列の`sizeof`は定数。構造体はパーサでは大きさが分からない
+            CExprKind::SizeofType(t) => match t.prim_size_align() {
+                Some((size, _)) => size as i64,
+                None => return Err(fail("sizeof(構造体など)")),
+            },
+            CExprKind::SizeofExpr(_) => return Err(fail("sizeof(式)")),
             _ => return Err(fail("定数でない式")),
         })
     }

@@ -16,7 +16,10 @@ mod prelude;
 #[cfg(test)]
 mod tests;
 
-pub(in crate::compiler::c_frontend) use error::{ParseError, ParseErrorKind};
+pub(in crate::compiler::c_frontend) use error::ParseError;
+// テストでだけ種類を見る
+#[cfg(test)]
+use error::ParseErrorKind;
 
 use prelude::{Group1Node, TokenInfo};
 

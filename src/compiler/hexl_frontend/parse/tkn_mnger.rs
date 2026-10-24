@@ -123,21 +123,4 @@ impl Parser {
     pub(in crate::compiler::hexl_frontend::parse) fn current_tkn(&self) -> &lex::Tkn {
         &self.tkns.as_ref().unwrap()[self.idx].tkn
     }
-
-    #[inline(always)]
-    pub(in crate::compiler::hexl_frontend::parse) fn current_line(&self, idx: usize) -> usize {
-        // 範囲外はエラーの位置を表示するための値なので`0`を返す
-        self.tkns
-            .as_ref()
-            .and_then(|tkns| tkns.get(idx))
-            .map_or(0, |t| t.span.line)
-    }
-
-    #[inline(always)]
-    pub(in crate::compiler::hexl_frontend::parse) fn tkn_chr_pos(&self) -> usize {
-        self.tkns
-            .as_ref()
-            .and_then(|tkns| tkns.get(self.idx.saturating_sub(1)))
-            .map_or(0, |t| t.span.pos)
-    }
 }

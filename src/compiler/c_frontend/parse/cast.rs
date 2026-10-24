@@ -49,13 +49,30 @@ impl CType {
         }
     }
 
-    /// 最上位の`const`を外す
-    pub fn without_const(mut self) -> CType {
-        match &mut self {
-            CType::Named { konst, .. } | CType::Ptr { konst, .. } => *konst = false,
-            _ => {}
+    /// 組み込み型・ポインタ・配列の`(大きさ, 境界)`(バイト、LP64)
+    ///
+    /// 構造体・共用体・列挙型(タグ名)は定義が要るので`None`
+    /// (`Lowerer::size_align`が定義を見て計算する)。`void`・関数型・大きさの無い配列も`None`
+    pub fn prim_size_align(&self) -> Option<(u64, u64)> {
+        match self {
+            CType::Named { name, .. } => {
+                let n = match name.as_str() {
+                    "char" | "signed char" | "unsigned char" | "bool" => 1,
+                    "short" | "unsigned short" => 2,
+                    "int" | "unsigned int" | "float" => 4,
+                    "long" | "unsigned long" | "long long" | "unsigned long long" | "double" => 8,
+                    "long double" => 16,
+                    _ => return None,
+                };
+                Some((n, n))
+            }
+            CType::Ptr { .. } => Some((8, 8)),
+            CType::Array { inner, len: Some(n) } => {
+                let (size, align) = inner.prim_size_align()?;
+                Some((size.checked_mul(*n as u64)?, align))
+            }
+            _ => None,
         }
-        self
     }
 }
 
