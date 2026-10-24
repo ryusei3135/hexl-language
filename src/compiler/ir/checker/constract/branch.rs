@@ -170,6 +170,7 @@ impl IR {
                 Self::mark_used(e, must_vars);
             }
         }
+        let mut fork_must_list = Vec::new();
         for arm in arms.iter() {
             // アームのパターン式で終了するなら、この文で終了する
             // (アームごとに分岐前の状態の複製で調べ、`must_vars`は変えない)
@@ -184,11 +185,17 @@ impl IR {
                     );
                 }
             }
+            fork_must_list.push(scope_must_vars);
             self.check_loop_block(fn_name, &arm.body, &Self::fork_vars(must_vars))?;
         }
+
         if let Some(body) = arm_else {
-            self.check_loop_block(fn_name, body, &Self::fork_vars(must_vars))?;
+            let forked = Self::fork_vars(must_vars);
+            self.check_loop_block(fn_name, body, &forked)?;
+            fork_must_list.push(forked);
         }
+        // 条件分岐のスコープで終了した契約を合流
+        self.merge_branches(&must_vars, fork_must_list);
         Ok(ends)
     }
 
