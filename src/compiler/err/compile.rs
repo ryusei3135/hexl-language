@@ -55,6 +55,7 @@ pub enum CompileErrKind {
         fn_name: String,
         var_name: String,
     },
+    ConstractUnterminableScope(String),
     /// `must`の契約を持つ変数へ再代入しようとした
     AssignToMustVar(String),
     /// `++`/`--`を整数以外の変数に使おうとした
@@ -387,6 +388,7 @@ impl CompileErrKind {
             Self::AsmEmitNotTernaryCondKind(..) => "E0030",
             Self::AsmEmitTernaryCondNotFound(..) => "E0031",
             Self::AsmEmitFloatNotSupported(..) => "E0032",
+            Self::ConstractUnterminableScope(..) => "E0033",
         }
     }
 
@@ -443,6 +445,9 @@ impl CompileErrKind {
             ),
             Self::ContractMustNotUsed { fn_name, var_name } => {
                 format!("`must`の変数`{var_name}`が、関数`{fn_name}`の中で一度も使われていません")
+            }
+            Self::ConstractUnterminableScope(name) => {
+                panic!();
             }
             Self::AssignToMustVar(name) => {
                 format!("`must`の契約を持つ変数`{name}`には再代入できません")

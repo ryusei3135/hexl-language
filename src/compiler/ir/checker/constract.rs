@@ -1,3 +1,7 @@
+
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use super::*;
 use crate::compiler::ast::{ArgsNode, ConstractTy, Expr, ExprNode, FuncDefine, TyNode};
 use crate::compiler::err::CompileErr;
@@ -7,7 +11,7 @@ mod branch;
 mod common;
 mod loop_check;
 
-use common::MustVar;
+use common::{MustVar, MustVarsTy};
 
 /// 契約の検査から見た、式の型
 enum ExprTy {
@@ -178,7 +182,7 @@ impl IR {
     /// IRを生成する時点で`check_constract_arg`が確認するので、
     /// ここでは「そもそも関数に渡されているか」だけを見る
     pub(crate) fn check_must_var_used(&mut self, func: &FuncDefine) -> Result<(), err::ErrKind> {
-        let mut must_vars: Vec<MustVar> = Vec::new();
+        let must_vars: MustVarsTy = Rc::new(RefCell::new(Vec::new()));
 
         // 引数として受け取った`must`の値も、この関数の中で
         // 別の関数へ渡す義務がある
@@ -186,10 +190,12 @@ impl IR {
             .iter()
             .filter(|param| param.ty.is_constract_must())
             .for_each(|param| {
-                must_vars.push(MustVar::new(param.name.clone(), &func.span));
+                must_vars
+                    .borrow_mut()
+                    .push(MustVar::new(param.name.clone(), &func.span));
             });
 
-        self.walk_group2_nodes(&func.body, &mut must_vars, &func.name)?;
+        self.walk_group2_nodes(&func.body, &must_vars, &func.name)?;
 
         // // ループの中での契約の終了は、`ret`/`break`の前にしか置けない
         // let mut scope: Vec<String> = must_vars.iter().map(|v| v.name.clone()).collect();
@@ -199,11 +205,12 @@ impl IR {
         //         .filter(|p| p.ty.is_constract_must())
         //         .count(),
         // );
-        self.check_loop_contract_ends(&func.name, &func.body, &mut must_vars)?;
+        self.check_loop_contract_ends(&func.name, &func.body, &must_vars)?;
 
         // 一度も渡されていない変数、または条件分岐の一部でしか
         // 契約を終了していない変数はエラー
         for var in must_vars
+            .borrow()
             .iter()
             .filter(|var| var.tracked && ((!var.used && !var.ended_on_exit) || var.branch_mismatch))
         {

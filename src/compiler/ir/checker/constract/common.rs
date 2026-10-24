@@ -4,6 +4,9 @@
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
 
+/// 契約を持つ変数の一覧(共有して、あとから状態を書き換える)
+pub(super) type MustVarsTy = Rc<RefCell<Vec<MustVar>>>;
+
 /// 関数の中で追跡している、`must`の契約を持つ変数
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct MustVar {
@@ -46,71 +49,120 @@ impl MustVar {
 }
 
 impl IR {
+    /// 分岐の解析用に、変数の状態を複製する
+    /// (`Rc`の`clone`は同じ一覧を共有してしまうので、中身を複製した別の一覧を作る)
+    pub(super) fn fork_vars(must_vars: &MustVarsTy) -> MustVarsTy {
+        Rc::new(RefCell::new(must_vars.borrow().clone()))
+    }
+
+    /// 終了した契約(この呼び出しで新しく終了した変数名)を、重複なく`dst`へ足す
+    pub(super) fn push_ends(dst: &mut Vec<String>, src: Vec<String>) {
+        for name in src {
+            if !dst.contains(&name) {
+                dst.push(name);
+            }
+        }
+    }
+
+    /// 文・式の列を辿り、この中で新しく終了した契約の変数名を返す
     pub(super) fn walk_group2_nodes(
         &mut self,
         nodes: &Body,
-        must_vars: &mut Vec<MustVar>,
+        must_vars: &MustVarsTy,
         fn_name: &str,
-    ) -> Result<(), err::ErrKind> {
+    ) -> Result<Vec<String>, err::ErrKind> {
+        let mut ends: Vec<String> = Vec::new();
         for n in nodes.iter() {
             match n.get_node() {
                 Group2Node::Expr(expr) => {
-                    self.walk_expr(&expr, must_vars, fn_name)?;
+                    Self::push_ends(&mut ends, self.walk_expr(&expr, must_vars, fn_name)?);
                 }
                 Group2Node::Stmt(StmtNode::Return(expr)) => {
-                    self.walk_expr(&expr, must_vars, fn_name)?;
+                    Self::push_ends(&mut ends, self.walk_expr(&expr, must_vars, fn_name)?);
                 }
                 Group2Node::Stmt(StmtNode::Continue | StmtNode::Break(..)) => {}
                 _ => {}
             }
         }
-        Ok(())
+        Ok(ends)
     }
 
+    /// 式を辿り、この式の中で新しく終了した(`used`になった)契約の変数名を返す
     pub(super) fn walk_expr(
         &mut self,
         expr: &Expr,
-        must_vars: &mut Vec<MustVar>,
+        must_vars: &MustVarsTy,
         fn_name: &str,
-    ) -> Result<(), err::ErrKind> {
+    ) -> Result<Vec<String>, err::ErrKind> {
         match &expr.node {
             // 変数の定義: `must`の型ならここから追跡を始める
             ExprNode::DefVar(var) => {
-                self.walk_expr(&var.value, must_vars, fn_name)?;
+                // 初期値の中で終了した契約(定義した変数自身はまだ終了していない)
+                let ends = self.walk_expr(&var.value, must_vars, fn_name)?;
                 if var.ty.is_constract_must() {
                     // 同名の契約変数が外側にあっても、既存の要素は書き換えず
                     // 新しい要素を積む。名前の検索は後ろから行うので内側が優先され、
                     // スコープを抜けるときの`truncate`で内側の要素だけが消える
-                    must_vars.push(MustVar::new(var.name.clone(), &expr.span));
-                } else if must_vars.iter().any(|entry| entry.name == var.name) {
-                    // 契約のない変数が外側の契約変数を隠す場合
-                    must_vars.push(MustVar::mask(var.name.clone(), &expr.span));
+                    must_vars
+                        .borrow_mut()
+                        .push(MustVar::new(var.name.clone(), &expr.span));
+                } else {
+                    let shadows = must_vars
+                        .borrow()
+                        .iter()
+                        .any(|entry| entry.name == var.name);
+                    if shadows {
+                        // 契約のない変数が外側の契約変数を隠す場合
+                        must_vars
+                            .borrow_mut()
+                            .push(MustVar::mask(var.name.clone(), &expr.span));
+                    }
                 }
-                Ok(())
+                Ok(ends)
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
             ExprNode::CallFunc(call_info) => {
-                call_info.args.iter().try_for_each(|arg| {
+                let mut ends: Vec<String> = Vec::new();
+                for arg in call_info.args.iter() {
                     if let Some(name) = Self::arg_var_name(arg) {
-                        Self::mark_used(name, must_vars);
+                        if Self::mark_used(name, must_vars) {
+                            Self::push_ends(&mut ends, vec![name.clone()]);
+                        }
                     }
-                    self.walk_expr(arg, must_vars, fn_name)
-                })?;
-                Ok(())
+                    Self::push_ends(&mut ends, self.walk_expr(arg, must_vars, fn_name)?);
+                }
+                Ok(ends)
             }
             // 条件分岐は`branch.rs`、反復処理は`loop_check.rs`で扱う
-            ExprNode::Match { .. } => self.walk_match(expr, must_vars, fn_name),
+            ExprNode::Match { .. } => self.tracking_cond_expr_node(expr, must_vars, fn_name),
             ExprNode::Loop { .. } => self.walk_loop(expr, must_vars, fn_name),
             // それ以外は子の式を順に辿る(`try_for_each_child`を`scan_loop_expr`と共有する)
-            _ => Self::try_for_each_child(expr, &mut |child| {
-                self.walk_expr(child, must_vars, fn_name)
-            }),
+            _ => {
+                let mut ends: Vec<String> = Vec::new();
+                Self::try_for_each_child::<err::ErrKind>(expr, &mut |child| {
+                    Self::push_ends(&mut ends, self.walk_expr(child, must_vars, fn_name)?);
+                    Ok(())
+                })?;
+                Ok(ends)
+            }
         }
     }
 
     /// `&Box<Expr>`などを`&Expr`にそろえる(関数の引数での型強制を使う)
     pub(super) fn as_expr(expr: &Expr) -> &Expr {
         expr
+    }
+    
+    /// 式の中で終了される(関数の引数として渡される)`must_vars`の変数名
+    pub(super) fn ended_by(
+        &mut self,
+        expr: &Expr,
+        must_vars: &MustVarsTy,
+        fn_name: &str,
+    ) -> Result<Vec<String>, err::ErrKind> {
+        // `walk_expr`は、この式で新しく終了した変数だけを返す
+        // (前の文で終了した変数が、あとの文すべてで終了したことにならない)
+        self.walk_expr(expr, must_vars, fn_name)
     }
 
     /// 式の子の式を、評価する順に`f`へ渡す
@@ -171,12 +223,20 @@ impl IR {
         }
     }
 
-    pub(super) fn mark_used(name: &str, must_vars: &mut Vec<MustVar>) {
+    /// 新しく終了済みにしたら`true`(すでに終了済み・契約を持たない変数なら`false`)
+    pub(super) fn mark_used(name: &str, must_vars: &MustVarsTy) -> bool {
         // 最も内側の同名の要素だけを見る。それが契約を持たない変数なら何もしない
-        if let Some(var) = must_vars.iter_mut().rev().find(|var| var.name == name) {
-            if var.tracked {
+        if let Some(var) = must_vars
+            .borrow_mut()
+            .iter_mut()
+            .rev()
+            .find(|var| var.name == name)
+        {
+            if var.tracked && !var.used {
                 var.used = true;
+                return true;
             }
         }
+        false
     }
 }

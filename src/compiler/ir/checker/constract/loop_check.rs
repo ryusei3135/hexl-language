@@ -8,7 +8,7 @@ use std::rc::Rc;
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
 use crate::compiler::ir::def_tree::VarLife::EndConstract;
-use crate::err::{self, ErrKind, Span, compile::*};
+use crate::err::{self, ErrKind, Span, compile::{self, CompileErrKind::ConstractUnterminableScope}};
 
 impl IR {
     /// 反復処理(`Expr::Loop`)の追跡
@@ -16,26 +16,37 @@ impl IR {
     pub(super) fn walk_loop(
         &mut self,
         expr: &Expr,
-        must_vars: &mut Vec<MustVar>,
+        must_vars: &MustVarsTy,
         fn_name: &str,
-    ) -> Result<(), err::ErrKind> {
+    ) -> Result<Vec<String>, err::ErrKind> {
         let ExprNode::Loop {
             ref pattern,
             ref body,
         } = expr.node
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
-        let scope_start = must_vars.len();
+        let scope_start = must_vars.borrow().len();
+        let mut ends: Vec<String> = Vec::new();
         if let Some(pattern) = pattern {
-            self.walk_expr(&pattern, must_vars, fn_name)?;
+            Self::push_ends(&mut ends, self.walk_expr(&pattern, must_vars, fn_name)?);
         }
-        self.walk_group2_nodes(&body, must_vars, fn_name)?;
+        Self::push_ends(&mut ends, self.walk_group2_nodes(&body, must_vars, fn_name)?);
         // Loopの中で新たに契約したのにloopで契約を終了していない場合エラー
         self.emit_scope_constract_errs(scope_start, must_vars, fn_name);
 
-        must_vars.truncate(scope_start);
-        Ok(())
+        // ループの中で定義した変数は外側から見えないので、終了した契約から除く
+        {
+            let vars = must_vars.borrow();
+            let outer: Vec<&str> = vars[..scope_start.min(vars.len())]
+                .iter()
+                .filter(|v| v.tracked)
+                .map(|v| v.name.as_str())
+                .collect();
+            ends.retain(|name| outer.contains(&name.as_str()));
+        }
+        must_vars.borrow_mut().truncate(scope_start);
+        Ok(ends)
     }
 
     /// 関数全体を辿り、ループを見つけたら`check_loop_block`で検査する
@@ -44,7 +55,7 @@ impl IR {
         &mut self,
         fn_name: &str,
         nodes: &Body,
-        scope: &mut Vec<MustVar>,
+        scope: &MustVarsTy,
     ) -> Result<(), err::ErrKind> {
         for n in nodes.iter() {
             match n.get_node() {
@@ -59,28 +70,31 @@ impl IR {
 
     /// スコープが終了したときスコープで契約が終了していなかったら
     /// エラープールにすべてのエラーをスタック
-    fn emit_scope_constract_errs(
+    pub(super) fn emit_scope_constract_errs(
         &mut self,
         start: usize,
-        must_vars: &mut Vec<MustVar>,
+        must_vars: &MustVarsTy,
         fn_name: &str,
     ) {
         // Loopの中で新たに契約したのにloopで契約を終了していない場合エラー
-        if must_vars.len() > start {
+        // (`RefCell`の借用を持ったままエラープールに積まないよう、先に集める)
+        let unused: Vec<(String, Rc<Span>)> = must_vars
+            .borrow()
+            .iter()
+            .skip(start)
             // 複数のエラーをスタック(契約を終了していない変数だけ)
-            for i in start..must_vars.len() {
-                if !must_vars[i].tracked || must_vars[i].used {
-                    continue;
-                }
-                let result: Result<(), err::ErrKind> = crate::GenCompileErr2!(
-                    CompileErrKind::ContractMustNotUsed {
-                        fn_name: fn_name.to_string(),
-                        var_name: must_vars[i].name.clone()
-                    },
-                    Rc::clone(&must_vars[i].span)
-                );
-                (*self.err_pool.borrow_mut()).push_err_node(result.unwrap_err());
-            }
+            .filter(|var| var.tracked && !var.used)
+            .map(|var| (var.name.clone(), Rc::clone(&var.span)))
+            .collect();
+        for (var_name, span) in unused {
+            let result: Result<(), err::ErrKind> = crate::GenCompileErr2!(
+                CompileErrKind::ContractMustNotUsed {
+                    fn_name: fn_name.to_string(),
+                    var_name
+                },
+                span
+            );
+            (*self.err_pool.borrow_mut()).push_err_node(result.unwrap_err());
         }
     }
 
@@ -91,56 +105,30 @@ impl IR {
         &mut self,
         fn_name: &str,
         expr: &Expr,
-        scope: &mut Vec<MustVar>,
+        scope: &MustVarsTy,
     ) -> Result<(), err::ErrKind> {
         match &expr.node {
             ExprNode::DefVar(var) => {
                 self.scan_loop_expr(fn_name, &var.value, scope)?;
                 if var.ty.is_constract_must() {
-                    scope.push(MustVar::new(var.name.clone(), &expr.span));
-                } else if scope.iter().any(|entry| entry.name == var.name) {
-                    scope.push(MustVar::mask(var.name.clone(), &expr.span));
-                }
-            }
-            ExprNode::Match {
-                pattern,
-                arms,
-                arm_else,
-            } => {
-                // 分岐の式(`cond`の条件など)は分岐の前に評価されるので、
-                // 分岐前の`scope`に対して走査する
-                if let Some(pattern) = pattern {
-                    self.scan_loop_expr(fn_name, Self::as_expr(pattern), scope)?;
-                }
-                // 分岐の前の`scope`(外側の変数)は、どの分岐の後でも残す。
-                // 各分岐は分岐前の状態のコピーに対して解析し、分岐の中で
-                // 定義した変数は外側の変数とは別に扱って、分岐の終わりで捨てる。
-                let mut branches: Vec<Vec<MustVar>> = Vec::new();
-                for arm in arms.iter() {
-                    // 各アームのパターン式は、そのアームの状態の中で評価される
-                    branches.push(self.scan_loop_branch(
-                        fn_name,
-                        Some(Self::as_expr(&arm.pattern)),
-                        &arm.body,
-                        scope,
-                    )?);
-                }
-                if let Some(body) = arm_else {
-                    branches.push(self.scan_loop_branch(fn_name, None, body, scope)?);
-                }
-                // 外側の変数ごとに分岐の結果を合流させる。
-                // どれか一つの分岐でも終了していれば、その先では終了済みの
-                // 可能性があるものとして扱う(一部の分岐でしか終了しない場合の
-                // エラーは、`walk_match`が報告する)
-                for (i, var) in scope.iter_mut().enumerate() {
-                    if var.tracked && branches.iter().any(|branch| branch[i].used) {
-                        var.used = true;
+                    scope
+                        .borrow_mut()
+                        .push(MustVar::new(var.name.clone(), &expr.span));
+                } else {
+                    let shadows = scope.borrow().iter().any(|entry| entry.name == var.name);
+                    if shadows {
+                        scope
+                            .borrow_mut()
+                            .push(MustVar::mask(var.name.clone(), &expr.span));
                     }
                 }
             }
+            ExprNode::Match { .. } => {
+                self.tracking_cond_expr_node(expr, scope, fn_name)?;
+            }
             ExprNode::Loop { body, .. } => {
-                let mut guarded = scope.clone();
-                self.check_loop_block(&fn_name, body, &mut guarded)?;
+                let guarded = Self::fork_vars(scope);
+                self.check_loop_block(fn_name, body, &guarded)?;
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
             // (引数の中にも反復処理や分岐があり得るので、引数も同じ走査で辿る)
@@ -163,41 +151,23 @@ impl IR {
 
     /// 分岐1つ分を、分岐前の`scope`のコピーに対して解析して返す
     /// (分岐の中で定義された変数は、検査したうえで結果に含めない)
-    fn scan_loop_branch(
+    pub(super) fn scan_loop_branch(
         &mut self,
         fn_name: &str,
         pattern: Option<&Expr>,
         body: &Body,
-        outer: &[MustVar],
+        outer: &MustVarsTy,
     ) -> Result<Vec<MustVar>, err::ErrKind> {
-        let outer_len = outer.len();
-        let mut local = outer.to_vec();
+        let outer_len = outer.borrow().len();
+        let local = Self::fork_vars(outer);
         if let Some(pattern) = pattern {
-            self.scan_loop_expr(fn_name, pattern, &mut local)?;
+            self.scan_loop_expr(fn_name, pattern, &local)?;
         }
-        self.check_loop_contract_ends(fn_name, body, &mut local)?;
-        self.emit_scope_constract_errs(outer_len, &mut local, fn_name);
-        local.truncate(outer_len);
-        Ok(local)
-    }
-
-    /// 式の中で終了される(関数の引数として渡される)`guarded`の変数名
-    fn ended_by(
-        &mut self,
-        expr: &Expr,
-        guarded: &mut Vec<MustVar>,
-        fn_name: &str,
-    ) -> Result<Vec<String>, err::ErrKind> {
-        // 式を辿る前から終了済みだった変数は、この式で終了したことにしない
-        // (前の文で終了した変数が、あとの文すべてで終了したことになってしまう)
-        let used_before: Vec<bool> = guarded.iter().map(|v| v.used).collect();
-        self.walk_expr(expr, guarded, fn_name)?;
-        Ok(guarded
-            .iter()
-            .zip(used_before)
-            .filter(|(v, before)| v.tracked && v.used && !before)
-            .map(|(v, _)| v.name.clone())
-            .collect())
+        self.check_loop_contract_ends(fn_name, body, &local)?;
+        self.emit_scope_constract_errs(outer_len, &local, fn_name);
+        let mut state = local.borrow().clone();
+        state.truncate(outer_len);
+        Ok(state)
     }
 
     /// ループ本体(や、その中の分岐の本体)の検査
@@ -206,11 +176,11 @@ impl IR {
     /// 文は、直後(他の終了する文を挟んでもよい)に`ret`/`break`が
     /// 無ければエラーにする。そうしないと次の周でもう一度終了してしまう。
     /// ループの中で定義した変数は毎周作り直されるので対象外
-    fn check_loop_block(
+    pub(super) fn check_loop_block(
         &mut self,
         fn_name: &str,
         body: &Body,
-        guarded: &mut Vec<MustVar>,
+        guarded: &MustVarsTy,
     ) -> Result<(), err::ErrKind> {
         let mut locals: Vec<MustVar> = Vec::new();
         // (この文が終了する変数, `ret`/`break`か, この文の位置)
@@ -230,37 +200,16 @@ impl IR {
             let mut ends: Vec<String> = Vec::new();
             if let Some(ref expr) = expr {
                 match &expr.node {
-                    // 分岐の本体は、それぞれ同じ規則で検査する
-                    ExprNode::Match {
-                        pattern,
-                        arms,
-                        arm_else,
-                    } => {
-                        // 分岐の式(`cond`の条件など)で終了するなら、この文で終了する
-                        if let Some(pattern) = pattern {
-                            ends = self.ended_by(Self::as_expr(pattern), guarded, fn_name)?;
-                        }
-                        for arm in arms.iter() {
-                            // アームのパターン式で終了するなら、この文で終了する
-                            for name in
-                                self.ended_by(Self::as_expr(&arm.pattern), &mut guarded.clone(), fn_name)?
-                            {
-                                if !ends.contains(&name) {
-                                    ends.push(name);
-                                }
-                            }
-                            self.check_loop_block(fn_name, &arm.body, &mut guarded.clone())?;
-                        }
-                        if let Some(body) = arm_else {
-                            self.check_loop_block(fn_name, body, &mut guarded.clone())?;
-                        }
+                    // 分岐の本体は、それぞれ同じ規則で検査する(`cond_expr_tracking.rs`)
+                    ExprNode::Match { .. } => {
+                        ends = self.tracking_cond_expr_node(expr, guarded, fn_name)?;
                     }
                     // 入れ子のループは、自分の本体を検査する。
                     // さらに外側のループから見ると、中で終了することも終了する文
                     ExprNode::Loop { body, .. } => {
-                        let mut inner = guarded.clone();
-                        inner.extend(locals.iter().cloned());
-                        self.check_loop_block(fn_name, body, &mut inner)?;
+                        let inner = Self::fork_vars(guarded);
+                        inner.borrow_mut().extend(locals.iter().cloned());
+                        self.check_loop_block(fn_name, body, &inner)?;
                         ends = self.ended_by(expr, guarded, fn_name)?;
                     }
                     _ => {
@@ -270,7 +219,7 @@ impl IR {
                 // ループの中で定義した変数は、この周の中で終了するだけでよい
                 // (契約のない変数が外側の契約変数を隠す場合も、以降は外側の変数を見ない)
                 if let ExprNode::DefVar(ref var) = expr.node {
-                    guarded.retain(|v| v.name != var.name);
+                    guarded.borrow_mut().retain(|v| v.name != var.name);
                     if var.ty.is_constract_must() {
                         locals.push(MustVar::new(var.name.clone(), &expr.span));
                     }

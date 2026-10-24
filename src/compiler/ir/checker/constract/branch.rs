@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
+use crate::err::compile::CompileErrKind::ConstractUnterminableScope;
 
 /// 本体が必ず抜ける先(`ret`は関数、`break`は反復処理を抜ける)
 ///
@@ -34,61 +35,56 @@ impl Exits {
 }
 
 impl IR {
-    /// 条件分岐(`Expr::Match`)の追跡
+    /// ループ本体の中の条件分岐(`Expr::Match`)の追跡
     ///
-    /// 分岐ごとに独立して追跡し、最後に結果を突き合わせる。
-    /// 一つでも契約を終了する分岐があるなら、すべての分岐で
-    /// 終了しなければならない
-    pub(super) fn walk_match(
+    /// `must_vars`はループの外で定義された`must`の変数。
+    /// 戻り値は、この分岐の式(`cond`の条件など)で終了した変数名
+    pub(super) fn tracking_cond_expr_node(
         &mut self,
         expr: &Expr,
-        must_vars: &mut Vec<MustVar>,
+        must_vars: &MustVarsTy,
         fn_name: &str,
-    ) -> Result<(), err::ErrKind> {
+    ) -> Result<Vec<String>, err::ErrKind> {
         let ExprNode::Match {
             pattern,
             arms,
             arm_else,
         } = &expr.node
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
+        let mut ends: Vec<String> = Vec::new();
+        // 分岐の式(`cond`の条件など)で終了するなら、この文で終了する
         if let Some(pattern) = pattern {
-            self.walk_expr(pattern, must_vars, fn_name)?;
+            ends = self.ended_by(Self::as_expr(pattern), must_vars, fn_name)?;
+            // 終了する契約を反映
+            for e in ends.iter() {
+                Self::mark_used(e, must_vars);
+            }
         }
-        // (分岐の解析結果, 全経路が`ret`/`break`で抜ける分岐なら、その脱出先)
-        let mut branches: Vec<(Vec<MustVar>, Option<Exits>)> = Vec::new();
         for arm in arms.iter() {
-            let state = Self::walk_branch(&must_vars[..], |vars| {
-                self.walk_expr(&arm.pattern, vars, fn_name)?;
-                self.walk_group2_nodes(&arm.body, vars, fn_name)
-            })?;
-            branches.push((state, Self::body_exits(&arm.body)));
+            // アームのパターン式で終了するなら、この文で終了する
+            // (アームごとに分岐前の状態の複製で調べ、`must_vars`は変えない)
+            for name in self.ended_by(
+                Self::as_expr(&arm.pattern),
+                &Self::fork_vars(must_vars),
+                fn_name,
+            )? {
+                if !ends.contains(&name) {
+                    // 前回の条件のスコープで終了していない契約は終了できない
+                    return crate::GenCompileErrNode!(
+                        ConstractUnterminableScope,
+                        fn_name.to_string(),
+                        Rc::clone(&expr.span)
+                    );
+                }
+            }
+            self.check_loop_block(fn_name, &arm.body, &Self::fork_vars(must_vars))?;
         }
         if let Some(body) = arm_else {
-            let state = Self::walk_branch(&must_vars[..], |vars| {
-                self.walk_group2_nodes(body, vars, fn_name)
-            })?;
-            branches.push((state, Self::body_exits(body)));
-        } else if pattern.is_none() {
-            // `else`の無い条件分岐は、何もしない分岐があるのと同じ
-            branches.push((must_vars.clone(), None));
+            self.check_loop_block(fn_name, body, &Self::fork_vars(must_vars))?;
         }
-        Self::merge_branches(must_vars, &branches);
-        Ok(())
-    }
-
-    /// 分岐1つ分を、分岐前の状態のコピーに対して解析して返す
-    /// (分岐の中で定義された変数は結果に含めない)
-    fn walk_branch(
-        must_vars: &[MustVar],
-        walk: impl FnOnce(&mut Vec<MustVar>) -> Result<(), err::ErrKind>,
-    ) -> Result<Vec<MustVar>, err::ErrKind> {
-        let outer_len = must_vars.len();
-        let mut local = must_vars.to_vec();
-        walk(&mut local)?;
-        local.truncate(outer_len);
-        Ok(local)
+        Ok(ends)
     }
 
     /// 本体を実行すると、必ず`ret`/`break`で抜けるか(全経路の解析)
@@ -128,41 +124,5 @@ impl IR {
             exits = exits.union(Self::body_exits(&arm.body)?);
         }
         Some(exits.union(Self::body_exits(arm_else.as_ref()?)?))
-    }
-
-    /// 各分岐の解析結果を`must_vars`に反映する
-    ///
-    /// - すべての分岐で終了 -> 終了済み
-    /// - 一部の分岐でだけ終了 -> 終了済みにしたうえで`branch_mismatch`を立てる
-    /// - どの分岐でも終了していない -> 変化なし
-    /// - `ret`/`break`で抜ける分岐で終了している場合は、その分岐を比較から外す
-    ///   (`cond c { f(x)\n break } else {}`のように、抜けない側は後で終了できる)
-    fn merge_branches(must_vars: &mut Vec<MustVar>, branches: &[(Vec<MustVar>, Option<Exits>)]) {
-        for (i, var) in must_vars.iter_mut().enumerate() {
-            // 分岐の前に終了済みなら、分岐ごとの確認は不要
-            if var.used {
-                continue;
-            }
-            if branches.iter().any(|br| br.0[i].branch_mismatch) {
-                var.branch_mismatch = true;
-            }
-            if branches.iter().any(|br| br.0[i].ended_on_exit) {
-                var.ended_on_exit = true;
-            }
-            let exit_ended = branches.iter().any(|br| br.1.is_some() && br.0[i].used);
-            let rest: Vec<&(Vec<MustVar>, Option<Exits>)> = branches
-                .iter()
-                .filter(|br| !(br.1.is_some() && br.0[i].used))
-                .collect();
-            let used_count = rest.iter().filter(|br| br.0[i].used).count();
-            if used_count > 0 {
-                var.used = true;
-                if used_count < rest.len() {
-                    var.branch_mismatch = true;
-                }
-            } else if exit_ended {
-                var.ended_on_exit = true;
-            }
-        }
     }
 }
