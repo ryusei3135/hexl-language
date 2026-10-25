@@ -252,7 +252,19 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         if file_path.starts_with(".c") | file_path.starts_with(".h") {
             compiler::c_frontend::emit_c_node(&file_path)
         } else {
-            panic!();
+            // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
+            // `#if #windows` / `#elif #linux` などの条件をこのOSで切り替える
+            let mut lexer = Lexer::with_os(&os);
+            let mut parser = Parser::new(&file_name, Rc::clone(&err_pool));
+
+            // `#include "file"` の相対パスは、このファイルのあるディレクトリが基準
+            lexer.set_source_file(Rc::clone(&file_name));
+
+            // アセンブリ言語のデータを作成
+            lexer.analy(&content)?;
+            let c_file_list: &[String] = &lexer.include_c_file_list;
+
+            parser.parser(&lexer.gen_tkns, c_file_list)?.to_vec()
         }
     } else {
         // 選んだOSのシンボル(`#linux` / `#windows`)だけを定義して、
