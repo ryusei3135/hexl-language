@@ -17,3 +17,6 @@
 - `ModPath::last_segment`は、パスが空のとき空文字列を返す(panicしない)
 - 例外: `tkn_mnger.rs`の`current_tkn`は`&Tkn`を返す関数で、`tkns`が未設定/範囲外のときの
     値が無いため、`unwrap`が残っている(`current_line`/`tkn_chr_pos`はpanicしない)
+
+## 2026-10-25
+- 型のバイトサイズを取得する機能`sizeof`を追加 expr.rsのvalueに

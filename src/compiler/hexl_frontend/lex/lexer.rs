@@ -359,6 +359,7 @@ impl Lexer {
                     "move" => Tkn::KeyWordMove,
                     "allow" => Tkn::KeyWordAllow,
                     "type" => Tkn::KeyWordType,
+                    "sizeof" => Tkn::KeyWordSizeof,
                     _ => Tkn::Name(self.chr_stk.clone()),
                 },
                 GenFlag::Str => Tkn::Str(self.chr_stk.clone()),

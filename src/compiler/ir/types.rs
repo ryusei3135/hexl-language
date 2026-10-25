@@ -413,4 +413,110 @@ impl IR {
             TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => self.size_of(&ty.unwrap_ty()),
         }
     }
+
+    /// `TyNode`のバイトサイズを`usize`で返す
+    ///
+    /// - 組み込み型は`Size::try_from`で`Size`へ変換して`to_bytes`で求める
+    /// - 組み込み型でなければ、`struct_tree`/`variant_tree`の定義から求める
+    ///   - 構造体: 全フィールドのサイズの合計
+    ///   - バリアント: (タグがあれば`VARIANT_TAG_BYTES`) + 最大のペイロード。
+    ///     全メンバーが型なしの場合はタグだけ(`size_of`の`DD`と同じ)
+    /// - ポインタは指す先に関わらず`POINTER_BYTES`(8)バイト
+    ///
+    /// `size_of`と違い、未定義の型や自己参照する型でもpanicせず`Err`を返す
+    pub(in crate::compiler::ir) fn byte_size_of(&self, ty: &TyNode) -> Result<usize, err::ErrKind> {
+        self.byte_size_of_inner(ty, &mut Vec::new())
+    }
+
+    fn byte_size_of_inner(
+        &self,
+        ty: &TyNode,
+        // 値として展開中の構造体/バリアント名(自己参照の検出用)
+        visiting: &mut Vec<String>,
+    ) -> Result<usize, err::ErrKind> {
+        const POINTER_BYTES: usize = 8;
+
+        match ty {
+            TyNode::Ty(name) => {
+                // 組み込み型
+                if types::Size::is_builtin_ty_name(name) {
+                    return Ok(types::Size::try_from(ty)?.to_bytes());
+                }
+
+                // ポインタを介さずに自分自身を含む型は、サイズが決まらない
+                if visiting.iter().any(|v| v == name) {
+                    return Err(crate::GenUndefErrResult!(
+                        UndefStruct,
+                        format!("{name} は自分自身を直接含んでいるため、サイズを求められません"),
+                        None
+                    ));
+                }
+
+                // 構造体
+                if let Some(struct_def) = self.struct_tree.get(name) {
+                    visiting.push(name.clone());
+                    let mut total = 0usize;
+                    for field in struct_def.fields.iter() {
+                        match self.byte_size_of_inner(&field.ty, visiting) {
+                            Ok(n) => total += n,
+                            Err(e) => {
+                                visiting.pop();
+                                return Err(e);
+                            }
+                        }
+                    }
+                    visiting.pop();
+                    return Ok(total);
+                }
+
+                // バリアント型
+                if let Some(variant_def) = self.variant_tree.get(name) {
+                    // 全メンバーが型なしならタグ(整数値)だけ
+                    if variant_def.is_plain_enum() {
+                        return Ok(VARIANT_TAG_BYTES);
+                    }
+                    visiting.push(name.clone());
+                    let mut payload = 0usize;
+                    for field in variant_def.fields.iter() {
+                        // 型なしメンバーはペイロード0バイト
+                        let Some(field_ty) = &field.ty else { continue };
+                        match self.byte_size_of_inner(field_ty, visiting) {
+                            Ok(n) => payload = payload.max(n),
+                            Err(e) => {
+                                visiting.pop();
+                                return Err(e);
+                            }
+                        }
+                    }
+                    visiting.pop();
+                    let tag = if variant_def.is_tagged() {
+                        VARIANT_TAG_BYTES
+                    } else {
+                        0
+                    };
+                    return Ok(tag + payload);
+                }
+
+                Err(crate::GenUndefErrResult!(
+                    UndefVarTy,
+                    name.to_string(),
+                    None
+                ))
+            }
+            // ポインタは指す先に関わらず固定サイズ(構造体への再帰もここで止まる)
+            TyNode::Pointer { .. } => Ok(POINTER_BYTES),
+            // スタック/静的領域は、要素のサイズ × 長さ
+            TyNode::Stack { name, len } | TyNode::Static { name, len } => {
+                let elem = self.byte_size_of_inner(name, visiting)?;
+                Ok(if *len >= 1 { elem * len } else { elem })
+            }
+            TyNode::RefTy(inner) => self.byte_size_of_inner(inner, visiting),
+            TyNode::SelfTy(name) => {
+                self.byte_size_of_inner(&TyNode::Ty(name.to_string()), visiting)
+            }
+            TyNode::ConstractMust(inner) | TyNode::ConstractOf(inner) => {
+                self.byte_size_of_inner(&inner.unwrap_ty(), visiting)
+            }
+        }
+    }
 }

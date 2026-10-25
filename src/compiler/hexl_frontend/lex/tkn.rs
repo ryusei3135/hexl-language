@@ -101,6 +101,8 @@ pub enum Tkn {
     KeyWordAwait,
     KeyWordMove,
     KeyWordType,
+
+    KeyWordSizeof,
 }
 
 impl Tkn {

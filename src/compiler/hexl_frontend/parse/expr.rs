@@ -456,6 +456,13 @@ impl Parser {
         let v = match value_tkn {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
+            // 型のバイトサイズを取得するノード
+            lex::Tkn::KeyWordSizeof => {
+                self.advance_tkn().unwrap();
+                let ty = self.ty_node_after_delim()?;
+                self.advance_tkn().unwrap();
+                return Ok(Expr::new(ExprNode::Sizeof(ty), span));
+            }
             // ポインタにアクセス
             lex::Tkn::Mul => Expr::new(
                 ExprNode::ConnectAddr(Box::new(self.expr_value(init_struct)?)),

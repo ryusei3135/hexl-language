@@ -103,7 +103,7 @@ impl IR {
             self.expr_counter = 0;
             match &node {
                 Group1Node::FuncDefine(info) => {
-                    pool_err!(self.ini_def_fn_info::<M>(&info));
+                    pool_err!(self.init_def_fn_info::<M>(&info));
                 }
                 #[cfg(not(test))]
                 Group1Node::Include(path) => {

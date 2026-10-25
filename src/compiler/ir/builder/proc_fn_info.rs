@@ -10,7 +10,7 @@ impl IR {
     /// 処理のIRを生成する
     /// 一回しか呼ばれないのでinlineにしてもOk
     #[inline(always)]
-    pub(super) fn ini_def_fn_info<M: ResultMod>(
+    pub(super) fn init_def_fn_info<M: ResultMod>(
         &mut self,
         info: &FuncDefine,
     ) -> Result<(), err::ErrKind> {

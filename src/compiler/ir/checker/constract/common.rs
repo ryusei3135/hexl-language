@@ -216,6 +216,7 @@ impl IR {
                 f(Self::as_expr(&pair.0))?;
                 f(Self::as_expr(&pair.1))
             }
+            ExprNode::Sizeof(..) => Ok(()),
             ExprNode::Cast((_, n)) | ExprNode::Sign((_, n)) => f(Self::as_expr(&n)),
             ExprNode::Ternary(n) => {
                 f(Self::as_expr(&n.0))?;

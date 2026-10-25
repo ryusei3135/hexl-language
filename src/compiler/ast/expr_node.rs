@@ -313,6 +313,8 @@ pub enum ExprNode {
     LeftInc(Box<Expr>),
     LeftDec(Box<Expr>),
 
+    Sizeof(TyNode),
+
     /// 条件演算子: `cond ? then : else` -> `Ternary((cond, then, else))`
     Ternary((Box<Expr>, Box<Expr>, Box<Expr>)),
 
