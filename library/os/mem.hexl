@@ -5,8 +5,8 @@
 // (16バイトにしておくと16バイトアラインが保たれる)。
 //
 // 失敗時は 0 を返す。
-os_alloc(size: i64): i64 {
-    base: i64 = -1
+os_alloc(size: i64): i64* {
+    base: i64* = -1
     // ヘッダ(16バイト)を含めた全体のサイズ
     total: i64 = size + 16
     #asm(gcc_x64) {
@@ -83,8 +83,8 @@ os_realloc(addr: i64, size: i64): i64 {
 // これらは最終的なPEリンクで Kernel32 のシンボルとして解決できる必要がある。
 // HeapAlloc は16バイトアラインで返し、サイズも HeapFree 側で管理されるので
 // ヘッダは不要。失敗時は 0 を返す。
-os_alloc(size: i64): i64 {
-    result: i64 = 0
+os_alloc(size: i64): i64* {
+    result: i64* = 0
     #asm(gcc_x64) {
         // 32バイトのシャドウスペース + 8バイト(スタックアラインのため)
         "subq $40, %rsp"
@@ -104,9 +104,7 @@ os_alloc(size: i64): i64 {
 os_free(addr: i64) {
     #asm(gcc_x64) {
         "subq $40, %rsp"
-        // heap = GetProcessHeap()
         "call GetProcessHeap"
-        // HeapFree(heap, 0, addr)
         "movq %rax, %rcx"
         "movq $0, %rdx"
         "movq ${addr + 0}, %r8"
@@ -162,17 +160,16 @@ pub malloc<T>(len: i64): T* must=free {
     elem: i64 = sizeof(T)
     size: i64 = len * elem
 
-    addr: i64 = os_alloc(size)
+    addr: i64* = os_alloc(size)
     ret addr
 }
 
 // malloc で確保したメモリを解放する。0(null)は何もしない。
 pub free<T>(ptr: T* of malloc) {
     addr: i64 = ptr
-    cond addr == 0 {
-        ret
+    cond addr != 0 {
+        os_free(addr)
     }
-    os_free(addr)
 }
 
 // malloc で確保したメモリを len 個ぶんの大きさに変える。

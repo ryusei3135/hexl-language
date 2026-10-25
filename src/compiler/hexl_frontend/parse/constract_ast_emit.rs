@@ -52,6 +52,27 @@ impl Parser {
         }
     }
 
+    /// 型を作り終えた直後(`current_tkn()`が型の次のトークン)に
+    /// `must=func` / `of Func`が続いていれば、その型を契約付きの型にする。
+    ///
+    /// `is_constract_ty`は型名の直後(`int must=free`)しか見ないので、
+    /// ポインタ型(`int* must=free`)のように、型名より後ろに契約が
+    /// 書かれる場合はこちらを使う。契約はポインタ全体にかかる
+    /// (`ConstractMust(Pointer(int))`)。
+    pub(in crate::compiler::hexl_frontend::parse) fn constract_after_ty(
+        &mut self,
+        ty: TyNode,
+    ) -> Result<TyNode, err::ErrKind> {
+        let ty = match self.current_tkn() {
+            lex::Tkn::KeyWordMust => self.ty_constract_must(ty)?,
+            lex::Tkn::KeyWordOf => self.ty_constract_of(ty)?,
+            _ => return Ok(ty),
+        };
+        // `ty_constract_must/of`は契約の名前を指して終わるので、次へ進める
+        self.next_tkn(&[])?;
+        Ok(ty)
+    }
+
     pub(in crate::compiler::hexl_frontend::parse) fn is_constract_ty(
         &mut self,
         base_ty: TyNode,
@@ -79,6 +100,66 @@ mod test {
         let mut lexer = lex::Lexer::new();
         lexer.analy(&content.to_string()).unwrap();
         lexer.gen_tkns.clone()
+    }
+
+    #[test]
+    fn check_constract_must_after_pointer() {
+        // `int* must=free`: 契約はポインタ全体にかかる
+        let mut p = parse::Parser::new_for_test();
+        let tkns = gen_nodes("main(): b1 { a: int* must=free = 10 }");
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        let Group2Node::Expr(expr) = node.body[0].get_node() else {
+            panic!("not expr");
+        };
+        let ExprNode::DefVar(def) = &expr.node else {
+            panic!("not def var");
+        };
+        assert_eq!(
+            def.ty,
+            ConstractTy::new::<{ IS_MUST }>(
+                Some("free".to_string()),
+                None,
+                Box::new(TyNode::Pointer {
+                    is_const: false,
+                    ty_name: Box::new(TyNode::Ty("int".to_string())),
+                    range: None,
+                })
+            )
+        );
+        assert_eq!(
+            *def.value,
+            Expr::new(
+                ExprNode::Number("10".to_string()),
+                std::rc::Rc::new(crate::compiler::err::Span::unknown()),
+            )
+        );
+    }
+
+    #[test]
+    fn check_pointer_without_constract_is_unchanged() {
+        let mut p = parse::Parser::new_for_test();
+        let tkns = gen_nodes("main(): b1 { a: int* = 10 }");
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        let Group2Node::Expr(expr) = node.body[0].get_node() else {
+            panic!("not expr");
+        };
+        let ExprNode::DefVar(def) = &expr.node else {
+            panic!("not def var");
+        };
+        assert_eq!(
+            def.ty,
+            TyNode::Pointer {
+                is_const: false,
+                ty_name: Box::new(TyNode::Ty("int".to_string())),
+                range: None,
+            }
+        );
     }
 
     #[test]

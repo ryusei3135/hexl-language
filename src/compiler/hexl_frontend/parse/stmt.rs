@@ -69,6 +69,16 @@ pub struct Parser {
     pub(super) other_stk: Vec<(String, StkInfo)>, // 処理中の一時データを保存
     /// 定義済みのジェネリクス関数(関数名 -> 定義)
     pub(super) generic_funcs: HashMap<String, GenericFunc>,
+    /// `#include`先の公開ジェネリクス関数(モジュール名 -> 関数名 -> 定義)。
+    /// `mod::func<int>(..)`の呼び出しで使う(`include_generic.rs`)
+    pub(super) included_generics: HashMap<String, HashMap<String, GenericFunc>>,
+    /// `#include`先のモジュールの最上位にある関数名(モジュール名 -> 関数名)。
+    /// 実体化した本体の中の呼び出し`f(..)`を`mod::f(..)`に直すために使う
+    /// `#include`先の、公開されていない通常の関数の定義(モジュール名 -> 関数名 -> 定義)。
+    /// 実体化した本体から呼ばれたときに、呼び出し側のファイルへ(モジュール名を
+    /// 付けて)複製する。`pub`でなくても、ジェネリクスの本体から使えるようにするため
+    pub(super) included_private_fns: HashMap<String, HashMap<String, GenericFunc>>,
+    pub(super) included_fn_names: HashMap<String, std::collections::HashSet<String>>,
     /// 作成済みの(関数名, `<>`の中身)。同じ型での呼び出しが
     /// 何度あっても、その型の関数は1つだけ作るために使う
     pub(super) generated_funcs: Vec<(String, Vec<TyNode>)>,
@@ -110,6 +120,9 @@ impl Parser {
             gen_flag: GenFlag::Group1,
             other_stk: Vec::new(),
             generic_funcs: HashMap::new(),
+            included_generics: HashMap::new(),
+            included_fn_names: HashMap::new(),
+            included_private_fns: HashMap::new(),
             generated_funcs: Vec::new(),
             pending_funcs: Vec::new(),
             generic_depth: 0,
@@ -189,6 +202,8 @@ impl Parser {
         // 引数や戻り値の型`Pair<int>`を関数の定義と間違えないよう、
         // 型の定義を先に集める
         self.collect_generic_types()?;
+        // `#include`先の公開ジェネリクス関数も、使えるように集める
+        self.collect_included_generics()?;
         self.collect_generic_funcs()?;
         self.parse_loop::<stmt::ParseLoopPushPool>()?;
 

@@ -26,8 +26,24 @@ impl Parser {
                 return self.build_member_node(name);
             }
             lex::Tkn::ModPathTkn => {
-                // バリアントか調べる
+                // `#include`先のジェネリクス関数の呼び出し: `mod::func<int>(..)`
+                let span = self.build_err_span();
                 self.advance_tkn_checked()?;
+                if let lex::Tkn::Name(func_name) = self.peek_tkn()? {
+                    // `::`が指す位置の2つ先が`<`
+                    if self.is_included_generic_call(name, &func_name, self.idx + 2) {
+                        // 関数名、`<`の順に進める(`<`を指して呼び出す)
+                        self.advance_tkn_checked()?;
+                        self.advance_tkn_checked()?;
+                        let call = self.included_generic_call_expr(name, &func_name, true)?;
+                        return Ok(ExprNode::Scope {
+                            scope: vec![name.to_string()],
+                            target: Box::new(call),
+                        }
+                        .with_span(span));
+                    }
+                }
+                // バリアントか調べる
                 if let lex::Tkn::Name(next_name) = self.peek_tkn()? {
                     if self.is_variant_field(name, &next_name) {
                         self.advance_tkn_checked()?;

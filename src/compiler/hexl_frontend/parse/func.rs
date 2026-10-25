@@ -343,6 +343,12 @@ impl Parser {
         if !self.generic_funcs.contains_key(name) {
             return false;
         }
+        self.is_generic_args_then_lparen(lt_idx)
+    }
+
+    /// `<`から`>`までが型の並びで、`>`の次が`(`か判定する
+    /// (`is_generic_call`と、`include`先の呼び出しで共通)
+    pub(super) fn is_generic_args_then_lparen(&self, lt_idx: usize) -> bool {
         let Some(tkns) = self.tkns.as_ref() else {
             return false;
         };
@@ -493,10 +499,32 @@ impl Parser {
         ty_args: &[TyNode],
         ty_tkns: &[Vec<lex::LocatedTkn>],
     ) -> Result<(), err::ErrKind> {
+        let Some(generic) = self.generic_funcs.get(name).cloned() else {
+            return crate::err_at!(self.internal_state_err("defined generic function"));
+        };
+        self.instantiate_generic_def(name, None, generic, ty_args, ty_tkns)
+    }
+
+    /// 定義`generic`から、型引数`ty_args`の関数を作る。
+    /// `module`が`Some`なら、`#include`先のモジュールの関数として作る
+    /// (`mod::func<int>(..)`で呼び出せるよう、モジュール名を付ける)
+    pub(super) fn instantiate_generic_def(
+        &mut self,
+        name: &str,
+        module: Option<&str>,
+        generic: GenericFunc,
+        ty_args: &[TyNode],
+        ty_tkns: &[Vec<lex::LocatedTkn>],
+    ) -> Result<(), err::ErrKind> {
+        // 同じ関数名でも、モジュールが違えば別の関数
+        let key = match module {
+            Some(m) => format!("{}::{}", m, name),
+            None => name.to_string(),
+        };
         if self
             .generated_funcs
             .iter()
-            .any(|(n, t)| n == name && t == ty_args)
+            .any(|(n, t)| *n == key && t == ty_args)
         {
             return Ok(());
         }
@@ -505,16 +533,21 @@ impl Parser {
                 self.fn_not_implemented("型が増え続ける再帰的なジェネリクス関数")
             );
         }
-
-        let Some(generic) = self.generic_funcs.get(name).cloned() else {
-            return crate::err_at!(self.internal_state_err("defined generic function"));
-        };
         // 本体の中で自分自身を呼び出していても、無限に作らないよう
         // 解析を始める前に登録する
-        self.generated_funcs
-            .push((name.to_string(), ty_args.to_vec()));
+        self.generated_funcs.push((key, ty_args.to_vec()));
 
         let tkns = Self::substitute_ty_params(&generic, ty_tkns);
+        // `#include`先の関数なら、本体の中の呼び出しを`mod::f(..)`に直す
+        let tkns = match module {
+            Some(m) => {
+                let q = self.qualify_included_calls(m, tkns);
+                // 呼んでいる非公開の関数も、呼び出し側のファイルに作る
+                self.instantiate_private_callees(m, &q)?;
+                q
+            }
+            None => tkns,
+        };
 
         // 解析の途中の状態を退避して、置き換え後のトークン列だけを
         // 先頭から解析する(トップレベルの関数として解析される)
@@ -546,7 +579,11 @@ impl Parser {
         };
         func.set_temp_ty(ty_args);
         func.public = generic.is_public;
-        self.pending_funcs.push(Group1Node::FuncDefine(func));
+        let mut node = Group1Node::FuncDefine(func);
+        if let Some(m) = module {
+            node.add_mod_path(vec![m.to_string()]);
+        }
+        self.pending_funcs.push(node);
         Ok(())
     }
 }

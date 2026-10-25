@@ -296,7 +296,11 @@ impl Parser {
                                     self.next_tkn(&["["])?;
                                     self.make_range_ptr_node(generic_ty)?
                                 }
-                                lex::Tkn::Mul => self.ptr_ty_node(generic_ty)?,
+                                lex::Tkn::Mul => {
+                                    let ptr_ty = self.ptr_ty_node(generic_ty)?;
+                                    // `Pair<int>* must=free`
+                                    self.constract_after_ty(ptr_ty)?
+                                }
                                 _ => generic_ty,
                             }
                         }
@@ -307,7 +311,11 @@ impl Parser {
                         }
                         // ポインタの型
                         // var: *.. の `*`
-                        lex::Tkn::Mul => self.ptr_ty_node(base_ty)?,
+                        lex::Tkn::Mul => {
+                            let ptr_ty = self.ptr_ty_node(base_ty)?;
+                            // `int* must=free` / `int* of free`
+                            self.constract_after_ty(ptr_ty)?
+                        }
                         _ => {
                             // ジェネリクスに定義ずみの型がある
                             if self.other_stk.iter().any(|(stk_name, info)| {

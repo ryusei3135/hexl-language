@@ -16,7 +16,7 @@ impl IR {
             types::Size::Pointer { ty, .. } => {
                 if let types::Size::GetAddr(var_t) = var_ty {
                     if var_t != ty {
-                        panic!();
+                        panic!("{:?}", span);
                     }
                 }
             }
@@ -32,10 +32,10 @@ impl IR {
                         return;
                     }
                 } else {
-                    if var_ty != expect_ty {
-                        // let changed_ty: types::Size = ty.clone().try_into().unwrap();
-                        panic!("{:?} fond {:?} {:?}", expect_ty, var_ty, span);
-                    }
+                    // if var_ty != expect_ty {
+                    //     // let changed_ty: types::Size = ty.clone().try_into().unwrap();
+                    //     panic!("{:?} fond {:?} {:?}", expect_ty, var_ty, span);
+                    // }
                 }
             }
         }

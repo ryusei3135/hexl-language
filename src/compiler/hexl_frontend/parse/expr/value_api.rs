@@ -69,6 +69,20 @@ impl Parser {
         let lex::Tkn::Name(mem_name) = found.clone() else {
             return crate::err_at!(self.expected_tkn("name", found));
         };
+        // `#include`先のジェネリクス関数の呼び出し: `mod::func<int>(..)`
+        // (現在は`func`を指しているので、`<`は次のトークン)
+        if self.is_included_generic_call(&name, &mem_name, self.idx + 1) {
+            // `<`まで進めて呼び出す
+            self.advance_tkn_checked()?;
+            let call = self.included_generic_call_expr(&name, &mem_name, init_struct)?;
+            return Ok(Expr::new(
+                ExprNode::Scope {
+                    scope: vec![name],
+                    target: Box::new(call),
+                },
+                span,
+            ));
+        }
         if self.is_variant_field(&name, &mem_name) {
             // unsafeな共用体の初期化: `Type::mem { mem: expr }`
             // (`Type::Mem(expr)`はタグ付き共用体用なので、`{`が続くときだけここに入る)

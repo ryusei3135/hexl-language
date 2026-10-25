@@ -83,7 +83,6 @@ func6(a: int must=func5, f: float) {
     func5(a)
 }
 
-
 add(a mut: int, b: int): Option<int> {
     t::c_func()
     c: byte* = "hello world\n"
@@ -101,8 +100,10 @@ add(a mut: int, b: int): Option<int> {
         }
         a--
     }
-    ret Option::None
+    ret Option<int>::None
 }
+
+
 
 test_arr(idx: uint): i64 {
     ptr: int* must=free = mem::malloc<int>(10)

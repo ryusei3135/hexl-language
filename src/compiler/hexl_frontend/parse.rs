@@ -7,6 +7,8 @@ mod constract_ast_emit;
 mod err_factory;
 mod expr;
 mod func;
+/// `#include`先のジェネリクス関数を呼び出し側で実体化するAPIを提供
+mod include_generic;
 mod mut_var;
 mod path;
 /// プリプロセッサのノードを作成するAPIを提供
