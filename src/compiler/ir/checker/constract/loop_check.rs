@@ -114,7 +114,7 @@ impl IR {
         match &expr.node {
             ExprNode::DefVar(var) => {
                 self.scan_loop_expr(fn_name, &var.value, scope)?;
-                if var.ty.is_constract_must() {
+                if var.ty.is_contract_must() {
                     scope
                         .borrow_mut()
                         .push(MustVar::new(var.name.clone(), &expr.span));
@@ -281,7 +281,7 @@ impl IR {
                 if let ExprNode::DefVar(ref var) = expr.node {
                     {
                         let mut g = guarded.borrow_mut();
-                        if var.ty.is_constract_must() {
+                        if var.ty.is_contract_must() {
                             // `ended_by`(`walk_expr`)が積んだ、この変数自身の要素は検査の対象外にする
                             if let Some(own) = g
                                 .iter_mut()
@@ -302,7 +302,7 @@ impl IR {
                     }
                     // この周で定義した契約変数(入れ子のループへ引き継ぐ)。
                     // 同名の変数を定義し直したら、前の変数はマスクで隠す
-                    if var.ty.is_constract_must() {
+                    if var.ty.is_contract_must() {
                         locals.push(MustVar::new(var.name.clone(), &expr.span));
                     } else if locals.iter().any(|v| v.name == var.name) {
                         locals.push(MustVar::mask(var.name.clone(), &expr.span));

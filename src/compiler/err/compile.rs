@@ -58,6 +58,7 @@ pub enum CompileErrKind {
         end_fn: Option<String>,
     },
     ConstractUnterminableScope(String),
+    ConstractTernaryMismatch,
     /// `must`の契約を持つ変数へ再代入しようとした
     AssignToMustVar(String),
     /// `++`/`--`を整数以外の変数に使おうとした
@@ -423,6 +424,7 @@ impl CompileErrKind {
             Self::AsmEmitFloatNotSupported(..) => "E0032",
             Self::ConstractUnterminableScope(..) => "E0033",
             Self::BreakOutsideLoop => "E0034",
+            Self::ConstractTernaryMismatch => "E0035",
         }
     }
 
@@ -477,6 +479,7 @@ impl CompileErrKind {
                 "契約の名前が一致しません(関数`{fn_name}`の引数`{param_name}`)\n\
                  期待: `of {of_name}` / 渡された値: `must {must_name}`"
             ),
+            Self::ConstractTernaryMismatch => panic!(),
             Self::ContractMustNotUsed {
                 fn_name, var_name, ..
             } => {

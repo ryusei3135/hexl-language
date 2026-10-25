@@ -104,7 +104,7 @@ impl IR {
             ExprNode::DefVar(var) => {
                 // 初期値の中で終了した契約(定義した変数自身はまだ終了していない)
                 let ends = self.walk_expr(&var.value, must_vars, fn_name, in_loop)?;
-                if var.ty.is_constract_must() {
+                if var.ty.is_contract_must() {
                     // 同名の契約変数が外側にあっても、既存の要素は書き換えず
                     // 新しい要素を積む。名前の検索は後ろから行うので内側が優先され、
                     // スコープを抜けるときの`truncate`で内側の要素だけが消える
@@ -145,7 +145,7 @@ impl IR {
             // それ以外は子の式を順に辿る(`try_for_each_child`を`scan_loop_expr`と共有する)
             _ => {
                 let mut ends: Vec<String> = Vec::new();
-                Self::try_for_each_child::<err::ErrKind>(expr, &mut |child| {
+                Self::try_for_each_child(expr, &mut |child| {
                     let found = self.walk_expr(child, must_vars, fn_name, in_loop)?;
                     Self::push_ends(&mut ends, found);
                     Ok(())
@@ -179,10 +179,10 @@ impl IR {
     /// 契約の追跡で特別な扱いが要るノード(`DefVar`/`CallFunc`/`Match`/`Loop`)は
     /// 含めず、呼び出し側で先に処理する。式ノードを追加したときは、
     /// 子の式を持つなら、ここに足す(足さないと追跡が漏れる)
-    pub(super) fn try_for_each_child<E>(
+    pub(super) fn try_for_each_child(
         expr: &Expr,
-        f: &mut impl FnMut(&Expr) -> Result<(), E>,
-    ) -> Result<(), E> {
+        f: &mut impl FnMut(&Expr) -> Result<(), err::ErrKind>,
+    ) -> Result<(), err::ErrKind> {
         match &expr.node {
             ExprNode::Scope { target, .. }
             | ExprNode::Member { target, .. }
@@ -219,8 +219,7 @@ impl IR {
             ExprNode::Cast((_, n)) | ExprNode::Sign((_, n)) => f(Self::as_expr(&n)),
             ExprNode::Ternary(n) => {
                 f(Self::as_expr(&n.0))?;
-                f(Self::as_expr(&n.1))?;
-                f(Self::as_expr(&n.2))
+                Self::check_tarnary_contract(&n.1, &n.2, &n.0.span)
             }
             ExprNode::Inc(n)
             | ExprNode::Inversion(n)

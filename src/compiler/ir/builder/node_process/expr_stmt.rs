@@ -12,7 +12,7 @@ impl IR {
         attr: &parse::VarMutAttr,
     ) -> Result<(), err::ErrKind> {
         // `must`の契約を持つ変数は、値をすり替えられないため再代入できない
-        if self.var_tree.is_constract_must(name) {
+        if self.var_tree.is_contract_must(name) {
             CompileErr::assign_to_must_var(name, Rc::clone(&self.current_span))?;
         }
         if !matches!(attr, parse::VarMutAttr::Var) {

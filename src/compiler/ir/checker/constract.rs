@@ -9,6 +9,7 @@ use crate::compiler::err::CompileErr;
 mod branch;
 mod common;
 mod loop_check;
+mod embe_expr;
 
 use common::{MustVar, MustVarsTy};
 
@@ -40,10 +41,10 @@ impl IR {
         // `of`の引数には「`must`の値だ」と確認できた式しか渡せないので、
         // 確認できない式は`must`ではない値と同じエラーにする
         let arg_must = match &arg_ty {
-            ExprTy::Known(ty) => ty.as_constract_must(),
+            ExprTy::Known(ty) => ty.as_contract_must(),
             ExprTy::Plain | ExprTy::Unresolved => None,
         };
-        let param_of = param.ty.as_constract_of();
+        let param_of = param.ty.as_contract_of();
 
         match (param_of, arg_must) {
             // `must=func`は、実際に値を渡す関数を指定する
@@ -118,7 +119,7 @@ impl IR {
         // (通常の引数や、別の名前の`must`の引数に渡したら契約が消える)
         let accepts_transfer = param
             .ty
-            .as_constract_must()
+            .as_contract_must()
             .is_some_and(|v| v.must_name() == must);
         if !accepts_transfer {
             return Ok(false);
@@ -187,7 +188,7 @@ impl IR {
         // 別の関数へ渡す義務がある
         func.params
             .iter()
-            .filter(|param| param.ty.is_constract_must())
+            .filter(|param| param.ty.is_contract_must())
             .for_each(|param| {
                 must_vars
                     .borrow_mut()
@@ -204,7 +205,7 @@ impl IR {
         let loop_scope: MustVarsTy = Rc::new(RefCell::new(
             func.params
                 .iter()
-                .filter(|param| param.ty.is_constract_must())
+                .filter(|param| param.ty.is_contract_must())
                 .map(|param| MustVar::new(param.name.clone(), &func.span))
                 .collect(),
         ));

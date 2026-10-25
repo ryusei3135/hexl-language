@@ -76,12 +76,12 @@ impl IR {
             let result = Self::body_exits(&arm.body);
 
             match &result {
+                Some(Exits::RETURN) => {
+                    self.check_all_end_constract(must_vars, fn_name, &expr.span)?;
+                }
                 // 反復処理がないのに`break`で抜ける分岐(入れ子の分岐の中の`break`も含む)
                 Some(e) if e.brk && !in_loop => {
                     return crate::GenCompileErr2!(BreakOutsideLoop, Rc::clone(&expr.span));
-                }
-                Some(Exits::RETURN) => {
-                    self.check_all_end_constract(must_vars, fn_name, &expr.span)?;
                 }
                 _ => {}
             }

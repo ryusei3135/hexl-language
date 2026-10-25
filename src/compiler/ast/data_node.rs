@@ -304,7 +304,7 @@ impl TyNode {
 
     /// `must`の契約が付いた型なら、その契約の情報を返す
     #[inline(always)]
-    pub fn as_constract_must(&self) -> Option<&ConstractTy> {
+    pub fn as_contract_must(&self) -> Option<&ConstractTy> {
         match self {
             Self::ConstractMust(ty) => Some(ty),
             _ => None,
@@ -313,7 +313,7 @@ impl TyNode {
 
     /// `of`の契約が付いた型なら、その契約の情報を返す
     #[inline(always)]
-    pub fn as_constract_of(&self) -> Option<&ConstractTy> {
+    pub fn as_contract_of(&self) -> Option<&ConstractTy> {
         match self {
             Self::ConstractOf(ty) => Some(ty),
             _ => None,
@@ -321,12 +321,12 @@ impl TyNode {
     }
 
     #[inline(always)]
-    pub fn is_constract_must(&self) -> bool {
-        self.as_constract_must().is_some()
+    pub fn is_contract_must(&self) -> bool {
+        self.as_contract_must().is_some()
     }
 
     #[inline(always)]
-    pub fn is_constract_of(&self) -> bool {
-        self.as_constract_of().is_some()
+    pub fn is_contract_of(&self) -> bool {
+        self.as_contract_of().is_some()
     }
 }

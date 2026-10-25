@@ -167,12 +167,12 @@ impl IR {
         let flag = fn_def
             .ret_ty
             .as_ref()
-            .map(|v| v.is_constract_must())
+            .map(|v| v.is_contract_must())
             .unwrap_or(false)
             || fn_def
                 .ret_ty
                 .as_ref()
-                .map(|v| v.is_constract_of())
+                .map(|v| v.is_contract_of())
                 .unwrap_or(false);
         if flag {
             self.constract_flag.constract_fn(fn_def.ret_ty.as_ref());

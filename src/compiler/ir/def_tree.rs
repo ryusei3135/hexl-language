@@ -87,7 +87,7 @@ impl VarTree {
         };
         if let Some(ref mut var_info) = self.hash.get_mut(var_name) {
             let is_constract_ty =
-                var_info.size.is_constract_must() || var_info.size.is_constract_of();
+                var_info.size.is_contract_must() || var_info.size.is_contract_of();
             return match var_info.life {
                 VarLife::Constracting if is_constract_ty => {
                     crate::GenCompileErr!(
@@ -192,10 +192,10 @@ impl VarTree {
 
     /// 指定された変数が`must`の契約を持つかどうか
     #[inline(always)]
-    pub(in crate::compiler::ir) fn is_constract_must(&self, var_name: &str) -> bool {
+    pub(in crate::compiler::ir) fn is_contract_must(&self, var_name: &str) -> bool {
         self.hash
             .get(var_name)
-            .is_some_and(|var| var.size.is_constract_must())
+            .is_some_and(|var| var.size.is_contract_must())
     }
 
     #[inline(always)]
@@ -224,7 +224,7 @@ impl VarTree {
     ) -> Result<(), err::ErrKind> {
         for (name, var) in &self.hash {
             if state.hash.contains_key(name)
-                || !var.size.is_constract_must()
+                || !var.size.is_contract_must()
                 || var.life != def_tree::VarLife::Constracting
             {
                 continue;
