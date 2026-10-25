@@ -1,0 +1,21 @@
+#include "mem.hexl"
+
+
+struct Vec<T> {
+    val: T* must=free
+    len: u64
+    cap: u64
+
+    pub new(self: Self) {
+        self.val = mem::malloc<T>(10)
+    }
+
+    pub push(val: T) {
+        [self.val self.len] = val
+        sefl.len++
+    }
+
+    pub fn del(self: Self) {
+        mem::free<T>(self.val)
+    }
+}
