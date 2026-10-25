@@ -89,19 +89,12 @@ impl AsmEmitter {
         let div_mnemonic = if unsigned { "div" } else { "idiv" };
         if unsigned {
             let rdx = self.asm_fmt.get_fmt_reg(2, &calc)?;
-            let clear = format!("{{space}}xor {}, {}\n", rdx, rdx);
+            let clear = self.asm_fmt.get_zero_reg(&rdx);
             asm.push_str(&self.asm_fmt.fmt_mnemonic_resize("xor", &clear, &calc));
         } else {
-            let att = self.asm_fmt.mnemonic_size();
-            let extend = match (&calc, att) {
-                (Size::DQ, true) => "cqto",
-                (Size::DQ, false) => "cqo",
-                (_, true) => "cltd",
-                (_, false) => "cdq",
-            };
-            asm.push_str(&format!("{{space}}{}\n", extend));
+            asm.push_str(&self.asm_fmt.get_sign_extend_acc(matches!(calc, Size::DQ)));
         }
-        let div = format!("{{space}}{} {}\n", div_mnemonic, dst_txt);
+        let div = self.asm_fmt.get_div_inst(unsigned, &dst_txt);
         asm.push_str(&self.asm_fmt.fmt_mnemonic_resize(div_mnemonic, &div, &calc));
 
         // === 商(`%rax`)か余り(`%rdx`)を、結果のレジスタへ ===

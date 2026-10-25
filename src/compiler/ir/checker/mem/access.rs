@@ -201,7 +201,6 @@ impl IR {
     fn access_bounds<M: ResultMod>(&self, name: &str) -> Result<(usize, usize), types::Size> {
         let ty = self.var_tree.get_ty_node(name).expect(name);
         let size: Result<types::Size, _> = ty.clone().try_into();
-        println!("{:?} {:?}", size, ty);
         match size {
             Ok(types::Size::Array { len, .. }) => Ok((0, len)),
             Ok(types::Size::Pointer { range, .. }) => Ok(range.unwrap_or((0, 0))),

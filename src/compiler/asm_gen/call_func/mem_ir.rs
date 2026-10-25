@@ -91,7 +91,7 @@ impl AsmEmitter {
         for k in 0..len {
             let value = match elems.get(k) {
                 Some(idx) => self.extract_operand_text(*idx, this_is_self)?,
-                None => "$0".to_string(),
+                None => self.asm_fmt.get_fmt_num("0"),
             };
             let elem_ref = self
                 .asm_fmt

@@ -21,8 +21,8 @@ use crate::compiler::err::{self, undef::UndefKind::UndefVar};
 
 use super::*;
 
-/// スタックフレームのベースレジスタ
-pub(in crate::compiler::asm_gen) const FRAME_BASE_REG: &str = "%rbp";
+/// スタックフレームのベースレジスタ(定義は`asm_fmt/x64.rs`)
+pub(in crate::compiler::asm_gen) use super::asm_fmt::x64::FRAME_BASE_REG;
 
 // ===========================================================================
 // IRのノード

@@ -48,7 +48,7 @@ impl AsmEmitter {
                 // 第一引数(`self`のポインタ)のレジスタを取得し、
                 // `%rbp`をそのレジスタに置き換える
                 // (ポインタなので64bitのレジスタ(`Size::DQ`)を使う)
-                struct_txt.push_str(&fmted.replace("%rbp", &self.self_ptr_reg()));
+                struct_txt.push_str(&fmted.replace(FRAME_BASE_REG, &self.self_ptr_reg()));
             } else {
                 struct_txt.push_str(&fmted);
             }
@@ -124,7 +124,7 @@ impl AsmEmitter {
 
         if this_is_self {
             // `self`のポインタ(64bitのレジスタ)の指す先へ書き込む
-            variant_txt = variant_txt.replace("%rbp", &self.self_ptr_reg());
+            variant_txt = variant_txt.replace(FRAME_BASE_REG, &self.self_ptr_reg());
         }
         Ok(variant_txt)
     }

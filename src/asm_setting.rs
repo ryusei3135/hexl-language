@@ -236,7 +236,6 @@ pub fn gen_asm_text(
         let mut writer = asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt), os, &err_pool);
         Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     } else {
-        println!("現在アセンブリコードのフォーマットをハードコード `asm_setting`");
         let asm_settings = load_setting()?;
         let mut writer = asm_gen::AsmEmitter::new(asm_settings, None, os, &err_pool);
         Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))

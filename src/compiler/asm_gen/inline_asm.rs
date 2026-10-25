@@ -279,14 +279,14 @@ impl AsmEmitter {
                 self.asm_text.push_str(&push_asm);
             }
             RegisterMode::Float(_) => {
-                self.asm_text.push_str("sub $16, %rsp\n");
+                self.asm_text.push_str(&self.asm_fmt.get_stack_alloc_16());
                 let size = self.float_reg_size(reg);
                 let opcode = Self::float_move_opcode(&size);
                 let line = self
                     .asm_fmt
                     .get_opcode_tmpl(opcode)
                     .replace("{src1}", &self.reg_mode_operand(reg, &size)?)
-                    .replace("{dst}", "(%rsp)");
+                    .replace("{dst}", &self.asm_fmt.get_stack_top_ref());
                 self.asm_text.push_str(&line);
             }
         }
@@ -306,10 +306,10 @@ impl AsmEmitter {
                 let line = self
                     .asm_fmt
                     .get_opcode_tmpl(opcode)
-                    .replace("{src1}", "(%rsp)")
+                    .replace("{src1}", &self.asm_fmt.get_stack_top_ref())
                     .replace("{dst}", &self.reg_mode_operand(reg, &size)?);
                 self.asm_text.push_str(&line);
-                self.asm_text.push_str("add $16, %rsp\n");
+                self.asm_text.push_str(&self.asm_fmt.get_stack_free_16());
             }
         }
         Ok(())

@@ -1,4 +1,4 @@
 pub mod mng_fmt;
-mod x64;
+pub(in crate::compiler::asm_gen) mod x64;
 
 use crate::compiler::ir::types::Size;

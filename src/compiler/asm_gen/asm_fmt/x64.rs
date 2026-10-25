@@ -11,6 +11,9 @@ use crate::asm_setting::{
     AsmFormat, DataFmt, Func, FuncArgsReg, OpSizeFmt, OperandInfo, Reg, ValueFmt,
 };
 
+/// スタックフレームのベースレジスタ
+pub(in crate::compiler::asm_gen) const FRAME_BASE_REG: &str = "%rbp";
+
 pub struct StaticReg {
     pub db: &'static [&'static str],
     pub dw: &'static [&'static str],
@@ -495,6 +498,188 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}ret\n",
             },
         ),
+        // ===== 他のファイルから参照される共通のテンプレート =====
+        // ラベル・ジャンプ
+        (
+            "label",
+            StaticOperandInfo {
+                len: 0,
+                template: "{name}:\n",
+            },
+        ),
+        (
+            "jmp",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}jmp {dst}\n",
+            },
+        ),
+        // 浮動小数点レジスタをスタックへ退避・復元するための領域の確保/解放と、その参照
+        (
+            "sp_alloc_16",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}sub $16, %rsp\n",
+            },
+        ),
+        (
+            "sp_free_16",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}add $16, %rsp\n",
+            },
+        ),
+        (
+            "sp_ref",
+            StaticOperandInfo {
+                len: 0,
+                template: "(%rsp)",
+            },
+        ),
+        // 除算の準備(符号拡張/ゼロクリア)と除算
+        (
+            "cltd",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}cltd\n",
+            },
+        ),
+        (
+            "cqto",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}cqto\n",
+            },
+        ),
+        (
+            "cdq",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}cdq\n",
+            },
+        ),
+        (
+            "cqo",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}cqo\n",
+            },
+        ),
+        (
+            "zero_reg",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}xor {dst}, {dst}\n",
+            },
+        ),
+        (
+            "idiv",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}idiv {dst}\n",
+            },
+        ),
+        (
+            "udiv",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}div {dst}\n",
+            },
+        ),
+        // 符号反転・即値の加算
+        (
+            "neg",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}neg {dst}\n",
+            },
+        ),
+        (
+            "add_imm",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}add {src1}, {dst}\n",
+            },
+        ),
+        // 整数の拡張(`get_sign_extend`/`get_zero_extend`/`get_int_extend`)
+        (
+            "movsbw",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movsbw {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movsbl",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movsbl {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movsbq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movsbq {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movswl",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movswl {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movswq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movswq {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movslq",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movslq {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movzbw",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movzbw {src1}, {dst}\n",
+            },
+        ),
+        (
+            "movzwl",
+            StaticOperandInfo {
+                len: 2,
+                template: "{space}movzwl {src1}, {dst}\n",
+            },
+        ),
+        // 静的領域のデータ定義(`.align` + ラベル + ディレクティブ)
+        (
+            "data_long",
+            StaticOperandInfo {
+                len: 0,
+                template: ".align 4\n{name}: .long {value}\n",
+            },
+        ),
+        (
+            "data_float",
+            StaticOperandInfo {
+                len: 0,
+                template: ".align 4\n{name}: .float {value}\n",
+            },
+        ),
+        (
+            "data_double",
+            StaticOperandInfo {
+                len: 0,
+                template: ".align 8\n{name}: .double {value}\n",
+            },
+        ),
         (
             "address",
             StaticOperandInfo {
@@ -713,6 +898,17 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
         call: "{space}call {name}\n",
     },
 };
+
+/// フォーマットファイルに定義が無い命令のテンプレートとして使う、`GCC_X64`の定義を返す。
+/// アセンブリ言語のテキストは、このファイルに書いたものから作る
+pub(in crate::compiler::asm_gen) fn default_tmpl(key: &str) -> &'static str {
+    GCC_X64
+        .op
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| v.template)
+        .unwrap_or_else(|| panic!("x64.rsに定義がありません: {}", key))
+}
 
 fn to_strings(src: &[&str]) -> Vec<String> {
     src.iter().map(|s| s.to_string()).collect()

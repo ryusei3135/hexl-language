@@ -135,7 +135,7 @@ impl MngAsmFmt {
         self.opcode_fmt
             .get("neg")
             .map(|o| o.template.clone())
-            .unwrap_or_else(|| "{space}neg {dst}\n".to_string())
+            .unwrap_or_else(|| x64::default_tmpl("neg").to_string())
             .replace("{dst}", reg)
     }
 
@@ -145,7 +145,7 @@ impl MngAsmFmt {
         self.opcode_fmt
             .get("add_imm")
             .map(|o| o.template.clone())
-            .unwrap_or_else(|| "{space}add {src1}, {dst}\n".to_string())
+            .unwrap_or_else(|| x64::default_tmpl("add_imm").to_string())
             .replace("{src1}", imm)
             .replace("{dst}", reg)
     }
@@ -168,7 +168,7 @@ impl MngAsmFmt {
         self.opcode_fmt
             .get(&key)
             .map(|o| o.template.clone())
-            .unwrap_or_else(|| format!("{{space}}movs{}q {{src1}}, {{dst}}\n", kind))
+            .unwrap_or_else(|| x64::default_tmpl(&key).to_string())
             .replace("{src1}", src)
             .replace("{dst}", dst)
     }
@@ -192,7 +192,7 @@ impl MngAsmFmt {
         self.opcode_fmt
             .get(&key)
             .map(|o| o.template.clone())
-            .unwrap_or_else(|| format!("{{space}}movz{}q {{src1}}, {{dst}}\n", kind))
+            .unwrap_or_else(|| x64::default_tmpl(&key).to_string())
             .replace("{src1}", src)
             .replace("{dst}", dst)
     }
@@ -218,7 +218,7 @@ impl MngAsmFmt {
         self.opcode_fmt
             .get(&mnemonic)
             .map(|o| o.template.clone())
-            .unwrap_or_else(|| format!("{{space}}{} {{src1}}, {{dst}}\n", mnemonic))
+            .unwrap_or_else(|| x64::default_tmpl(&mnemonic).to_string())
             .replace("{src1}", src)
             .replace("{dst}", dst)
     }
@@ -558,7 +558,9 @@ impl MngAsmFmt {
         label: &str,
         _size: &types::Size,
     ) -> String {
-        format!(".align 4\n{}: .long {}\n", label, value.replace("$", ""))
+        self.tmpl_or_default("data_long")
+            .replace("{name}", label)
+            .replace("{value}", &value.replace("$", ""))
     }
 
     pub(in crate::compiler::asm_gen) fn get_float_fmt(
@@ -567,12 +569,14 @@ impl MngAsmFmt {
         label: &str,
         size: &types::Size,
     ) -> String {
-        let (alignment, directive) = match size {
-            types::Size::F32 => (4, ".float"),
-            types::Size::F64 => (8, ".double"),
+        let key = match size {
+            types::Size::F32 => "data_float",
+            types::Size::F64 => "data_double",
             _ => panic!("float literal has non-floating-point type: {:?}", size),
         };
-        format!(".align {alignment}\n{label}: {directive} {value}\n")
+        self.tmpl_or_default(key)
+            .replace("{name}", label)
+            .replace("{value}", value)
     }
 
     #[inline(always)]
@@ -597,6 +601,75 @@ impl MngAsmFmt {
     /// アセンブリ言語のセクションを定義するフォーマット
     pub(in crate::compiler::asm_gen) fn get_section_fmt(&self, section: &str) -> String {
         self.fmt.section.replace("{name}", section)
+    }
+
+    /// オペコードのフォーマット。フォーマットファイルに定義が無ければ`x64.rs`の定義を返す
+    pub(in crate::compiler::asm_gen) fn tmpl_or_default(&self, key: &str) -> String {
+        self.opcode_fmt
+            .get(key)
+            .map(|o| o.template.clone())
+            .unwrap_or_else(|| x64::default_tmpl(key).to_string())
+    }
+
+    /// ラベルの定義(`name:`)
+    pub(in crate::compiler::asm_gen) fn get_label_fmt(&self, name: &str) -> String {
+        self.tmpl_or_default("label").replace("{name}", name)
+    }
+
+    /// 無条件ジャンプ(`jmp name`)
+    pub(in crate::compiler::asm_gen) fn get_jmp(&self, name: &str) -> String {
+        self.tmpl_or_default("jmp").replace("{dst}", name)
+    }
+
+    /// 生成済みのアセンブリの1行が、無条件ジャンプかどうか
+    pub(in crate::compiler::asm_gen) fn is_jmp_line(&self, line: &str) -> bool {
+        let tmpl = self.tmpl_or_default("jmp");
+        let head = tmpl.split("{dst}").next().unwrap_or("");
+        let head = head.replace("{space}", "");
+        let line = line.trim().trim_start_matches("{space}").trim_start();
+        line.starts_with(head.trim_start())
+    }
+
+    /// `ret`命令
+    pub(in crate::compiler::asm_gen) fn get_ret(&self) -> String {
+        self.tmpl_or_default("ret")
+    }
+
+    /// 浮動小数点レジスタの退避用に、スタックを16byte確保する
+    pub(in crate::compiler::asm_gen) fn get_stack_alloc_16(&self) -> String {
+        self.tmpl_or_default("sp_alloc_16")
+    }
+
+    /// `get_stack_alloc_16`で確保したスタックを解放する
+    pub(in crate::compiler::asm_gen) fn get_stack_free_16(&self) -> String {
+        self.tmpl_or_default("sp_free_16")
+    }
+
+    /// スタックの先頭(`%rsp`)のメモリ参照
+    pub(in crate::compiler::asm_gen) fn get_stack_top_ref(&self) -> String {
+        self.tmpl_or_default("sp_ref")
+    }
+
+    /// レジスタを0にする命令(`xor r, r`)
+    pub(in crate::compiler::asm_gen) fn get_zero_reg(&self, reg: &str) -> String {
+        self.tmpl_or_default("zero_reg").replace("{dst}", reg)
+    }
+
+    /// 除算(`idiv`/`div`)。`unsigned`なら`div`
+    pub(in crate::compiler::asm_gen) fn get_div_inst(&self, unsigned: bool, operand: &str) -> String {
+        let key = if unsigned { "udiv" } else { "idiv" };
+        self.tmpl_or_default(key).replace("{dst}", operand)
+    }
+
+    /// 除算の前に、`rax`の符号を`rdx`へ拡張する命令(`cltd`/`cqto`、Intel形式では`cdq`/`cqo`)
+    pub(in crate::compiler::asm_gen) fn get_sign_extend_acc(&self, is_64bit: bool) -> String {
+        let key = match (is_64bit, self.mnemonic_size()) {
+            (true, true) => "cqto",
+            (true, false) => "cqo",
+            (false, true) => "cltd",
+            (false, false) => "cdq",
+        };
+        self.tmpl_or_default(key)
     }
 
     /// オペコードのフォーマット

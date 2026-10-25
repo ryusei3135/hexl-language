@@ -17,13 +17,17 @@ pub(super) struct Exits {
 }
 
 impl Exits {
-    const RETURN: Self = Self {
+    pub const RETURN: Self = Self {
         ret: true,
         brk: false,
     };
-    const BREAK: Self = Self {
+    pub const BREAK: Self = Self {
         ret: false,
         brk: true,
+    };
+    pub const OTHER: Self = Self {
+        ret: false,
+        brk: false,
     };
 
     fn union(self, other: Self) -> Self {

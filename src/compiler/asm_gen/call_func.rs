@@ -177,11 +177,12 @@ impl AsmEmitter {
                     let opcode = Self::float_move_opcode(&size);
                     let operand = self.reg_mode_operand(*reg, &size)?;
                     format!(
-                        "sub $16, %rsp\n{}",
+                        "{}{}",
+                        self.asm_fmt.get_stack_alloc_16(),
                         self.asm_fmt
                             .get_opcode_tmpl(opcode)
                             .replace("{src1}", &operand)
-                            .replace("{dst}", "(%rsp)")
+                            .replace("{dst}", &self.asm_fmt.get_stack_top_ref())
                     )
                 }
             })
@@ -396,7 +397,7 @@ impl AsmEmitter {
         let fn_ret_ty = fn_meta_data.1.get_ret_ty();
         // 新しく関数の作成、
         let fn_label = Self::fn_label_of(&fn_meta_data.1.name, &fn_meta_data.1.temp_ty);
-        self.asm_text.push_str(&format!("{}:\n", &fn_label));
+        self.asm_text.push_str(&self.asm_fmt.get_label_fmt(&fn_label));
         self.begin_fn_state(&fn_meta_data.1);
 
         // 関数の先頭のスタックフレームの生成位置を控えておく。
@@ -565,7 +566,7 @@ impl AsmEmitter {
             inst::Inst::Float { dst, value, size } => self.gen_float_asm(*dst, value, size),
             inst::Inst::InitArr(_) => {}
             inst::Inst::Block(name) => {
-                self.asm_text.push_str(&format!("{}:\n", name));
+                self.asm_text.push_str(&self.asm_fmt.get_label_fmt(name));
             }
             inst::Inst::StartScope => self.start_scope_asm(),
             inst::Inst::EndScope => self.end_scope_asm(),
@@ -581,9 +582,9 @@ impl AsmEmitter {
                     .rev()
                     .map(str::trim)
                     .find(|l| !l.is_empty())
-                    .is_some_and(|l| l.starts_with("jmp "));
+                    .is_some_and(|l| self.asm_fmt.is_jmp_line(l));
                 if !after_jmp {
-                    self.asm_text.push_str(&format!("jmp {}\n", name));
+                    self.asm_text.push_str(&self.asm_fmt.get_jmp(name));
                 }
             }
             inst::Inst::AssignVar { name, dst, value } => {
@@ -689,9 +690,10 @@ impl AsmEmitter {
     /// `_start`はOSから直接呼ばれるエントリーポイントで、`ret`で戻る先が
     /// 無い(終了は`exit`のsyscallで行う)ため、`leave; ret`は付けない
     fn gen_implicit_ret(&mut self, fn_name: &str) {
-        if fn_name != "_start" && !self.asm_text.ends_with("ret\n") {
+        if fn_name != "_start" && !self.asm_text.ends_with(self.asm_fmt.get_ret().as_str()) {
             self.asm_text.push_str(CALLEE_RESTORE_MARK);
-            self.asm_text.push_str("leave\nret\n");
+            self.asm_text.push_str(&self.asm_fmt.func_frame_end());
+            self.asm_text.push_str(&self.asm_fmt.get_ret());
         }
     }
 
@@ -968,7 +970,7 @@ impl AsmEmitter {
                 }
                 self.asm_text
                     .push_str(self.asm_fmt.func_frame_end().as_str());
-                self.asm_text.push_str("ret\n");
+                self.asm_text.push_str(&self.asm_fmt.get_ret());
                 // }
                 return Ok(());
             }
@@ -991,7 +993,7 @@ impl AsmEmitter {
         }
         self.asm_text
             .push_str(self.asm_fmt.func_frame_end().as_str());
-        self.asm_text.push_str("ret\n");
+        self.asm_text.push_str(&self.asm_fmt.get_ret());
         // }
         Ok(())
     }

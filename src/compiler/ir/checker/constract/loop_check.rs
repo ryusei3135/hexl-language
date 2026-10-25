@@ -239,7 +239,7 @@ impl IR {
     pub(super) fn check_loop_block(
         &mut self,
         fn_name: &str,
-        body: &Body,
+        body: &[ast::Group2Info],
         guarded: &MustVarsTy,
     ) -> Result<(), err::ErrKind> {
         let mut locals: Vec<MustVar> = Vec::new();
@@ -254,13 +254,13 @@ impl IR {
                 Group2Node::Expr(expr) => {
                     let is_exit = match Self::expr_exits(&expr) {
                         // ループの中でreturnしているので契約がすべて終了しているか確認
-                        Some(Exits::RETURN) => {
+                        Some(a) if a.ret => {
                             return self.check_all_end_constract(guarded, fn_name, &expr.span);
                         }
                         Some(..) => true,
                         None => false,
-                    }
-                    let is_exit = Self::expr_exits(&expr);
+                    };
+                    let is_exi = Self::expr_exits(&expr);
                     (Some(expr), is_exit)
                 }
                 Group2Node::Stmt(StmtNode::Return(expr)) => (Some(expr), true),
@@ -279,7 +279,7 @@ impl IR {
                     ExprNode::Loop { body, .. } => {
                         let inner = Self::fork_vars(guarded);
                         inner.borrow_mut().extend(locals.iter().cloned());
-                        self.check_loop_block(fn_name, body, &inner)?;
+                        self.check_loop_block(fn_name, &body, &inner)?;
                         ends = self.ended_by(expr, guarded, fn_name)?;
                     }
                     _ => {

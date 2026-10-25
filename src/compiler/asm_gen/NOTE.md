@@ -130,3 +130,13 @@
     `ptr_var_base`が`%rdx`へ読み込んでからベースにする。
 - 構造体の変数(`is_stack`)と区別するときは`is_spilled_scalar`を使う(`Size::Struct`でない`is_stack`)。
 - 未対応: インラインアセンブラの`${var}`・引数(`Inst::Param`)に、スタックへ置いた変数を渡すケース。
+
+## アセンブリのテキストは`asm_fmt/x64.rs`から作る(2026-10-25)
+- アセンブリの命令・ラベル・ディレクティブ・`%rbp`/`(%rsp)`などのレジスタ名は、生成するコードに直書きせず、
+    `asm_fmt/x64.rs`(`GCC_X64`)のテンプレートを`MngAsmFmt`の関数経由で参照する。
+- フォーマットファイルに定義が無いキーは、`x64::default_tmpl`(`MngAsmFmt::tmpl_or_default`)で`x64.rs`の定義を使う。
+- 追加したキー: `label` / `jmp` / `sp_alloc_16` / `sp_free_16` / `sp_ref` / `cltd` / `cqto` / `cdq` / `cqo` / `zero_reg` /
+    `idiv` / `udiv` / `neg` / `add_imm` / `movs{b,w,l}{w,l,q}` / `movz{b,w}{w,l,q}` / `data_long` / `data_float` / `data_double`
+- 呼び出す関数: `get_label_fmt` / `get_jmp` / `is_jmp_line` / `get_ret` / `get_stack_alloc_16` / `get_stack_free_16` /
+    `get_stack_top_ref` / `get_zero_reg` / `get_div_inst` / `get_sign_extend_acc`。`FRAME_BASE_REG`の定義も`x64.rs`にある。
+- `ret`/`jmp`/ラベルは`{space}`付きのテンプレートになったので、出力のインデントが2文字増える(動作は同じ)。

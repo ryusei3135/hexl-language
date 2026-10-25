@@ -47,7 +47,6 @@ impl Parser {
                 }
                 lex::Tkn::Dot | lex::Tkn::ModPathTkn => {
                     let dst = self.build_scope_node(&name)?;
-                    println!("{:?}", self.next_tkn_ref(&[]));
                     if self.next_tkn_ref(&["="])? == lex::Tkn::Equal {
                         return Ok(AssignVar::new(
                             &name,

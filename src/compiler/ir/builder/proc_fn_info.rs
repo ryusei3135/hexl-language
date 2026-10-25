@@ -50,7 +50,6 @@ impl IR {
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
     pub(super) fn entry_fn_info(&mut self, info: &FuncDefine) -> Result<(), err::ErrKind> {
-        println!("Resultがここで止まっている");
         self.check_must_var_used(&info)?;
         self.func_ret_ty = Some(info.ret_ty.clone());
 
@@ -82,7 +81,6 @@ impl IR {
         meta_data: &CallInfo,
         return_var_name: Option<&String>,
     ) -> Result<inst::Inst, err::ErrKind> {
-        println!("{:?}", self.extern_func_tree);
         // 関数の定義を取得
         let defined_func_data: FnDefInfo = {
             if let Some(def_data) =
