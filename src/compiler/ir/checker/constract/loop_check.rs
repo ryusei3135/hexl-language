@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
+use crate::compiler::ir::checker::constract::branch::Exits;
 use crate::err::{self, Span};
 
 impl IR {
@@ -233,6 +234,8 @@ impl IR {
     /// 文は、直後(他の終了する文を挟んでもよい)に`ret`/`break`が
     /// 無ければエラーにする。そうしないと次の周でもう一度終了してしまう。
     /// ループの中で定義した変数は毎周作り直されるので対象外
+    /// 
+    /// もしretがあるならその時点ですべての契約が終了しているか調べる
     pub(super) fn check_loop_block(
         &mut self,
         fn_name: &str,
@@ -249,7 +252,15 @@ impl IR {
             let (expr, is_exit) = match n.get_node() {
                 // 全経路が`ret`/`break`で抜ける分岐も、脱出する文として扱う
                 Group2Node::Expr(expr) => {
-                    let is_exit = Self::expr_exits(&expr).is_some();
+                    let is_exit = match Self::expr_exits(&expr) {
+                        // ループの中でreturnしているので契約がすべて終了しているか確認
+                        Some(Exits::RETURN) => {
+                            return self.check_all_end_constract(guarded, fn_name, &expr.span);
+                        }
+                        Some(..) => true,
+                        None => false,
+                    }
+                    let is_exit = Self::expr_exits(&expr);
                     (Some(expr), is_exit)
                 }
                 Group2Node::Stmt(StmtNode::Return(expr)) => (Some(expr), true),

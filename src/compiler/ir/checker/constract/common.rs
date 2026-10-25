@@ -248,14 +248,17 @@ impl IR {
         }
     }
 
-    /// 引数の式が指している変数の名前を返す
-    /// (`&var`や`*var`のように包まれていても中身を辿る)
+    /// 引数として渡されて、契約を終了する変数の名前を返す
+    ///
+    /// `*var`のように包まれていても中身を辿る。
+    /// `&var`(アドレスを取ってポインタとして渡す場合)は、契約した変数そのものを
+    /// 渡す(譲渡する)わけではないので、契約は終了せず`None`を返す。
     pub(super) fn arg_var_name(arg: &Expr) -> Option<&String> {
         match &arg.node {
             ExprNode::Var(name) => Some(name),
-            ExprNode::GetAddress(target) | ExprNode::ConnectAddr(target) => {
-                Self::arg_var_name(&target)
-            }
+            ExprNode::ConnectAddr(target) => Self::arg_var_name(&target),
+            // ポインタで渡された契約は終了しない
+            ExprNode::GetAddress(_) => None,
             _ => None,
         }
     }
