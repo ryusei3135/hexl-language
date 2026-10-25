@@ -2,7 +2,10 @@
 //! (`must`の変数の追跡状態と、式を辿る処理)
 
 use super::*;
-use crate::{compiler::ast::{Expr, ExprNode, Group2Node, StmtNode}};
+use crate::compiler::{
+    ExprNode::Number,
+    ast::{Expr, ExprNode, Group2Node, StmtNode},
+};
 
 /// 契約を持つ変数の一覧(共有して、あとから状態を書き換える)
 pub(super) type MustVarsTy = Rc<RefCell<Vec<MustVar>>>;
@@ -196,15 +199,36 @@ impl IR {
             | ExprNode::Sub(pair)
             | ExprNode::Mul(pair)
             | ExprNode::Div(pair)
+            | ExprNode::AndCalcul(pair)
+            | ExprNode::XorCalcul(pair)
+            | ExprNode::OrCalcul(pair)
+            | ExprNode::RShift(pair)
+            | ExprNode::LShift(pair)
             | ExprNode::Surplus(pair)
+            | ExprNode::CmpOr(pair)
+            | ExprNode::CmpAnd(pair)
             | ExprNode::LessThen(pair)
             | ExprNode::GreaterThen(pair)
+            | ExprNode::LessThenEq(pair)
+            | ExprNode::GreaterThenEq(pair)
             | ExprNode::Equal(pair)
             | ExprNode::NotEq(pair) => {
                 f(Self::as_expr(&pair.0))?;
                 f(Self::as_expr(&pair.1))
             }
-            ExprNode::InitStruct { fields, .. } => {
+            ExprNode::Cast((_, n)) | ExprNode::Sign((_, n)) => f(Self::as_expr(&n)),
+            ExprNode::Ternary(n) => {
+                f(Self::as_expr(&n.0))?;
+                f(Self::as_expr(&n.1))?;
+                f(Self::as_expr(&n.2))
+            }
+            ExprNode::Inc(n)
+            | ExprNode::Inversion(n)
+            | ExprNode::CmpNot(n)
+            | ExprNode::LeftDec(n)
+            | ExprNode::LeftInc(n)
+            | ExprNode::Dec(n) => f(Self::as_expr(&n)),
+            ExprNode::InitVariant { fields, .. } | ExprNode::InitStruct { fields, .. } => {
                 fields.values().try_for_each(|val| f(Self::as_expr(val)))
             }
             ExprNode::Array(values) => values.iter().try_for_each(|val| f(Self::as_expr(val))),
@@ -212,7 +236,16 @@ impl IR {
                 f(Self::as_expr(dst))?;
                 f(Self::as_expr(index))
             }
-            _ => Ok(()),
+            // 検査しない
+            ExprNode::EnumVariant { .. } => Ok(()),
+            ExprNode::CallFunc(..)
+            | ExprNode::Match { .. }
+            | ExprNode::Loop { .. }
+            | ExprNode::DefVar(..) => Ok(()),
+            ExprNode::RangeNode(..) => Ok(()),
+            ExprNode::Number(..) | ExprNode::Float(..) | ExprNode::Var(..) | ExprNode::Str(..) => {
+                Ok(())
+            }
         }
     }
 
@@ -246,7 +279,12 @@ impl IR {
     }
 
     /// 契約がすべて終了しているかを確認する関数
-    pub(super) fn check_all_end_constract(&mut self, must_vars: &MustVarsTy, fn_name: &str, span: &Rc<Span>) -> Result<(), err::ErrKind> {
+    pub(super) fn check_all_end_constract(
+        &mut self,
+        must_vars: &MustVarsTy,
+        fn_name: &str,
+        span: &Rc<Span>,
+    ) -> Result<(), err::ErrKind> {
         // 一度も渡されていない変数、または条件分岐の一部でしか
         // 契約を終了していない変数はエラー
         for var in must_vars

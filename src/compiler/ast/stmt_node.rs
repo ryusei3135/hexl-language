@@ -166,7 +166,6 @@ pub enum Group1Node {
     Line(String),
 }
 
-
 impl Group1Node {
     pub fn wrap_variant_field_kind(self) -> VariantFieldKind {
         VariantFieldKind::Method(self)
@@ -193,7 +192,7 @@ impl Group1Node {
     pub fn add_mod_name(&mut self, name: String) {
         self.add_mod_path(vec![name]);
     }
-    
+
     /// 現在のモジュール(`Option<String>`)の外側に、パスを足す
     /// 現在が`b`で`["a", "x"]`なら`a::x::b`、現在がなければ`a::x`
     fn prepend_mod_path(module: &mut Option<String>, path: &[String]) {

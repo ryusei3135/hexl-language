@@ -67,7 +67,10 @@ impl CType {
                 Some((n, n))
             }
             CType::Ptr { .. } => Some((8, 8)),
-            CType::Array { inner, len: Some(n) } => {
+            CType::Array {
+                inner,
+                len: Some(n),
+            } => {
                 let (size, align) = inner.prim_size_align()?;
                 Some((size.checked_mul(*n as u64)?, align))
             }

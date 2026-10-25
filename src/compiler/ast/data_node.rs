@@ -134,7 +134,7 @@ impl Field for VariantField {
 
 impl VariantField {
     /// `A::Name`のように`Normal`かつ型を指定しないときに使う
-    /// ```
+    /// ```txt
     /// variant A {
     ///     Name
     ///     Name1(int)
@@ -174,7 +174,6 @@ pub struct VariantDefine {
     /// `variant Name`の位置
     pub span: Rc<err::Span>,
 }
-
 
 impl VariantDefine {
     #[inline(always)]

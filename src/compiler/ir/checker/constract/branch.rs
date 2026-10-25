@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode};
-use crate::err::compile::CompileErrKind::{BreakOutsideLoop};
+use crate::err::compile::CompileErrKind::BreakOutsideLoop;
 
 /// 本体が必ず抜ける先(`ret`は関数、`break`は反復処理を抜ける)
 ///
@@ -138,9 +138,8 @@ impl IR {
     ) {
         // この文脈で「契約を終了したまま抜けてよい」分岐か
         // (反復処理の外では`break`で抜けても認めない)
-        let leaves = |br: &(Vec<MustVar>, Option<Exits>)| {
-            br.1.is_some_and(|e| e.ret || (in_loop && e.brk))
-        };
+        let leaves =
+            |br: &(Vec<MustVar>, Option<Exits>)| br.1.is_some_and(|e| e.ret || (in_loop && e.brk));
         for (i, var) in must_vars.borrow_mut().iter_mut().enumerate() {
             // 分岐の前に終了済みなら、分岐ごとの確認は不要
             if var.used {

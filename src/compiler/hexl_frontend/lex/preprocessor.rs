@@ -14,7 +14,7 @@ mod define;
 mod include;
 mod line;
 
-use self::cond::{cond_else, cond_endif, is_active, CondFrame};
+use self::cond::{CondFrame, cond_else, cond_endif, is_active};
 use self::define::read_multiline_define;
 use self::include::is_kept_directive;
 use super::comment::strip_comments;

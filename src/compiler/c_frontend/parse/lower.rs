@@ -164,12 +164,19 @@ impl Lowerer {
                             }
                         }
                         seen.pop();
-                        let total = if *kind == TagKind::Union { max_size } else { offset };
+                        let total = if *kind == TagKind::Union {
+                            max_size
+                        } else {
+                            offset
+                        };
                         Some((total.div_ceil(max_align) * max_align, max_align))
                     }
                 }
             }
-            CType::Array { inner, len: Some(n) } => {
+            CType::Array {
+                inner,
+                len: Some(n),
+            } => {
                 let (size, align) = self.size_align_in(inner, seen)?;
                 Some((size.checked_mul(*n as u64)?, align))
             }

@@ -3,7 +3,7 @@ use crate::compiler::hexl_frontend::lex;
 
 impl Parser {
     /// 契約元の型を作成する関数
-    /// ```
+    /// ```text
     /// var: T must=func
     /// ```
     #[inline(always)]
@@ -34,7 +34,7 @@ impl Parser {
     }
 
     /// 契約を終了する関数の型
-    /// ```
+    /// ```text
     /// func(var: T of Func)
     /// ```
     #[inline(always)]

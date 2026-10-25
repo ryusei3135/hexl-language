@@ -231,6 +231,7 @@ impl IR {
 #[cfg(test)]
 mod self_ty_tests {
     use super::*;
+    use crate::compiler::ArgsNode;
 
     fn make_func(name: &str, params: Vec<ArgsNode>, ret_ty: ast::TyNode) -> ast::FuncDefine {
         let mut func =

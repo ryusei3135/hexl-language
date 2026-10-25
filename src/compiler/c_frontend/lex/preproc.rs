@@ -241,10 +241,7 @@ impl Preprocessor {
     }
 
     /// `-I dir`(`#include "..."` と `<...>` の両方で探す)
-    pub(in crate::compiler::c_frontend) fn add_include_dir(
-        &mut self,
-        dir: impl Into<PathBuf>,
-    ) {
+    pub(in crate::compiler::c_frontend) fn add_include_dir(&mut self, dir: impl Into<PathBuf>) {
         self.include_dirs.push(dir.into());
     }
 
@@ -257,11 +254,7 @@ impl Preprocessor {
     }
 
     /// メモリ上のヘッダを登録する(ファイルより優先。テストや組み込みヘッダ用)
-    pub(in crate::compiler::c_frontend) fn add_virtual_file(
-        &mut self,
-        name: &str,
-        contents: &str,
-    ) {
+    pub(in crate::compiler::c_frontend) fn add_virtual_file(&mut self, name: &str, contents: &str) {
         self.virtual_files
             .insert(name.to_string(), contents.to_string());
     }

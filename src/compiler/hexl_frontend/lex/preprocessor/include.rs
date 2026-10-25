@@ -16,7 +16,8 @@ impl Preprocessor {
     /// 名前を保存して、この行の処理を終えたら`true`
     /// (無効な`#if`の枝の中の`#include`は処理しないので`false`)
     pub(super) fn include_directive(&mut self, rest_of_line: &str, active: bool) -> bool {
-        if active {
+        // 無効な`#if`の枝の中なら、名前は保存しない
+        if !active {
             return false;
         }
         if let Some(rel) = plain_include_path(rest_of_line) {
@@ -27,7 +28,7 @@ impl Preprocessor {
                 return true;
             }
         }
-        
+
         false
     }
 }

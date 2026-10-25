@@ -22,20 +22,13 @@ use std::path::Path;
 
 pub use error::LinkResult;
 pub use link::{LinkOptions, LinkOutput, Linker};
+pub use pe::DllImport;
 
 /// オブジェクトファイルのパスを受け取り、すべてを読み込んでリンクする。
 ///
 /// 既定のオプション (エントリ `_start`、ロードアドレス `0x400000`) を使う。
 /// パスは渡した順にリンクされる。結果は [`LinkOutput`] として返り、
 /// ファイルへ書き出すには [`LinkOutput::write_to_file`] を呼ぶ。
-///
-/// ```no_run
-/// # fn main() -> Result<(), objlink::LinkError> {
-/// let output = objlink::linker(["main.o", "util.o"])?;
-/// output.write_to_file("a.out")?;
-/// # Ok(())
-/// # }
-/// ```
 ///
 /// # Errors
 ///
@@ -54,18 +47,6 @@ where
     linker.link()
 }
 
-/// [`linker`] と同じだが、オプション (出力形式・エントリ名・ロードアドレスなど) を指定できる。
-///
-/// ```no_run
-/// # fn main() -> Result<(), objlink::LinkError> {
-/// let mut opts = objlink::LinkOptions::pe();
-/// opts.entry = "mainCRTStartup".into();
-/// opts.imports.push(objlink::DllImport::new("kernel32.dll", ["ExitProcess"]));
-/// let output = objlink::linker_with_options(["main.obj"], opts)?;
-/// output.write_to_file("main.exe")?;
-/// # Ok(())
-/// # }
-/// ```
 pub fn linker_with_options<I, P>(paths: I, options: LinkOptions) -> LinkResult<LinkOutput>
 where
     I: IntoIterator<Item = P>,

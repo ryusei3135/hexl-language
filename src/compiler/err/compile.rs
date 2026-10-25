@@ -632,9 +632,7 @@ impl CompileErrKind {
                 "添字を数字にするか、変数・構造体のメンバーを使ってください".into()
             }
             Self::AsmEmitFloatNotSupported(..) => "整数の式に書き換えてください".into(),
-            Self::BreakOutsideLoop => {
-                "`break`を取り除くか、`loop`の中に移動してください".into()
-            }
+            Self::BreakOutsideLoop => "`break`を取り除くか、`loop`の中に移動してください".into(),
             _ => return None,
         })
     }

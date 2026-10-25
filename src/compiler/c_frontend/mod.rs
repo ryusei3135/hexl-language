@@ -63,10 +63,7 @@ fn build_preprocessor(opts: &COptions) -> Result<lex::Preprocessor, CFrontendErr
     Ok(pp)
 }
 
-fn finish(
-    pp: &lex::Preprocessor,
-    tokens: Vec<lex::TokenInfo>,
-) -> Result<COutput, CFrontendError> {
+fn finish(pp: &lex::Preprocessor, tokens: Vec<lex::TokenInfo>) -> Result<COutput, CFrontendError> {
     let out = parse_c(tokens).map_err(|e| CFrontendError(e.to_string()))?;
     let mut warnings = pp.warnings().to_vec();
     warnings.extend(out.warnings);
@@ -91,10 +88,7 @@ pub fn try_emit_c_node(
 }
 
 /// Cのファイルを変換する(`#include "x.h"`は、そのファイルのあるディレクトリからも探す)
-pub fn try_emit_c_node_from_file(
-    path: &str,
-    opts: &COptions,
-) -> Result<COutput, CFrontendError> {
+pub fn try_emit_c_node_from_file(path: &str, opts: &COptions) -> Result<COutput, CFrontendError> {
     let mut pp = build_preprocessor(opts)?;
     let tokens = pp
         .preprocess_file(path)

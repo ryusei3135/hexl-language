@@ -339,7 +339,13 @@ impl ErrPool {
         let indent: String = src_line
             .chars()
             .take_while(|c| *c == ' ' || *c == '\t')
-            .map(|c| if c == '\t' { " ".repeat(TAB_WIDTH) } else { " ".to_string() })
+            .map(|c| {
+                if c == '\t' {
+                    " ".repeat(TAB_WIDTH)
+                } else {
+                    " ".to_string()
+                }
+            })
             .collect();
         let new_line_no = line_no + 1;
         let pad = " ".repeat(new_line_no.to_string().len());

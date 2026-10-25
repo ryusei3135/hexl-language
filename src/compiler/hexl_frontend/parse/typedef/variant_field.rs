@@ -149,6 +149,7 @@ mod variant_node_test {
             )],
             methods: Vec::new(),
             span: actual.span.clone(),
+            module: None,
         };
         assert_eq!(actual, expected);
     }

@@ -7,9 +7,7 @@ use std::rc::Rc;
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
-use crate::err::{
-    self, Span,
-};
+use crate::err::{self, Span};
 
 impl IR {
     /// 反復処理(`Expr::Loop`)の追跡

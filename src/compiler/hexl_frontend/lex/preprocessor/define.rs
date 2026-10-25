@@ -1,7 +1,7 @@
 //! `#define`(値のマクロ・関数形式マクロ)の読み取りと展開
 
 use super::include::is_kept_directive;
-use super::{is_name_char, line, PreprocKind, Preprocessor, ReplaceVal};
+use super::{PreprocKind, Preprocessor, ReplaceVal, is_name_char, line};
 
 /// 関数形式マクロの展開の入れ子の上限(`#define F(a) #F(a)`のような自己再帰の防止)
 const MAX_EXPAND_DEPTH: usize = 64;
