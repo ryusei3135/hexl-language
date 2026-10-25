@@ -1,0 +1,206 @@
+#if #linux
+// Linux x86-64: mmap / munmap を直接 syscall で呼ぶ。
+// munmap にはサイズが必要なので、確保した領域の先頭16バイトに
+// 全体のバイト数を書き込み、ユーザーにはその直後のアドレスを返す
+// (16バイトにしておくと16バイトアラインが保たれる)。
+//
+// 失敗時は 0 を返す。
+os_alloc(size: i64): i64 {
+    base: i64 = -1
+    // ヘッダ(16バイト)を含めた全体のサイズ
+    total: i64 = size + 16
+    #asm(gcc_x64) {
+        // mmap(NULL, total, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+        "movq $0, %rdi"
+        "movq ${total}, %rsi"
+        "movq $3, %rdx"
+        "movq $0x22, %r10"
+        "movq $-1, %r8"
+        "movq $0, %r9"
+        "movq $9, %rax"
+        "syscall"
+        "movq %rax, ${base}"
+    }
+
+    // syscall のエラーは -errno(負の値)で返る
+    cond base < 0 {
+        ret 0
+    }
+
+    // 先頭に全体のサイズを記録
+    #asm(gcc_x64) {
+        "movq ${base + 0}, %rax"
+        "movq ${total}, %rcx"
+        "movq %rcx, (%rax)"
+    }
+    ret base + 16
+}
+
+os_free(addr: i64) {
+    #asm(gcc_x64) {
+        // 先頭のヘッダ(16バイト手前)から全体のサイズを読む
+        "movq ${addr + 0}, %rdi"
+        "subq $16, %rdi"
+        "movq (%rdi), %rsi"
+        // munmap(base, total)
+        "movq $11, %rax"
+        "syscall"
+    }
+}
+
+// addr のブロックを size バイトに拡大/縮小する。必要なら別のアドレスへ移動する。
+// 失敗時は 0 を返し、元のブロックはそのまま残る。
+os_realloc(addr: i64, size: i64): i64 {
+    base: i64 = -1
+    total: i64 = size + 16
+    #asm(gcc_x64) {
+        // mremap(old_base, old_total, new_total, MREMAP_MAYMOVE)
+        "movq ${addr + 0}, %rdi"
+        "subq $16, %rdi"
+        "movq (%rdi), %rsi"
+        "movq ${total}, %rdx"
+        "movq $1, %r10"
+        "movq $25, %rax"
+        "syscall"
+        "movq %rax, ${base}"
+    }
+
+    cond base < 0 {
+        ret 0
+    }
+
+    // 新しいサイズをヘッダに記録
+    #asm(gcc_x64) {
+        "movq ${base + 0}, %rax"
+        "movq ${total}, %rcx"
+        "movq %rcx, (%rax)"
+    }
+    ret base + 16
+}
+
+#elif #windows
+// Windows x64 ABI: Kernel32 の GetProcessHeap / HeapAlloc / HeapFree を使う。
+// これらは最終的なPEリンクで Kernel32 のシンボルとして解決できる必要がある。
+// HeapAlloc は16バイトアラインで返し、サイズも HeapFree 側で管理されるので
+// ヘッダは不要。失敗時は 0 を返す。
+os_alloc(size: i64): i64 {
+    result: i64 = 0
+    #asm(gcc_x64) {
+        // 32バイトのシャドウスペース + 8バイト(スタックアラインのため)
+        "subq $40, %rsp"
+        // heap = GetProcessHeap()
+        "call GetProcessHeap"
+        // HeapAlloc(heap, 0, total)
+        "movq %rax, %rcx"
+        "movq $0, %rdx"
+        "movq ${size}, %r8"
+        "call HeapAlloc"
+        "movq %rax, ${result}"
+        "addq $40, %rsp"
+    }
+    ret result
+}
+
+os_free(addr: i64) {
+    #asm(gcc_x64) {
+        "subq $40, %rsp"
+        // heap = GetProcessHeap()
+        "call GetProcessHeap"
+        // HeapFree(heap, 0, addr)
+        "movq %rax, %rcx"
+        "movq $0, %rdx"
+        "movq ${addr + 0}, %r8"
+        "call HeapFree"
+        "addq $40, %rsp"
+    }
+}
+
+// addr のブロックを size バイトに拡大/縮小する。必要なら別のアドレスへ移動する。
+// 失敗時は 0 を返し、元のブロックはそのまま残る。
+os_realloc(addr: i64, size: i64): i64 {
+    result: i64 = 0
+    #asm(gcc_x64) {
+        "subq $40, %rsp"
+        // heap = GetProcessHeap()
+        "call GetProcessHeap"
+        // HeapReAlloc(heap, 0, addr, size)
+        "movq %rax, %rcx"
+        "movq $0, %rdx"
+        "movq ${addr + 0}, %r8"
+        "movq ${size}, %r9"
+        "call HeapReAlloc"
+        "movq %rax, ${result}"
+        "addq $40, %rsp"
+    }
+    ret result
+}
+
+#else
+os_alloc(size: i64): i64 {
+    ret 0
+}
+
+os_free(addr: i64) {
+}
+
+os_realloc(addr: i64, size: i64): i64 {
+    ret 0
+}
+#endif
+
+// Hexl memory library.
+// Build with --linux or --windows so the preprocessor selects one backend.
+
+// T型の要素を len 個ぶんのメモリを確保して、先頭のポインタを返す。
+// 失敗した場合、len が 0 以下の場合は 0(null)を返す。
+// 確保したメモリは初期化されない(Linuxは0埋め、Windowsは不定)。
+pub malloc<T>(len: i64): T* must=free {
+    cond len <= 0 {
+        ret 0
+    }
+
+    elem: i64 = sizeof(T)
+    size: i64 = len * elem
+
+    addr: i64 = os_alloc(size)
+    ret addr
+}
+
+// malloc で確保したメモリを解放する。0(null)は何もしない。
+pub free<T>(ptr: T* of malloc) {
+    addr: i64 = ptr
+    cond addr == 0 {
+        ret
+    }
+    os_free(addr)
+}
+
+// malloc で確保したメモリを len 個ぶんの大きさに変える。
+// 内容は新旧の小さいほうの大きさぶん引き継がれ、アドレスは変わることがある。
+// 呼び出し後、引数の ptr は(契約上)使えなくなり、戻り値を使う。
+//
+// - ptr が 0(null)なら malloc<T>(len) と同じ
+// - len が 0 なら ptr を解放して 0 を返す
+// - 確保に失敗した場合は、契約を守るために ptr を解放して 0 を返す
+//   (元の内容は失われる)
+pub realloc<T>(ptr: T* must=free, len: u64): T* must=free {
+    addr: i64 = ptr
+    cond addr == 0 {
+        ret malloc<T>(len)
+    }
+
+    cond len == 0 {
+        os_free(addr)
+        ret 0
+    }
+
+    elem: i64 = sizeof(T)
+    size: i64 = len * elem
+
+    new_addr: i64 = os_realloc(addr, size)
+    cond new_addr == 0 {
+        os_free(addr)
+        ret 0
+    }
+    ret new_addr
+}

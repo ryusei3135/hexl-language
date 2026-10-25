@@ -4,6 +4,18 @@ use super::*;
 use crate::compiler::ast::{ExprNode, ImportKind, InlineAsm, ModPath};
 use crate::compiler::hexl_frontend::include_root;
 
+/// `#include "dir/io.hexl"`のファイルパスから、モジュール名(`io`)を作る。
+///
+/// `Parser::parser`が`#include "dir/io.c"`のモジュール名を
+/// `file_stem`で作っているのと同じ規則(ディレクトリと拡張子を除く)
+fn module_name_from_file(file_path: &str) -> String {
+    std::path::Path::new(file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
 impl IR {
     pub(super) fn include_proc(
         &mut self,
@@ -138,7 +150,11 @@ impl IR {
 
         // エイリアスが指定されていればそれを、
         // 無ければファイル名から生成したモジュール名を使う
-        let module_name = alias.cloned().unwrap_or_else(|| path.last_segment());
+        // (`#include "dir/io.c"`が`io::func`になるのと同じく、
+        // `#include "dir/io.hexl"`も拡張子とディレクトリを除いた`io`にする)
+        let module_name = alias
+            .cloned()
+            .unwrap_or_else(|| module_name_from_file(&path.gen_path()));
 
         extern_fn_tree
             .iter_mut()
@@ -251,5 +267,23 @@ impl IR {
         });
         self.id_counter += 1;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod module_name_tests {
+    use super::module_name_from_file;
+
+    #[test]
+    fn strips_dir_and_extension() {
+        assert_eq!(module_name_from_file("io.hexl"), "io");
+        assert_eq!(module_name_from_file("lib/io.hexl"), "io");
+        assert_eq!(module_name_from_file("a/b/memory.hexl"), "memory");
+    }
+
+    #[test]
+    fn same_rule_as_c_files() {
+        // C言語側(`Parser::parser`)と同じ名前になる
+        assert_eq!(module_name_from_file("lib/io.c"), "io");
     }
 }

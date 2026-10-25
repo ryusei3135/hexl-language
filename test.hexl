@@ -1,5 +1,6 @@
 #include io="library/os/io.hexl"
 #include "t.c"
+#include "library/os/mem.hexl"
 
 
 #define M(expr) {{
@@ -104,8 +105,10 @@ add(a mut: int, b: int): Option<int> {
 }
 
 test_arr(idx: uint): i64 {
+    ptr: int* must=free = mem::malloc<int>(10)
     arr: [int 5] = {0}
     var: int = [arr idx else 0]
+    mem::free<int>(ptr)
     ret (i64)var
 }
 
