@@ -74,6 +74,8 @@ _start(): int {
     - const
     - mut
     - Self
+    - sizeof
+    - type
 * 契約
     - must
     - of
