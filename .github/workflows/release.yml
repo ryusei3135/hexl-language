@@ -47,7 +47,7 @@ jobs:
           mkdir hexl_dist
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/
           cp -r library hexl_dist/
-          cp -r asm_fmt hexl_dist/
+          cp -r asm_fmts hexl_dist/
           
           # フォルダ内をフラットに圧縮
           tar -czf ${{ matrix.asset_name }} -C hexl_dist .
@@ -59,7 +59,7 @@ jobs:
           mkdir hexl_dist
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/
           xcopy /E /I library hexl_dist\library
-          xcopy /E /I asm_fmt hexl_dist\asm_fmt
+          xcopy /E /I asm_fmts hexl_dist\asm_fmt
           
           # フォルダ内をフラットに圧縮
           cd hexl_dist
