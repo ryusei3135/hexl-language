@@ -5,11 +5,16 @@ on:
     tags:
       - 'v*' # v1.0.0 などのタグがプッシュされた時だけ実行
 
+# リリースを作成・編集するために書き込み権限を明示的に付与
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     name: Build and Release for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false # 1つのOSが失敗しても、他のOSのビルドを止めない
       matrix:
         include:
           # Linux (x86_64)
@@ -43,31 +48,37 @@ jobs:
       - name: Package archive (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          # 一時フォルダを作成して必要なものを集める
           mkdir hexl_dist
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/
           cp -r library hexl_dist/
           cp -r asm_fmts hexl_dist/
-          
-          # フォルダ内をフラットに圧縮
           tar -czf ${{ matrix.asset_name }} -C hexl_dist .
 
       - name: Package archive (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          # 一時フォルダを作成して必要なものを集める
           mkdir hexl_dist
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/
+          max_retries=5
+          count=0
+          while [ $count -lt $max_retries ]; do
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/ && break
+            count=$((count+1))
+            sleep 1
+          done
           xcopy /E /I library hexl_dist\library
           xcopy /E /I asm_fmts hexl_dist\asm_fmts
-          
-          # フォルダ内をフラットに圧縮
           cd hexl_dist
           7z a ../${{ matrix.asset_name }} *
+        shell: bash # Windowsでも確実に実行できるようにシェルを指定
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.asset_name }}
+          # 同時並行でアップロードされた際、既存のリリースにファイルを「追記」する設定
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
