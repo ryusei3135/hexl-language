@@ -256,7 +256,10 @@ impl Parser {
     pub(in crate::compiler::hexl_frontend::parse) fn ty_node_after_delim(
         &mut self,
     ) -> Result<TyNode, err::ErrKind> {
-        match self.next_tkn(&["name", "[", "string", "Self"])?.clone() {
+        match self.next_tkn(&["name", "[", "string", "Self", "="])?.clone() {
+            lex::Tkn::Equal => {
+                Ok(TyNode::Auto)
+            }
             // 予約語`Self`: 自身の構造体を指す型
             lex::Tkn::KeyWordSelf => {
                 // `Self`の次のトークンへ進める

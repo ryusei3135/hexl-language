@@ -125,7 +125,7 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
                     }
                     "update" => {
                         println!("アップデートを確認中...");
-                        match updater::handle_update() {
+                        match updater::handle_update(None) {
                             Ok(true) => {
                                 println!("更新が成功しました。新しい機能をお楽しみください！");
                                 std::process::exit(0);

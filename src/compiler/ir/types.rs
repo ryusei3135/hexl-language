@@ -356,6 +356,7 @@ impl IR {
     /// 場合は`struct_tree`/`variant_tree`を参照して解決する
     pub(in crate::compiler::ir) fn size_of(&self, ty: &TyNode) -> types::Size {
         match ty {
+            TyNode::Auto => panic!(),
             TyNode::Ty(name) => {
                 if types::Size::is_builtin_ty_name(name) {
                     return ty.try_into().unwrap();
@@ -437,6 +438,7 @@ impl IR {
         const POINTER_BYTES: usize = 8;
 
         match ty {
+            TyNode::Auto => panic!(),
             TyNode::Ty(name) => {
                 // 組み込み型
                 if types::Size::is_builtin_ty_name(name) {

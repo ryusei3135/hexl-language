@@ -218,6 +218,7 @@ impl VariantDefine {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TyNode {
+    Auto,
     Ty(String),
     /// メゾット内で使われる`Self`(自身の構造体を表す予約語)
     /// - 内側の`String`は、`Self`が実際に指している構造体の名前
@@ -283,6 +284,7 @@ impl TyNode {
             Self::ConstractOf(c) => {
                 Self::ConstractOf(c.with_ty(c.unwrap_ty().expand_alias(lookup)))
             }
+            Self::Auto => panic!(),
         }
     }
 
@@ -299,6 +301,7 @@ impl TyNode {
             Self::Static { name, .. } => name.get_ty_str_name(),
             Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name(),
             Self::ConstractMust(ty) | Self::ConstractOf(ty) => ty.unwrap_ty().get_ty_str_name(),
+            Self::Auto => panic!(),
         }
     }
 
