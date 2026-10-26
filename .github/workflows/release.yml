@@ -56,26 +56,31 @@ jobs:
 
       - name: Package archive (Windows)
         if: matrix.os == 'windows-latest'
+        shell: bash
         run: |
           mkdir hexl_dist
+          
+          # バイナリのコピー（リトライ付き）
           max_retries=5
           count=0
           while [ $count -lt $max_retries ]; do
-            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/ && break
+            cp "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" hexl_dist/ && break
             count=$((count+1))
             sleep 1
           done
-          xcopy /E /I library hexl_dist\library
-          xcopy /E /I asm_fmts hexl_dist\asm_fmts
+          
+          # xcopyの代わりに、Bashで確実に動く cp -r を使用（スラッシュ区切り）
+          cp -r library hexl_dist/
+          cp -r asm_fmts hexl_dist/
+          
+          # 圧縮処理
           cd hexl_dist
           7z a ../${{ matrix.asset_name }} *
-        shell: bash # Windowsでも確実に実行できるようにシェルを指定
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.asset_name }}
-          # 同時並行でアップロードされた際、既存のリリースにファイルを「追記」する設定
           tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
