@@ -335,7 +335,19 @@ impl Parser {
                 if self.is_variant_bind_at(self.idx) {
                     return crate::err_at!(self.variant_bind_outside_cond());
                 }
+                // `name->member = value` / `name->method(..)`: `[name].member = value` と同じ
+                if matches!(self.peek_tkn(), Ok(lex::Tkn::AccessPtr)) {
+                    return self.ptr_member_stmt_node(&name, None, None);
+                }
                 Group2Node::Expr(self.build_scope_node(&name)?)
+            }
+            // `self->name = value` / [self].name = value` と同じ
+            lex::Tkn::KeyWordSelf if matches!(self.peek_tkn(), Ok(lex::Tkn::AccessPtr)) => {
+                let Some(self_name) = self.struct_self_name.clone() else {
+                    return crate::err_at!(self.self_outside_of_type());
+                };
+                // `->`まで進めて、`[name].member`の`.`と同じ位置から処理する
+                self.ptr_member_stmt_node(&self_name, None, None)?
             }
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {

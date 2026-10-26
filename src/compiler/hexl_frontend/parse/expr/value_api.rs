@@ -16,10 +16,16 @@ impl Parser {
         // `init_struct`が`false`の場合(`cond`の条件式など)は構造体を初期化してはいけない。
         // そのため`{`が続いても構造体の初期化とはみなさず変数を返すが、
         // 関数呼び出し(`f(a)`)やメンバーアクセスは通常どおり解析する
-        let node = match self.next_tkn_ref(&[".", "(", "`", "::"])? {
+        let node = match self.next_tkn_ref(&[".", "->", "(", "`", "::"])? {
             lex::Tkn::Dot => {
                 let n = self.build_scope_node(&name);
                 return n;
+            }
+            // ポインタ経由のメンバー/メゾット: `name->member`
+            // (`[name].member`と同じ`PtrMember`)。
+            lex::Tkn::AccessPtr => {
+                self.next_tkn(&["->"])?;
+                self.ptr_member_node(&name, None, None)?
             }
             // 関数を呼びだすノードを作成
             lex::Tkn::LParen => {

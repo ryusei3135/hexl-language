@@ -52,6 +52,7 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} hexl_dist/
           cp -r library hexl_dist/
           cp -r asm_fmts hexl_dist/
+          cp -r asm.yaml hexl_dist/
           tar -czf ${{ matrix.asset_name }} -C hexl_dist .
 
       - name: Package archive (Windows)
@@ -72,6 +73,7 @@ jobs:
           # xcopyの代わりに、Bashで確実に動く cp -r を使用（スラッシュ区切り）
           cp -r library hexl_dist/
           cp -r asm_fmts hexl_dist/
+          cp -r asm.yaml hexl_dist/
           
           # 圧縮処理
           cd hexl_dist

@@ -44,7 +44,7 @@ impl ConstractFlags {
             self.def_var = Some(var_ty.clone());
         } else {
             if self.constract_ret.as_ref().unwrap() != var_ty {
-                panic!();
+                panic!("{:?} {:?}", var_ty, self.constract_ret);
             }
             self.reset();
         }

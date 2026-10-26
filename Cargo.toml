@@ -1,6 +1,6 @@
 [package]
 name = "hexl"
-version = "1.2.0"
+version = "1.2.4"
 edition = "2024"
 
 [build-dependencies]

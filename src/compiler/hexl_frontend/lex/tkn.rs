@@ -52,6 +52,8 @@ pub enum Tkn {
     Inc,
     Dec,
 
+    AccessPtr, // ->
+
     Inversion,
 
     CompleSyn,

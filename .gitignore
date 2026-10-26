@@ -20,3 +20,4 @@ library/os/*.md
 documents/docs.md
 src/compiler/ir/checker/constract/constract_d.md
 hexl_linux_x64
+test1.hexl

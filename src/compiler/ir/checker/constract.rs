@@ -138,6 +138,29 @@ impl IR {
         }
     }
 
+    /// ポインタ変数`ptr_name`が指す構造体の、メンバー`member`の宣言上の型を返す
+    /// (`self->name`/`[ptr].name`の`name`の型)。
+    /// 構造体やメンバーが見つからない場合は`None`
+    pub(in crate::compiler::ir) fn ptr_member_field_ty(
+        &self,
+        ptr_name: &str,
+        member: &str,
+    ) -> Option<TyNode> {
+        let struct_name = self.var_tree.get_ty_name(ptr_name).ok()?;
+        self.struct_tree
+            .get(&struct_name)?
+            .fields
+            .iter()
+            .find(|field| field.name == member)
+            .map(|field| field.ty.clone())
+    }
+
+    /// `ptr_member_field_ty`の、契約の検査用(`ExprTy`)版。見つからなければ`Unresolved`
+    fn ptr_member_ty(&self, ptr_name: &str, member: &str) -> ExprTy {
+        self.ptr_member_field_ty(ptr_name, member)
+            .map_or(ExprTy::Unresolved, ExprTy::Known)
+    }
+
     /// 契約の検査のために、式の型を調べる
     /// (`&var`や`*var`のように、間接的に指している場合も辿る)
     ///
@@ -159,11 +182,17 @@ impl IR {
             }
             // 代入式の値の型は、代入先の型
             ExprNode::Assign(assign) => self.expr_ty_node(&assign.dst),
+            // `self->name` / `[ptr].name`: ポインタ変数(`self`など)自身の型ではなく、
+            // 指す先の構造体のメンバー`name`の型で検査する
+            ExprNode::PtrMember { name, target, .. } => match &target.node {
+                ExprNode::Var(member) => self.ptr_member_ty(name, member),
+                // メゾット呼び出しや配列メンバーの要素は、ここでは型を解決できない
+                _ => ExprTy::Unresolved,
+            },
             // 契約を持つ値を取り出せる式だが、ここでは型を解決できない
             // (メンバー・配列の要素・分岐やループの値・変数の定義)
             ExprNode::Scope { .. }
             | ExprNode::Member { .. }
-            | ExprNode::PtrMember { .. }
             | ExprNode::RefArray { .. }
             | ExprNode::VariantBind(_)
             | ExprNode::DefVar(_)

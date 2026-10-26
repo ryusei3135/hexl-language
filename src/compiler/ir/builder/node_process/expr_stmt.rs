@@ -503,16 +503,45 @@ impl IR {
         expect_byte: &types::Size,
         attr: &parse::VarMutAttr,
     ) -> Result<inst::Inst, err::ErrKind> {
-        self.ensure_var_is_assignable(&assign_node.name, attr)?;
+        // `self->name = value` / `[ptr].name = value`の代入先は、ポインタ変数
+        // (`assign_node.name`、`self`など)ではなく、指す先の構造体のメンバー`name`。
+        // 変数の型や追跡している値は、メンバーではなくポインタ変数のものなので、
+        // メンバーへの代入では`name`の型で検査し、ポインタ変数の記録は更新しない
+        let ptr_member = match &assign_node.dst.node {
+            ExprNode::PtrMember { name, target, .. } => match &target.node {
+                ExprNode::Var(member) => Some((name.as_str(), member.as_str())),
+                _ => None,
+            },
+            _ => None,
+        };
 
-        // 範囲付きポインタ変数への再代入が範囲を超えていないかを確認する
-        // (`src/ir/checker/tracking.rs`)
-        self.range_ptr_reassign_checker(&assign_node.name, &assign_node.value);
-        // 静的に分かる値であれば、以降の範囲チェックで使えるよう記録しておく
-        self.record_var_value(&assign_node.name, &assign_node.value);
+        let value_name = if let Some((ptr_name, member)) = ptr_member {
+            // `must`の契約を持つメンバーは、値をすり替えられないため再代入できない
+            if self
+                .ptr_member_field_ty(ptr_name, member)
+                .is_some_and(|ty| ty.is_contract_must())
+            {
+                CompileErr::assign_to_must_var(member, Rc::clone(&self.current_span))?;
+            }
+            if !matches!(attr, parse::VarMutAttr::Var) {
+                CompileErr::assign_to_imm_var(member, Rc::clone(&self.current_span))?;
+            }
+            // 値の生成で一時領域を確保する場合に、ポインタ変数(`self`)の名前で
+            // 変数を登録して上書きしないよう、メンバー用の別名を使う
+            format!("$ptr_member_{}", self.id_counter)
+        } else {
+            self.ensure_var_is_assignable(&assign_node.name, attr)?;
+
+            // 範囲付きポインタ変数への再代入が範囲を超えていないかを確認する
+            // (`src/ir/checker/tracking.rs`)
+            self.range_ptr_reassign_checker(&assign_node.name, &assign_node.value);
+            // 静的に分かる値であれば、以降の範囲チェックで使えるよう記録しておく
+            self.record_var_value(&assign_node.name, &assign_node.value);
+            assign_node.name.clone()
+        };
 
         let right_expr_idx: usize = self.gen_named_expr_ir::<M>(
-            &assign_node.name,
+            &value_name,
             *assign_node.value.clone(),
             &expect_byte,
             &attr,

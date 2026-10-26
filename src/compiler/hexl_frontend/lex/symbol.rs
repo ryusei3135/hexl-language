@@ -72,6 +72,8 @@ impl Lexer {
                     Tkn::RAngleBracket => Tkn::RShift,
                     // `=>` (matchの条件/パターンの後に付ける矢印)
                     Tkn::Equal => Tkn::Arrow,
+                    // ->
+                    Tkn::Sub => Tkn::AccessPtr,
                     _ => return None,
                 };
                 self.gen_tkns.pop();

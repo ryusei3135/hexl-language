@@ -430,6 +430,13 @@ impl Parser {
                     self.advance_tkn_checked()?;
                     return self.scope_member_node(name, init_struct);
                 }
+                // `name->member` / `name->method(..)`は`[name].member`と同じ。
+                // `name.member`(`build_scope_node`)と同じく、メンバー名(または
+                // メゾット呼び出しの次)を指した状態で返す
+                lex::Tkn::AccessPtr => {
+                    self.next_tkn(&["->"])?;
+                    return self.ptr_member_node(&name, None, None);
+                }
                 // 関数を呼ぶノード
                 lex::Tkn::LParen => {
                     self.next_tkn(&[])?;
@@ -453,6 +460,8 @@ impl Parser {
             self.next_tkn(&["[", "*", "number", "float", "string", "name", "(", "{"])?;
         // 値の先頭のトークン(`next_tkn`で進めた後の現在のトークン)の位置
         let span = self.build_err_span();
+        // `( expr )`で囲まれた式の場合にtrue。この`)`は末尾で読み飛ばす必要がある
+        let mut from_paren = false;
         let v = match value_tkn {
             // 変数のアドレスを取得するノード
             lex::Tkn::LBracket => self.get_var_addr_node()?,
@@ -474,6 +483,7 @@ impl Parser {
                 let Some(self_name) = self.struct_self_name.clone() else {
                     return crate::err_at!(self.self_outside_of_type());
                 };
+                // `self.name` / `self->name`は`gen_name_node`が処理する
                 // `expr/value_api.rs`
                 self.gen_name_node::<true>(self_name, init_struct)?
             }
@@ -522,6 +532,7 @@ impl Parser {
                     dbg!(self.current_tkn());
                     return crate::err_at!(self.unexpect_tkn_in_expr());
                 } else {
+                    from_paren = true;
                     result
                 }
             }
@@ -552,8 +563,23 @@ impl Parser {
             }
         }
 
+        // `self.name`のようなメンバーアクセスは、メンバー名の次のトークンまで
+        // 進んだ状態で返ってくる。そのため次が`)`の場合、この`)`は
+        // 関数呼び出しの引数の終了(`f(self.name)`)であり、すでに現在の
+        // トークンとして指しているので、ここで読み飛ばしてはいけない
+        // (読み飛ばすと`call_func_expr`が`)`を見つけられず、次の`}`などで
+        // `, or `)`が必要です`のエラーになる)。
+        // `( expr )`で囲まれた式の`)`だけは、ここで読み飛ばす
+        fn member_already_at_rparen(v: &Expr) -> bool {
+            matches!(
+                v.node,
+                ExprNode::Member { .. } | ExprNode::PtrMember { .. }
+            )
+        }
+
         if already_positioned_after_call(&v) == false {
             match self.current_tkn() {
+                lex::Tkn::RParen if !from_paren && member_already_at_rparen(&v) => {}
                 lex::Tkn::Name(_)
                 | lex::Tkn::Number(_)
                 | lex::Tkn::Float(_)
