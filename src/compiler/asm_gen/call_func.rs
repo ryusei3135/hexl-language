@@ -864,7 +864,10 @@ impl AsmEmitter {
     ) -> Result<(), err::ErrKind> {
         let is_mem_write = matches!(
             self.curr_inst[dst],
-            inst::Inst::Pointer(..) | inst::Inst::InsertArr { .. } | inst::Inst::RefStruct { .. }
+            inst::Inst::Pointer(..)
+                | inst::Inst::InsertArr { .. }
+                | inst::Inst::RefStruct { .. }
+                | inst::Inst::RefStructPtr { .. }
         );
 
         if is_mem_write {

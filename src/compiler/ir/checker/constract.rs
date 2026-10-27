@@ -138,6 +138,13 @@ impl IR {
         }
     }
 
+    /// 処理中の関数が、構造体の初期化メゾット(`Struct::new`)か
+    pub(in crate::compiler::ir) fn in_constructor(&self) -> bool {
+        self.define_meta_data
+            .last()
+            .is_some_and(|f| f.name == "new" && f.module().is_some())
+    }
+
     /// ポインタ変数`ptr_name`が指す構造体の、メンバー`member`の宣言上の型を返す
     /// (`self->name`/`[ptr].name`の`name`の型)。
     /// 構造体やメンバーが見つからない場合は`None`
@@ -242,7 +249,23 @@ impl IR {
 
         // 一度も渡されていない変数、または条件分岐の一部でしか
         // 契約を終了していない変数はエラー
+        // 構造体のメゾット(第一引数が`Self`のものを含む)は、契約を持つ値を
+        // フィールドへ入れたり、`self`経由で扱ったりするので、関数が終わるときに
+        // 契約が終了していなくてもエラーにしない
+        // (契約の終了は、構造体を初期化したスコープで確認する)
+        if Self::is_struct_method(func) {
+            return Ok(());
+        }
         self.check_all_end_constract(&must_vars, &func.name, &func.span)
+    }
+
+    /// 構造体のメゾット、または第一引数が`Self`(`Self*`)の関数か
+    fn is_struct_method(func: &FuncDefine) -> bool {
+        func.module.is_some()
+            || func
+                .params
+                .first()
+                .is_some_and(|param| Self::ty_contains_self(&param.ty))
     }
 }
 

@@ -507,7 +507,7 @@ impl AsmEmitter {
 
     fn check_node_is_struct(&self, node_idx: usize) -> bool {
         match &self.curr_inst[node_idx] {
-            inst::Inst::RefStruct { .. } => true,
+            inst::Inst::RefStruct { .. } | inst::Inst::RefStructPtr { .. } => true,
             _ => false,
         }
     }
@@ -617,6 +617,12 @@ impl AsmEmitter {
             }
             inst::Inst::RefStruct { src, pos, size } => {
                 // `asm_emitter/operand_txt/`に記述
+                self.ref_struct_txt(&src, pos, size.to_bytes())
+            }
+            // `self->name`: 構造体を指すポインタ変数`src`の先のメンバー。
+            // ポインタ変数は(レジスタまたは退避先から読み込んだ)ポインタの値を
+            // ベースにするので、構造体の先頭を指すポインタのメンバー参照と同じ形になる
+            inst::Inst::RefStructPtr { src, pos, size } => {
                 self.ref_struct_txt(&src, pos, size.to_bytes())
             }
             inst::Inst::GetAddress(index) => self.extract_operand_text(index, this_is_self),

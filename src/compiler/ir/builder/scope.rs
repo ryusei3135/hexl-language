@@ -157,7 +157,15 @@ impl IR {
                     );
                 }
             }
-            self.gen_call_fn_ir::<M>(scope.last().map(|x| x.as_str()), &call_func_node, None)
+            // `a: A = A::new()`のように、`new(): Self`が構造体を値で返す場合は、
+            // 変数の名前を渡して、戻り値を受け取る領域を確保させる
+            // (`self`を受け取るメゾットは、上で確保した領域へ書き込むので不要)
+            let return_var_name = if needs_self_area { None } else { var_name };
+            self.gen_call_fn_ir::<M>(
+                scope.last().map(|x| x.as_str()),
+                &call_func_node,
+                return_var_name,
+            )
         } else {
             panic!();
         }

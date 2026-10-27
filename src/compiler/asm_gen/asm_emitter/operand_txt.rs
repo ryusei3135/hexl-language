@@ -42,7 +42,8 @@ impl AsmEmitter {
                 .parse::<usize>()
                 .map_err(|_| err::ErrKind::asm_emit_array_index_not_number(value.to_string()))?,
             // 配列の添字が構造体のメンバ変数の場合
-            inst::Inst::RefStruct { src, pos, size } => {
+            inst::Inst::RefStruct { src, pos, size }
+            | inst::Inst::RefStructPtr { src, pos, size } => {
                 // 構造体からindexを取り出す処理を追加
                 return self.ref_arr_for_struct_member(name, &src, pos, &size, dst, this_is_self);
             }

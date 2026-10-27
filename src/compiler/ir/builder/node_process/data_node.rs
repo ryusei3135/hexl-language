@@ -289,7 +289,9 @@ impl IR {
         fields: &mut HashMap<String, Box<Expr>>,
     ) -> Result<inst::Inst, err::ErrKind> {
         // 構造体のメゾットを処理中かつ初期化する構造体が`self`
-        let struct_name: String = if self.this_is_self {
+        // `ret Self { .. }`のように、パーサーが`Self`を構造体の名前へ解決済みの場合は、
+        // 変数ではなく構造体の定義として直接引く(`self`変数の型から求める必要はない)
+        let struct_name: String = if self.this_is_self && self.struct_tree.get(name).is_none() {
             self.var_tree.get_ty_name(name)?.to_owned()
         } else {
             name.to_string()

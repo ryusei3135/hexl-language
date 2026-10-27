@@ -32,6 +32,11 @@ impl IR {
 
         if first_param_is_self {
             func.ret_ty = Self::resolve_self_like_ty(&func.ret_ty);
+        } else if let ast::TyNode::SelfTy(name) = &func.ret_ty {
+            // `new(): Self`のように、第一引数が`Self`ではないメゾットの`Self`の戻り値は、
+            // 自身の構造体を値で返す(`ret Self { .. }`)。
+            // 構造体を返す通常の関数(`f(): Name`)と同じ扱いにする
+            func.ret_ty = ast::TyNode::Ty(name.clone());
         } else if Self::ty_contains_self(&func.ret_ty) {
             panic!(
                 "Self型の戻り値は、第一引数がSelfのメソッドでのみ使えます: {:?}",

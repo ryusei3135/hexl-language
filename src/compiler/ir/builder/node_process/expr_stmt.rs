@@ -517,9 +517,12 @@ impl IR {
 
         let value_name = if let Some((ptr_name, member)) = ptr_member {
             // `must`の契約を持つメンバーは、値をすり替えられないため再代入できない
-            if self
-                .ptr_member_field_ty(ptr_name, member)
-                .is_some_and(|ty| ty.is_contract_must())
+            // ただし、構造体の初期化(`new`メゾット)の中での最初の代入は許可する。
+            // フィールドの契約は、構造体を初期化したスコープで終了すればよい
+            if !self.in_constructor()
+                && self
+                    .ptr_member_field_ty(ptr_name, member)
+                    .is_some_and(|ty| ty.is_contract_must())
             {
                 CompileErr::assign_to_must_var(member, Rc::clone(&self.current_span))?;
             }

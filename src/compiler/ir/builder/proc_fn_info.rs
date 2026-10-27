@@ -50,6 +50,9 @@ impl IR {
     /// 現在処理中の関数の情報を登録する
     /// **これは自分自身のファイルの中の関数**
     pub(super) fn entry_fn_info(&mut self, info: &FuncDefine) -> Result<(), err::ErrKind> {
+        // 前の関数の最後の文が立てた契約のフラグが、この関数の引数の登録
+        // (`push_param_meta_data`)に持ち越されないようにする
+        self.constract_flag.reset();
         self.check_must_var_used(&info)?;
         self.func_ret_ty = Some(info.ret_ty.clone());
 

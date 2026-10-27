@@ -115,7 +115,7 @@ impl IR {
         match &expr.node {
             ExprNode::DefVar(var) => {
                 self.scan_loop_expr(fn_name, &var.value, scope)?;
-                if var.ty.is_contract_must() {
+                if self.owns_contract(&var.ty) {
                     scope
                         .borrow_mut()
                         .push(MustVar::new(var.name.clone(), &expr.span));
@@ -152,6 +152,13 @@ impl IR {
                     }
                     self.scan_loop_expr(fn_name, arg, scope)?;
                 }
+            }
+            // `a.del()`: `must`のフィールドを持つ構造体の契約を終了するメゾット
+            ExprNode::Member { scope: path, target } if Self::is_contract_end_call(target) => {
+                if let Some(name) = path.last() {
+                    Self::mark_used(name, scope);
+                }
+                self.scan_loop_expr(fn_name, target, scope)?;
             }
             // 代入・演算・配列や構造体の初期化など、それ以外の式は子の式を辿る。
             // (ここで辿らないと、式の奥にある反復処理や終了を見落とす)
@@ -292,7 +299,7 @@ impl IR {
                 if let ExprNode::DefVar(ref var) = expr.node {
                     {
                         let mut g = guarded.borrow_mut();
-                        if var.ty.is_contract_must() {
+                        if self.owns_contract(&var.ty) {
                             // `ended_by`(`walk_expr`)が積んだ、この変数自身の要素は検査の対象外にする
                             if let Some(own) = g
                                 .iter_mut()
@@ -313,7 +320,7 @@ impl IR {
                     }
                     // この周で定義した契約変数(入れ子のループへ引き継ぐ)。
                     // 同名の変数を定義し直したら、前の変数はマスクで隠す
-                    if var.ty.is_contract_must() {
+                    if self.owns_contract(&var.ty) {
                         locals.push(MustVar::new(var.name.clone(), &expr.span));
                     } else if locals.iter().any(|v| v.name == var.name) {
                         locals.push(MustVar::mask(var.name.clone(), &expr.span));

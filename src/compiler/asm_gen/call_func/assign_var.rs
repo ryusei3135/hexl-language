@@ -26,7 +26,7 @@ impl AsmEmitter {
         // 書き込む値のサイズを表しているため、`get_var_ty(&name)`で
         // 問題なかった。
         let mnemonic_size = match &self.curr_inst[dst] {
-            inst::Inst::RefStruct { .. } => match &self.curr_inst[value] {
+            inst::Inst::RefStruct { .. } | inst::Inst::RefStructPtr { .. } => match &self.curr_inst[value] {
                 inst::Inst::Num { size, .. } => size.clone(),
                 _ => self.get_var_ty(&name)?,
             },

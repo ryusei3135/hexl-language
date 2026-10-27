@@ -47,7 +47,33 @@ impl MustVar {
     }
 }
 
+/// 契約を終了するメゾットの名前(`must`のフィールドを持つ構造体の、デストラクタ)
+const CONTRACT_END_METHOD: &str = "del";
+
 impl IR {
+    /// 型が、契約を持つか
+    ///
+    /// - `T must=f`
+    /// - `must`のフィールドを持つ構造体`A`(フィールドの契約は、構造体を
+    ///   初期化したスコープの中で`a.del()`により終了すればよい)
+    pub(super) fn owns_contract(&self, ty: &TyNode) -> bool {
+        if ty.is_contract_must() {
+            return true;
+        }
+        match ty {
+            TyNode::Ty(name) => self
+                .struct_tree
+                .get(name)
+                .is_some_and(|def| def.fields.iter().any(|f| f.ty.is_contract_must())),
+            _ => false,
+        }
+    }
+
+    /// `変数.del()`のような、構造体のフィールドの契約を終了するメゾット呼び出しか
+    pub(super) fn is_contract_end_call(target: &Expr) -> bool {
+        matches!(&target.node, ExprNode::CallFunc(call) if call.name == CONTRACT_END_METHOD)
+    }
+
     /// 分岐の解析用に、変数の状態を複製する
     /// (`Rc`の`clone`は同じ一覧を共有してしまうので、中身を複製した別の一覧を作る)
     pub(super) fn fork_vars(must_vars: &MustVarsTy) -> MustVarsTy {
@@ -104,7 +130,7 @@ impl IR {
             ExprNode::DefVar(var) => {
                 // 初期値の中で終了した契約(定義した変数自身はまだ終了していない)
                 let ends = self.walk_expr(&var.value, must_vars, fn_name, in_loop)?;
-                if var.ty.is_contract_must() {
+                if self.owns_contract(&var.ty) {
                     // 同名の契約変数が外側にあっても、既存の要素は書き換えず
                     // 新しい要素を積む。名前の検索は後ろから行うので内側が優先され、
                     // スコープを抜けるときの`truncate`で内側の要素だけが消える
@@ -137,6 +163,18 @@ impl IR {
                     let found = self.walk_expr(arg, must_vars, fn_name, in_loop)?;
                     Self::push_ends(&mut ends, found);
                 }
+                Ok(ends)
+            }
+            // `a.del()`: `must`のフィールドを持つ構造体の契約を、このスコープで終了する
+            ExprNode::Member { scope, target } if Self::is_contract_end_call(target) => {
+                let mut ends: Vec<String> = Vec::new();
+                if let Some(name) = scope.last() {
+                    if Self::mark_used(name, must_vars) {
+                        Self::push_ends(&mut ends, vec![name.clone()]);
+                    }
+                }
+                let found = self.walk_expr(target, must_vars, fn_name, in_loop)?;
+                Self::push_ends(&mut ends, found);
                 Ok(ends)
             }
             // 条件分岐(ループの外)は`branch.rs`の`walk_match`、反復処理は`loop_check.rs`で扱う
