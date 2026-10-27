@@ -185,7 +185,7 @@ impl Parser {
 
         for f in include_c_list {
             let content = fs::read_to_string(f).unwrap();
-            let mut n = c_frontend::emit_c_node(&content);
+            let mut n = c_frontend::emit_c_node(&content, &Rc::new(f.to_string()));
             // `dir/file.c` -> `file`
             let gen_mod = Path::new(f)
                 .file_stem()

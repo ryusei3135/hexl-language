@@ -11,7 +11,7 @@ pub fn handle_update(target_version: Option<String>) -> Result<bool, Box<dyn std
     current_exe_dir.pop(); // バイナリ名を除去して親フォルダパスにする
 
     let mut builder = self_update::backends::github::Update::configure();
-    
+
     builder
         .repo_owner("ryusei3135")
         .repo_name("hexl-language")

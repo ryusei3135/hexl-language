@@ -571,10 +571,7 @@ impl Parser {
         // `, or `)`が必要です`のエラーになる)。
         // `( expr )`で囲まれた式の`)`だけは、ここで読み飛ばす
         fn member_already_at_rparen(v: &Expr) -> bool {
-            matches!(
-                v.node,
-                ExprNode::Member { .. } | ExprNode::PtrMember { .. }
-            )
+            matches!(v.node, ExprNode::Member { .. } | ExprNode::PtrMember { .. })
         }
 
         if already_positioned_after_call(&v) == false {

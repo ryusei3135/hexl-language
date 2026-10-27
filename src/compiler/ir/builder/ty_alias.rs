@@ -169,7 +169,7 @@ fn expr(e: &mut ast::Expr, map: &AliasMap) {
             name(n, map);
             fields.values_mut().for_each(|v| expr(v, map));
         }
-        E::Sizeof(..) => {},
+        E::Sizeof(..) => {}
         E::EnumVariant { name: n, .. } => name(n, map),
 
         E::GetAddress(a)

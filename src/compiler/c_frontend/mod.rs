@@ -3,7 +3,7 @@ mod parse;
 
 use crate::compiler::ast::Group1Node;
 use parse::parse_c;
-use std::{fmt, path::PathBuf};
+use std::{fmt, path::PathBuf, rc::Rc};
 
 /// Cフロントエンドの設定(コンパイラの`-I` `-isystem` `-D` `-U`相当)
 #[derive(Clone, Debug, Default)]
@@ -63,8 +63,12 @@ fn build_preprocessor(opts: &COptions) -> Result<lex::Preprocessor, CFrontendErr
     Ok(pp)
 }
 
-fn finish(pp: &lex::Preprocessor, tokens: Vec<lex::TokenInfo>) -> Result<COutput, CFrontendError> {
-    let out = parse_c(tokens).map_err(|e| CFrontendError(e.to_string()))?;
+fn finish(
+    pp: &lex::Preprocessor,
+    tokens: Vec<lex::TokenInfo>,
+    #[cfg(not(test))] self_file_name: &Rc<String>,
+) -> Result<COutput, CFrontendError> {
+    let out = parse_c(tokens, &self_file_name).map_err(|e| CFrontendError(e.to_string()))?;
     let mut warnings = pp.warnings().to_vec();
     warnings.extend(out.warnings);
     Ok(COutput {
@@ -79,21 +83,36 @@ pub fn try_emit_c_node(
     file_name: &str,
     src: &str,
     opts: &COptions,
+    #[cfg(not(test))] self_file_name: &Rc<String>,
 ) -> Result<COutput, CFrontendError> {
     let mut pp = build_preprocessor(opts)?;
     let tokens = pp
         .preprocess(file_name, src)
         .map_err(|e| CFrontendError(e.to_string()))?;
-    finish(&pp, tokens)
+    finish(
+        &pp,
+        tokens,
+        #[cfg(not(test))]
+        &self_file_name,
+    )
 }
 
 /// Cのファイルを変換する(`#include "x.h"`は、そのファイルのあるディレクトリからも探す)
-pub fn try_emit_c_node_from_file(path: &str, opts: &COptions) -> Result<COutput, CFrontendError> {
+pub fn try_emit_c_node_from_file(
+    path: &str,
+    opts: &COptions,
+    #[cfg(not(test))] self_file_name: &Rc<String>,
+) -> Result<COutput, CFrontendError> {
     let mut pp = build_preprocessor(opts)?;
     let tokens = pp
         .preprocess_file(path)
         .map_err(|e| CFrontendError(e.to_string()))?;
-    finish(&pp, tokens)
+    finish(
+        &pp,
+        tokens,
+        #[cfg(not(test))]
+        &self_file_name,
+    )
 }
 
 /// 警告を標準エラーへ出し、ノードだけ返す。エラーならメッセージつきでpanicする
@@ -113,11 +132,20 @@ fn report(result: Result<COutput, CFrontendError>) -> Vec<Group1Node> {
 }
 
 /// c言語のコードを変換
-pub fn emit_c_node(src: &str) -> Vec<Group1Node> {
-    report(try_emit_c_node("<input>", src, &COptions::default()))
+pub fn emit_c_node(src: &str, self_file_name: &Rc<String>) -> Vec<Group1Node> {
+    report(try_emit_c_node(
+        "<input>",
+        src,
+        &COptions::default(),
+        self_file_name,
+    ))
 }
 
 /// c言語のファイルを変換(`#include "x.h"`を、ファイルのあるディレクトリから解決できる)
-pub fn emit_c_node_from_file(path: &str) -> Vec<Group1Node> {
-    report(try_emit_c_node_from_file(path, &COptions::default()))
+pub fn emit_c_node_from_file(path: &str, self_file_name: &Rc<String>) -> Vec<Group1Node> {
+    report(try_emit_c_node_from_file(
+        path,
+        &COptions::default(),
+        self_file_name,
+    ))
 }

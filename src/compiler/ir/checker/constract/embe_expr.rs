@@ -41,9 +41,7 @@ impl IR {
                 let r = Self::is_contract_value(&n.2)?;
                 (l == r).then_some(l)
             }
-            _ => {
-                Some(true)
-            }
+            _ => Some(true),
         }
     }
 }

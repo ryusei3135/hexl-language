@@ -18,8 +18,12 @@ impl Parser {
     ///
     /// ## 引数
     /// - src `${}`の中に書かれていた文字列(例: `"x.y"`, `"*p"`)
-    pub(super) fn parse_asm_operand(&self, src: &str) -> Result<Expr, err::ErrKind> {
-        let mut lexer = lex::Lexer::new();
+    pub(super) fn parse_asm_operand(
+        &self,
+        src: &str,
+        self_file_name: &Rc<String>,
+    ) -> Result<Expr, err::ErrKind> {
+        let mut lexer = lex::Lexer::new(&self_file_name);
         // 字句解析のエラーは、`${}`の中の文字列が不正ということ
         lexer
             .analy(&src.to_string())

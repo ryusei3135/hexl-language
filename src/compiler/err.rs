@@ -24,20 +24,29 @@ pub struct Span {
     pub line: usize,
     pub pos: usize,
     pub line_txt: String,
+    #[cfg(not(test))]
+    pub self_file_name: Rc<String>,
 }
 
 impl Span {
-    pub fn new(line: usize, pos: usize, line_txt: String) -> Self {
+    pub fn new(
+        line: usize,
+        pos: usize,
+        line_txt: String,
+        #[cfg(not(test))] self_file_name: &Rc<String>,
+    ) -> Self {
         Self {
             line: line,
             pos: pos,
             line_txt,
+            #[cfg(not(test))]
+            self_file_name: Rc::clone(&self_file_name),
         }
     }
 
     /// 位置情報が存在しない(取得できない)場合に使う
     pub fn unknown() -> Self {
-        Self::new(0, 0, "undefine".to_string())
+        Self::new(0, 0, "undefine".to_string(), &Rc::new("nont".to_string()))
     }
 }
 

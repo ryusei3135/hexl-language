@@ -656,7 +656,11 @@ impl MngAsmFmt {
     }
 
     /// 除算(`idiv`/`div`)。`unsigned`なら`div`
-    pub(in crate::compiler::asm_gen) fn get_div_inst(&self, unsigned: bool, operand: &str) -> String {
+    pub(in crate::compiler::asm_gen) fn get_div_inst(
+        &self,
+        unsigned: bool,
+        operand: &str,
+    ) -> String {
         let key = if unsigned { "udiv" } else { "idiv" };
         self.tmpl_or_default(key).replace("{dst}", operand)
     }

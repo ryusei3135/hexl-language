@@ -5,18 +5,20 @@ use crate::compiler::err::Span;
 use crate::compiler::hexl_frontend::parse::VarMutAttr;
 use std::rc::Rc;
 
-fn parse(src: &str) -> Vec<Group1Node> {
+fn parse(src: &str, #[cfg(not(test))] self_file_name: &Rc<String>) -> Vec<Group1Node> {
     let toks = Preprocessor::new()
         .preprocess("t.c", src)
         .expect("preprocess");
-    parse_c(toks).unwrap_or_else(|e| panic!("{}", e)).nodes
+    parse_c(toks, &self_file_name)
+        .unwrap_or_else(|e| panic!("{}", e))
+        .nodes
 }
 
-fn parse_err(src: &str) -> ParseError {
+fn parse_err(src: &str, #[cfg(not(test))] self_file_name: &Rc<String>) -> ParseError {
     let toks = Preprocessor::new()
         .preprocess("t.c", src)
         .expect("preprocess");
-    parse_c(toks).expect_err("エラーになるはず")
+    parse_c(toks, &self_file_name).expect_err("エラーになるはず")
 }
 
 fn func(nodes: &[Group1Node], name: &str) -> FuncDefine {

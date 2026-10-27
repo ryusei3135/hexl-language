@@ -8,8 +8,8 @@ use crate::compiler::err::CompileErr;
 // 条件分岐・反復処理・共通の処理は、それぞれ別のファイルに分けている
 mod branch;
 mod common;
-mod loop_check;
 mod embe_expr;
+mod loop_check;
 
 use common::{MustVar, MustVarsTy};
 
@@ -245,8 +245,6 @@ impl IR {
         self.check_all_end_constract(&must_vars, &func.name, &func.span)
     }
 }
-
-
 
 // ===== テスト =====
 #[cfg(test)]
@@ -788,9 +786,7 @@ g(v: int must=d) { d(v) }
         // 契約中(未終了)の`x`は、契約のない通常の`x`でも隠せない
         // (IR生成が`ReassignActiveContract`にする)
         assert_err_kind(
-            &main_with(
-                "x: int must=c = a()\ncond 1 == 1 {\n x: int = 1\n e(x)\n} else {}\nc(x)",
-            ),
+            &main_with("x: int must=c = a()\ncond 1 == 1 {\n x: int = 1\n e(x)\n} else {}\nc(x)"),
             "ReassignActiveContract",
         );
         assert_err_kind(

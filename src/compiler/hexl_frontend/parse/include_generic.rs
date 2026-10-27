@@ -106,7 +106,7 @@ impl Parser {
         let Ok(content) = std::fs::read_to_string(&file) else {
             return;
         };
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new(&Rc::new(file.clone()));
         if lexer.analy(&content).is_err() {
             return;
         }
@@ -288,10 +288,7 @@ impl Parser {
             let target = match &t.tkn {
                 lex::Tkn::Name(n)
                     if i > 0
-                        && !matches!(
-                            tkns[i - 1].tkn,
-                            lex::Tkn::Dot | lex::Tkn::ModPathTkn
-                        )
+                        && !matches!(tkns[i - 1].tkn, lex::Tkn::Dot | lex::Tkn::ModPathTkn)
                         && (fns.is_some_and(|f| f.contains(n))
                             || generics.is_some_and(|g| g.contains_key(n))) =>
                 {

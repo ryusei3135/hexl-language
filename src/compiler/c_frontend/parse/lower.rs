@@ -7,6 +7,7 @@ use super::cast::*;
 use super::error::*;
 use super::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TagKind {
@@ -42,26 +43,28 @@ pub struct Lowerer {
     frames: Vec<Frame>,
     rename_seq: usize,
     cur_line: usize,
+    self_file_name: Rc<String>,
 }
 
 fn unsup<T>(line: usize, msg: impl Into<String>) -> PResult<T> {
     Err(ParseError::unsupported(line, 0, msg))
 }
 
-fn span_at(line: usize) -> std::rc::Rc<crate::compiler::err::Span> {
+fn span_at(line: usize, self_file_name: &Rc<String>) -> std::rc::Rc<crate::compiler::err::Span> {
     std::rc::Rc::new(crate::compiler::err::Span::new(
         line,
         0,
         "undefine".to_string(),
+        self_file_name,
     ))
 }
 
-fn expr_at(node: ExprNode, line: usize) -> Expr {
-    Expr::new(node, span_at(line))
+fn expr_at(node: ExprNode, line: usize, self_file_name: &Rc<String>) -> Expr {
+    Expr::new(node, span_at(line, self_file_name))
 }
 
 impl Lowerer {
-    pub fn new() -> Self {
+    pub fn new(file_name: &Rc<String>) -> Self {
         Lowerer {
             tags: HashMap::new(),
             structs: HashMap::new(),
@@ -72,6 +75,7 @@ impl Lowerer {
             frames: Vec::new(),
             rename_seq: 0,
             cur_line: 0,
+            self_file_name: Rc::clone(&file_name),
         }
     }
 
@@ -229,11 +233,15 @@ impl Lowerer {
                     fs.push(StructField {
                         name: f.name.clone(),
                         ty: self.to_ty(&f.ty, 0)?,
-                        span: span_at(0),
+                        span: span_at(0, &self.self_file_name),
                     });
                 }
-                self.out
-                    .push(StructDefine::new(name, fs, Vec::new(), span_at(0)));
+                self.out.push(StructDefine::new(
+                    name,
+                    fs,
+                    Vec::new(),
+                    span_at(0, &self.self_file_name),
+                ));
             }
             CDef::Union { name, fields } => {
                 let mut fs = Vec::new();
@@ -242,11 +250,15 @@ impl Lowerer {
                         name: f.name.clone(),
                         ty: Some(self.to_ty(&f.ty, 0)?),
                         mode: VariantMode::Unsafe,
-                        span: span_at(0),
+                        span: span_at(0, &self.self_file_name),
                     });
                 }
-                self.out
-                    .push(VariantDefine::new(name, fs, Vec::new(), span_at(0)));
+                self.out.push(VariantDefine::new(
+                    name,
+                    fs,
+                    Vec::new(),
+                    span_at(0, &self.self_file_name),
+                ));
             }
             CDef::Enum { name, members } => {
                 for (i, (m, v)) in members.iter().enumerate() {
@@ -262,10 +274,14 @@ impl Lowerer {
                 }
                 let fs = members
                     .into_iter()
-                    .map(|(m, _)| VariantField::typeless_new(m, span_at(0)))
+                    .map(|(m, _)| VariantField::typeless_new(m, span_at(0, &self.self_file_name)))
                     .collect();
-                self.out
-                    .push(VariantDefine::new(name, fs, Vec::new(), span_at(0)));
+                self.out.push(VariantDefine::new(
+                    name,
+                    fs,
+                    Vec::new(),
+                    span_at(0, &self.self_file_name),
+                ));
             }
         }
         Ok(())
@@ -297,7 +313,7 @@ impl Lowerer {
                 } else {
                     VarMutAttr::Var
                 },
-                span: span_at(f.line),
+                span: span_at(f.line, &self.self_file_name),
             });
         }
         let ret_ty = self.to_ty(&f.ret, f.line)?;
@@ -324,7 +340,13 @@ impl Lowerer {
             }
         }
 
-        let mut node = FuncDefine::new(f.name, params, ret_ty, !f.is_static, span_at(f.line));
+        let mut node = FuncDefine::new(
+            f.name,
+            params,
+            ret_ty,
+            !f.is_static,
+            span_at(f.line, &self.self_file_name),
+        );
         if let Group1Node::FuncDefine(fd) = &mut node {
             for b in body {
                 fd.add(b);
@@ -375,7 +397,7 @@ impl Lowerer {
     // ---------------------------------------------------------------
 
     fn info(&self, line: usize, node: Group2Node) -> Group2Info {
-        node.gen_group_info(line, span_at(line))
+        node.gen_group_info(line, span_at(line, &self.self_file_name))
     }
 
     /// 新しい`Body`を作って、中で`s`を変換する
@@ -465,13 +487,16 @@ impl Lowerer {
             CStmtKind::Return(e) => {
                 let v = match e {
                     Some(e) => self.lower_expr(e, true)?,
-                    None => void_value(line),
+                    None => void_value(line, &self.self_file_name),
                 };
                 out.push(self.info(line, Group2Node::Stmt(StmtNode::Return(v))));
             }
             CStmtKind::Break => match self.frames.last() {
                 Some(Frame::Loop { .. }) => {
-                    out.push(self.info(line, Group2Node::Stmt(StmtNode::Break(span_at(line)))));
+                    out.push(self.info(
+                        line,
+                        Group2Node::Stmt(StmtNode::Break(span_at(line, &self.self_file_name))),
+                    ));
                 }
                 Some(Frame::Switch) => {
                     return unsup(
@@ -544,13 +569,16 @@ impl Lowerer {
         } else {
             VarMutAttr::Var
         };
-        Ok(DefineVar::new(&name, value, &tynode, var_attr).wrap(span_at(line)))
+        Ok(DefineVar::new(&name, value, &tynode, var_attr)
+            .wrap(span_at(line, &self.self_file_name)))
     }
 
     fn lower_init(&mut self, ty: &CType, init: Option<&CInit>, line: usize) -> PResult<Expr> {
         match init {
             None => Ok(match ty {
-                CType::Array { .. } => expr_at(ExprNode::Array(Vec::new()), line),
+                CType::Array { .. } => {
+                    expr_at(ExprNode::Array(Vec::new()), line, &self.self_file_name)
+                }
                 _ => match self.tag_kind(ty) {
                     Some(TagKind::Struct) => expr_at(
                         ExprNode::InitStruct {
@@ -559,6 +587,7 @@ impl Lowerer {
                             fields: HashMap::new(),
                         },
                         line,
+                        &self.self_file_name,
                     ),
                     Some(TagKind::Union) => expr_at(
                         ExprNode::InitVariant {
@@ -567,9 +596,14 @@ impl Lowerer {
                             fields: HashMap::new(),
                         },
                         line,
+                        &self.self_file_name,
                     ),
                     // スカラ・ポインタ・列挙型は0で初期化(Cでは不定値だが、0にしても矛盾しない)
-                    _ => expr_at(ExprNode::Number("0".to_string()), line),
+                    _ => expr_at(
+                        ExprNode::Number("0".to_string()),
+                        line,
+                        &self.self_file_name,
+                    ),
                 },
             }),
             Some(CInit::Expr(e)) => self.lower_expr(e, true),
@@ -595,7 +629,7 @@ impl Lowerer {
                     }
                     v.push(self.lower_init(inner, Some(it), line)?);
                 }
-                Ok(expr_at(ExprNode::Array(v), line))
+                Ok(expr_at(ExprNode::Array(v), line, &self.self_file_name))
             }
             _ => match self.tag_kind(ty) {
                 Some(kind @ (TagKind::Struct | TagKind::Union)) => {
@@ -655,6 +689,7 @@ impl Lowerer {
                                 fields,
                             },
                             line,
+                            &self.self_file_name,
                         )
                     } else {
                         expr_at(
@@ -664,6 +699,7 @@ impl Lowerer {
                                 fields,
                             },
                             line,
+                            &self.self_file_name,
                         )
                     })
                 }
@@ -696,7 +732,7 @@ impl Lowerer {
             arms.push(MatchArm {
                 pattern: Box::new(pat),
                 body,
-                span: span_at(cond.line),
+                span: span_at(cond.line, &self.self_file_name),
             });
             match els {
                 None => break,
@@ -721,6 +757,7 @@ impl Lowerer {
                 arm_else,
             },
             c.line,
+            &self.self_file_name,
         ))
     }
 
@@ -729,19 +766,23 @@ impl Lowerer {
             return Ok(None);
         }
         let (e, is_bool) = self.lower_expr_ex(cond, true)?;
-        let neg = negate(e, is_bool, line);
-        let brk = self.info(line, Group2Node::Stmt(StmtNode::Break(span_at(line))));
+        let neg = negate(e, is_bool, line, &self.self_file_name);
+        let brk = self.info(
+            line,
+            Group2Node::Stmt(StmtNode::Break(span_at(line, &self.self_file_name))),
+        );
         let m = expr_at(
             ExprNode::Match {
                 pattern: None,
                 arms: vec![MatchArm {
                     pattern: Box::new(neg),
                     body: vec![brk],
-                    span: span_at(line),
+                    span: span_at(line, &self.self_file_name),
                 }],
                 arm_else: None,
             },
             line,
+            &self.self_file_name,
         );
         Ok(Some(self.info(line, Group2Node::Expr(m))))
     }
@@ -761,6 +802,7 @@ impl Lowerer {
                 body: b?,
             },
             line,
+            &self.self_file_name,
         ))
     }
 
@@ -777,6 +819,7 @@ impl Lowerer {
                 body: b?,
             },
             line,
+            &self.self_file_name,
         ))
     }
 
@@ -816,6 +859,7 @@ impl Lowerer {
                         body: b?,
                     },
                     line,
+                    &self.self_file_name,
                 )),
             ));
             Ok(())
@@ -902,7 +946,7 @@ impl Lowerer {
                         arms.push(MatchArm {
                             pattern: Box::new(p),
                             body: lowered.clone(),
-                            span: span_at(e.line),
+                            span: span_at(e.line, &self.self_file_name),
                         });
                     }
                     Label::Default => arm_else = Some(lowered.clone()),
@@ -916,6 +960,7 @@ impl Lowerer {
                 arm_else,
             },
             line,
+            &self.self_file_name,
         ))
     }
 
@@ -942,7 +987,7 @@ impl Lowerer {
     /// 条件として使う式(0/1の値になる形にする)
     fn lower_cond(&mut self, e: &CExpr) -> PResult<Expr> {
         let (x, is_bool) = self.lower_expr_ex(e, true)?;
-        Ok(to_bool(x, is_bool, e.line))
+        Ok(to_bool(x, is_bool, e.line, &self.self_file_name))
     }
 
     fn bin(&mut self, a: &CExpr, b: &CExpr) -> PResult<(Box<Expr>, Box<Expr>)> {
@@ -981,7 +1026,7 @@ impl Lowerer {
                             );
                         }
                         let (a, b) = self.bin(l, r)?;
-                        make_bin(*op, a, b, line)
+                        make_bin(*op, a, b, line, &self.self_file_name)
                     }
                 };
                 ExprNode::Assign(AssignVar {
@@ -1001,7 +1046,7 @@ impl Lowerer {
                     arms: vec![MatchArm {
                         pattern: Box::new(pat),
                         body: ba,
-                        span: span_at(line),
+                        span: span_at(line, &self.self_file_name),
                     }],
                     arm_else: Some(bb),
                 }
@@ -1057,7 +1102,7 @@ impl Lowerer {
                 );
             }
         };
-        Ok((expr_at(r, line), false))
+        Ok((expr_at(r, line, &self.self_file_name), false))
     }
 
     fn lower_unary(
@@ -1070,30 +1115,46 @@ impl Lowerer {
         Ok(match op {
             UnOp::Plus => (self.lower_expr(a, true)?, false),
             UnOp::Neg => match &a.kind {
-                CExprKind::Int(s) => (expr_at(ExprNode::Number(format!("-{}", s)), line), false),
-                CExprKind::Float(s) => (expr_at(ExprNode::Float(format!("-{}", s)), line), false),
+                CExprKind::Int(s) => (
+                    expr_at(
+                        ExprNode::Number(format!("-{}", s)),
+                        line,
+                        &self.self_file_name,
+                    ),
+                    false,
+                ),
+                CExprKind::Float(s) => (
+                    expr_at(
+                        ExprNode::Float(format!("-{}", s)),
+                        line,
+                        &self.self_file_name,
+                    ),
+                    false,
+                ),
                 _ => (
                     expr_at(
                         ExprNode::Sub(Expr::wrap(
-                            expr_at(ExprNode::Number("0".into()), line),
+                            expr_at(ExprNode::Number("0".into()), line, &self.self_file_name),
                             self.lower_expr(a, true)?,
                         )),
                         line,
+                        &self.self_file_name,
                     ),
                     false,
                 ),
             },
             UnOp::Not => {
                 let (x, is_bool) = self.lower_expr_ex(a, true)?;
-                (negate(x, is_bool, line), true)
+                (negate(x, is_bool, line, &self.self_file_name), true)
             }
             UnOp::BitNot => (
                 expr_at(
                     ExprNode::XorCalcul(Expr::wrap(
                         self.lower_expr(a, true)?,
-                        expr_at(ExprNode::Number("-1".into()), line),
+                        expr_at(ExprNode::Number("-1".into()), line, &self.self_file_name),
                     )),
                     line,
+                    &self.self_file_name,
                 ),
                 false,
             ),
@@ -1101,6 +1162,7 @@ impl Lowerer {
                 expr_at(
                     ExprNode::ConnectAddr(Box::new(self.lower_expr(a, true)?)),
                     line,
+                    &self.self_file_name,
                 ),
                 false,
             ),
@@ -1108,15 +1170,24 @@ impl Lowerer {
                 expr_at(
                     ExprNode::GetAddress(Box::new(self.lower_expr(a, true)?)),
                     line,
+                    &self.self_file_name,
                 ),
                 false,
             ),
             UnOp::PreInc => (
-                expr_at(ExprNode::Inc(Box::new(self.lower_expr(a, true)?)), line),
+                expr_at(
+                    ExprNode::Inc(Box::new(self.lower_expr(a, true)?)),
+                    line,
+                    &self.self_file_name,
+                ),
                 false,
             ),
             UnOp::PreDec => (
-                expr_at(ExprNode::Dec(Box::new(self.lower_expr(a, true)?)), line),
+                expr_at(
+                    ExprNode::Dec(Box::new(self.lower_expr(a, true)?)),
+                    line,
+                    &self.self_file_name,
+                ),
                 false,
             ),
             UnOp::PostInc | UnOp::PostDec => {
@@ -1129,9 +1200,9 @@ impl Lowerer {
                 let x = Box::new(self.lower_expr(a, true)?);
                 (
                     if op == UnOp::PostInc {
-                        expr_at(ExprNode::Inc(x), line)
+                        expr_at(ExprNode::Inc(x), line, &self.self_file_name)
                     } else {
-                        expr_at(ExprNode::Dec(x), line)
+                        expr_at(ExprNode::Dec(x), line, &self.self_file_name)
                     },
                     false,
                 )
@@ -1154,16 +1225,22 @@ impl Lowerer {
                     // 右辺に副作用も異常終了もないので、短絡評価しなくても結果は同じ
                     let pair = Expr::wrap(l, r);
                     if op == BinOp::LogAnd {
-                        expr_at(ExprNode::AndCalcul(pair), line)
+                        expr_at(ExprNode::AndCalcul(pair), line, &self.self_file_name)
                     } else {
-                        expr_at(ExprNode::OrCalcul(pair), line)
+                        expr_at(ExprNode::OrCalcul(pair), line, &self.self_file_name)
                     }
                 } else {
                     // 短絡評価を保つため、Matchで書く(`a && b` = `a ? b : 0`)
                     let (then_v, else_v) = if op == BinOp::LogAnd {
-                        (r, expr_at(ExprNode::Number("0".into()), line))
+                        (
+                            r,
+                            expr_at(ExprNode::Number("0".into()), line, &self.self_file_name),
+                        )
                     } else {
-                        (expr_at(ExprNode::Number("1".into()), line), r)
+                        (
+                            expr_at(ExprNode::Number("1".into()), line, &self.self_file_name),
+                            r,
+                        )
                     };
                     let tb = vec![self.info(line, Group2Node::Expr(then_v))];
                     let eb = vec![self.info(line, Group2Node::Expr(else_v))];
@@ -1173,11 +1250,12 @@ impl Lowerer {
                             arms: vec![MatchArm {
                                 pattern: Box::new(l),
                                 body: tb,
-                                span: span_at(line),
+                                span: span_at(line, &self.self_file_name),
                             }],
                             arm_else: Some(eb),
                         },
                         line,
+                        &self.self_file_name,
                     )
                 };
                 Ok((e, true))
@@ -1188,7 +1266,7 @@ impl Lowerer {
                     op,
                     BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne
                 );
-                Ok((make_bin(op, x, y, line), is_bool))
+                Ok((make_bin(op, x, y, line, &self.self_file_name), is_bool))
             }
         }
     }
@@ -1220,9 +1298,9 @@ impl Lowerer {
             }
         }
         fields.reverse();
-        let target = |fields: &[String]| -> Expr {
+        let target = |fields: &[String], file_name: &Rc<String>| -> Expr {
             if fields.len() == 1 {
-                expr_at(ExprNode::Var(fields[0].clone()), line)
+                expr_at(ExprNode::Var(fields[0].clone()), line, &file_name)
             } else {
                 expr_at(
                     ExprNode::Member {
@@ -1230,9 +1308,11 @@ impl Lowerer {
                         target: Box::new(expr_at(
                             ExprNode::Var(fields[fields.len() - 1].clone()),
                             line,
+                            &file_name,
                         )),
                     },
                     line,
+                    &file_name,
                 )
             }
         };
@@ -1244,9 +1324,10 @@ impl Lowerer {
                         name: self.resolve(p),
                         index: None,
                         else_idx: None,
-                        target: Box::new(target(&fields)),
+                        target: Box::new(target(&fields, &self.self_file_name)),
                     },
                     line,
+                    &self.self_file_name,
                 )),
                 CExprKind::Unary(UnOp::Deref, _) => {
                     unsup(line, "`(*pp)->m`(ポインタのポインタ経由のメンバー参照)")
@@ -1267,9 +1348,11 @@ impl Lowerer {
                         target: Box::new(expr_at(
                             ExprNode::Var(fields[fields.len() - 1].clone()),
                             line,
+                            &self.self_file_name,
                         )),
                     },
                     line,
+                    &self.self_file_name,
                 ))
             }
             // `a[i].m`
@@ -1279,9 +1362,10 @@ impl Lowerer {
                         name: self.resolve(p),
                         index: Some(Box::new(self.lower_expr(idx, true)?)),
                         else_idx: None,
-                        target: Box::new(target(&fields)),
+                        target: Box::new(target(&fields, &self.self_file_name)),
                     },
                     line,
+                    &self.self_file_name,
                 )),
                 _ => unsup(
                     line,
@@ -1295,9 +1379,10 @@ impl Lowerer {
                         name: self.resolve(p),
                         index: None,
                         else_idx: None,
-                        target: Box::new(target(&fields)),
+                        target: Box::new(target(&fields, &self.self_file_name)),
                     },
                     line,
+                    &self.self_file_name,
                 )),
                 _ => unsup(line, "`(*式).m`(変数名以外のポインタ)"),
             },
@@ -1332,8 +1417,8 @@ fn type_name(t: &CType) -> String {
 }
 
 /// `return;`に使う値。nodeのReturnは必ず式を取るので0で代用する(NOTE.md)
-fn void_value(line: usize) -> Expr {
-    expr_at(ExprNode::Number("0".to_string()), line)
+fn void_value(line: usize, self_file_name: &Rc<String>) -> Expr {
+    expr_at(ExprNode::Number("0".to_string()), line, self_file_name)
 }
 
 fn ends_with_bare_return(body: &[CStmt]) -> bool {
@@ -1351,7 +1436,13 @@ fn is_const_true(e: &CExpr) -> bool {
         || matches!(&e.kind, CExprKind::Char(v) if *v != 0)
 }
 
-fn make_bin(op: BinOp, a: Box<Expr>, b: Box<Expr>, line: usize) -> Expr {
+fn make_bin(
+    op: BinOp,
+    a: Box<Expr>,
+    b: Box<Expr>,
+    line: usize,
+    self_file_name: &Rc<String>,
+) -> Expr {
     let p = (a, b);
     let node = match op {
         BinOp::Mul => ExprNode::Mul(p),
@@ -1373,26 +1464,27 @@ fn make_bin(op: BinOp, a: Box<Expr>, b: Box<Expr>, line: usize) -> Expr {
         BinOp::LogAnd => ExprNode::CmpAnd(p),
         BinOp::LogOr => ExprNode::CmpOr(p),
     };
-    expr_at(node, line)
+    expr_at(node, line, self_file_name)
 }
 
 /// 値を0/1にする(既に0/1ならそのまま)
-fn to_bool(e: Expr, is_bool: bool, line: usize) -> Expr {
+fn to_bool(e: Expr, is_bool: bool, line: usize, self_file_name: &Rc<String>) -> Expr {
     if is_bool {
         e
     } else {
         expr_at(
             ExprNode::NotEq(Expr::wrap(
                 e,
-                expr_at(ExprNode::Number("0".to_string()), line),
+                expr_at(ExprNode::Number("0".to_string()), line, self_file_name),
             )),
             line,
+            self_file_name,
         )
     }
 }
 
 /// 条件の否定
-fn negate(e: Expr, is_bool: bool, line: usize) -> Expr {
+fn negate(e: Expr, is_bool: bool, line: usize, self_file_name: &Rc<String>) -> Expr {
     let node = match e.node {
         ExprNode::Equal(p) => ExprNode::NotEq(p),
         ExprNode::NotEq(p) => ExprNode::Equal(p),
@@ -1404,11 +1496,11 @@ fn negate(e: Expr, is_bool: bool, line: usize) -> Expr {
             let _ = is_bool;
             ExprNode::Equal(Expr::wrap(
                 Expr::new(other, e.span),
-                expr_at(ExprNode::Number("0".to_string()), line),
+                expr_at(ExprNode::Number("0".to_string()), line, &self_file_name),
             ))
         }
     };
-    expr_at(node, line)
+    expr_at(node, line, &self_file_name)
 }
 
 /// 評価しても副作用(代入・関数呼び出し・++/--)が無い

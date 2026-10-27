@@ -16,6 +16,8 @@ mod prelude;
 #[cfg(test)]
 mod tests;
 
+use std::rc::Rc;
+
 pub(in crate::compiler::c_frontend) use error::ParseError;
 // テストでだけ種類を見る
 #[cfg(test)]
@@ -35,9 +37,14 @@ pub(in crate::compiler::c_frontend) struct ParseOutput {
 /// プリプロセス済みのトークン列(`Preprocessor::preprocess`の戻り値)をパースする
 pub(in crate::compiler::c_frontend) fn parse_c(
     tokens: Vec<TokenInfo>,
+    #[cfg(not(test))] self_file_name: &Rc<String>,
 ) -> Result<ParseOutput, ParseError> {
     let (items, mut warnings) = parser::Parser::new(tokens).parse_unit()?;
-    let (nodes, w2) = lower::Lowerer::new().lower_unit(items)?;
+    let (nodes, w2) = lower::Lowerer::new(
+        #[cfg(not(test))]
+        &self_file_name,
+    )
+    .lower_unit(items)?;
     warnings.extend(w2);
     Ok(ParseOutput { nodes, warnings })
 }

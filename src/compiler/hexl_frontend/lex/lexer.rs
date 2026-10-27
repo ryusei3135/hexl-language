@@ -110,18 +110,19 @@ pub struct Lexer {
     /// `*=`(MulEq)として誤って結合してしまう。
     saw_gap: bool,
     span: Option<Rc<err::Span>>,
+    self_file_path: Rc<String>,
 }
 
 impl Lexer {
     /// 実行環境のOS(`#linux` / `#windows` のどちらか)が定義された状態で作る
-    pub fn new() -> Self {
-        Self::with_preproc(Preprocessor::new().setup_defines())
+    pub fn new(self_file_path: &str) -> Self {
+        Self::with_preproc(Preprocessor::new().setup_defines(), self_file_path)
     }
 
     /// `--linux` / `--windows` で選んだOS名(`"linux"` / `"windows"`)のシンボルだけを
     /// 定義して作る。`#if #windows` などの条件がこのOSで切り替わる。
-    pub fn with_os(os: &str) -> Self {
-        Self::with_preproc(Preprocessor::new().setup_defines_for(os))
+    pub fn with_os(os: &str, self_file_path: &str) -> Self {
+        Self::with_preproc(Preprocessor::new().setup_defines_for(os), self_file_path)
     }
 
     /// これから解析するソースファイルのパスを教える。
@@ -137,7 +138,7 @@ impl Lexer {
         }
     }
 
-    fn with_preproc(preproc_table: Preprocessor) -> Self {
+    fn with_preproc(preproc_table: Preprocessor, file_path: &str) -> Self {
         Self {
             last_kind: None,
             gen_flag: None,
@@ -147,10 +148,11 @@ impl Lexer {
             include_c_file_list: Vec::new(),
             saw_gap: true,
             span: None,
+            self_file_path: Rc::new(file_path.to_string()),
         }
     }
 
-    pub fn analy(&mut self, content: &String) -> Result<(), err::lex_err::LexErrs> {
+    pub fn analy(&mut self, content: &str) -> Result<(), err::lex_err::LexErrs> {
         self.gen_tkns = Vec::new();
         self.chr_stk = String::new();
         self.last_kind = None;
@@ -182,6 +184,7 @@ impl Lexer {
             line_counter,
             chr_counter,
             lines[line_counter - 1].to_string(),
+            &self.self_file_path,
         )));
 
         for (idx, &chr) in chars.iter().enumerate() {
@@ -250,6 +253,7 @@ impl Lexer {
                         line_counter,
                         chr_counter,
                         lines[line_counter - 1].to_string(),
+                        &self.self_file_path,
                     )));
                 }
 

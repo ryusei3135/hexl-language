@@ -397,7 +397,8 @@ impl AsmEmitter {
         let fn_ret_ty = fn_meta_data.1.get_ret_ty();
         // 新しく関数の作成、
         let fn_label = Self::fn_label_of(&fn_meta_data.1.name, &fn_meta_data.1.temp_ty);
-        self.asm_text.push_str(&self.asm_fmt.get_label_fmt(&fn_label));
+        self.asm_text
+            .push_str(&self.asm_fmt.get_label_fmt(&fn_label));
         self.begin_fn_state(&fn_meta_data.1);
 
         // 関数の先頭のスタックフレームの生成位置を控えておく。

@@ -209,7 +209,7 @@ impl Parser {
 
             let inner = &caps[1];
 
-            match self.parse_asm_operand(inner) {
+            match self.parse_asm_operand(inner, &span.self_file_name) {
                 Ok(expr) => {
                     let index = operands.len();
                     operands.push(expr);
