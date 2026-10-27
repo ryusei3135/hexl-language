@@ -15,6 +15,7 @@ hexl/
 build.rs
 hexl_d
 *.o
+*.s
 a
 library/os/*.md
 documents/docs.md

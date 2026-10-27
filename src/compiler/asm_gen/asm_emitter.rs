@@ -65,6 +65,7 @@ impl AsmEmitter {
             struct_stk_map: HashMap::new(),
             spilled_regs: std::collections::BTreeMap::new(),
             spill_slots: std::collections::BTreeMap::new(),
+            self_ptr_slot: None,
             node_vars: std::collections::HashSet::new(),
             node_vars_all: false,
             dead_vars: std::collections::HashSet::new(),
@@ -263,6 +264,7 @@ impl AsmEmitter {
         self.struct_stk_map.clear();
         self.spilled_regs.clear();
         self.spill_slots.clear();
+        self.self_ptr_slot = None;
         self.node_vars.clear();
         self.node_vars_all = false;
         self.dead_vars.clear();
@@ -396,9 +398,20 @@ impl AsmEmitter {
         let mut txt = self.extract_operand_text(struct_idx, this_is_self)?;
 
         let ret_line = if this_is_self.is_none() {
-            let self_ptr_reg = self.self_ptr_reg();
-            let line = self.fill_tmpl("address", &self.get_reg_txt(dst, &Size::DQ)?, &self_ptr_reg);
-            self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
+            if let Some(offset) = self.self_ptr_slot {
+                // 退避したポインタの値をそのままdstへ渡す
+                self.mov_line(
+                    &self.get_reg_txt(dst, &Size::DQ)?,
+                    &self.rbp_ref(offset),
+                    &Size::DQ,
+                    true,
+                )
+            } else {
+                let self_ptr_reg = self.self_ptr_reg();
+                let line =
+                    self.fill_tmpl("address", &self.get_reg_txt(dst, &Size::DQ)?, &self_ptr_reg);
+                self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
+            }
         } else {
             self.fill_tmpl(opcode, &self.get_reg_txt(dst, &base_size)?, FRAME_BASE_REG)
         };

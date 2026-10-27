@@ -207,6 +207,49 @@ impl AsmEmitter {
         self.store_via_scratch(&size, &slot, init)
     }
 
+    /// 構造体・バリアントの初期化が、暗黙の`self`ポインタを使いながら関数も呼ぶか
+    /// (呼び出しで第1引数のレジスタが上書きされるので、先に退避する必要がある)
+    pub(in crate::compiler::asm_gen) fn needs_self_ptr_save(&self) -> bool {
+        let has_call = self
+            .curr_inst
+            .iter()
+            .any(|node| matches!(node, inst::Inst::CallFunc(..)));
+        let has_init = self.curr_inst.iter().any(|node| {
+            matches!(
+                node,
+                inst::Inst::Struct { .. } | inst::Inst::Variant { .. } | inst::Inst::InitArr(..)
+            )
+        });
+        has_call && has_init
+    }
+
+    /// `self`ポインタ(第1引数のレジスタ)を、スタックの専用の領域へ退避する命令を作る
+    /// (退避先を`self_ptr_slot`に記録する)
+    pub(in crate::compiler::asm_gen) fn save_self_ptr_asm(&mut self) -> String {
+        let offset = self.alloc_var_slot();
+        self.self_ptr_slot = Some(offset);
+        self.mov_line(&self.rbp_ref(offset), &self.self_ptr_reg(), &Size::DQ, true)
+    }
+
+    /// `self`ポインタをベースにして書き込むための、(読み込む命令, ベースのレジスタ名)
+    ///
+    /// 退避していれば、退避先から一時レジスタ(`%rdx`)へ読み込む命令と`%rdx`を返す
+    /// (呼び出しで上書きされた第1引数のレジスタは使わない)。
+    /// 退避していなければ、命令は空で、第1引数のレジスタを返す。
+    /// 読み込む命令は、そのレジスタを使う命令の直前に置くこと
+    pub(in crate::compiler::asm_gen) fn self_ptr_base(
+        &self,
+    ) -> Result<(String, String), err::ErrKind> {
+        match self.self_ptr_slot {
+            Some(offset) => {
+                let scratch = self.reg64(&RegisterMode::Normal(SPILL_PTR_SCRATCH))?;
+                let load = self.mov_line(&scratch, &self.rbp_ref(offset), &Size::DQ, true);
+                Ok((load, scratch))
+            }
+            None => Ok((String::new(), self.self_ptr_reg())),
+        }
+    }
+
     /// ポインタ変数`name`の値を持つ64bitレジスタ名を返す
     /// (指す先を`(%reg)`で参照するときのベースに使う)
     ///

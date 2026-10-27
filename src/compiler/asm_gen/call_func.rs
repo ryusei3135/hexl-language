@@ -123,6 +123,7 @@ impl AsmEmitter {
         let arr_index_temp = self.arr_index_temp.take();
         let spilled_regs = mem::take(&mut self.spilled_regs);
         let spill_slots = mem::take(&mut self.spill_slots);
+        let self_ptr_slot = self.self_ptr_slot.take();
         let node_vars = mem::take(&mut self.node_vars);
         let node_vars_all = self.node_vars_all;
         let dead_vars = mem::take(&mut self.dead_vars);
@@ -148,6 +149,7 @@ impl AsmEmitter {
         self.arr_index_temp = arr_index_temp;
         self.spilled_regs = spilled_regs;
         self.spill_slots = spill_slots;
+        self.self_ptr_slot = self_ptr_slot;
         self.node_vars = node_vars;
         self.node_vars_all = node_vars_all;
         self.dead_vars = dead_vars;
@@ -417,6 +419,12 @@ impl AsmEmitter {
         }
 
         self.curr_inst = mem::take(&mut fn_meta_data.1.body);
+        // 構造体の初期化が`self`のポインタ(`%rdi`など)を使い、かつ関数を呼ぶ場合、
+        // 呼び出しの引数で上書きされる前に、ポインタを退避する
+        if fn_meta_data.0 != "_start" && self.needs_self_ptr_save() {
+            let save = self.save_self_ptr_asm();
+            self.asm_text.push_str(&save);
+        }
         let returned_struct_idx = self.find_returned_struct_idx(fn_ret_ty.is_none());
         let ctx = FnGenCtx {
             fn_name: &fn_meta_data.0,

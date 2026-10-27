@@ -134,6 +134,10 @@ pub struct AsmEmitter {
     pub(in crate::compiler::asm_gen) spilled_regs: std::collections::BTreeMap<RegisterMode, usize>,
     /// レジスタ -> 退避先のオフセット(関数ごとに、レジスタ1つにつき1回だけ確保する)
     pub(in crate::compiler::asm_gen) spill_slots: std::collections::BTreeMap<RegisterMode, usize>,
+    /// 暗黙の`self`ポインタ(第1引数のレジスタ`%rdi`など)の退避先の、
+    /// `%rbp`からのオフセット。関数の先頭で退避し、関数の呼び出しで`%rdi`が
+    /// 上書きされても、以降は退避先から読み込んで使う。関数ごとの状態
+    pub(in crate::compiler::asm_gen) self_ptr_slot: Option<usize>,
     /// 今生成しているノードが参照する変数の名前
     pub(in crate::compiler::asm_gen) node_vars: std::collections::HashSet<String>,
     /// 今のノードが参照する変数を調べられない(関数呼び出しで退避したままにしない)

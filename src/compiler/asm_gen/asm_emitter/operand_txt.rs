@@ -181,10 +181,11 @@ impl AsmEmitter {
         this_is_self: SelfPtrInfo,
     ) -> Result<String, err::ErrKind> {
         // 代入する先が構造体などの自身のポインタの場合、引数のレジスタにする
-        let assign_reg = if this_is_self.is_none() {
-            self.self_ptr_reg()
+        // (退避している場合は、書き込みの直前に退避先からポインタを読み込む)
+        let (self_load, assign_reg) = if this_is_self.is_none() {
+            self.self_ptr_base()?
         } else {
-            FRAME_BASE_REG.to_string()
+            (String::new(), FRAME_BASE_REG.to_string())
         };
 
         let first_id = ids
@@ -220,11 +221,16 @@ impl AsmEmitter {
                 .asm_fmt
                 .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
 
+            txt.push_str(&self_load);
             txt.push_str(&self.mov_line(&dst, &value, &size, true));
         }
 
         if RET_IS_ASM {
             return Ok(txt);
+        }
+        // 返すオペランドのベースが退避先から読み込んだレジスタなら、使う前に読み込んでおく
+        if !self_load.is_empty() {
+            self.asm_text.push_str(&self_load);
         }
         // サイズがSelfポインタでない場合
         if this_is_self.is_some() {
