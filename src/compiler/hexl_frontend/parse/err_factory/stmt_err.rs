@@ -46,11 +46,10 @@ impl Parser {
                 self.build_err_span(),
                 "parse::stmt::loop_control_node".to_string(),
             ),
-            file_name: Rc::clone(&self.file_name),
         })))
     }
 
-    /// `pub`の次が、関数の名前ではなかった
+    /// `pub`の次が、関数の名前・`struct`・`variant`・`type`のどれでもなかった
     pub(in crate::compiler::hexl_frontend::parse) fn unexpect_tkn_after_pub<T>(
         &self,
         found: lex::Tkn,
@@ -60,7 +59,7 @@ impl Parser {
             self.build_err_span(),
             err::SyntaxErrKind::UnexpectTknAfterKeyword {
                 keyword: lex::Tkn::KeyWordPub,
-                expected: vec!["struct", "variant", "name"],
+                expected: vec!["name", "struct", "variant", "type"],
                 found,
             },
             Rc::clone(&self.file_name)

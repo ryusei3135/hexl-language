@@ -13,7 +13,7 @@
 //! ```
 //!
 //! エラー箇所のソースコードを表示するには、先に[`ErrPool::add_source`]で
-//! ファイル名(`SyntaxErr::file_name`と同じ文字列)とソースコードを登録する。
+//! ファイル名(`Span`が持つファイル名と同じ文字列)とソースコードを登録する。
 //! 登録されていないファイルは、位置(`file:line:pos`)だけを表示する。
 
 use crate::compiler::err;
@@ -81,7 +81,7 @@ impl ErrPool {
 
     /// エラー箇所の表示に使うソースコードを登録する
     ///
-    /// `file_name`は、`SyntaxErr::file_name`と同じ文字列にする
+    /// `file_name`は、`Span::file_name`と同じ文字列にする
     #[cfg(test)]
     pub fn add_source(&mut self, file_name: &str, source: &str) {
         self.sources
@@ -101,24 +101,26 @@ impl ErrPool {
         let mut out = String::new();
         let mut count = 0;
         for e in self.err_list.iter() {
-            match e {
-                ErrKind::Syntax(n) => {
-                    out.push_str(&self.render_syntax_err(n, color));
-                    out.push('\n');
-                    count += 1;
+            let rendered = match e {
+                ErrKind::Syntax(n) => self.render_syntax_err(n, color),
+                ErrKind::CompileErr(n) => self.render_compile_err(n, color),
+                ErrKind::CompileErrAt(n) => {
+                    let ce = CompileErr::new(n.error.kind.clone(), Rc::clone(&n.span));
+                    self.render_compile_err(&ce, color)
                 }
-                ErrKind::CompileErr(n) => {
-                    out.push_str(&self.render_compile_err(n, color));
-                    out.push('\n');
-                    count += 1;
+                ErrKind::Undef(n) => self.render_undef_err(n, color),
+                ErrKind::Preproc(n) => self.render_preproc_err(n, color),
+                ErrKind::CompilerErr(n) => self.render_compiler_err(n, color),
+                ErrKind::NotFoundTkn(t) => {
+                    self.render_simple_err(format!("`{:?}`が見つかりません", t), color)
                 }
-                ErrKind::Undef(n) => {
-                    out.push_str(&self.render_undef_err(n, color));
-                    out.push('\n');
-                    count += 1;
+                ErrKind::UnexpectedToken => {
+                    self.render_simple_err("予期しないトークンです".to_string(), color)
                 }
-                _ => {}
-            }
+            };
+            out.push_str(&rendered);
+            out.push('\n');
+            count += 1;
         }
         if count > 0 {
             let msg = if count == 1 {
@@ -136,13 +138,14 @@ impl ErrPool {
     }
 
     fn render_syntax_err(&self, n: &err::SyntaxErr, color: bool) -> String {
+        let (file, line, pos) = pos_of(&n.loc.span);
         self.render_diag(
             &Diag {
-                code: String::new(),
+                code: n.kind.code().to_string(),
                 title: n.kind.to_string(),
-                file: n.file_name.to_string(),
-                line: n.loc.span.line as usize,
-                pos: n.loc.span.pos as usize,
+                file,
+                line,
+                pos,
                 label: Self::label(&n.kind),
                 notes: Vec::new(),
                 help: Self::help(&n.kind).map(|h| h.to_string()),
@@ -154,21 +157,17 @@ impl ErrPool {
 
     /// `CompileErr`(型・契約・配列の範囲などの意味解析のエラー)を表示する
     ///
-    /// `Span`にはファイル名が無いので、ソースが1つだけ登録されていればその名前を使う
-    /// (複数あるときは`<unknown>`)
+    /// ファイル名は`Span`が持っている。`Span::unknown()`(アセンブリ生成の段階など)の
+    /// ときは、`-->`とソース行は出さない
     fn render_compile_err(&self, n: &err::CompileErr, color: bool) -> String {
-        let file = if self.sources.len() == 1 {
-            self.sources.keys().next().cloned().unwrap_or_default()
-        } else {
-            "<unknown>".to_string()
-        };
+        let (file, line, pos) = pos_of(&n.span);
         self.render_diag(
             &Diag {
                 code: n.kind.code().to_string(),
                 title: n.kind.title(),
                 file,
-                line: n.span.line as usize,
-                pos: n.span.pos as usize,
+                line,
+                pos,
                 label: String::new(),
                 notes: n.kind.note().into_iter().collect(),
                 help: n.kind.help(),
@@ -180,16 +179,20 @@ impl ErrPool {
 
     /// 未定義のエラー(変数・関数・型・メンバーなど)を表示する
     ///
-    /// `UndefErrs`は位置(`Span`)を持たないので、`-->`とソース行は出さず、
-    /// `= note:`/`= help:`だけを出す
+    /// `UndefErrs`の位置(`span`)が分かっていれば`-->`とソース行も出す。
+    /// 分からない(`None`)ときは、`= note:`/`= help:`だけを出す
     fn render_undef_err(&self, n: &err::undef::UndefErrs, color: bool) -> String {
+        let (file, line, pos) = match err::span_loc(n.span.as_ref()) {
+            Some(span) => pos_of(span),
+            None => (String::new(), 0, 0),
+        };
         self.render_diag(
             &Diag {
                 code: n.code().to_string(),
                 title: n.title(),
-                file: String::new(),
-                line: 0,
-                pos: 0,
+                file,
+                line,
+                pos,
                 label: String::new(),
                 notes: n.note().into_iter().collect(),
                 help: Some(n.help()),
@@ -199,7 +202,66 @@ impl ErrPool {
         )
     }
 
-    /// 構文エラーとコンパイルエラーに共通の表示
+    /// プリプロセッサ(`#include`/`#asm`など)のエラーを表示する
+    fn render_preproc_err(&self, n: &err::PreprocErrDetail, color: bool) -> String {
+        let (file, line, pos) = pos_of(&n.loc.span);
+        self.render_diag(
+            &Diag {
+                code: n.kind.code().to_string(),
+                title: n.kind.to_string(),
+                file,
+                line,
+                pos,
+                label: String::new(),
+                notes: Vec::new(),
+                help: None,
+                suggestion: None,
+            },
+            color,
+        )
+    }
+
+    /// コンパイラ自身のエラー(内部エラー)を表示する
+    fn render_compiler_err(&self, n: &err::CompilerErr, color: bool) -> String {
+        let (file, line, pos) = match err::span_loc(n.span.as_ref()) {
+            Some(span) => pos_of(span),
+            None => (String::new(), 0, 0),
+        };
+        self.render_diag(
+            &Diag {
+                code: "E0900".to_string(),
+                title: format!("内部エラー: {}", n.kind),
+                file,
+                line,
+                pos,
+                label: String::new(),
+                notes: vec!["コンパイラ内部の問題の可能性があります".to_string()],
+                help: None,
+                suggestion: None,
+            },
+            color,
+        )
+    }
+
+    /// コードも位置も無いエラーを表示する
+    fn render_simple_err(&self, title: String, color: bool) -> String {
+        self.render_diag(
+            &Diag {
+                code: String::new(),
+                title,
+                file: String::new(),
+                line: 0,
+                pos: 0,
+                label: String::new(),
+                notes: Vec::new(),
+                help: None,
+                suggestion: None,
+            },
+            color,
+        )
+    }
+
+    /// 全種類のエラーに共通の表示
     fn render_diag(&self, d: &Diag, color: bool) -> String {
         let file = d.file.as_str();
         let mut out = String::new();
@@ -374,45 +436,32 @@ impl ErrPool {
     }
 
     /// `^`の横に表示する短い説明
+    ///
+    /// 「ここに`X`があります/置けません」「ここには`X`が必要です」の形に揃える
     fn label(kind: &err::SyntaxErrKind) -> String {
         use err::SyntaxErrKind as K;
         match kind {
-            K::TknIsEof { expected } => {
-                format!("ここで終了しています(期待: {})", expected.join(" / "))
+            K::TknIsEof { .. } => "ここでトークン列が終了しています".to_string(),
+            K::UnexpectedTkn { expected, .. } => {
+                format!("ここには`{:?}`が必要です", expected)
             }
-            K::UnexpectedTkn {
-                found, expected, ..
-            } => {
-                format!("`{:?}`が必要ですが、`{:?}`があります", expected, found)
+            K::OptionIsNotFound { found, .. } => format!("ここに`{}`は指定できません", found),
+            K::UnexpectTknAfterKeyword { expected, .. } => {
+                format!("ここには{}が必要です", expected.join(" / "))
             }
-            K::OptionIsNotFound { found, .. } => format!("`{}`は使えません", found),
-            K::UnexpectTknAfterKeyword {
-                keyword,
-                expected,
-                found,
-            } => format!(
-                "`{:?}`の後には{}が必要ですが、`{:?}`があります",
-                keyword,
-                expected.join(" / "),
-                found
-            ),
-            K::UnenclosedScope { .. } => "ここまでに`}`が見つかりませんでした".to_string(),
-            K::NotFoundTkn(t) => format!("`{:?}`が必要です", t),
-            K::UnexpectTknInExpr { found } => format!("`{:?}`は式の中で使えません", found),
-            K::TknIsEofInExpr => "式の途中でファイルが終わっています".to_string(),
+            K::UnenclosedScope { .. } => "ここまでに`}`が見つかりません".to_string(),
+            K::NotFoundTkn(t) => format!("ここには`{:?}`が必要です", t),
+            K::UnexpectTknInExpr { found } => format!("ここに`{:?}`は置けません", found),
+            K::TknIsEofInExpr => "ここで式が終了しています".to_string(),
             K::Cond(kind) => kind.to_string(),
-            K::UnexpectTknInStmt { found } => format!("`{:?}`は文の先頭に置けません", found),
-            K::ExpectedKind { expected, found } => {
-                format!("{}が必要ですが、`{:?}`があります", expected, found)
+            K::UnexpectTknInStmt { found } => format!("ここに`{:?}`は置けません", found),
+            K::ExpectedKind { expected, .. } => format!("ここには{}が必要です", expected),
+            K::NotImplemented { feature } => {
+                format!("ここの`{}`はまだ実装されていません", feature)
             }
-            K::NotImplemented { feature } => format!("`{}`は未対応です", feature),
-            K::MissingEqualsAfterMust { found } => {
-                format!("`=`が必要ですが、`{:?}`があります", found)
-            }
-            K::MissingIdentAfterOf { found } => {
-                format!("名前が必要ですが、`{:?}`があります", found)
-            }
-            K::GenericsNotSupportedYet => "ジェネリクスは未対応です".to_string(),
+            K::MissingEqualsAfterMust { .. } => "ここには`=`が必要です".to_string(),
+            K::MissingIdentAfterOf { .. } => "ここには名前が必要です".to_string(),
+            K::GenericsNotSupportedYet => "ここの`ジェネリクス`はまだ実装されていません".to_string(),
         }
     }
 
@@ -434,6 +483,22 @@ impl ErrPool {
             }
             _ => None,
         }
+    }
+}
+
+// ---------------------------------------------------------------------
+// 位置
+// ---------------------------------------------------------------------
+
+/// `Span`から`(ファイル名, 行, 文字)`を取り出す
+///
+/// `Span::unknown()`(位置が分からない)のときは、ファイル名を空にして
+/// `-->`とソース行を出さないようにする
+fn pos_of(span: &Span) -> (String, usize, usize) {
+    if span.is_unknown() {
+        (String::new(), 0, 0)
+    } else {
+        (span.file_name().to_string(), span.line, span.pos)
     }
 }
 

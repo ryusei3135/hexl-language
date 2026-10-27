@@ -88,7 +88,14 @@ impl Parser {
                 lex::Tkn::KeyWordStruct | lex::Tkn::KeyWordVariant
                     if depth == 0 && self.generic_type_head(i).is_some() =>
                 {
-                    let (name, generic, end) = self.extract_generic_type_def(i)?;
+                    let (name, mut generic, end) = self.extract_generic_type_def(i)?;
+                    // `pub struct Name<T> {..}`か
+                    generic.public = i > 0
+                        && self
+                            .tkns
+                            .as_ref()
+                            .and_then(|tkns| tkns.get(i - 1))
+                            .is_some_and(|t| t.tkn == lex::Tkn::KeyWordPub);
                     self.generic_types.insert(name, generic);
                     // 定義の中身は読み飛ばす
                     i = end;
@@ -204,6 +211,9 @@ impl Parser {
                 params,
                 tkns: def_tkns,
                 name_idx: name_idx - kw_idx,
+                // `pub`の有無は、定義の外側のトークンなので呼び出し元
+                // (`collect_generic_types`)が設定する
+                public: false,
             },
             end,
         ))
@@ -448,12 +458,14 @@ impl Parser {
         let mut made = self.parse_tkns_isolated(tkns)?.into_iter();
 
         // 置き換え後のトークン列は型1つ分なので、作られるノードも1つ
-        let def = match made.next() {
+        let mut def = match made.next() {
             Some(def @ (Group1Node::StructDefine(_) | Group1Node::VariantDefine(_))) => def,
             _ => {
                 return crate::err_at!(self.internal_state_err("generated struct/variant node"));
             }
         };
+        // 定義の`pub`を引き継ぐ(解析し直すトークン列には`pub`が含まれない)
+        def.set_public(generic.public);
         self.pending_types.push(def);
         Ok(mangled)
     }

@@ -130,7 +130,7 @@ impl fmt::Display for SyntaxErrKind {
             Self::UnexpectTknInExpr { found } => {
                 write!(f, "式の中で予期しないトークン`{:?}`が見つかりました", found)
             }
-            Self::TknIsEofInExpr => write!(f, "式の解析中にトークン列が終了しました"),
+            Self::TknIsEofInExpr => write!(f, "式の途中でトークン列が予期せず終了しました"),
             Self::Cond(kind) => write!(f, "{}", kind),
             Self::UnexpectTknInStmt { found } => {
                 write!(f, "文の中で予期しないトークン`{:?}`が見つかりました", found)
@@ -154,7 +154,7 @@ impl fmt::Display for SyntaxErrKind {
             Self::OptionIsNotFound { found, context } => {
                 write!(f, "`{:?}`の後に`{}`は指定できません", context, found)
             }
-            Self::GenericsNotSupportedYet => write!(f, "ジェネリクスはまだ実装されていません"),
+            Self::GenericsNotSupportedYet => write!(f, "`ジェネリクス`はまだ実装されていません"),
         }
     }
 }
@@ -167,8 +167,14 @@ impl fmt::Display for SyntaxErrKind {
 pub struct SyntaxErr {
     pub kind: SyntaxErrKind,
     pub loc: ErrLoc,
-    pub file_name: Rc<String>,
     pub span: Rc<Span>,
+}
+
+impl SyntaxErr {
+    /// エラーが発生したソースファイルの名前(`span`が持っている)
+    pub fn file_name(&self) -> &str {
+        self.span.file_name()
+    }
 }
 
 /// `SyntaxErr`の別名。式まわりの解析関数(`expr.rs`など)では
@@ -177,7 +183,7 @@ pub type SynErrs = SyntaxErr;
 
 impl fmt::Display for SyntaxErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "構文エラー: {} [{}]", self.kind, self.loc)
+        write!(f, "{}: {} [{}]", CAT_SYNTAX, self.kind, self.loc)
     }
 }
 
@@ -189,17 +195,27 @@ impl fmt::Display for SyntaxErr {
 /// のように、位置(`Span`)と`SyntaxErrKind`の値を渡す。
 /// 戻り値は`Result<T, err::ErrKind>`(常に`Err`)で、`T`は呼び出し側の
 /// 文脈から推論される。
+///
+/// ファイル名は`Span`が持っているので、渡す必要はない。
+/// 以前の`syntax_err!(span, kind, file_name)`の形も、`file_name`を
+/// 無視する形で受け付ける(そのうち消してよい)。
 #[macro_export]
 macro_rules! syntax_err {
-    ($span:expr, $kind:expr, $file_name:expr) => {
+    ($span:expr, $kind:expr) => {{
+        let __span: ::std::rc::Rc<$crate::compiler::err::Span> = $span;
         Err::<_, $crate::compiler::err::ErrKind>($crate::compiler::err::ErrKind::Syntax(Box::new(
             $crate::compiler::err::SyntaxErr {
                 kind: $kind,
-                loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
-                file_name: $file_name,
-                span: $span,
+                loc: $crate::compiler::err::ErrLoc::new(
+                    ::std::rc::Rc::clone(&__span),
+                    $crate::func_name!(),
+                ),
+                span: __span,
             },
         )))
+    }};
+    ($span:expr, $kind:expr, $file_name:expr) => {
+        $crate::syntax_err!($span, $kind)
     };
 }
 
@@ -240,12 +256,14 @@ impl fmt::Display for CondErrKinds {
 /// ```
 #[macro_export]
 macro_rules! cond_err {
-    ($span:expr, $kind:ident, $file_name:expr) => {
+    ($span:expr, $kind:ident) => {
         $crate::syntax_err!(
             $span,
-            $crate::compiler::err::SyntaxErrKind::Cond($crate::compiler::err::CondErrKinds::$kind),
-            $file_name
+            $crate::compiler::err::SyntaxErrKind::Cond($crate::compiler::err::CondErrKinds::$kind)
         )
+    };
+    ($span:expr, $kind:ident, $file_name:expr) => {
+        $crate::cond_err!($span, $kind)
     };
 }
 
@@ -285,8 +303,8 @@ impl fmt::Display for PreprocErrs {
             Self::UnexpectedTrailingTokenInAsmOperand => {
                 "`${...}`の中に、式として解析できない余分なトークンがあります"
             }
-            Self::ExpectedRBracketInAsmOperand => "`]`が必要です",
-            Self::ExpectedRParenInAsmOperand => "`)`が必要です",
+            Self::ExpectedRBracketInAsmOperand => "`[..]`を閉じる`]`が必要です",
+            Self::ExpectedRParenInAsmOperand => "`(..)`を閉じる`)`が必要です",
             Self::UnexpectedTokenInAsmOperand => {
                 "インラインアセンブラのオペランドとして解釈できないトークンです"
             }
@@ -309,7 +327,14 @@ pub struct PreprocErrDetail {
 
 impl fmt::Display for PreprocErrDetail {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "プリプロセッサのエラー: {} [{}]", self.kind, self.loc)
+        write!(f, "{}: {} [{}]", CAT_PREPROC, self.kind, self.loc)
+    }
+}
+
+impl PreprocErrDetail {
+    /// エラーが発生したソースファイルの名前(`loc.span`が持っている)
+    pub fn file_name(&self) -> &str {
+        self.loc.span.file_name()
     }
 }
 
@@ -321,13 +346,16 @@ impl fmt::Display for PreprocErrDetail {
 /// ```
 #[macro_export]
 macro_rules! preproc_err {
-    ($span:expr, $kind:ident, $file_name:expr) => {
+    ($span:expr, $kind:ident) => {
         return Err($crate::compiler::err::ErrKind::Preproc(Box::new(
             $crate::compiler::err::PreprocErrDetail {
                 kind: $crate::compiler::err::PreprocErrs::$kind,
                 loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
             },
         )))
+    };
+    ($span:expr, $kind:ident, $file_name:expr) => {
+        $crate::preproc_err!($span, $kind)
     };
 }
 
@@ -348,4 +376,61 @@ macro_rules! preproc_err_at {
             loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
         }))
     };
+}
+
+// ---------------------------------------------------------------------
+// エラーコード
+//
+// `CompileErrKind`(`E00xx`)・`UndefKind`(`E01xx`)と同じ`E`+4桁の形式で、
+// 構文エラーは`E02xx`、プリプロセッサのエラーは`E03xx`とする。
+// ---------------------------------------------------------------------
+
+impl SyntaxErrKind {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::TknIsEof { .. } => "E0201",
+            Self::UnexpectedTkn { .. } => "E0202",
+            Self::OptionIsNotFound { .. } => "E0203",
+            Self::UnexpectTknAfterKeyword { .. } => "E0204",
+            Self::UnenclosedScope { .. } => "E0205",
+            Self::NotFoundTkn(..) => "E0206",
+            Self::UnexpectTknInExpr { .. } => "E0207",
+            Self::TknIsEofInExpr => "E0208",
+            Self::UnexpectTknInStmt { .. } => "E0209",
+            Self::ExpectedKind { .. } => "E0210",
+            Self::NotImplemented { .. } => "E0215",
+            Self::MissingEqualsAfterMust { .. } => "E0216",
+            Self::MissingIdentAfterOf { .. } => "E0217",
+            Self::GenericsNotSupportedYet => "E0218",
+            Self::Cond(kind) => kind.code(),
+        }
+    }
+}
+
+impl CondErrKinds {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::CondExprScopeStartLBrace => "E0220",
+            Self::CondExprPatternLBrace => "E0221",
+            Self::CondElseLBrace => "E0222",
+            Self::CondElseNotFound => "E0223",
+        }
+    }
+}
+
+impl PreprocErrs {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::EmptyAsmOperand => "E0301",
+            Self::UnexpectedTrailingTokenInAsmOperand => "E0302",
+            Self::ExpectedRBracketInAsmOperand => "E0303",
+            Self::ExpectedRParenInAsmOperand => "E0304",
+            Self::UnexpectedTokenInAsmOperand => "E0305",
+            Self::ExpectedMemberNameInAsmOperand => "E0306",
+            Self::ExpectedPathSegment => "E0307",
+            Self::ExpectedLParenAfterAsm => "E0308",
+            Self::NotFoundAsmName => "E0309",
+            Self::ExpectedRParenAfterAsm => "E0310",
+        }
+    }
 }

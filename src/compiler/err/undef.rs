@@ -18,6 +18,8 @@
 //!                          `ErrKind`を作る(式として使う)
 
 use crate::compiler::err;
+use std::fmt;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UndefKind {
@@ -39,6 +41,10 @@ pub struct UndefErrs {
     pub kind: UndefKind,
     pub found: String,
     pub expect: Option<String>,
+    /// 未定義のものを使った位置(ファイル名を含む)。分からないときは`None`
+    ///
+    /// `ErrKind::with_span`で後から付けられる
+    pub span: Option<Rc<err::Span>>,
 }
 
 impl UndefErrs {
@@ -47,7 +53,40 @@ impl UndefErrs {
             kind: UndefKind::UndefFunc,
             found: found.to_owned(),
             expect: None,
+            span: None,
         }))
+    }
+
+    /// 位置付きの`undef_fn`
+    pub fn undef_fn_at(found: &str, span: Rc<err::Span>) -> err::ErrKind {
+        err::ErrKind::Undef(Box::new(Self {
+            kind: UndefKind::UndefFunc,
+            found: found.to_owned(),
+            expect: None,
+            span: Some(span),
+        }))
+    }
+
+    /// 位置を付ける
+    pub fn with_span(mut self, span: Rc<err::Span>) -> Self {
+        self.span = Some(span);
+        self
+    }
+
+    /// エラーが発生したソースファイルの名前(位置が分からないときは`None`)
+    pub fn file_name(&self) -> Option<&str> {
+        err::span_loc(self.span.as_ref()).map(|s| s.file_name())
+    }
+}
+
+impl fmt::Display for UndefErrs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        err::write_err(
+            f,
+            err::CAT_UNDEF,
+            &self.title(),
+            err::span_loc(self.span.as_ref()).map(|s| s as &dyn fmt::Display),
+        )
     }
 }
 
@@ -65,7 +104,7 @@ impl UndefKind {
             Self::UndefMemberInFn => "E0108",
             Self::UndefVariant => "E0109",
             Self::UndefVariantField => "E0110",
-            Self::UndefInlineAsm => "E111",
+            Self::UndefInlineAsm => "E0111",
         }
     }
 
@@ -154,6 +193,7 @@ impl UndefErrs {
     }
 }
 
+/// `GenUndefErrResult!(kind, found, expect)` / `GenUndefErrResult!(kind, found, expect, span)`
 #[macro_export]
 macro_rules! GenUndefErrResult {
     ($kind:ident, $found:expr, $expect:expr) => {
@@ -161,6 +201,15 @@ macro_rules! GenUndefErrResult {
             kind: $kind,
             found: $found,
             expect: $expect,
+            span: None,
+        }))
+    };
+    ($kind:ident, $found:expr, $expect:expr, $span:expr) => {
+        err::ErrKind::Undef(Box::new(crate::compiler::err::undef::UndefErrs {
+            kind: $kind,
+            found: $found,
+            expect: $expect,
+            span: Some($span),
         }))
     };
 }

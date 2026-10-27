@@ -65,9 +65,15 @@ impl IR {
                 // 構造体を登録
                 Group1Node::StructDefine(info) => {
                     self.struct_tree.add(info);
+                    // メゾットも同じ理由で先に登録する。ジェネリクスな型から
+                    // 作られた型(`Vec$int`)は、使われた関数より後ろに
+                    // 追加されるので、登録しておかないと`Vec<int>::new()`などが
+                    // 見つからない(`UndefFunc`)
+                    self.declare_methods(&info.name, &info.methods);
                 }
                 Group1Node::VariantDefine(info) => {
                     self.variant_tree.add(info);
+                    self.declare_methods(&info.name, &info.methods);
                 }
                 Group1Node::FuncDefine(info) => {
                     // 関数本体を生成する前にシグネチャを登録し、

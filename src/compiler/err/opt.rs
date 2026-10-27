@@ -11,8 +11,10 @@ pub enum OptErrs {
 impl fmt::Display for OptErrs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NotFoundOpt(opt) => write!(f, "不明なオプションです: `{}`", opt),
-            Self::OptFlags => write!(f, "オプションの指定方法が正しくありません"),
+            Self::NotFoundOpt(opt) => {
+                write!(f, "{}: オプション`{}`が見つかりません", super::CAT_OPT, opt)
+            }
+            Self::OptFlags => write!(f, "{}: オプションの指定方法が不正です", super::CAT_OPT),
         }
     }
 }

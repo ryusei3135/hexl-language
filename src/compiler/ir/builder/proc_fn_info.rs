@@ -98,7 +98,11 @@ impl IR {
                 if let Some(def_data) = result {
                     def_data.gen_fn_def(self.stk_counter)
                 } else {
-                    return Err(undef::UndefErrs::undef_fn(&meta_data.name));
+                    // 呼び出しのある文の位置(ファイル名を含む)を付ける
+                    return Err(undef::UndefErrs::undef_fn_at(
+                        &meta_data.name,
+                        Rc::clone(&self.current_span),
+                    ));
                 }
             }
         };

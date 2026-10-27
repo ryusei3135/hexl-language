@@ -100,6 +100,30 @@ impl IR {
         }
     }
 
+    /// 構造体/バリアント型のメゾットのシグネチャを、関数ツリーに先に登録する
+    ///
+    /// `expand_methods`は、型が定義された順番にメゾットを展開する。
+    /// そのため、型の定義より前の関数から呼び出されたり、
+    /// ジェネリクスから作られた型(定義が最後に追加される)のメゾットを
+    /// 呼び出したりすると、まだ登録されていないことになる。
+    /// 関数と同じように、本体を生成する前にシグネチャだけ登録しておく。
+    /// `expand_methods`と同じ`Self`の解決とモジュール名の付け方にする
+    pub(in crate::compiler::ir) fn declare_methods(
+        &mut self,
+        owner: &str,
+        methods: &[ast::Group1Node],
+    ) {
+        for method in methods {
+            let ast::Group1Node::FuncDefine(method_info) = method else {
+                // 関数定義以外は、`expand_methods`が報告する
+                continue;
+            };
+            let mut method_info = self.resolve_self_ty(method_info);
+            method_info.module = Some(owner.to_string());
+            self.func_tree.declare(&method_info);
+        }
+    }
+
     /// 構造体の中に定義されているメゾット(`StructDefine::methods`)を、
     /// 通常のトップレベルの関数として展開してIRへ変換する
     ///
@@ -382,6 +406,41 @@ mod struct_method_expand_tests {
         // モジュール名(構造体名)を指定しない場合は解決できない
         // (トップレベルの関数と名前空間が混ざらないようにするため)
         assert!(ir.func_tree.get(&"get_num".to_string(), None).is_none());
+    }
+
+    #[test]
+    fn method_can_be_called_before_struct_definition() {
+        // 型の定義より前に書かれた関数からも、メゾットを呼び出せる
+        let nodes = parse_test_source(
+            "main(): int { ret Point::answer() } struct Point { pub answer(): int { ret 42 } }",
+        );
+
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+
+        let body = ir.test_only_get_func_body("main");
+        assert!(body
+            .iter()
+            .any(|inst| matches!(inst, inst::Inst::CallFunc(_))));
+    }
+
+    #[test]
+    fn generic_struct_method_can_be_called() {
+        // ジェネリクスから作った型(`Pair$int`)は、使った関数より後ろに
+        // 追加されるが、そのメゾットも呼び出せる
+        let nodes = parse_test_source(
+            "struct Pair<T> { a: T pub new(): Self { ret Self { a: 0 } } } main(): int { p: Pair<int> = Pair<int>::new() ret 0 }",
+        );
+
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+
+        let body = ir.test_only_get_func_body("main");
+        assert!(body
+            .iter()
+            .any(|inst| matches!(inst, inst::Inst::CallFunc(_))));
     }
 
     #[test]

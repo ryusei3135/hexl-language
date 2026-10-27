@@ -20,3 +20,10 @@
 
 ## 2026-10-25
 - 型のバイトサイズを取得する機能`sizeof`を追加 expr.rsのvalueに
+## 2026-10-27 `pub`の構造体/バリアント/型エイリアス
+- `pub struct` / `pub variant` / `pub type`のノード(`StructDefine`/`VariantDefine`/`TypeAlias`)に`public: bool`を追加した(`FuncDefine`と同じ)
+    - `new`は非公開(`false`)で作る。`pub`の定義は`Group1Node::set_public(true)`で設定する(`stmt.rs`の`pub_keyword_node`)
+    - `Group1Node::is_public()`で、どのノードでも公開かどうかを取得できる
+- `pub struct Name<T>`は、使われて作った型(`Name$int`)に`pub`を引き継ぐ(`GenericType::public`)
+- `pub impl`はエラー。メゾットは`impl`の中で`pub`を付ける
+- `pub_keyword_node`はエラーを`?`でそのまま返す(エラープールへの登録は呼び出し元の`C::handle`が1度だけ行う)

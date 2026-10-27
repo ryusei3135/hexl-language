@@ -458,6 +458,71 @@ mod ty_tests {
         );
     }
 
+    /// `pub`が付いた構造体/バリアント/型エイリアスのノードは`public`になる
+    #[test]
+    fn test_pub_struct() {
+        let mut expected = StructDefine::new(
+            "Name".to_string(),
+            vec![StructField::make_field("name", "ty", sp())],
+            Vec::new(),
+            sp(),
+        );
+        expected.set_public(true);
+        assert_eq!(
+            &build("pub struct Name { name: ty }"),
+            &vec![expected.clone()]
+        );
+        // `pub`なしは非公開
+        assert!(!build("struct Name { name: ty }")[0].is_public());
+        assert!(expected.is_public());
+    }
+
+    #[test]
+    fn test_pub_variant() {
+        let nodes = build("pub variant A { B C }");
+        assert!(matches!(&nodes[0], Group1Node::VariantDefine(v) if v.public));
+        let nodes = build("variant A { B C }");
+        assert!(matches!(&nodes[0], Group1Node::VariantDefine(v) if !v.public));
+    }
+
+    #[test]
+    fn test_pub_type_alias() {
+        let nodes = build("pub type T = int");
+        assert!(matches!(&nodes[0], Group1Node::TypeAlias(t) if t.public));
+        let nodes = build("type T = int");
+        assert!(matches!(&nodes[0], Group1Node::TypeAlias(t) if !t.public));
+    }
+
+    /// `pub struct Name<T>`から作った型も公開される
+    #[test]
+    fn test_pub_generic_struct() {
+        let nodes = build(
+            "
+            pub struct Pair<T> { a: T b: T }
+            struct Priv<T> { a: T }
+            main(): int {
+                x: Pair<int> = Pair<int> { a: 1 b: 2 }
+                y: Priv<int> = Priv<int> { a: 1 }
+                ret 0
+            }
+            ",
+        );
+        let public_of = |name: &str| {
+            nodes.iter().find_map(|n| match n {
+                Group1Node::StructDefine(s) if s.name == name => Some(s.public),
+                _ => None,
+            })
+        };
+        assert_eq!(public_of("Pair$int"), Some(true));
+        assert_eq!(public_of("Priv$int"), Some(false));
+    }
+
+    /// `impl`には`pub`を付けられない
+    #[test]
+    fn test_pub_impl_is_err() {
+        assert!(build_is_err("struct A { a: int } pub impl A { f() {} }"));
+    }
+
     #[test]
     fn struct_init() {
         let mut func = FuncDefine::new(

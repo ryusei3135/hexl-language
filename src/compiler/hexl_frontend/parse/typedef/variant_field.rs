@@ -142,6 +142,7 @@ mod variant_node_test {
         let actual = gen_variant("variant A {A}");
         // 位置は比較の対象ではないので、パース結果の位置をそのまま使う
         let expected = VariantDefine {
+            public: false,
             name: "A".to_string(),
             fields: vec![VariantField::typeless_new(
                 "A".to_string(),

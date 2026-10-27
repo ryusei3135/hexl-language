@@ -55,6 +55,9 @@ pub(super) struct GenericType {
     /// `tkns`の中で、型の名前のトークンがある位置
     /// (`struct Name`なら1、`variant "unsafe" Name`なら2)
     pub(super) name_idx: usize,
+    /// `pub struct Name<T> { .. }`のように`pub`が付いているか。
+    /// 使われて作った構造体/バリアントのノードも、この値で公開される
+    pub(super) public: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -411,9 +414,44 @@ impl Parser {
         Ok(stmt.wrap())
     }
 
+    /// `pub`から始まる定義(`pub name(..)` / `pub struct` / `pub variant` / `pub type`)を解析する
+    ///
+    /// 呼び出し時は current_tkn() が `KeyWordPub`、終了時は`pub`なしの定義と同じ位置を指す。
+    /// エラーはそのまま返す(エラープールへの登録は、呼び出し元の
+    /// `C::handle`が1度だけ行う)。
+    ///
+    /// `impl`は定義するノードがなく(既存の型にメゾットを足すだけ)、
+    /// `pub`を付ける対象がないので、`pub impl`はエラーにする。
+    /// メゾットを公開するには、`impl`の中のメゾットに`pub`を付ける
     fn pub_keyword_node(&mut self) -> Result<(), err::ErrKind> {
-        match self.next_tkn(&["name", ".."])? {
+        match self.next_tkn(&["name", "struct", "variant", "type"])? {
             lex::Tkn::Name(name) => self.build_func::<true>(&name),
+            lex::Tkn::KeyWordStruct => {
+                // ジェネリクス(`pub struct Name<T> {..}`)は、使われるまで
+                // ノードを作らないので、読み飛ばす
+                // (`pub`かどうかは`collect_generic_types`が記録済み)
+                if !self.skip_generic_type_def()? {
+                    let mut node = self.struct_node()?;
+                    node.set_public(true);
+                    self.gen_nodes.push(node);
+                }
+                Ok(())
+            }
+            lex::Tkn::KeyWordVariant => {
+                if !self.skip_generic_type_def()? {
+                    let mut node = self.variant_node()?;
+                    node.set_public(true);
+                    self.gen_nodes.push(node);
+                }
+                Ok(())
+            }
+            // `pub type T = BaseTy`
+            lex::Tkn::KeyWordType => {
+                let mut node = self.type_alias_node()?;
+                node.set_public(true);
+                self.gen_nodes.push(node);
+                Ok(())
+            }
             unexpect_tkn => {
                 // 期待したトークンじゃないので、エラー
                 crate::err_at!(self.unexpect_tkn_after_pub(unexpect_tkn))

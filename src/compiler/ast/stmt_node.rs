@@ -187,6 +187,32 @@ impl Group1Node {
         }
     }
 
+    /// ノードに`pub`が付いているかを設定する
+    ///
+    /// `Include`と`Line`は公開/非公開を持たないので何もしない。
+    /// `new`で作ったノードは非公開(`false`)なので、`pub`を付けて定義された
+    /// 構造体/バリアント/型エイリアスにだけ`set_public(true)`を呼ぶ
+    pub fn set_public(&mut self, public: bool) {
+        match self {
+            Self::FuncDefine(n) => n.public = public,
+            Self::StructDefine(n) => n.public = public,
+            Self::VariantDefine(n) => n.public = public,
+            Self::TypeAlias(n) => n.public = public,
+            Self::Include(_) | Self::Line(_) => {}
+        }
+    }
+
+    /// ノードに`pub`が付いているか(`Include`と`Line`は常に`false`)
+    pub fn is_public(&self) -> bool {
+        match self {
+            Self::FuncDefine(n) => n.public,
+            Self::StructDefine(n) => n.public,
+            Self::VariantDefine(n) => n.public,
+            Self::TypeAlias(n) => n.public,
+            Self::Include(_) | Self::Line(_) => false,
+        }
+    }
+
     /// ノードにモジュールのパスを一つ追加する
     /// func -> mod::func
     pub fn add_mod_name(&mut self, name: String) {

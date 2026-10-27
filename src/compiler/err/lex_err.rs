@@ -26,7 +26,12 @@ pub struct LexErrs {
 
 impl fmt::Display for LexErrs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "字句解析エラー: {} [{}]", self.kind, self.span)
+        write_err(
+            f,
+            CAT_LEX,
+            &self.kind,
+            span_loc(Some(&self.span)).map(|s| s as &dyn fmt::Display),
+        )
     }
 }
 

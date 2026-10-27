@@ -17,6 +17,8 @@ pub(in crate::compiler) trait Field {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeAlias {
+    /// `pub type T = BaseTy`のように`pub`が付いているか
+    pub public: bool,
     pub name: String,
     pub ty: TyNode,
     /// 所属するモジュールのパス(`a::b`)
@@ -29,6 +31,7 @@ impl TypeAlias {
     #[inline(always)]
     pub const fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Group1Node {
         Group1Node::TypeAlias(Self {
+            public: false,
             name,
             ty,
             module: None,
@@ -62,6 +65,8 @@ impl Field for StructField {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructDefine {
+    /// `pub struct Name {..}`のように`pub`が付いているか
+    pub public: bool,
     pub name: String,
     pub fields: Vec<StructField>,
     pub methods: Vec<Group1Node>,
@@ -80,6 +85,7 @@ impl StructDefine {
         span: Rc<err::Span>,
     ) -> Group1Node {
         Group1Node::StructDefine(Self {
+            public: false,
             name,
             fields,
             methods,
@@ -166,6 +172,8 @@ impl VariantField {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantDefine {
+    /// `pub variant Name {..}`のように`pub`が付いているか
+    pub public: bool,
     pub name: String,
     pub fields: Vec<VariantField>,
     pub methods: Vec<Group1Node>,
@@ -184,6 +192,7 @@ impl VariantDefine {
         span: Rc<err::Span>,
     ) -> Group1Node {
         Group1Node::VariantDefine(Self {
+            public: false,
             name,
             fields,
             methods,

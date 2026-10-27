@@ -1,3 +1,4 @@
+use std::fmt;
 use std::rc::Rc;
 
 use crate::compiler::ast;
@@ -297,12 +298,31 @@ impl CompileErr {
     ///    = help: ...
     /// ```
     ///
-    /// `err::Span`の中身(行・列)に依存しないよう、位置は`Debug`表示で出す。
-    /// `Span`に行/列/ソースがあるなら、`location`をそこから作る形に差し替えると
-    /// ソースの抜粋(`3 | x = 1`と`^^^`)まで出せる
+    /// 位置は`ファイル名:行:文字`の形式(`Span`が持つファイル名を使う)。
+    /// 位置が分からない(`Span::unknown()`)ときは`-->`の行を出さない
     pub fn message(&self) -> String {
-        let location = format!("{:?}", self.span);
+        let location = if self.span.is_unknown() {
+            String::new()
+        } else {
+            self.span.location()
+        };
         self.kind.render(&location)
+    }
+
+    /// エラーが発生したソースファイルの名前(位置が分からないときは`None`)
+    pub fn file_name(&self) -> Option<&str> {
+        err::span_loc(Some(&self.span)).map(|s| s.file_name())
+    }
+}
+
+impl fmt::Display for CompileErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        err::write_err(
+            f,
+            err::CAT_COMPILE,
+            &self.kind.title(),
+            err::span_loc(Some(&self.span)).map(|s| s as &dyn fmt::Display),
+        )
     }
 }
 
@@ -452,7 +472,7 @@ impl CompileErrKind {
             }
             Self::PointerRangeLengthMismatch { range, value_len } => {
                 format!(
-                    "ポインタの範囲`{}..{}`に対して、値`{}`が範囲外です",
+                    "ポインタの範囲`{}..{}`の長さと、値の長さ`{}`が一致しません",
                     range.0, range.1, value_len
                 )
             }
@@ -479,14 +499,16 @@ impl CompileErrKind {
                 "契約の名前が一致しません(関数`{fn_name}`の引数`{param_name}`)\n\
                  期待: `of {of_name}` / 渡された値: `must {must_name}`"
             ),
-            Self::ConstractTernaryMismatch => panic!(),
+            Self::ConstractTernaryMismatch => {
+                "三項演算子の分岐どうしで、契約の終了の有無が一致しません".to_string()
+            }
             Self::ContractMustNotUsed {
                 fn_name, var_name, ..
             } => {
                 format!("`must`の変数`{var_name}`が、関数`{fn_name}`の中で一度も使われていません")
             }
             Self::ConstractUnterminableScope(name) => {
-                panic!();
+                format!("`must`の変数`{name}`の契約を、このスコープの中で終了できません")
             }
             Self::AssignToMustVar(name) => {
                 format!("`must`の契約を持つ変数`{name}`には再代入できません")
@@ -534,7 +556,7 @@ impl CompileErrKind {
             Self::AsmEmitRegNotNormal(place) => {
                 format!("整数用のレジスタが必要です: {place}")
             }
-            Self::AsmEmitNotSetCcKind(kind) => format!("setccの式ではありません: {kind}"),
+            Self::AsmEmitNotSetCcKind(kind) => format!("`setcc`の式ではありません: {kind}"),
             Self::AsmEmitNotTernaryCondKind(kind) => {
                 format!("三項演算子の条件ではありません: {kind}")
             }
@@ -657,14 +679,13 @@ impl CompileErrKind {
         }
     }
 
-    /// Rust風の表示を組み立てる。`location`は発生位置の文字列
+    /// Rust風の表示を組み立てる。`location`は`ファイル名:行:文字`の文字列(空なら出さない)
     pub fn render(&self, location: &str) -> String {
-        let mut out = format!(
-            "error[{}]: {}\n  --> {}",
-            self.code(),
-            self.title(),
-            location
-        );
+        let mut out = format!("error[{}]: {}", self.code(), self.title());
+        // 位置が分からないときは`-->`の行を出さない
+        if !location.is_empty() {
+            out.push_str(&format!("\n  --> {}", location));
+        }
         if let Some(note) = self.note() {
             out.push_str(&format!("\n   = note: {note}"));
         }

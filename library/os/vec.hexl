@@ -1,4 +1,4 @@
-#include "mem.hexl"
+#include "library/os/mem.hexl"
 
 
 pub struct Vec<T> {
@@ -16,11 +16,13 @@ pub struct Vec<T> {
 
     pub push(self: Self*, val: T) {
         l: u64 = self->len
-        [self.val l] = val
-        sell->len++
+        // `[` の直後は変数名のみ。`[self->val l]` は書けないので、一度ローカル変数に入れる
+        p: T* must=free = self->val
+        [p l] = val
+        self->len = l + 1
     }
 
-    pub fn del(self: Self*) {
-        mem::free<T>(self.val)
+    pub del(self: Self*) {
+        mem::free<T>(self->val)
     }
 }
