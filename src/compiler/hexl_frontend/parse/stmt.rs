@@ -90,6 +90,9 @@ pub struct Parser {
     /// ジェネリクス関数の中で、さらにジェネリクス関数が
     /// 呼び出されている入れ子の深さ
     pub(super) generic_depth: usize,
+    /// `#include`先のジェネリクスな構造体/バリアント(モジュール名 -> 型名 -> 定義)。
+    /// `mod::Type<int>`を使うときに、`generic_types`へ取り込む(`include_generic.rs`)
+    pub(super) included_generic_types: HashMap<String, HashMap<String, GenericType>>,
     /// 定義済みのジェネリクスな構造体/バリアント(型名 -> 定義)
     pub(super) generic_types: HashMap<String, GenericType>,
     /// 作成済みの(型名, `<>`の中身)。同じ型引数での使用が
@@ -126,6 +129,7 @@ impl Parser {
             generated_funcs: Vec::new(),
             pending_funcs: Vec::new(),
             generic_depth: 0,
+            included_generic_types: HashMap::new(),
             generic_types: HashMap::new(),
             generated_types: Vec::new(),
             pending_types: Vec::new(),

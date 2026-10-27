@@ -281,7 +281,19 @@ impl Parser {
 
                 Ok(ty)
             }
-            lex::Tkn::Name(name) => {
+            lex::Tkn::Name(mut name) => {
+                // `mod::Type` / `mod::Type<int>`: モジュール名は型の名前に含めない
+                // (`#include`先のジェネリクスな型は、ここで取り込む)
+                while matches!(self.peek_tkn(), Ok(lex::Tkn::ModPathTkn)) {
+                    // `::`、型の名前の順に進める
+                    self.next_tkn(&["::"])?;
+                    let found = self.next_tkn(&["name"])?;
+                    let lex::Tkn::Name(next_name) = found.clone() else {
+                        return crate::err_at!(self.expected_tkn("name", found));
+                    };
+                    let module = std::mem::replace(&mut name, next_name);
+                    self.import_included_generic_type(&module, &name);
+                }
                 // 契約型かを調べる
                 let base_ty = self.is_constract_ty(TyNode::Ty(name.clone()))?;
                 let ty =

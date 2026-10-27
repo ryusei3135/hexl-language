@@ -123,7 +123,8 @@ impl Parser {
             .collect_generic_types()
             .and_then(|_| self.collect_generic_funcs());
         let found = std::mem::replace(&mut self.generic_funcs, saved_funcs);
-        self.generic_types = saved_types;
+        // include先のジェネリクスな型も、`mod::Type<int>`で使えるように残す
+        let found_types = std::mem::replace(&mut self.generic_types, saved_types);
         self.tkns = saved_tkns;
         if collected.is_err() {
             return;
@@ -144,6 +145,10 @@ impl Parser {
                     .entry(module.clone())
                     .or_default()
                     .extend(fn_names);
+                self.included_generic_types
+                    .entry(module.clone())
+                    .or_default()
+                    .extend(found_types);
                 self.included_generics
                     .entry(module)
                     .or_default()
@@ -153,8 +158,13 @@ impl Parser {
             ImportKind::Func(func_name) => {
                 if let Some(g) = found.get(&func_name) {
                     self.generic_funcs
-                        .entry(func_name)
+                        .entry(func_name.clone())
                         .or_insert_with(|| g.clone());
+                }
+                if let Some(t) = found_types.get(&func_name) {
+                    self.generic_types
+                        .entry(func_name)
+                        .or_insert_with(|| t.clone());
                 }
             }
             // `#include "file"::*`: モジュール名を付けず、全て
@@ -162,9 +172,30 @@ impl Parser {
                 for (name, g) in found {
                     self.generic_funcs.entry(name).or_insert(g);
                 }
+                for (name, t) in found_types {
+                    self.generic_types.entry(name).or_insert(t);
+                }
             }
             ImportKind::Module(None) | ImportKind::Auto => {}
         }
+    }
+
+    /// `module::name`が、`#include`先のジェネリクスな型なら、現在のファイルの
+    /// `generic_types`へ取り込んで`true`を返す(同名の型が既にあれば、そちらを使う)。
+    /// 取り込んだ後は、そのファイルで定義した型と同じ方法(`Name<int>`)で実体化できる。
+    ///
+    /// 実体化した型は、モジュール名のない名前(`Vec$int`)で、呼び出し側のファイルに作られる
+    pub(super) fn import_included_generic_type(&mut self, module: &str, name: &str) -> bool {
+        let Some(def) = self
+            .included_generic_types
+            .get(module)
+            .and_then(|types| types.get(name))
+            .cloned()
+        else {
+            return false;
+        };
+        self.generic_types.entry(name.to_string()).or_insert(def);
+        true
     }
 
     /// 最上位にある関数の名前(`name(`で始まる定義)を集める

@@ -89,6 +89,15 @@ impl Parser {
                 span,
             ));
         }
+        // `#include`先のジェネリクスな型: `mod::Type<int>::new()` / `mod::Type<int> { .. }`
+        // (現在は`Type`を指すので、`<`は次のトークン)
+        if self.import_included_generic_type(&name, &mem_name)
+            && self.is_generic_type_expr(&mem_name, self.idx + 1)
+        {
+            // `<`まで進めて、通常のジェネリクスな型の式と同じに扱う
+            self.advance_tkn_checked()?;
+            return self.generic_type_expr::<false>(&mem_name, init_struct);
+        }
         if self.is_variant_field(&name, &mem_name) {
             // unsafeな共用体の初期化: `Type::mem { mem: expr }`
             // (`Type::Mem(expr)`はタグ付き共用体用なので、`{`が続くときだけここに入る)
