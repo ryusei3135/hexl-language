@@ -459,6 +459,28 @@ mod expr_tests {
     }
 
     #[test]
+    fn check_ptr_member_inc_stmt() {
+        // `self->len++`は、メンバーへの`Inc`になる(変数`len`の`Inc`ではない)
+        let mut p = parse::Parser::new_for_test();
+        let tkns = gen_nodes("main(): b1 { ptr->len++ }");
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        assert_eq!(node.body.len(), 1);
+        assert_eq!(
+            node.body[0].get_node(),
+            &ex(ExprNode::Inc(Box::new(ex(ExprNode::PtrMember {
+                name: "ptr".to_string(),
+                index: None,
+                else_idx: None,
+                target: Box::new(ex(ExprNode::Var("len".to_string()))),
+            }))))
+            .wrap_group2()
+        );
+    }
+
+    #[test]
     fn check_cast_expr() {
         // キャスト: `(T)var` -> `Cast((T, Box(var)))`
         let mut p = parse::Parser::new_for_test();

@@ -26,10 +26,12 @@ impl AsmEmitter {
         // 書き込む値のサイズを表しているため、`get_var_ty(&name)`で
         // 問題なかった。
         let mnemonic_size = match &self.curr_inst[dst] {
-            inst::Inst::RefStruct { .. } | inst::Inst::RefStructPtr { .. } => match &self.curr_inst[value] {
-                inst::Inst::Num { size, .. } => size.clone(),
-                _ => self.get_var_ty(&name)?,
-            },
+            // 構造体のメンバー(`self->len = ..` / `a.len = ..`)は、メンバー自身の型。
+            // `name`(`self`など)の型は構造体(またはそのポインタ)なので、
+            // ニーモニックのサイズに使えない
+            inst::Inst::RefStruct { size, .. } | inst::Inst::RefStructPtr { size, .. } => {
+                size.clone()
+            }
             inst::Inst::Pointer(..) | inst::Inst::InsertArr { .. } => self.get_expr_ty(dst),
             _ => self.get_var_ty(&name)?,
         };

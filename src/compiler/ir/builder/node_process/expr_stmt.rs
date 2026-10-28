@@ -3,7 +3,7 @@
 use crate::compiler::ast::Expr;
 
 use super::*;
-use crate::compiler::ast::{AssignVar, ExprNode, TyNode};
+use crate::compiler::ast::{AssignVar, DefineVar, ExprNode, TyNode};
 
 impl IR {
     fn ensure_var_is_assignable(
@@ -344,17 +344,10 @@ impl IR {
         Ok(inst::Inst::Cast { src, after })
     }
 
-    /// `++`/`--`(前置/後置)の対象の変数を確認して、その型を返す
-    ///
-    /// 対象は、再代入できる整数型の変数のみ
-    fn inc_dec_var_ty<M: ResultMod>(&mut self, name: &str) -> Result<types::Size, err::ErrKind> {
-        let var_attr = self.var_tree.is_mut(name);
-        self.ensure_var_is_assignable(name, &var_attr)?;
-
-        let ty_node = self.var_tree.get_ty_node(name).unwrap();
-        let ty = M::handle(self.try_size_or_emit_struct(&ty_node))?;
-        if !matches!(
-            &ty,
+    /// `++`/`--`できる型(整数型)か
+    fn is_inc_dec_integer(ty: &types::Size) -> bool {
+        matches!(
+            ty,
             types::Size::DB
                 | types::Size::UDB
                 | types::Size::DW
@@ -363,7 +356,23 @@ impl IR {
                 | types::Size::UDD
                 | types::Size::DQ
                 | types::Size::UDQ
-        ) {
+        )
+    }
+
+    /// `++`/`--`(前置/後置)の対象の変数を確認して、その型を返す
+    ///
+    /// 対象は、再代入できる整数型の変数のみ
+    /// (構造体のメンバーは`inc_dec_member_check`で確認する)
+    ///
+    /// `name`は`var_tree`に登録された変数の名前に限る。メンバーの名前(`len`など)は
+    /// 変数として登録されていないので、呼び出し側は`inc_dec_var_ty`に対象の式ごと渡す
+    fn inc_dec_name_ty<M: ResultMod>(&mut self, name: &str) -> Result<types::Size, err::ErrKind> {
+        let var_attr = self.var_tree.is_mut(name);
+        self.ensure_var_is_assignable(name, &var_attr)?;
+
+        let ty_node = self.var_tree.get_ty_node(name).unwrap();
+        let ty = M::handle(self.try_size_or_emit_struct(&ty_node))?;
+        if !Self::is_inc_dec_integer(&ty) {
             return Err(CompileErr::inc_dec_requires_integer(
                 name,
                 Rc::clone(&self.current_span),
@@ -372,16 +381,141 @@ impl IR {
         Ok(ty)
     }
 
+    /// `++`/`--`の対象が構造体のメンバーなら、再代入できる整数型のメンバーかを
+    /// 確認して、メンバーを持つ変数(代入ノードの`name`)の名前を返す
+    ///
+    /// - `self->len` / `[ptr].len`(`PtrMember`): 変数は、ポインタ変数(`self`など)
+    /// - `a.len`(`Member`): 変数は、構造体の変数`a`
+    ///
+    /// 検査の内容は代入(`assign_expr_node`)と同じ
+    /// (`must`の契約を持つメンバー、不変な変数は再代入できない)
+    ///
+    /// 対象がメンバーではない(変数など)なら`Ok(None)`
+    fn inc_dec_member_check<M: ResultMod>(
+        &mut self,
+        target: &Expr,
+    ) -> Result<Option<(String, types::Size)>, err::ErrKind> {
+        // (メンバーを持つ変数, メンバー名, ポインタ経由か)
+        let (owner, member, via_ptr) = match &target.node {
+            ExprNode::PtrMember { name, target, .. } => match &target.node {
+                ExprNode::Var(member) => (name.clone(), member.clone(), true),
+                _ => return Err(err::ErrKind::UnexpectedToken),
+            },
+            ExprNode::Member { scope, target } => {
+                let Some(owner) = scope.last() else {
+                    return Err(err::ErrKind::UnexpectedToken);
+                };
+                match &target.node {
+                    ExprNode::Var(member) => (owner.clone(), member.clone(), false),
+                    _ => return Err(err::ErrKind::UnexpectedToken),
+                }
+            }
+            _ => return Ok(None),
+        };
+
+        let var_attr = self.var_tree.is_mut(&owner);
+        if via_ptr {
+            // `assign_expr_node`の`PtrMember`の代入と同じ検査
+            if !self.in_constructor()
+                && self
+                    .ptr_member_field_ty(&owner, &member)
+                    .is_some_and(|ty| ty.is_contract_must())
+            {
+                CompileErr::assign_to_must_var(&member, Rc::clone(&self.current_span))?;
+            }
+            if !matches!(var_attr, parse::VarMutAttr::Var) {
+                CompileErr::assign_to_imm_var(&member, Rc::clone(&self.current_span))?;
+            }
+        } else {
+            self.ensure_var_is_assignable(&owner, &var_attr)?;
+        }
+
+        // メンバーの型。`get_ty_name`は、ポインタ型の変数には指す先の構造体名を返す
+        let struct_name = self.var_tree.get_ty_name(&owner)?;
+        let field_ty = self
+            .struct_tree
+            .get(&struct_name)
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefStruct, struct_name.to_string(), None))?
+            .fields
+            .iter()
+            .find(|field| field.name == member)
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefStructMember, member.to_string(), None))?
+            .ty
+            .clone();
+        let ty = M::handle(self.try_size_or_emit_struct(&field_ty))?;
+        if !Self::is_inc_dec_integer(&ty) {
+            return Err(CompileErr::inc_dec_requires_integer(
+                &member,
+                Rc::clone(&self.current_span),
+            ));
+        }
+        Ok(Some((owner, ty)))
+    }
+
+    /// `++`/`--`(前置/後置)の対象の式を確認して、その型を返す
+    ///
+    /// - 変数(`a`): 再代入できる整数型の変数
+    /// - 構造体のメンバー(`self->len` / `[ptr].len` / `a.len`): 構造体の定義からメンバーの
+    ///   型を調べる。メンバーの名前だけを変数として調べない(`len`は変数ではない)
+    ///
+    /// 戻り値は、(代入ノードの`name`になる変数の名前, 対象の型)
+    fn inc_dec_var_ty<M: ResultMod>(
+        &mut self,
+        target: &Expr,
+    ) -> Result<(String, types::Size), err::ErrKind> {
+        match &target.node {
+            ExprNode::Var(name) => {
+                let ty = self.inc_dec_name_ty::<M>(name)?;
+                Ok((name.clone(), ty))
+            }
+            _ => self
+                .inc_dec_member_check::<M>(target)?
+                .ok_or(err::ErrKind::UnexpectedToken),
+        }
+    }
+
+    /// `++a` / `a++`などを、代入`a = a + 1`(`a = a - 1`)のノードに展開する
+    ///
+    /// 対象は、変数、または構造体のメンバー(`self->len` / `[ptr].len` / `a.len`)。
+    /// メンバーは、読み出したメモリ上の値を増減しても元に書き戻されないため、
+    /// 代入に展開してメンバーへ書き込む。式の値は、増減後の値になる
+    fn desugar_inc_dec<M: ResultMod>(
+        &mut self,
+        expr: &Expr,
+        target: &Expr,
+        is_inc: bool,
+    ) -> Result<Expr, err::ErrKind> {
+        let span = Rc::clone(&expr.span);
+        // 代入ノードの`name`になる、変数の名前(対象の式ごと確認する)
+        let (owner, _) = self.inc_dec_var_ty::<M>(target)?;
+        let calc = Expr::wrap(
+            target.clone(),
+            ExprNode::Number("1".to_string()).with_span(Rc::clone(&span)),
+        );
+        let value = if is_inc {
+            ExprNode::Add(calc)
+        } else {
+            ExprNode::Sub(calc)
+        };
+        Ok(AssignVar::new(
+            &owner,
+            target.clone(),
+            value.with_span(Rc::clone(&span)),
+            span,
+        ))
+    }
+
     pub(in super::super) fn build_inc_dec_expr<M: ResultMod>(
         &mut self,
         target: &Expr,
         kind: &inst::ExprKind,
     ) -> Result<inst::Inst, err::ErrKind> {
-        let ExprNode::Var(name) = &target.node else {
+        // 変数のみ(メンバーは`desugar_unary`が代入に展開済み)
+        if !matches!(&target.node, ExprNode::Var(_)) {
             return Err(err::ErrKind::UnexpectedToken);
-        };
+        }
 
-        let ty = self.inc_dec_var_ty::<M>(name)?;
+        let (_, ty) = self.inc_dec_var_ty::<M>(target)?;
 
         let idx = self.gen_expr_ir::<M>(target, Some(&ty))?;
         Ok(inst::ExprInst {
@@ -414,6 +548,92 @@ impl IR {
         Ok((cond, left, right))
     }
 
+    /// `[ptr->member index else else_idx]`(`PtrMember`の`target`が`RefArray`)を、
+    /// ポインタを一時変数に入れた通常の配列アクセスに展開する
+    ///
+    /// ```text
+    /// $ptr_arr_N: <メンバーの型> = ptr->member      // ここで`DefVar`のIRを出力する
+    /// [$ptr_arr_N index else else_idx]               // 戻り値の式
+    /// ```
+    ///
+    /// ポインタ変数への配列アクセス(`[p index]`)と同じ処理に乗せるための展開で、
+    /// `PtrMember`の`RefArray`をそのままIRにすると、添字が捨てられてメンバー自体への
+    /// アクセスになってしまう。
+    ///
+    /// 戻り値は、(一時変数の名前, 配列アクセスの式)
+    fn ptr_member_arr_to_tmp<M: ResultMod>(
+        &mut self,
+        dst: &Expr,
+    ) -> Result<(String, Expr), err::ErrKind> {
+        let ExprNode::PtrMember {
+            name: ptr, target, ..
+        } = &dst.node
+        else {
+            return Err(err::ErrKind::UnexpectedToken);
+        };
+        let ExprNode::RefArray {
+            name: member,
+            index,
+            else_idx,
+            ..
+        } = &target.node
+        else {
+            return Err(err::ErrKind::UnexpectedToken);
+        };
+
+        // メンバーの型(ポインタ/配列)。`get_ty_name`は、ポインタ変数には指す先の構造体名を返す
+        let struct_name = self.var_tree.get_ty_name(ptr)?;
+        let field_ty = self
+            .struct_tree
+            .get(&struct_name)
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefStruct, struct_name.to_string(), None))?
+            .fields
+            .iter()
+            .find(|field| field.name == *member)
+            .ok_or_else(|| crate::GenUndefErrResult!(UndefStructMember, member.to_string(), None))?
+            .ty
+            .clone();
+        let field_size = M::handle(self.try_size_or_emit_struct(&field_ty))?;
+
+        let span = Rc::clone(&dst.span);
+        let tmp = format!("$ptr_arr_{}", self.id_counter);
+        // `ptr->member`(メンバーそのものの値 = 配列の先頭を指すポインタ)
+        let member_value = Expr::new(
+            ExprNode::PtrMember {
+                name: ptr.clone(),
+                index: None,
+                else_idx: None,
+                target: Box::new(Expr::new(
+                    ExprNode::Var(member.clone()),
+                    Rc::clone(&span),
+                )),
+            },
+            Rc::clone(&span),
+        );
+        let def_var = Expr::new(
+            ExprNode::DefVar(DefineVar {
+                name: tmp.clone(),
+                value: Box::new(member_value),
+                ty: field_ty,
+                var_attr: parse::VarMutAttr::Invar,
+            }),
+            Rc::clone(&span),
+        );
+        self.gen_expr_ir::<M>(&def_var, Some(&field_size))?;
+
+        let tmp_var = Expr::new(ExprNode::Var(tmp.clone()), Rc::clone(&span));
+        let arr = Expr::new(
+            ExprNode::RefArray {
+                name: tmp.clone(),
+                dst: Box::new(tmp_var),
+                index: index.clone(),
+                else_idx: else_idx.clone(),
+            },
+            span,
+        );
+        Ok((tmp, arr))
+    }
+
     /// 前置の単項演算子(`+` `-` `!` `~` `++` `--`)を、既存のノードに展開する
     ///
     /// 単項演算専用の命令は作らず、バックエンドが対応済みの命令だけで表す
@@ -423,6 +643,8 @@ impl IR {
     /// - `!a`  -> `a == 0`
     /// - `++a` -> `a = a + 1`(式の値は、加算後の値)
     /// - `--a` -> `a = a - 1`(式の値は、減算後の値)
+    /// - `self->len++` / `a.len--`など、メンバーの後置`++`/`--`も、同じく代入に展開する
+    ///   (`a`が変数の後置は`build_inc_dec_expr`)
     ///
     /// 単項演算のノードでなければ`Ok(None)`
     pub(in super::super) fn desugar_unary<M: ResultMod>(
@@ -469,28 +691,35 @@ impl IR {
                 ExprNode::Number("0".to_string()).with_span(Rc::clone(&expr.span)),
             ))
             .with_span(Rc::clone(&expr.span)),
-            ExprNode::LeftInc(target) | ExprNode::LeftDec(target) => {
-                let ExprNode::Var(name) = &(**target).node else {
-                    return Err(err::ErrKind::UnexpectedToken);
-                };
-                // 後置の`++`/`--`と同じ条件(再代入できる整数型の変数)を確認する
-                self.inc_dec_var_ty::<M>(name)?;
-                let var = ExprNode::Var(name.clone());
-                let calc = Expr::wrap(
-                    Expr::new(var.clone(), Rc::clone(&expr.span)),
-                    ExprNode::Number("1".to_string()).with_span(Rc::clone(&expr.span)),
-                );
-                let value = if matches!(&expr.node, ExprNode::LeftInc(_)) {
-                    ExprNode::Add(calc)
-                } else {
-                    ExprNode::Sub(calc)
-                };
-                AssignVar::new(
-                    name,
-                    Expr::new(var, Rc::clone(&expr.span)),
-                    value.with_span(Rc::clone(&expr.span)),
-                    Rc::clone(&expr.span),
-                )
+            // `++a` / `--a`
+            ExprNode::LeftInc(target) | ExprNode::LeftDec(target) => self.desugar_inc_dec::<M>(
+                expr,
+                target,
+                matches!(&expr.node, ExprNode::LeftInc(_)),
+            )?,
+            // 構造体のメンバーの`a->len++` / `a.len--`(変数の`a++`は`build_inc_dec_expr`が処理する)
+            ExprNode::Inc(target) | ExprNode::Dec(target)
+                if matches!(
+                    &target.node,
+                    ExprNode::PtrMember { .. } | ExprNode::Member { .. }
+                ) =>
+            {
+                self.desugar_inc_dec::<M>(expr, target, matches!(&expr.node, ExprNode::Inc(_)))?
+            }
+            // `[ptr->member index] = value`: 一時変数に入れたポインタへの配列の代入に展開する
+            ExprNode::Assign(assign)
+                if matches!(
+                    &assign.dst.node,
+                    ExprNode::PtrMember { target, .. }
+                        if matches!(target.node, ExprNode::RefArray { .. })
+                ) =>
+            {
+                let (tmp, arr) = self.ptr_member_arr_to_tmp::<M>(&assign.dst)?;
+                AssignVar::new(&tmp, arr, (*assign.value).clone(), Rc::clone(&expr.span))
+            }
+            // `[ptr->member index]`(値の読み取り)
+            ExprNode::PtrMember { target, .. } if matches!(target.node, ExprNode::RefArray { .. }) => {
+                self.ptr_member_arr_to_tmp::<M>(expr)?.1
             }
             _ => return Ok(None),
         };

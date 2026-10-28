@@ -359,7 +359,28 @@ impl Parser {
             // ポインタ/配列にアクセスするノードの作成
             lex::Tkn::LBracket => {
                 let tkn = self.next_tkn(&["name"])?;
-                if let lex::Tkn::Name(name) = tkn.clone() {
+                // `[self ..]`の`self`は、構造体/バリアント自身の名前として扱う
+                let name = match tkn.clone() {
+                    lex::Tkn::Name(name) => name,
+                    lex::Tkn::KeyWordSelf => {
+                        let Some(self_name) = self.struct_self_name.clone() else {
+                            return crate::err_at!(self.self_outside_of_type());
+                        };
+                        self_name
+                    }
+                    _ => return crate::err_at!(self.stmt_name_not_found_after_lbracket(tkn)),
+                };
+                // `[name->member index]` / `[self->member index else 0]`:
+                // ポインタが指す構造体のメンバー(配列)への代入
+                // (`name`の次が`->`、`member`の次が添字の先頭)
+                if matches!(self.peek_tkn(), Ok(lex::Tkn::AccessPtr))
+                    && self
+                        .peek3_tkn()
+                        .map_or(false, |t| Self::is_arr_index_start(&t))
+                {
+                    // expr/arr_access.rsで定義
+                    self.make_ptr_member_array_assign_node(&name)?
+                } else {
                     match self.peek_tkn() {
                         // `name`の次が添字の式(数字/変数/`a.a`など)の場合、
                         // 配列への代入
@@ -375,8 +396,6 @@ impl Parser {
                         // `[name] = value` / `[name].member = value` / `[name].method(..)`
                         _ => self.ptr_stmt_node(&name)?,
                     }
-                } else {
-                    return crate::err_at!(self.stmt_name_not_found_after_lbracket(tkn));
                 }
             }
             lex::Tkn::KeyWordRet => StmtNode::Return(self.expr_branch()?).wrap(),
@@ -547,6 +566,22 @@ impl Parser {
         if matches!(&member_node.node, ExprNode::PtrMember { target, .. } if matches!(target.node, ExprNode::CallFunc(..)))
         {
             return Ok(member_node.wrap_group2());
+        }
+
+        // 後置の`++`/`--`: `self->len++` / `[ptr].len--`
+        // メンバーの`Inc`/`Dec`にする(これが無いと、`len++`が別の文として解析され、
+        // `self->`が失われて変数`len`の`++`になってしまう)。
+        // `name++`と同じく、`++`の次のトークンまで進めて返す
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::Inc | lex::Tkn::Dec)) {
+            let postfix = self.next_tkn(&[])?;
+            self.advance_tkn_checked()?;
+            let span = member_node.span.clone();
+            let node = if postfix == lex::Tkn::Inc {
+                ExprNode::Inc(Box::new(member_node))
+            } else {
+                ExprNode::Dec(Box::new(member_node))
+            };
+            return Ok(Expr::new(node, span).wrap_group2());
         }
 
         // フィールドアクセスの場合、続く`=`の有無で代入か参照かを判断する

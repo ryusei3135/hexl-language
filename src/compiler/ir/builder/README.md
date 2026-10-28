@@ -46,3 +46,10 @@
 - 整数の即値は整数型、小数の即値は浮動小数点型のときだけ変換する。ポインタ・構造体の型は即値の型にしない。
 - 期待する型が無い二項演算(`if a < 10`など)は、`resolve_expect_byte`がオペランドの型で決める(決まらなければ`DD`)。
 - 関数の引数は従来どおり、関数の定義の引数の型(`gen_call_fn_ir`)。
+
+
+## `++`/`--`の対象(`node_process/expr_stmt.rs`)
+- 変数: `a++` は `build_inc_dec_expr`(`inc_dec_var_ty`で検査)
+- 構造体のメンバー(`self->len++` / `++self->len` / `a.len++`)は `desugar_unary` で `len = len + 1` の代入に展開する
+    - 検査は `inc_dec_member_check`(代入と同じ: `must`の契約・不変な変数は不可、メンバーが整数型)
+    - 式の値は、増減後の値

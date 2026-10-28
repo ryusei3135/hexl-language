@@ -15,9 +15,29 @@ impl Parser {
         // `[`の位置
         let span = self.build_err_span();
         let next = self.next_tkn_ref(&["name"])?;
-        let lex::Tkn::Name(name) = next.clone() else {
-            return crate::err_at!(self.expected_tkn("name", next));
+        // `[`の位置から見て、`[name->member index]`の形か(`[`から2つ先が`->`、
+        // 4つ先が添字の先頭)
+        let is_ptr_member_arr = matches!(self.tkn_at(2), Some(lex::Tkn::AccessPtr))
+            && self
+                .tkn_at(4)
+                .map_or(false, |t| Self::is_arr_index_start(&t));
+        let name = match next.clone() {
+            lex::Tkn::Name(name) => name,
+            // `[self->member index]`の`self`は、構造体/バリアント自身の名前
+            lex::Tkn::KeyWordSelf if is_ptr_member_arr => {
+                let Some(self_name) = self.struct_self_name.clone() else {
+                    return crate::err_at!(self.self_outside_of_type());
+                };
+                self_name
+            }
+            _ => return crate::err_at!(self.expected_tkn("name", next)),
         };
+        // `[name->member index else else_idx]`: ポインタが指す構造体のメンバー(配列)の要素
+        if is_ptr_member_arr {
+            // `[`から`name`まで進める
+            self.next_tkn(&["name"])?;
+            return self.ptr_member_array_expr(&name);
+        }
         // nameの次に、添字の式が来た場合、それは配列にアクセスする
         // (`[`の次が`name`、その次が添字の先頭)
         if self
@@ -43,6 +63,81 @@ impl Parser {
             _ => Expr::new(ExprNode::GetAddress(Box::new(result)), span),
         };
         Ok(node)
+    }
+
+    /// 現在位置から`n`個先のトークンを、位置を進めずに返す(`n == 0`は現在のトークン)
+    #[inline(always)]
+    fn tkn_at(&self, n: usize) -> Option<lex::Tkn> {
+        self.tkns.as_ref()?.get(self.idx + n).map(|v| v.tkn.clone())
+    }
+
+    /// ポインタが指す構造体のメンバー(配列)の要素にアクセスするノードを作成する
+    /// `[name->member index]` / `[name->member index else else_idx]`
+    ///
+    /// `[name].member`と同じ`PtrMember`のノードで、`target`が配列の要素
+    /// (`RefArray`)になる(`name.[member index]`の`Member`と同じ作り)
+    ///
+    /// ## 呼び出し時の前提
+    /// `current_tkn()`が`name`(`self`は構造体自身の名前に置き換えて渡す)を
+    /// 指し、その次が`->`、その次が`member`、その次が添字の先頭である必要がある。
+    /// 終了時、`current_tkn()`は`]`を指す。
+    pub(in crate::compiler::hexl_frontend::parse) fn ptr_member_array_expr(
+        &mut self,
+        name: &str,
+    ) -> Result<Expr, err::ErrKind> {
+        // `name`の位置(`PtrMember`全体の位置)
+        let span = self.build_err_span();
+        self.next_tkn(&["->"])?;
+        let member_tkn = self.next_tkn(&["name"])?;
+        let lex::Tkn::Name(member) = member_tkn.clone() else {
+            return crate::err_at!(self.ptr_member_name_not_found(member_tkn));
+        };
+        // `member`の位置
+        let member_span = self.build_err_span();
+        let index = self.arr_access_index()?;
+        let else_idx = self.arr_access_else_idx()?.map(|v| Box::new(v));
+
+        let arr = Expr::new(
+            ExprNode::RefArray {
+                name: member.clone(),
+                dst: Box::new(Expr::new(
+                    ExprNode::Var(member),
+                    Rc::clone(&member_span),
+                )),
+                index: Box::new(index),
+                else_idx,
+            },
+            member_span,
+        );
+        Ok(Expr::new(
+            ExprNode::PtrMember {
+                name: name.to_string(),
+                index: None,
+                else_idx: None,
+                target: Box::new(arr),
+            },
+            span,
+        ))
+    }
+
+    /// ポインタが指す構造体のメンバー(配列)に値を代入するノードを作成する
+    /// `[name->member index] = value` / `[name->member index else else_idx] = value`
+    ///
+    /// ## 呼び出し時の前提
+    /// `ptr_member_array_expr`と同じ(`current_tkn()`が`name`を指している)
+    pub(in crate::compiler::hexl_frontend::parse) fn make_ptr_member_array_assign_node(
+        &mut self,
+        name: &str,
+    ) -> Result<Group2Node, err::ErrKind> {
+        let span = self.build_err_span();
+        let dst = self.ptr_member_array_expr(name)?;
+        // `]`の次の`=`まで進める
+        let eq_tkn = self.next_tkn(&["="])?;
+        if !matches!(eq_tkn, lex::Tkn::Equal) {
+            return crate::err_at!(self.arr_assign_equal_not_found(eq_tkn));
+        }
+        let value = self.expr_branch()?;
+        Ok(AssignVar::new(name, dst, value, span).wrap_group2())
     }
 
     /// `[name`の次のトークンが、配列の添字の式の先頭になれるかを判定する
@@ -458,6 +553,59 @@ mod test_access_arr_node {
         assert_eq!(
             first_stmt("[ptr 1 else 0].f()"),
             ptr_member(num("1"), Some(num("0")), call).wrap_group2()
+        );
+    }
+
+    /// `[ptr->val i else 0]`のノード
+    fn ptr_member_arr(index: Expr, else_idx: Option<Expr>) -> Expr {
+        ptr_member_target(ref_arr("val", index, else_idx))
+    }
+
+    fn ptr_member_target(target: Expr) -> Expr {
+        ex(ExprNode::PtrMember {
+            name: "ptr".to_string(),
+            index: None,
+            else_idx: None,
+            target: Box::new(target),
+        })
+    }
+
+    /// `[ptr->val i else 0] = 10`: ポインタが指す構造体の配列メンバーへ代入
+    #[test]
+    fn check_ptr_arrow_member_arr_assign() {
+        assert_eq!(
+            first_stmt("[ptr->val i else 0] = 10"),
+            AssignVar::new(
+                "ptr",
+                ptr_member_arr(var("i"), Some(num("0"))),
+                num("10"),
+                sp()
+            )
+            .wrap_group2()
+        );
+    }
+
+    /// `[ptr->val l] = v`: `else`なしでも書ける
+    #[test]
+    fn check_ptr_arrow_member_arr_assign_without_else() {
+        assert_eq!(
+            first_stmt("[ptr->val l] = v"),
+            AssignVar::new("ptr", ptr_member_arr(var("l"), None), var("v"), sp()).wrap_group2()
+        );
+    }
+
+    /// `x: int = [ptr->val i else 0]`: 値の読み取り
+    #[test]
+    fn check_ptr_arrow_member_arr_value() {
+        assert_eq!(
+            first_stmt("x: int = [ptr->val i else 0]"),
+            ex(ExprNode::DefVar(DefineVar {
+                name: "x".to_string(),
+                value: Box::new(ptr_member_arr(var("i"), Some(num("0")))),
+                ty: TyNode::Ty("int".to_string()),
+                var_attr: parse::VarMutAttr::Invar,
+            }))
+            .wrap_group2()
         );
     }
 

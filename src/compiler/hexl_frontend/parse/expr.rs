@@ -436,7 +436,27 @@ impl Parser {
                 // メゾット呼び出しの次)を指した状態で返す
                 lex::Tkn::AccessPtr => {
                     self.next_tkn(&["->"])?;
-                    return self.ptr_member_node(&name, None, None);
+                    let member = self.ptr_member_node(&name, None, None)?;
+                    // 後置の`++`/`--`: `x = self->len++`
+                    // (メンバーのフィールドのときだけ。メゾット呼び出しの次は見ない)
+                    let is_field = matches!(
+                        &member.node,
+                        ExprNode::PtrMember { target, .. } if matches!(target.node, ExprNode::Var(_))
+                    );
+                    if is_field && matches!(self.next_tkn_ref(&[]), Ok(lex::Tkn::Inc | lex::Tkn::Dec)) {
+                        let postfix = self.next_tkn(&[])?;
+                        self.advance_tkn_checked()?;
+                        let span = Rc::clone(&member.span);
+                        return Ok(Expr::new(
+                            if postfix == lex::Tkn::Inc {
+                                ExprNode::Inc(Box::new(member))
+                            } else {
+                                ExprNode::Dec(Box::new(member))
+                            },
+                            span,
+                        ));
+                    }
+                    return Ok(member);
                 }
                 // 関数を呼ぶノード
                 lex::Tkn::LParen => {

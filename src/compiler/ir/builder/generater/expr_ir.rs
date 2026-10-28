@@ -347,6 +347,10 @@ impl IR {
                     let result = self.member_is_fn_via_ptr::<M>(&name, &call_func_info);
                     M::handle(result)?
                 }
+                ast::ExprNode::RefArray { name: member, .. } => {
+                    let result = self.member_is_var_via_ptr(&name, &member);
+                    M::handle(result)?
+                }
                 t => panic!("{:?}", t),
             },
             ast::ExprNode::RangeNode(..) => panic!(),

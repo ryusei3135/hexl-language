@@ -146,7 +146,7 @@ impl VarTree {
 
     #[inline(always)]
     pub(in crate::compiler::ir) fn is_mut(&self, name: &str) -> parse::VarMutAttr {
-        self.hash.get(name).unwrap().var_attr.clone()
+        self.hash.get(name).expect(format!("var name, {:?}", name).as_str()).var_attr.clone()
     }
 
     // /// 既に登録されている変数の型だけを上書きする

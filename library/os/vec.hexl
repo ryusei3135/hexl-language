@@ -14,12 +14,12 @@ pub struct Vec<T> {
         }
     }
 
-    pub push(self: Self*, val: T) {
+    pub push(self mut: Self*, val: T) {
         l: u64 = self->len
         // `[` の直後は変数名のみ。`[self->val l]` は書けないので、一度ローカル変数に入れる
-        p: T* must=free = self->val
-        [p l] = val
-        self->len = l + 1
+        //p: T* must=free = self->val
+        [self->val l] = val
+        self->len++
     }
 
     pub del(self: Self*) {
