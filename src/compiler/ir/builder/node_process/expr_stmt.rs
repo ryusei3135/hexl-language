@@ -595,6 +595,18 @@ impl IR {
             .clone();
         let field_size = M::handle(self.try_size_or_emit_struct(&field_ty))?;
 
+        // 一時変数は、メンバーの値(ポインタ)のコピーにすぎないので、メンバーの契約
+        // (`T* must=free`など)は引き継がない。契約の終了は、構造体を初期化した
+        // スコープの`del`で行うもので、一時変数に契約を持たせると、
+        // 要素の代入が「`must`変数への再代入」になったり、一時変数の契約終了を
+        // 求められたりする
+        let tmp_ty = match &field_ty {
+            TyNode::ConstractMust(inner) | TyNode::ConstractOf(inner) => inner.unwrap_ty(),
+            other => other.clone(),
+        };
+        // 要素の書き込み可否は、ポインタ変数(`self`など)の可変性に従う
+        let tmp_attr = self.var_tree.is_mut(ptr);
+
         let span = Rc::clone(&dst.span);
         let tmp = format!("$ptr_arr_{}", self.id_counter);
         // `ptr->member`(メンバーそのものの値 = 配列の先頭を指すポインタ)
@@ -614,8 +626,8 @@ impl IR {
             ExprNode::DefVar(DefineVar {
                 name: tmp.clone(),
                 value: Box::new(member_value),
-                ty: field_ty,
-                var_attr: parse::VarMutAttr::Invar,
+                ty: tmp_ty,
+                var_attr: tmp_attr,
             }),
             Rc::clone(&span),
         );

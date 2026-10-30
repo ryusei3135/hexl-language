@@ -199,11 +199,12 @@ impl Parser {
     }
 
     fn ptr_ty_node(&mut self, ty: TyNode) -> Result<TyNode, err::ErrKind> {
-        let range = if self.peek_tkn()? == lex::Tkn::LParen {
-            // ポインタの範囲指定がある場合、`(start, end)`を読み込む
-            Some((0usize, 0usize))
-        } else {
-            None
+        let range = match self.peek_tkn()? {
+            lex::Tkn::LParen => Some((0usize, 0usize)),
+            lex::Tkn::Str(s) if s.as_str() == "unlimit" => {
+                Some((0usize, 0xFFFF_FFFF_FFFF_FFFFusize))
+            }
+            _ => None,
         };
         let is_const = self.is_const_ptr()?;
         self.next_tkn(&[])?;

@@ -2,7 +2,7 @@
 
 
 pub struct Vec<T> {
-    val: T* must=free
+    val: T*"unlimit" must=free
     len: u64
     cap: u64
 
@@ -18,7 +18,7 @@ pub struct Vec<T> {
         l: u64 = self->len
         // `[` の直後は変数名のみ。`[self->val l]` は書けないので、一度ローカル変数に入れる
         //p: T* must=free = self->val
-        [self->val l] = val
+        [self->val l else 0] = val
         self->len++
     }
 
