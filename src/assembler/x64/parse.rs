@@ -64,7 +64,7 @@ impl<'a> Lexer<'a> {
     //
     // `.` の直後が数字のときだけ小数として扱う
     // (`1.` のような形は従来どおり整数 + 識別子の扱いのまま)。
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Result<Token, String> {
         // 16進数 (`0xff` / `0XFF`)。`0x` の直後が16進数字のときだけ。
         // 64bit に収まらない桁は上位を切り捨てる (`0xFFFFFFFFFFFFFFFF` は `-1`)
         if self.current == Some('0')
@@ -81,7 +81,7 @@ impl<'a> Lexer<'a> {
                 self.advance();
             }
 
-            return Token::Number(value as i64);
+            return Ok(Token::Number(value as i64));
         }
 
         let mut value = String::new();
@@ -139,9 +139,18 @@ impl<'a> Lexer<'a> {
         }
 
         if is_float {
-            Token::Float(value.parse().unwrap())
+            match value.parse::<f64>() {
+                Ok(f) if f.is_finite() => Ok(Token::Float(f)),
+                _ => Err(format!("invalid float literal: {}", value)),
+            }
+        } else if let Ok(n) = value.parse::<i64>() {
+            Ok(Token::Number(n))
+        } else if let Ok(n) = value.parse::<u64>() {
+            // i64 に収まらない 64bit の値は、16進数と同じく2の補数で表す
+            // (`9223372036854775808` は `i64::MIN`)
+            Ok(Token::Number(n as i64))
         } else {
-            Token::Number(value.parse().unwrap())
+            Err(format!("integer literal out of range: {}", value))
         }
     }
 
@@ -172,10 +181,10 @@ impl<'a> Lexer<'a> {
     // 文字列リテラル ("...") を読み取る。
     //
     // 呼び出し時点で self.current は開きの `"` を指している。
-    // ループの各分岐は必ず self.advance() を呼ぶか break/panic するので、
+    // ループの各分岐は必ず self.advance() を呼ぶか break/return するので、
     // 入力が尽きても current の値が変わらないまま回り続けることはない
-    // (未終端の文字列や末尾の `\` は panic で確実に止める)。
-    fn string_literal(&mut self) -> String {
+    // (未終端の文字列や末尾の `\` は Err で確実に止める)。
+    fn string_literal(&mut self) -> Result<String, String> {
         // opening quote
         self.advance();
 
@@ -184,7 +193,7 @@ impl<'a> Lexer<'a> {
         loop {
             match self.current {
                 None => {
-                    panic!("unterminated string literal");
+                    return Err("unterminated string literal".to_string());
                 }
 
                 Some('"') => {
@@ -199,7 +208,9 @@ impl<'a> Lexer<'a> {
 
                     match self.current {
                         None => {
-                            panic!("unterminated string literal (trailing backslash)");
+                            return Err(
+                                "unterminated string literal (trailing backslash)".to_string()
+                            );
                         }
                         Some('n') => {
                             value.push('\n');
@@ -244,7 +255,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        value
+        Ok(value)
     }
 
     fn register(&mut self) -> String {
@@ -265,7 +276,7 @@ impl<'a> Lexer<'a> {
         value
     }
 
-    pub fn tokenize(mut self) -> Vec<Token> {
+    pub fn tokenize(mut self) -> Result<Vec<Token>, String> {
         let mut tokens = Vec::new();
 
         loop {
@@ -290,7 +301,7 @@ impl<'a> Lexer<'a> {
                     Token::Dollar
                 }
                 Some('%') => Token::Register(self.register()),
-                Some('"') => Token::Str(self.string_literal()),
+                Some('"') => Token::Str(self.string_literal()?),
                 Some('(') => {
                     self.advance();
                     Token::LParen
@@ -311,12 +322,12 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Token::Star
                 }
-                Some(c) if c.is_ascii_digit() => self.number(),
+                Some(c) if c.is_ascii_digit() => self.number()?,
                 Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '.' => {
                     Token::Ident(self.identifier())
                 }
                 Some(c) => {
-                    panic!("unexpected character: {}", c);
+                    return Err(format!("unexpected character: {:?}", c));
                 }
             };
 
@@ -329,7 +340,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        tokens
+        Ok(tokens)
     }
 }
 
@@ -398,7 +409,14 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(mut tokens: Vec<Token>) -> Self {
+        // 空のトークン列や、`Eof` で終わらないトークン列でも、
+        // `current` / `advance` が範囲外にならず、`parse` が必ず終わるように
+        // 末尾に `Eof` を補う
+        if !matches!(tokens.last(), Some(Token::Eof)) {
+            tokens.push(Token::Eof);
+        }
+
         Self { tokens, pos: 0 }
     }
 
@@ -515,7 +533,7 @@ impl Parser {
                 self.advance();
 
                 match self.advance() {
-                    Token::Number(n) => Ok(Operand::Immediate(-n)),
+                    Token::Number(n) => Ok(Operand::Immediate(n.wrapping_neg())),
                     Token::Float(f) => Ok(Operand::Float(-f)),
                     token => Err(format!("expected number, got {:?}", token)),
                 }
@@ -608,7 +626,8 @@ impl Parser {
         };
 
         match self.advance() {
-            Token::Number(n) => Ok(Operand::Immediate(n * sign)),
+            // `-9223372036854775808` のように `i64::MIN` も書けるよう、2の補数で反転する
+            Token::Number(n) => Ok(Operand::Immediate(if sign < 0 { n.wrapping_neg() } else { n })),
 
             Token::Ident(name) => {
                 // 将来 relocation 用に拡張可能
@@ -634,7 +653,7 @@ impl Parser {
 
                 match self.advance() {
                     Token::Number(n) => {
-                        displacement = -n;
+                        displacement = n.wrapping_neg();
                     }
 
                     token => {
@@ -735,5 +754,60 @@ impl Parser {
             scale,
             symbol,
         }))
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    fn parse(src: &str) -> Result<Program, String> {
+        let tokens = Lexer::new(src).tokenize()?;
+        Parser::new(tokens).parse()
+    }
+
+    fn first_imm(src: &str) -> i64 {
+        let program = parse(src).unwrap();
+        match &program.statements[0] {
+            Statement::Instruction(i) => match &i.operands[0] {
+                Operand::Immediate(n) => *n,
+                other => panic!("{:?}", other),
+            },
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn empty_and_eof_less_tokens_do_not_panic_or_hang() {
+        assert!(Parser::new(vec![]).parse().unwrap().statements.is_empty());
+        assert!(Parser::new(vec![Token::Eof]).parse().unwrap().statements.is_empty());
+        assert!(Parser::new(vec![Token::NewLine]).parse().unwrap().statements.is_empty());
+        assert!(Parser::new(vec![Token::Ident("nop".into())]).parse().is_ok());
+        // `Eof` が無く、命令の途中で終わっても止まる
+        assert!(Parser::new(vec![Token::Ident("mov".into()), Token::Minus]).parse().is_err());
+    }
+
+    #[test]
+    fn unterminated_string_is_error() {
+        assert!(Lexer::new(".ascii \"abc").tokenize().is_err());
+        assert!(Lexer::new(".ascii \"abc\\").tokenize().is_err());
+    }
+
+    #[test]
+    fn unexpected_character_is_error() {
+        assert!(Lexer::new("mov @, %rax").tokenize().is_err());
+        assert!(Lexer::new("mov \u{3042}").tokenize().is_err());
+    }
+
+    #[test]
+    fn out_of_range_integer_is_error() {
+        assert!(Lexer::new("push $99999999999999999999999").tokenize().is_err());
+    }
+
+    #[test]
+    fn i64_min_can_be_negated() {
+        assert_eq!(first_imm("push $-9223372036854775808"), i64::MIN);
+        assert_eq!(first_imm("push $-0x8000000000000000"), i64::MIN);
+        assert_eq!(first_imm(".quad -9223372036854775808"), i64::MIN);
     }
 }
