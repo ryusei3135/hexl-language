@@ -1,4 +1,4 @@
-#include "library/os/mem.hexl"
+#include std::"os/mem.hexl"
 
 
 pub struct Vec<T> {

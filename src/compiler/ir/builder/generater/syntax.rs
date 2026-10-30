@@ -162,12 +162,21 @@ impl IR {
             }
         }
 
+        // 契約(`must`)の状態は、分岐ごとに分岐の前の状態から始める。
+        // (ある分岐で終了した変数を、別の分岐でも終了できるようにするため。
+        //  分岐の間で契約が食い違っていないかは、`checker/constract/branch.rs`が確認する)
+        // `ret`/`break`で必ず抜ける分岐で終了した変数は、分岐の後には影響しないので、
+        // 抜けない分岐で終了した変数だけを、全分岐を作り終えたあとに終了済みにする
+        let life_before = self.var_tree.snapshot_life();
+        let mut ended_after: Vec<String> = Vec::new();
+
         // どの条件にも一致しなかった場合の処理(else)
         // (elseが無い場合でも、そのまま素通りして終了ラベルへ進む)
         if let Some(arm) = arm_else.clone() {
             self.begin_scope();
             self.gen_inst::<M>(&arm)?;
             self.end_block_scope(&scope_span);
+            self.finish_branch_life(&life_before, &arm, &mut ended_after);
         }
         crate::push_jmp_code!(self, Jmp, &end_label);
 
@@ -183,12 +192,33 @@ impl IR {
             }
             self.gen_inst::<M>(&arm.body)?;
             self.end_block_scope(&scope_span);
+            self.finish_branch_life(&life_before, &arm.body, &mut ended_after);
             crate::push_jmp_code!(self, Jmp, &end_label);
         }
+        // 分岐の後の契約の状態
+        self.var_tree.mark_life_ended(&ended_after);
 
         // 条件が終了したときにジャンプする場所を指定
         crate::push_jmp_code!(self, Block, end_label);
         Ok(self.id_counter - 1)
+    }
+
+    /// 分岐の本体を作り終えたあとに呼ぶ。契約の状態を分岐の前(`before`)へ戻し、
+    /// 本体が`ret`/`break`で抜けないなら、その本体で終了した変数を`ended_after`に積む
+    fn finish_branch_life(
+        &mut self,
+        before: &std::collections::HashMap<String, crate::compiler::ir::def_tree::VarLife>,
+        body: &Body,
+        ended_after: &mut Vec<String>,
+    ) {
+        if !Self::body_always_exits(body) {
+            for name in self.var_tree.ended_since(before) {
+                if !ended_after.contains(&name) {
+                    ended_after.push(name);
+                }
+            }
+        }
+        self.var_tree.restore_life(before);
     }
 
     /// 三項演算子を条件分岐に展開する(`gen_match_expr_ir`と同じ形)

@@ -219,14 +219,14 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
             "mul",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, {dst}\n{space}mul {src2}, {dst}\n",
+                template: "{space}mov {src1}, %rax\n{space}mul {src2}\n{space}mov %rax, {dst}\n",
             },
         ),
         (
             "imul",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, {dst}\n{space}imul {src2}, {dst}\n",
+                template: "{space}mov {src1}, %rax\n{space}mul {src2}\n{space}mov %rax, {dst}\n",
             },
         ),
         (

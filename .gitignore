@@ -9,7 +9,6 @@ test
 test.sh
 *.zip
 log.txt
-hexl/
 *.elf
 *.exe
 build.rs
@@ -17,6 +16,7 @@ hexl_d
 *.o
 *.s
 a
+hexl
 library/os/*.md
 documents/docs.md
 src/compiler/ir/checker/constract/constract_d.md

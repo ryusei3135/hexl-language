@@ -194,6 +194,51 @@ impl VarTree {
         }
     }
 
+    /// 全変数の契約の状態(`life`)を記録する(条件分岐の前に呼ぶ)
+    pub(in crate::compiler::ir) fn snapshot_life(&self) -> HashMap<String, VarLife> {
+        self.hash
+            .iter()
+            .map(|(name, var)| (name.clone(), var.life.clone()))
+            .collect()
+    }
+
+    /// `snapshot_life`で記録した状態へ戻す(分岐の本体を作り終えるたびに呼ぶ)。
+    /// 記録後に消えた変数(分岐の中のローカル変数)は無視する
+    pub(in crate::compiler::ir) fn restore_life(&mut self, snapshot: &HashMap<String, VarLife>) {
+        for (name, life) in snapshot {
+            if let Some(var) = self.hash.get_mut(name) {
+                var.life = life.clone();
+            }
+        }
+    }
+
+    /// `snapshot`の時点では契約中(`Constracting`)で、今は終了済みの変数の名前
+    pub(in crate::compiler::ir) fn ended_since(
+        &self,
+        snapshot: &HashMap<String, VarLife>,
+    ) -> Vec<String> {
+        snapshot
+            .iter()
+            .filter(|(name, life)| {
+                **life == VarLife::Constracting
+                    && self
+                        .hash
+                        .get(*name)
+                        .is_some_and(|var| var.life == VarLife::EndConstract)
+            })
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+
+    /// 指定された変数を、契約が終了済みの状態にする
+    pub(in crate::compiler::ir) fn mark_life_ended(&mut self, names: &[String]) {
+        for name in names {
+            if let Some(var) = self.hash.get_mut(name) {
+                var.life = VarLife::EndConstract;
+            }
+        }
+    }
+
     /// 指定された変数が`must`の契約を持つかどうか
     #[inline(always)]
     pub(in crate::compiler::ir) fn is_contract_must(&self, var_name: &str) -> bool {

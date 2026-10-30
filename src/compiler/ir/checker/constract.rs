@@ -227,6 +227,23 @@ impl IR {
         }
     }
 
+    /// `must`の引数が、戻り値の`must`へ契約を引き継ぐか
+    ///
+    /// 引数の型と戻り値の型が同じ名前の`must`(`realloc(ptr: T* must=free): T* must=free`)なら、
+    /// 呼び出し元が渡した契約は、戻り値を受け取った側へ引き継がれる。
+    /// この引数は、関数の中で別の関数へ渡さなくてよい
+    /// (途中で`free`などへ渡して終了しても構わない)
+    fn hands_over_to_ret(func: &FuncDefine, param: &ArgsNode) -> bool {
+        let Some(ret_must) = func.ret_ty.as_contract_must() else {
+            return false;
+        };
+        ret_must.must_name().is_some()
+            && param
+                .ty
+                .as_contract_must()
+                .is_some_and(|m| m.must_name() == ret_must.must_name())
+    }
+
     /// `must`の契約を持つ変数が、関数の中で必ず一度は
     /// 関数の引数として渡されているかを確認する
     ///
@@ -238,9 +255,10 @@ impl IR {
 
         // 引数として受け取った`must`の値も、この関数の中で
         // 別の関数へ渡す義務がある
+        // (戻り値の`must`へ引き継ぐ引数は、その義務を戻り値が負うので除く)
         func.params
             .iter()
-            .filter(|param| param.ty.is_contract_must())
+            .filter(|param| param.ty.is_contract_must() && !Self::hands_over_to_ret(func, param))
             .for_each(|param| {
                 must_vars
                     .borrow_mut()
@@ -257,7 +275,9 @@ impl IR {
         let loop_scope: MustVarsTy = Rc::new(RefCell::new(
             func.params
                 .iter()
-                .filter(|param| param.ty.is_contract_must())
+                .filter(|param| {
+                    param.ty.is_contract_must() && !Self::hands_over_to_ret(func, param)
+                })
                 .map(|param| MustVar::new(param.name.clone(), &func.span))
                 .collect(),
         ));
@@ -512,8 +532,6 @@ g(v: int must=d) { d(v) }
     }
 
     #[test]
-    #[ignore = "未実装: IR生成の`var_tree.finish_constract_var`が分岐を考慮せず、\
-                別の分岐で終了した変数を`VariableConstractExpired`にしてしまう"]
     fn each_branch_may_end_the_contract_once() {
         assert_ok(&main_with(
             "x: int must=c = a()\ncond 1 == 1 {\n c(x)\n} else {\n c(x)\n}",
@@ -521,8 +539,6 @@ g(v: int must=d) { d(v) }
     }
 
     #[test]
-    #[ignore = "未実装: IR生成の`var_tree.finish_constract_var`が分岐を考慮せず、\
-                分岐の中で終了した変数を、分岐の後で終了すると`VariableConstractExpired`にしてしまう"]
     fn ending_contract_in_branch_that_returns_is_ok_without_marking_it_ended() {
         // 契約を終了して`ret`する分岐は比較から外す。終了したことにはしないので、
         // 抜けない側の経路であとから終了する
@@ -546,8 +562,6 @@ g(v: int must=d) { d(v) }
     }
 
     #[test]
-    #[ignore = "未実装: IR生成の`var_tree.finish_constract_var`が分岐を考慮せず、\
-                分岐の中で終了した変数を、分岐の後で終了すると`VariableConstractExpired`にしてしまう"]
     fn ending_contract_in_branch_that_breaks_in_loop_is_ok_without_marking_it_ended() {
         // 反復処理の中では`break`でも認める(終了したことにはしない)
         assert_ok(&main_with(
@@ -596,8 +610,6 @@ g(v: int must=d) { d(v) }
     }
 
     #[test]
-    #[ignore = "未実装: IR生成の`var_tree.finish_constract_var`が分岐を考慮せず、\
-                分岐の中で終了した変数を、分岐の後で終了すると`VariableConstractExpired`にしてしまう"]
     fn ending_outer_contract_in_branch_then_after_it_inside_loop_is_ok() {
         // 抜ける分岐で終了しても終了したことにはしないので、抜けない側でも終了する
         assert_ok(&main_with(

@@ -233,6 +233,11 @@ impl IR {
         Ok(ends)
     }
 
+    /// IR生成から使う`body_exits`。本体が必ず`ret`/`break`で抜けるか
+    pub(in crate::compiler::ir) fn body_always_exits(body: &Body) -> bool {
+        Self::body_exits(body).is_some()
+    }
+
     /// 本体を実行すると、必ず`ret`/`break`で抜けるか(全経路の解析)
     ///
     /// 抜ける文より後ろは実行されないので、最初に「必ず抜ける」文を見つけた時点で決まる。
