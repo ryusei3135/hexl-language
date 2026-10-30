@@ -612,7 +612,7 @@ mod generic_tests {
     }
 
     fn try_build(src: &str) -> Result<Vec<Group1Node>, ()> {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&src.to_string()).unwrap();
         let mut p = parse::Parser::new_for_test();
         p.parser_for_test(&lexer.gen_tkns.clone())
@@ -871,7 +871,7 @@ mod generic_tests {
         // `p.T`の`T`はメンバーの名前なので、型パラメータではない
         // (トークン列の置き換えを直接確認する)
         let lex_tkns = |src: &str| {
-            let mut lexer = lex::Lexer::new();
+            let mut lexer = lex::Lexer::new("<test>");
             lexer.analy(&src.to_string()).unwrap();
             lexer.gen_tkns
         };

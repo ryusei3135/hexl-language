@@ -66,9 +66,9 @@ fn build_preprocessor(opts: &COptions) -> Result<lex::Preprocessor, CFrontendErr
 fn finish(
     pp: &lex::Preprocessor,
     tokens: Vec<lex::TokenInfo>,
-    #[cfg(not(test))] self_file_name: &Rc<String>,
+    self_file_name: &Rc<String>,
 ) -> Result<COutput, CFrontendError> {
-    let out = parse_c(tokens, &self_file_name).map_err(|e| CFrontendError(e.to_string()))?;
+    let out = parse_c(tokens, self_file_name).map_err(|e| CFrontendError(e.to_string()))?;
     let mut warnings = pp.warnings().to_vec();
     warnings.extend(out.warnings);
     Ok(COutput {
@@ -83,7 +83,7 @@ pub fn try_emit_c_node(
     file_name: &str,
     src: &str,
     opts: &COptions,
-    #[cfg(not(test))] self_file_name: &Rc<String>,
+    self_file_name: &Rc<String>,
 ) -> Result<COutput, CFrontendError> {
     let mut pp = build_preprocessor(opts)?;
     let tokens = pp
@@ -92,8 +92,7 @@ pub fn try_emit_c_node(
     finish(
         &pp,
         tokens,
-        #[cfg(not(test))]
-        &self_file_name,
+        self_file_name,
     )
 }
 
@@ -101,7 +100,7 @@ pub fn try_emit_c_node(
 pub fn try_emit_c_node_from_file(
     path: &str,
     opts: &COptions,
-    #[cfg(not(test))] self_file_name: &Rc<String>,
+    self_file_name: &Rc<String>,
 ) -> Result<COutput, CFrontendError> {
     let mut pp = build_preprocessor(opts)?;
     let tokens = pp
@@ -110,8 +109,7 @@ pub fn try_emit_c_node_from_file(
     finish(
         &pp,
         tokens,
-        #[cfg(not(test))]
-        &self_file_name,
+        self_file_name,
     )
 }
 

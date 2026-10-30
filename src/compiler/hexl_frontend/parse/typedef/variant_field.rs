@@ -126,7 +126,7 @@ mod variant_node_test {
     };
 
     fn gen_variant(content: &str) -> VariantDefine {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
         let mut p = parse::Parser::new_for_test();

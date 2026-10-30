@@ -576,7 +576,7 @@ mod tests {
     use crate::compiler::hexl_frontend::lex::*;
 
     fn lexer() -> Lexer {
-        Lexer::new()
+        Lexer::new("<test>")
     }
 
     #[test]
@@ -1158,7 +1158,7 @@ mod tests {
     }
 
     fn ret_nums(os: &str, src: &str) -> Vec<String> {
-        let mut lex = Lexer::with_os(os);
+        let mut lex = Lexer::with_os(os, "<test>");
         lex.analy(&src.to_string()).unwrap();
         lex.gen_tkns
             .into_iter()
@@ -1231,7 +1231,7 @@ mod tests {
     fn check_include_plain_is_not_inlined() {
         // `.hexl`は展開せず、`#include`のまま後段(ROOT基準+pubのみ)に任せる。
         // ファイルが無くてもここでは読まない
-        let mut lex = Lexer::with_os("linux");
+        let mut lex = Lexer::with_os("linux", "<test>");
         lex.analy(&"ret 0\n#include \"dir/a.hexl\"\nret 2".to_string())
             .unwrap();
         let includes = lex
@@ -1245,7 +1245,7 @@ mod tests {
     #[test]
     fn check_include_with_alias_is_left_for_parser() {
         // `"file"::io` と `io="file"` は読み込まず、`#include` のまま残る
-        let mut lex = Lexer::with_os("linux");
+        let mut lex = Lexer::with_os("linux", "<test>");
         lex.analy(&"#include \"x.hexl\"::io\n#include io=\"x.hexl\"".to_string())
             .unwrap();
         let names = lex
@@ -1260,7 +1260,7 @@ mod tests {
     fn check_include_c_file_only_saves_name() {
         // `.c` / `.h` は読み込まず(ファイルが無くてもよい)、名前だけが保存される。
         // ソースには何も展開されず、後ろのトークンの行番号もずれない
-        let mut lex = Lexer::with_os("linux");
+        let mut lex = Lexer::with_os("linux", "<test>");
         lex.analy(&"ret 1\n#include \"a.c\"\n#include \"b.h\"\nret 2".to_string())
             .unwrap();
         assert_eq!(lex.include_c_file_list, vec!["a.c", "b.h"]);
@@ -1277,7 +1277,7 @@ mod tests {
 
     #[test]
     fn check_include_c_file_duplicate_is_saved_once() {
-        let mut lex = Lexer::with_os("linux");
+        let mut lex = Lexer::with_os("linux", "<test>");
         lex.analy(&"#include \"a.c\"\n#include \"a.c\"".to_string())
             .unwrap();
         assert_eq!(lex.include_c_file_list, vec!["a.c"]);
@@ -1285,7 +1285,7 @@ mod tests {
 
     #[test]
     fn check_include_c_file_in_inactive_branch_is_skipped() {
-        let mut lex = Lexer::with_os("linux");
+        let mut lex = Lexer::with_os("linux", "<test>");
         lex.analy(
             &"#if #windows\n#include \"w.c\"\n#endif\n#if #linux\n#include \"l.c\"\n#endif"
                 .to_string(),

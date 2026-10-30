@@ -150,7 +150,7 @@ fn new_test_ir() -> IR {
 
 #[cfg(test)]
 fn parse_test_source(src: &str) -> Vec<Group1Node> {
-    let mut lexer = crate::compiler::hexl_frontend::lex::Lexer::new();
+    let mut lexer = crate::compiler::hexl_frontend::lex::Lexer::new("<test>");
     lexer.analy(&src.to_string()).unwrap();
     let file_name = std::rc::Rc::new("<test>".to_string());
     let err_pool = std::rc::Rc::new(std::cell::RefCell::new(crate::err::err_pool::ErrPool::new()));

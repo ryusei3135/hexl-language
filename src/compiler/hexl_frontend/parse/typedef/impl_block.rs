@@ -108,7 +108,7 @@ mod impl_block_test {
     };
 
     fn parse_nodes(content: &str) -> Result<Vec<Group1Node>, ()> {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&content.to_string()).unwrap();
         let tkns = lexer.gen_tkns.clone();
         let mut p = parse::Parser::new_for_test();

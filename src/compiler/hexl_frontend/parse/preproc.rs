@@ -241,7 +241,7 @@ mod inline_asm_tests {
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp() -> std::rc::Rc<err::Span> {
-        std::rc::Rc::new(err::Span::new(0, 0, String::new()))
+        std::rc::Rc::new(err::Span::new(0, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
     }
 
     /// 位置を付けて`Expr`にする
@@ -254,7 +254,7 @@ mod inline_asm_tests {
     fn gen_inline_asm(asm_body: &str) -> Vec<InlineAsm> {
         let src = format!("main(): b1 {{ #asm(gas) {{ {} }} }}", asm_body);
 
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&src.to_string()).unwrap();
 
         let mut p = parse::Parser::new_for_test();
@@ -371,7 +371,7 @@ mod inline_asm_tests {
     fn asm_block_does_not_truncate_following_statements() {
         let src = "main(): b1 { #asm(gas) { \"mov ${a}\" } ret a }";
 
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&src.to_string()).unwrap();
 
         let mut p = parse::Parser::new_for_test();

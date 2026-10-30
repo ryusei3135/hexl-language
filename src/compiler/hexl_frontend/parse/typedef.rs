@@ -413,12 +413,12 @@ mod ty_tests {
 
     /// テストで組み立てるノードに付ける位置(`line`も`pos`も0)
     fn sp() -> Rc<err::Span> {
-        Rc::new(err::Span::new(0, 0, String::new()))
+        Rc::new(err::Span::new(0, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
     }
 
     /// パース結果。すべての`span`と`Group2Info.line`を0にして返す
     fn build(value: &str) -> Vec<Group1Node> {
-        let mut lex = lex::Lexer::new();
+        let mut lex = lex::Lexer::new("<test>");
         let _ = lex.analy(&value.to_string()).unwrap();
         let mut parse = Parser::new_for_test();
         parse
@@ -437,7 +437,7 @@ mod ty_tests {
 
     /// 構文解析がエラーになるかどうか
     fn build_is_err(value: &str) -> bool {
-        let mut lex = lex::Lexer::new();
+        let mut lex = lex::Lexer::new("<test>");
         let _ = lex.analy(&value.to_string()).unwrap();
         let mut parse = Parser::new_for_test();
         parse.parser_for_test(&lex.gen_tkns.clone()).is_err()

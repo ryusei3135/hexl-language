@@ -24,7 +24,6 @@ pub struct Span {
     pub line: usize,
     pub pos: usize,
     pub line_txt: String,
-    #[cfg(not(test))]
     pub self_file_name: Rc<String>,
 }
 
@@ -33,13 +32,12 @@ impl Span {
         line: usize,
         pos: usize,
         line_txt: String,
-        #[cfg(not(test))] self_file_name: &Rc<String>,
+        self_file_name: &Rc<String>,
     ) -> Self {
         Self {
             line: line,
             pos: pos,
             line_txt,
-            #[cfg(not(test))]
             self_file_name: Rc::clone(&self_file_name),
         }
     }
@@ -58,7 +56,7 @@ impl Span {
     /// 位置情報が存在しない(取得できない)場合に使う
     #[cfg(test)]
     pub fn unknown() -> Self {
-        Self::new(0, 0, "undefine".to_string())
+        Self::new(0, 0, "undefine".to_string(), &Rc::new("test".to_string()))
     }
 
     /// `Span::unknown()`で作られた(位置が分からない)か
@@ -292,7 +290,7 @@ mod tests {
 
     #[test]
     fn display_includes_position_and_func_name() {
-        let span = Rc::new(Span::new(3, 10, String::new()));
+        let span = Rc::new(Span::new(3, 10, String::new(), &Rc::new("test".to_string())));
         let e = ErrKind::Syntax(Box::new(SyntaxErr {
             kind: SyntaxErrKind::TknIsEofInExpr,
             loc: ErrLoc::new(span.clone(), "expr_value".to_string()),
@@ -312,7 +310,7 @@ mod tests {
     fn undef_err_gets_span_from_with_span() {
         let e = undef::UndefErrs::undef_fn("foo");
         assert_eq!(e.to_string(), "未定義エラー: 関数`foo`が見つかりません");
-        let e = e.with_span(Rc::new(Span::new(2, 5, String::new())));
+        let e = e.with_span(Rc::new(Span::new(2, 5, String::new(), &Rc::new("test".to_string()))));
         let msg = e.to_string();
         assert!(msg.starts_with("未定義エラー: 関数`foo`が見つかりません ["));
         assert!(msg.contains("<test>"));
@@ -323,7 +321,7 @@ mod tests {
     fn compile_err_display_has_file_name() {
         let e = ErrKind::CompileErr(Box::new(CompileErr::new(
             CompileErrKind::BreakOutsideLoop,
-            Rc::new(Span::new(7, 1, String::new())),
+            Rc::new(Span::new(7, 1, String::new(), &Rc::new("test".to_string()))),
         )));
         let msg = e.to_string();
         assert!(msg.starts_with("コンパイルエラー: "));

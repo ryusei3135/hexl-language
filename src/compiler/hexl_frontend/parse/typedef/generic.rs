@@ -513,7 +513,7 @@ mod generic_type_tests {
     use crate::compiler::{hexl_frontend::lex, hexl_frontend::parse};
 
     fn try_build(src: &str) -> Result<Vec<Group1Node>, ()> {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&src.to_string()).unwrap();
         let mut p = parse::Parser::new_for_test();
         p.parser_for_test(&lexer.gen_tkns.clone())
@@ -526,7 +526,7 @@ mod generic_type_tests {
     }
 
     fn sp() -> std::rc::Rc<crate::compiler::err::Span> {
-        std::rc::Rc::new(crate::compiler::err::Span::new(0, 0, String::new()))
+        std::rc::Rc::new(crate::compiler::err::Span::new(0, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
     }
 
     /// `unsafe`共用体のメンバー(`mode`が`Unsafe`)を作る

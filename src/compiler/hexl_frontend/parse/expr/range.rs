@@ -75,7 +75,7 @@ mod test {
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp() -> std::rc::Rc<err::Span> {
-        std::rc::Rc::new(err::Span::new(0, 0, String::new()))
+        std::rc::Rc::new(err::Span::new(0, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
     }
 
     /// 位置を付けて`Expr`にする
@@ -84,7 +84,7 @@ mod test {
     }
 
     fn gen_nodes(content: &str) -> Vec<lex::LocatedTkn> {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&content.to_string()).unwrap();
         lexer.gen_tkns.clone()
     }

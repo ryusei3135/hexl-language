@@ -97,7 +97,7 @@ mod test {
     use crate::compiler::hexl_frontend::parse;
 
     fn gen_nodes(content: &str) -> Vec<lex::LocatedTkn> {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&content.to_string()).unwrap();
         lexer.gen_tkns.clone()
     }

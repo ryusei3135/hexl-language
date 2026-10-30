@@ -5,7 +5,8 @@ use crate::compiler::err::Span;
 use crate::compiler::hexl_frontend::parse::VarMutAttr;
 use std::rc::Rc;
 
-fn parse(src: &str, #[cfg(not(test))] self_file_name: &Rc<String>) -> Vec<Group1Node> {
+fn parse(src: &str) -> Vec<Group1Node> {
+    let self_file_name = Rc::new("t.c".to_string());
     let toks = Preprocessor::new()
         .preprocess("t.c", src)
         .expect("preprocess");
@@ -14,7 +15,8 @@ fn parse(src: &str, #[cfg(not(test))] self_file_name: &Rc<String>) -> Vec<Group1
         .nodes
 }
 
-fn parse_err(src: &str, #[cfg(not(test))] self_file_name: &Rc<String>) -> ParseError {
+fn parse_err(src: &str) -> ParseError {
+    let self_file_name = Rc::new("t.c".to_string());
     let toks = Preprocessor::new()
         .preprocess("t.c", src)
         .expect("preprocess");
@@ -843,7 +845,7 @@ fn realistic_program() {
         }
     "#;
     let toks = Preprocessor::new().preprocess("t.c", src).unwrap();
-    let out = parse_c(toks).unwrap_or_else(|e| panic!("{}", e));
+    let out = parse_c(toks, &Rc::new("t.c".to_string())).unwrap_or_else(|e| panic!("{}", e));
     assert_eq!(out.nodes.len(), 5);
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let n = out.nodes;

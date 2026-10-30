@@ -306,7 +306,7 @@ g(v: int must=d) { d(v) }
     /// `unwrap_or_report`はテスト中はpanicする(`std::process::exit`だと
     /// テスト全体が終了してしまうため。`ir/builder.rs`を参照)
     fn compile(src: &str) -> Result<(), String> {
-        let mut lexer = lex::Lexer::new();
+        let mut lexer = lex::Lexer::new("<test>");
         lexer.analy(&src.to_string()).unwrap();
         let file_name = std::rc::Rc::new("<test>".to_string());
         let err_pool =
@@ -403,10 +403,10 @@ g(v: int must=d) { d(v) }
     fn passing_contract_var_by_pointer_does_not_end_it() {
         // `&x`(ポインタ渡し)では契約は終了しない。終了していないので、
         // 最後まで`x`を渡さなければ未終了のエラー
-        assert_err(&main_with("x: int must=c = a()\nc(&x)"));
+        assert_err(&main_with("x: int must=c = a()\nc([x])"));
         // ポインタで渡したあとに、`x`そのものを渡して終了すれば成功
         // (終了していなければ二重終了にもならない)
-        assert_ok(&main_with("x: int must=c = a()\nc(&x)\nc(x)"));
+        assert_ok(&main_with("x: int must=c = a()\nc([x])\nc(x)"));
     }
 
     // ------------------------------------------------------------------

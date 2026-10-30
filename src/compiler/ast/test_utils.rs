@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 #[cfg(test)]
 fn span_at(line: usize) -> Rc<Span> {
-    Rc::new(Span::new(line, 0, String::new()))
+    Rc::new(Span::new(line, 0, String::new(), &Rc::new("<test>".to_string())))
 }
 
 #[cfg(test)]
