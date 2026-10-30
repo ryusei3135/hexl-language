@@ -1432,7 +1432,7 @@ mod sse_tests {
     use super::*;
 
     fn assemble(source: &str) -> Result<Vec<u8>, String> {
-        let tokens = Lexer::new(source).tokenize();
+        let tokens = Lexer::new(source).tokenize()?;
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();
@@ -1553,7 +1553,7 @@ mod alu_shift_tests {
     use super::*;
 
     fn assemble(source: &str) -> Result<Vec<u8>, String> {
-        let tokens = Lexer::new(source).tokenize();
+        let tokens = Lexer::new(source).tokenize()?;
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();
@@ -1749,7 +1749,7 @@ mod inc_dec_tests {
     use super::*;
 
     fn assemble(source: &str) -> Result<Vec<u8>, String> {
-        let tokens = Lexer::new(source).tokenize();
+        let tokens = Lexer::new(source).tokenize()?;
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();
@@ -1812,7 +1812,7 @@ mod jcc_tests {
     use super::*;
 
     fn assemble(source: &str) -> Result<Vec<u8>, String> {
-        let tokens = Lexer::new(source).tokenize();
+        let tokens = Lexer::new(source).tokenize()?;
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();
@@ -1913,7 +1913,7 @@ mod cmov_tests {
     use super::*;
 
     fn assemble(source: &str) -> Result<Vec<u8>, String> {
-        let tokens = Lexer::new(source).tokenize();
+        let tokens = Lexer::new(source).tokenize()?;
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();
@@ -1990,7 +1990,7 @@ mod setcc_tests {
     use super::*;
 
     fn assemble(source: &str) -> Result<Vec<u8>, String> {
-        let tokens = Lexer::new(source).tokenize();
+        let tokens = Lexer::new(source).tokenize()?;
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();

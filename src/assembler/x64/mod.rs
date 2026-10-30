@@ -40,7 +40,7 @@ pub fn emitter_x64_to(
     os: &str,
     out_path: Option<&str>,
 ) -> Result<String, String> {
-    let tokens = Lexer::new(source).tokenize();
+    let tokens = Lexer::new(source).tokenize()?;
 
     // 2. 構文解析
     let mut parser = Parser::new(tokens);
