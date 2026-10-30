@@ -461,7 +461,9 @@ impl ErrPool {
             }
             K::MissingEqualsAfterMust { .. } => "ここには`=`が必要です".to_string(),
             K::MissingIdentAfterOf { .. } => "ここには名前が必要です".to_string(),
-            K::GenericsNotSupportedYet => "ここの`ジェネリクス`はまだ実装されていません".to_string(),
+            K::GenericsNotSupportedYet => {
+                "ここの`ジェネリクス`はまだ実装されていません".to_string()
+            }
         }
     }
 

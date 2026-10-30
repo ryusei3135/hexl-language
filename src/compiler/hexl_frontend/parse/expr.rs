@@ -11,12 +11,12 @@ mod test_code;
 
 mod arr_access;
 mod cond;
+mod expr_value;
 pub(in crate::compiler::hexl_frontend::parse) mod range;
 /// このファイルでしか使われないAPIのモジュール
 mod value_api;
 /// `cond`の条件式の中だけで使える`M(val) := value`
 mod variant_bind;
-mod expr_value;
 use crate::compiler::hexl_frontend::lex;
 
 impl Parser {
@@ -443,7 +443,9 @@ impl Parser {
                         &member.node,
                         ExprNode::PtrMember { target, .. } if matches!(target.node, ExprNode::Var(_))
                     );
-                    if is_field && matches!(self.next_tkn_ref(&[]), Ok(lex::Tkn::Inc | lex::Tkn::Dec)) {
+                    if is_field
+                        && matches!(self.next_tkn_ref(&[]), Ok(lex::Tkn::Inc | lex::Tkn::Dec))
+                    {
                         let postfix = self.next_tkn(&[])?;
                         self.advance_tkn_checked()?;
                         let span = Rc::clone(&member.span);

@@ -1,7 +1,17 @@
 [package]
 name = "hexl"
-version = "1.2.4"
+version = "1.2.5"
 edition = "2024"
+
+# 既存のLSPバイナリ
+[[bin]]
+name = "hexl_lsp"
+path = "src/hexl_lsp/src/main.rs"
+
+# 追加するメインバイナリ
+[[bin]]
+name = "hexl"
+path = "src/main.rs"   # または "src/hexl_cli/main.rs" など自由なパス
 
 [build-dependencies]
 cc = "1"

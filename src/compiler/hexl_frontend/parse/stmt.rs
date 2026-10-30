@@ -583,6 +583,44 @@ impl Parser {
             };
             return Ok(Expr::new(node, span).wrap_group2());
         }
+        // 複合代入`+=` / `-=`: `self->len += 1` / `[ptr].len -= 2`
+        // `member = member + value` / `member = member - value` に展開する
+        // (`=`の代入と同じく、代入先はメンバーそのもの)
+        if matches!(
+            self.peek_tkn(),
+            Ok(lex::Tkn::AddEq
+                | lex::Tkn::MulEq
+                | lex::Tkn::DivEq
+                | lex::Tkn::SurplusEq
+                | lex::Tkn::AndEq
+                | lex::Tkn::XorEq
+                | lex::Tkn::OrEq
+                | lex::Tkn::LShiftEq
+                | lex::Tkn::RShiftEq)
+        ) {
+            let op = self.next_tkn(&["+=", "-="])?;
+            let rhs = self.expr_branch()?;
+            // 代入の位置は、代入先(メンバー)の位置
+            let span = member_node.span.clone();
+            let lhs = member_node.clone();
+            let calc = match op {
+                lex::Tkn::AddEq => ExprNode::Add((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::SubEq => ExprNode::Sub((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::MulEq => ExprNode::Mul((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::DivEq => ExprNode::Div((Box::new(lhs), Box::new(rhs))),
+
+                lex::Tkn::SurplusEq => ExprNode::Surplus((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::AndEq => ExprNode::AndCalcul((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::XorEq => ExprNode::XorCalcul((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::OrEq => ExprNode::OrCalcul((Box::new(lhs), Box::new(rhs))),
+
+                lex::Tkn::LShiftEq => ExprNode::LShift((Box::new(lhs), Box::new(rhs))),
+                lex::Tkn::RShiftEq => ExprNode::RShift((Box::new(lhs), Box::new(rhs))),
+                t => panic!("{:?}", t),
+            };
+            let value = Expr::new(calc, Rc::clone(&span));
+            return Ok(AssignVar::new(name, member_node, value, span).wrap_group2());
+        }
 
         // フィールドアクセスの場合、続く`=`の有無で代入か参照かを判断する
         // `[name].member = value`

@@ -205,7 +205,8 @@ fn print_binaries() {
         return;
     }
     println!("生成したオブジェクトファイル:");
-    let output = linker::linker(paths).unwrap();
+    let output = linker::linker(paths.clone()).unwrap();
+    paths.iter().for_each(|f| {fs::remove_file(f).unwrap()});
     output.write_to_file("a.out").unwrap();
     // for path in &paths {
     //     println!("  {}", path);

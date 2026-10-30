@@ -14,7 +14,12 @@ mod expr_tests {
 
     /// テスト用の位置。`Expr`の`PartialEq`は`span`を比較しないので、何でもよい
     fn sp(line: usize) -> std::rc::Rc<err::Span> {
-        std::rc::Rc::new(err::Span::new(line, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
+        std::rc::Rc::new(err::Span::new(
+            line,
+            0,
+            String::new(),
+            &std::rc::Rc::new("<test>".to_string()),
+        ))
     }
 
     /// 位置を付けて`Expr`にする

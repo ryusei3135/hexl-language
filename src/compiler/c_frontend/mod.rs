@@ -89,11 +89,7 @@ pub fn try_emit_c_node(
     let tokens = pp
         .preprocess(file_name, src)
         .map_err(|e| CFrontendError(e.to_string()))?;
-    finish(
-        &pp,
-        tokens,
-        self_file_name,
-    )
+    finish(&pp, tokens, self_file_name)
 }
 
 /// Cのファイルを変換する(`#include "x.h"`は、そのファイルのあるディレクトリからも探す)
@@ -106,11 +102,7 @@ pub fn try_emit_c_node_from_file(
     let tokens = pp
         .preprocess_file(path)
         .map_err(|e| CFrontendError(e.to_string()))?;
-    finish(
-        &pp,
-        tokens,
-        self_file_name,
-    )
+    finish(&pp, tokens, self_file_name)
 }
 
 /// 警告を標準エラーへ出し、ノードだけ返す。エラーならメッセージつきでpanicする

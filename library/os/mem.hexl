@@ -183,11 +183,13 @@ pub free<T>(ptr: T* of malloc) {
 pub realloc<T>(ptr: T* must=free, len: u64): T* must=free {
     addr: i64 = ptr
     cond addr == 0 {
+        // ptr は null。free は null を何もしないので、契約を終了するために渡す
+        free<T>(ptr)
         ret malloc<T>(len)
     }
 
     cond len == 0 {
-        os_free(addr)
+        free<T>(ptr)
         ret 0
     }
 
@@ -196,7 +198,7 @@ pub realloc<T>(ptr: T* must=free, len: u64): T* must=free {
 
     new_addr: i64 = os_realloc(addr, size)
     cond new_addr == 0 {
-        os_free(addr)
+        free<T>(ptr)
         ret 0
     }
     ret new_addr

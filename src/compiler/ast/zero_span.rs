@@ -13,7 +13,12 @@ use std::rc::Rc;
 /// `line`と`pos`が0の`Span`(`test_utils::span_at(0)`と同じもの)
 #[inline(always)]
 fn zeroed() -> Rc<Span> {
-    Rc::new(Span::new(0, 0, String::new(), &Rc::new("<test>".to_string())))
+    Rc::new(Span::new(
+        0,
+        0,
+        String::new(),
+        &Rc::new("<test>".to_string()),
+    ))
 }
 
 /// 自身と、中に含まれるすべてのノードの`span`を0にする

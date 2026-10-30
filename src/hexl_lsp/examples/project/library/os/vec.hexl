@@ -1,0 +1,3 @@
+pub push(v: int, x: int): int {
+    ret x
+}

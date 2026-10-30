@@ -131,10 +131,26 @@ impl IR {
                 .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
 
             Ok(true)
+        } else if Self::is_ptr_member_arg(arg) {
+            // `self->val` / `[ptr].val`のような、構造体のメンバーの`must`。
+            // メンバーの契約は変数単位では追跡せず、構造体を初期化した
+            // スコープで終了を確認する。`must=..`の引数へ渡したので、
+            // ここでは契約のチェックを外す(譲渡済みとして扱う)
+            Ok(true)
         } else {
             // 式から契約の移動元を特定できない。
             // 仕様に応じて明示的なコンパイルエラーにする。
             Ok(false)
+        }
+    }
+
+    /// 引数が、ポインタ経由の構造体のメンバー(`self->val` / `[ptr].val`)か
+    /// (`*`で包まれていても中身を辿る)
+    fn is_ptr_member_arg(arg: &Expr) -> bool {
+        match &arg.node {
+            ExprNode::ConnectAddr(target) => Self::is_ptr_member_arg(target),
+            ExprNode::PtrMember { target, .. } => matches!(target.node, ExprNode::Var(_)),
+            _ => false,
         }
     }
 

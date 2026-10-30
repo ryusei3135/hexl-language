@@ -1,0 +1,23 @@
+// 2次元の点
+pub struct Vec2 {
+    x: int
+    y: int
+    // 長さ(マンハッタン)
+    len(self: Vec2): int {
+        ret self->x + self->y
+    }
+}
+
+pub variant Shape {
+    Dot
+    Circle(int)
+}
+
+// 足し算
+pub add<T>(a: T, b: T): T {
+    ret a + b
+}
+
+pub scale(v: Vec2, k: int): Vec2 {
+    ret v
+}

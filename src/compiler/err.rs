@@ -28,12 +28,7 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(
-        line: usize,
-        pos: usize,
-        line_txt: String,
-        self_file_name: &Rc<String>,
-    ) -> Self {
+    pub fn new(line: usize, pos: usize, line_txt: String, self_file_name: &Rc<String>) -> Self {
         Self {
             line: line,
             pos: pos,
@@ -290,7 +285,12 @@ mod tests {
 
     #[test]
     fn display_includes_position_and_func_name() {
-        let span = Rc::new(Span::new(3, 10, String::new(), &Rc::new("test".to_string())));
+        let span = Rc::new(Span::new(
+            3,
+            10,
+            String::new(),
+            &Rc::new("test".to_string()),
+        ));
         let e = ErrKind::Syntax(Box::new(SyntaxErr {
             kind: SyntaxErrKind::TknIsEofInExpr,
             loc: ErrLoc::new(span.clone(), "expr_value".to_string()),
@@ -310,7 +310,12 @@ mod tests {
     fn undef_err_gets_span_from_with_span() {
         let e = undef::UndefErrs::undef_fn("foo");
         assert_eq!(e.to_string(), "未定義エラー: 関数`foo`が見つかりません");
-        let e = e.with_span(Rc::new(Span::new(2, 5, String::new(), &Rc::new("test".to_string()))));
+        let e = e.with_span(Rc::new(Span::new(
+            2,
+            5,
+            String::new(),
+            &Rc::new("test".to_string()),
+        )));
         let msg = e.to_string();
         assert!(msg.starts_with("未定義エラー: 関数`foo`が見つかりません ["));
         assert!(msg.contains("<test>"));

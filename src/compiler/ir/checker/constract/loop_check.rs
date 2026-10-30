@@ -154,7 +154,10 @@ impl IR {
                 }
             }
             // `a.del()`: `must`のフィールドを持つ構造体の契約を終了するメゾット
-            ExprNode::Member { scope: path, target } if Self::is_contract_end_call(target) => {
+            ExprNode::Member {
+                scope: path,
+                target,
+            } if Self::is_contract_end_call(target) => {
                 if let Some(name) = path.last() {
                     Self::mark_used(name, scope);
                 }

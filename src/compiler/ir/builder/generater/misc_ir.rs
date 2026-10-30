@@ -420,9 +420,10 @@ mod struct_method_expand_tests {
             .unwrap();
 
         let body = ir.test_only_get_func_body("main");
-        assert!(body
-            .iter()
-            .any(|inst| matches!(inst, inst::Inst::CallFunc(_))));
+        assert!(
+            body.iter()
+                .any(|inst| matches!(inst, inst::Inst::CallFunc(_)))
+        );
     }
 
     #[test]
@@ -438,9 +439,10 @@ mod struct_method_expand_tests {
             .unwrap();
 
         let body = ir.test_only_get_func_body("main");
-        assert!(body
-            .iter()
-            .any(|inst| matches!(inst, inst::Inst::CallFunc(_))));
+        assert!(
+            body.iter()
+                .any(|inst| matches!(inst, inst::Inst::CallFunc(_)))
+        );
     }
 
     #[test]

@@ -526,7 +526,12 @@ mod generic_type_tests {
     }
 
     fn sp() -> std::rc::Rc<crate::compiler::err::Span> {
-        std::rc::Rc::new(crate::compiler::err::Span::new(0, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
+        std::rc::Rc::new(crate::compiler::err::Span::new(
+            0,
+            0,
+            String::new(),
+            &std::rc::Rc::new("<test>".to_string()),
+        ))
     }
 
     /// `unsafe`共用体のメンバー(`mode`が`Unsafe`)を作る

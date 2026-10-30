@@ -40,10 +40,7 @@ pub(in crate::compiler::c_frontend) fn parse_c(
     self_file_name: &Rc<String>,
 ) -> Result<ParseOutput, ParseError> {
     let (items, mut warnings) = parser::Parser::new(tokens).parse_unit()?;
-    let (nodes, w2) = lower::Lowerer::new(
-        self_file_name,
-    )
-    .lower_unit(items)?;
+    let (nodes, w2) = lower::Lowerer::new(self_file_name).lower_unit(items)?;
     warnings.extend(w2);
     Ok(ParseOutput { nodes, warnings })
 }

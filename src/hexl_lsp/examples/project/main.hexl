@@ -1,0 +1,23 @@
+#include "lib/geom.hexl"
+#include std::"os/vec.hexl"
+#include "missing.hexl"
+#define N 10
+
+impl Vec2 {
+    twice(self: Vec2): int {
+        ret self->len() * 2
+    }
+}
+
+main(): int {
+    v = Vec2 { x: 1, y: 2 }
+    n = geom::add<int>(v.x, #N)
+    loop n > 0 {
+        n--
+        cond n == 5 {
+            break
+        }
+    }
+    continue
+    ret scale(v, 2).len()
+}

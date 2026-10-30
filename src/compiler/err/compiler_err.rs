@@ -1,6 +1,6 @@
 //! 構文ではなくこのhexlコンパイラ自身のエラー
 
-use super::{span_loc, write_err, Span, CAT_INTERNAL};
+use super::{CAT_INTERNAL, Span, span_loc, write_err};
 use crate::compiler::ir::types;
 use std::fmt;
 use std::rc::Rc;

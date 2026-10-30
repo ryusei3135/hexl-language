@@ -627,7 +627,11 @@ impl Parser {
 
         match self.advance() {
             // `-9223372036854775808` のように `i64::MIN` も書けるよう、2の補数で反転する
-            Token::Number(n) => Ok(Operand::Immediate(if sign < 0 { n.wrapping_neg() } else { n })),
+            Token::Number(n) => Ok(Operand::Immediate(if sign < 0 {
+                n.wrapping_neg()
+            } else {
+                n
+            })),
 
             Token::Ident(name) => {
                 // 将来 relocation 用に拡張可能
@@ -780,11 +784,31 @@ mod robustness_tests {
     #[test]
     fn empty_and_eof_less_tokens_do_not_panic_or_hang() {
         assert!(Parser::new(vec![]).parse().unwrap().statements.is_empty());
-        assert!(Parser::new(vec![Token::Eof]).parse().unwrap().statements.is_empty());
-        assert!(Parser::new(vec![Token::NewLine]).parse().unwrap().statements.is_empty());
-        assert!(Parser::new(vec![Token::Ident("nop".into())]).parse().is_ok());
+        assert!(
+            Parser::new(vec![Token::Eof])
+                .parse()
+                .unwrap()
+                .statements
+                .is_empty()
+        );
+        assert!(
+            Parser::new(vec![Token::NewLine])
+                .parse()
+                .unwrap()
+                .statements
+                .is_empty()
+        );
+        assert!(
+            Parser::new(vec![Token::Ident("nop".into())])
+                .parse()
+                .is_ok()
+        );
         // `Eof` が無く、命令の途中で終わっても止まる
-        assert!(Parser::new(vec![Token::Ident("mov".into()), Token::Minus]).parse().is_err());
+        assert!(
+            Parser::new(vec![Token::Ident("mov".into()), Token::Minus])
+                .parse()
+                .is_err()
+        );
     }
 
     #[test]
@@ -801,7 +825,11 @@ mod robustness_tests {
 
     #[test]
     fn out_of_range_integer_is_error() {
-        assert!(Lexer::new("push $99999999999999999999999").tokenize().is_err());
+        assert!(
+            Lexer::new("push $99999999999999999999999")
+                .tokenize()
+                .is_err()
+        );
     }
 
     #[test]

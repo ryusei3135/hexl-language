@@ -615,10 +615,7 @@ impl IR {
                 name: ptr.clone(),
                 index: None,
                 else_idx: None,
-                target: Box::new(Expr::new(
-                    ExprNode::Var(member.clone()),
-                    Rc::clone(&span),
-                )),
+                target: Box::new(Expr::new(ExprNode::Var(member.clone()), Rc::clone(&span))),
             },
             Rc::clone(&span),
         );
@@ -704,11 +701,9 @@ impl IR {
             ))
             .with_span(Rc::clone(&expr.span)),
             // `++a` / `--a`
-            ExprNode::LeftInc(target) | ExprNode::LeftDec(target) => self.desugar_inc_dec::<M>(
-                expr,
-                target,
-                matches!(&expr.node, ExprNode::LeftInc(_)),
-            )?,
+            ExprNode::LeftInc(target) | ExprNode::LeftDec(target) => {
+                self.desugar_inc_dec::<M>(expr, target, matches!(&expr.node, ExprNode::LeftInc(_)))?
+            }
             // 構造体のメンバーの`a->len++` / `a.len--`(変数の`a++`は`build_inc_dec_expr`が処理する)
             ExprNode::Inc(target) | ExprNode::Dec(target)
                 if matches!(
@@ -730,12 +725,39 @@ impl IR {
                 AssignVar::new(&tmp, arr, (*assign.value).clone(), Rc::clone(&expr.span))
             }
             // `[ptr->member index]`(値の読み取り)
-            ExprNode::PtrMember { target, .. } if matches!(target.node, ExprNode::RefArray { .. }) => {
+            ExprNode::PtrMember { target, .. }
+                if matches!(target.node, ExprNode::RefArray { .. }) =>
+            {
                 self.ptr_member_arr_to_tmp::<M>(expr)?.1
             }
             _ => return Ok(None),
         };
         Ok(Some(expanded))
+    }
+
+    /// `value`が、ポインタ`ptr_name`の指す構造体のメンバー`member`を
+    /// 引数に含む関数呼び出し(`f(self->val, ..)` / `mod::f<T>(self->val, ..)`)か
+    fn value_hands_over_member(value: &Expr, ptr_name: &str, member: &str) -> bool {
+        fn is_member(arg: &Expr, ptr_name: &str, member: &str) -> bool {
+            match &arg.node {
+                ExprNode::ConnectAddr(target) => is_member(target, ptr_name, member),
+                ExprNode::PtrMember { name, target, .. } => {
+                    name.as_str() == ptr_name
+                        && matches!(&target.node, ExprNode::Var(m) if m.as_str() == member)
+                }
+                _ => false,
+            }
+        }
+
+        let call = match &value.node {
+            ExprNode::CallFunc(call) => call,
+            ExprNode::Scope { target, .. } => match &target.node {
+                ExprNode::CallFunc(call) => call,
+                _ => return false,
+            },
+            _ => return false,
+        };
+        call.args.iter().any(|arg| is_member(arg, ptr_name, member))
     }
 
     pub(in super::super) fn assign_expr_node<M: ResultMod>(
@@ -760,7 +782,12 @@ impl IR {
             // `must`の契約を持つメンバーは、値をすり替えられないため再代入できない
             // ただし、構造体の初期化(`new`メゾット)の中での最初の代入は許可する。
             // フィールドの契約は、構造体を初期化したスコープで終了すればよい
+            // また、`self->val = f(self->val, ..)`のように、そのメンバー自身を
+            // 関数へ渡して、戻り値を受け取る代入も許可する(値のすり替えではなく、
+            // 契約の譲渡と受け取り)。渡し先が`must=..`の引数かどうかは、
+            // 呼び出しの引数のチェック(`check_constract_arg`)が確認する
             if !self.in_constructor()
+                && !Self::value_hands_over_member(&assign_node.value, ptr_name, member)
                 && self
                     .ptr_member_field_ty(ptr_name, member)
                     .is_some_and(|ty| ty.is_contract_must())

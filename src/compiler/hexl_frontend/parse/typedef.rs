@@ -414,7 +414,12 @@ mod ty_tests {
 
     /// テストで組み立てるノードに付ける位置(`line`も`pos`も0)
     fn sp() -> Rc<err::Span> {
-        Rc::new(err::Span::new(0, 0, String::new(), &std::rc::Rc::new("<test>".to_string())))
+        Rc::new(err::Span::new(
+            0,
+            0,
+            String::new(),
+            &std::rc::Rc::new("<test>".to_string()),
+        ))
     }
 
     /// パース結果。すべての`span`と`Group2Info.line`を0にして返す
