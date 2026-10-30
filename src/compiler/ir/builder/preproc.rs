@@ -67,7 +67,7 @@ impl IR {
         path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = include_root::resolve(&path.gen_path());
+        let full_path = include_root::resolve_for(path, &path.gen_path());
 
         if std::path::Path::new(&full_path).exists() {
             let _root_guard = include_root::enter_include();
@@ -88,7 +88,7 @@ impl IR {
             self.extern_func_tree.extend(extern_fn_tree);
         } else {
             let func_name = path.last_segment();
-            let parent_path = include_root::resolve(&path.gen_parent_path()?);
+            let parent_path = include_root::resolve_for(path, &path.gen_parent_path()?);
 
             if !std::path::Path::new(&parent_path).exists() {
                 panic!(
@@ -134,7 +134,7 @@ impl IR {
         alias: Option<&String>,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = include_root::resolve(&path.gen_path());
+        let full_path = include_root::resolve_for(path, &path.gen_path());
         self.check_include_file_exists(&full_path);
         if full_path.ends_with(".c") {
             return Ok(());
@@ -174,7 +174,7 @@ impl IR {
         func_name: &str,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = include_root::resolve(&path.gen_path());
+        let full_path = include_root::resolve_for(path, &path.gen_path());
         self.check_include_file_exists(&full_path);
 
         let _root_guard = include_root::enter_include();
@@ -207,7 +207,7 @@ impl IR {
         path: &ModPath,
         settings: &crate::OptSettings,
     ) -> Result<(), err::ErrKind> {
-        let full_path = include_root::resolve(&path.gen_path());
+        let full_path = include_root::resolve_for(path, &path.gen_path());
         self.check_include_file_exists(&full_path);
 
         let _root_guard = include_root::enter_include();

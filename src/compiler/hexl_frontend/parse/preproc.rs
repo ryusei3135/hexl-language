@@ -34,11 +34,30 @@ impl Parser {
     /// - `#include "mod/file.hexl"::func` `func`だけをそのまま取り込む
     /// - `#include "mod/file.hexl"::*`    公開関数を全て、そのまま取り込む
     /// - `#include mod::file`             従来通りの書き方(下位互換)
+    /// - `#include std::"mod/file.hexl"`  標準ライブラリ(hexl本体のあるディレクトリの`library/`)
+    ///                                     から取り込む(`::func` / `::*`や`Name=`も同様に付けられる)
     fn build_include_path(&mut self) -> Result<ModPath, err::ErrKind> {
         // `#include`の位置
         let span = self.build_err_span();
         // `Name "=" ...`の形なら、エイリアス指定として読み取る
         let alias = self.try_take_include_alias()?;
+
+        // `std::"file"`: 標準ライブラリ(hexl本体のディレクトリの`library/`)から取り込む
+        // (`std`の次が`::`、その次が文字列のときだけ。`std::file`は従来の書き方)
+        let is_std = matches!(self.peek_tkn()?, lex::Tkn::Name(ref n) if n == "std")
+            && matches!(self.peek2_tkn(), Some(lex::Tkn::ModPathTkn))
+            && matches!(self.peek3_tkn(), Some(lex::Tkn::Str(_)));
+        if is_std {
+            // `std`と`::`を読み飛ばし、文字列まで進める
+            self.next_tkn(&["std"])?;
+            self.next_tkn(&["::"])?;
+            let lex::Tkn::Str(literal) = self.next_tkn(&["string"])? else {
+                return crate::err_at!(self.expected_path_segment());
+            };
+            return Ok(self
+                .finish_literal_include(&literal, alias, Rc::clone(&span))?
+                .into_std());
+        }
 
         // match の結果を直接 return する形に統一
         match self.next_tkn(&["string", "name"])? {

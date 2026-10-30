@@ -7,6 +7,12 @@
 //! - `Lexer::set_source_file`が、最も外側のファイルのときだけ`ROOT`を設定する。
 //! - `#include`で取り込んだファイルを`crate::build`する間は`enter_include`の
 //!   ガードを持つ。その間の`set_source_file`は`ROOT`を書き換えない。
+//!
+//! ## 標準ライブラリ(`std`)
+//! `#include std::"os/vec.hexl"`(`ModPath::is_std`)は`ROOT`ではなく、
+//! **hexl本体(実行ファイル)のあるディレクトリ**の`library/`を基準にする
+//! (-> `<実行ファイルのディレクトリ>/library/os/vec.hexl`)。入れ子の`#include`の中でも同じ。
+//! `#include "std/os/vec.hexl"`のような文字列だけの書き方は、ただのパスなので`ROOT`が基準。
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -46,10 +52,51 @@ pub fn root() -> PathBuf {
     ROOT.with(|r| r.borrow().clone())
 }
 
+/// 標準ライブラリのディレクトリ名(hexl本体のあるディレクトリの下)
+const STD_DIR: &str = "library";
+
+/// hexl本体(実行ファイル)のあるディレクトリ。取得できなければ`None`
+fn exe_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+}
+
+/// `resolve_std`の本体。`exe_dir`を引数にして、テストできるようにしている
+fn resolve_std_in(rel: &str, exe_dir: Option<&Path>) -> String {
+    // 実行ファイルの場所が分からないときは、カレントの`library/`を探す
+    let base = exe_dir.map(Path::to_path_buf).unwrap_or_default();
+    let lib = base.join(STD_DIR);
+    // `cargo run`では実行ファイルが`target/debug/`にあり、その隣に`library/`が
+    // 無いので、無ければビルドしたソースのプロジェクト直下の`library/`を使う
+    let lib = if lib.is_dir() {
+        lib
+    } else {
+        let dev = Path::new(env!("CARGO_MANIFEST_DIR")).join(STD_DIR);
+        if dev.is_dir() { dev } else { lib }
+    };
+    lib.join(rel).to_string_lossy().into_owned()
+}
+
+/// 標準ライブラリのパス(`os/vec.hexl`)を`<hexl本体のディレクトリ>/library/os/vec.hexl`にする
+pub fn resolve_std(rel: &str) -> String {
+    resolve_std_in(rel, exe_dir().as_deref())
+}
+
 /// `#include`に書かれたパス(`dir/file`)を`ROOT/dir/file`にする。
 /// 絶対パスはそのまま返す。
 pub fn resolve(rel: &str) -> String {
     root().join(rel).to_string_lossy().into_owned()
+}
+
+/// `#include`の`path`(`rel`はそのファイルのパス)を解決する。
+/// `std::"..."`なら標準ライブラリ、それ以外は`ROOT`が基準
+pub fn resolve_for(path: &crate::compiler::ast::ModPath, rel: &str) -> String {
+    if path.is_std {
+        resolve_std(rel)
+    } else {
+        resolve(rel)
+    }
 }
 
 #[cfg(test)]
@@ -72,6 +119,16 @@ mod tests {
                 Path::new("proj/src").join("lib/b.hexl").to_string_lossy()
             );
         }
+        // 標準ライブラリは、ROOTに関係なく`<hexl本体のディレクトリ>/library/...`
+        assert_eq!(
+            resolve_std_in("os/vec.hexl", Some(Path::new("/opt/hexl"))),
+            Path::new("/opt/hexl").join("library").join("os/vec.hexl").to_string_lossy()
+        );
+        // `"std/..."`は、ただの`ROOT`基準のパス
+        assert_eq!(
+            resolve("std/os/vec.hexl"),
+            Path::new("proj/src").join("std/os/vec.hexl").to_string_lossy()
+        );
         // 外に出たら、次の最外ファイルで更新できる
         set_root_from_file(Path::new("other/main.hexl"));
         assert_eq!(

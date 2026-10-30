@@ -72,7 +72,7 @@ impl Parser {
     /// (そのエラーは、IR側の`build`が報告する)
     fn collect_generics_of_include(&mut self, path: &ModPath) {
         // (ファイルのパス, 取り込み方)を、IR側(`include_proc`)と同じ規則で決める
-        let full = include_root::resolve(&path.gen_path());
+        let full = include_root::resolve_for(path, &path.gen_path());
         let (file, kind): (String, ImportKind) = match &path.kind {
             ImportKind::Auto => {
                 if std::path::Path::new(&full).exists() {
@@ -81,10 +81,19 @@ impl Parser {
                     let Ok(parent) = path.gen_parent_path() else {
                         return;
                     };
-                    (
-                        include_root::resolve(&parent),
-                        ImportKind::Func(path.last_segment()),
-                    )
+                    let parent_full = include_root::resolve_for(path, &parent);
+                    // どちらも無いなら、両方の探した場所を示して止める
+                    // (`std::io`と書いて`library/io.hexl`が無い場合など)
+                    if !std::path::Path::new(&parent_full).exists() {
+                        panic!(
+                            "#includeで指定されたファイルが見つかりません: {} \
+                            (関数名として`{}`も試しましたが、ファイル{}も見つかりませんでした)",
+                            full,
+                            path.last_segment(),
+                            parent_full
+                        );
+                    }
+                    (parent_full, ImportKind::Func(path.last_segment()))
                 }
             }
             ImportKind::Module(alias) => {
@@ -102,6 +111,16 @@ impl Parser {
         // C言語のファイルのジェネリクスは無い
         if file.ends_with(".c") || file.ends_with(".h") {
             return;
+        }
+        // ファイルが無いのに黙って読み飛ばすと、`mod::func<int>(..)`が
+        // ジェネリクス関数として認識されず、`<`が予期しないトークンになる
+        // という分かりにくい構文エラーになる。IR側(`include_proc`)と同じく、
+        // 探した場所を示して止める
+        if !std::path::Path::new(&file).exists() {
+            panic!(
+                "#includeで指定されたファイルが見つかりません: {} (`std`は、hexl本体のあるディレクトリの`library/`を探します)",
+                file
+            );
         }
         let Ok(content) = std::fs::read_to_string(&file) else {
             return;

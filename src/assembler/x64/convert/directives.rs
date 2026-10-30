@@ -233,7 +233,7 @@ mod float_tests {
     use crate::assembler::x64::{Lexer, Parser, convert};
 
     fn assemble_data(source: &str) -> Result<(Vec<u8>, Emitter), String> {
-        let tokens = Lexer::new(source).tokenize()?;
+        let tokens = Lexer::new(source).tokenize();
         let ast = Parser::new(tokens).parse()?;
         let program = convert::convert_program(&ast)?;
         let mut emitter = Emitter::new();

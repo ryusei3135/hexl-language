@@ -47,6 +47,9 @@ pub enum ImportKind {
 pub struct ModPath {
     pub path: ImportPath,
     pub kind: ImportKind,
+    /// `#include std::"os/vec.hexl"`のように、標準ライブラリ(hexl本体のある
+    /// ディレクトリの`library/`)から取り込むか。`false`なら`ROOT`が基準
+    pub is_std: bool,
     /// `#include`の位置
     pub span: Rc<Span>,
 }
@@ -58,6 +61,7 @@ impl ModPath {
         Self {
             path: ImportPath::Segments(Vec::new()),
             kind: ImportKind::Auto,
+            is_std: false,
             span,
         }
     }
@@ -68,8 +72,16 @@ impl ModPath {
         Self {
             path: ImportPath::Literal(literal.to_string()),
             kind,
+            is_std: false,
             span,
         }
+    }
+
+    /// 標準ライブラリから取り込む印を付ける(`#include std::"file"`)
+    #[inline(always)]
+    pub fn into_std(mut self) -> Self {
+        self.is_std = true;
+        self
     }
 
     /// 従来の書き方(`Segments`)でのみ使う。

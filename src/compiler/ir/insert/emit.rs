@@ -21,7 +21,7 @@ impl IR {
         let num_idx = self.id_counter;
         self.push_inst(inst::Inst::gen_num(
             &n.to_string(),
-            &types::Size::DD,
+            &types::Size::UDQ,
             num_idx,
         ));
         let dst = self.id_counter;

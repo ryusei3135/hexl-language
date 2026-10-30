@@ -202,6 +202,7 @@ impl Parser {
         let range = match self.peek_tkn()? {
             lex::Tkn::LParen => Some((0usize, 0usize)),
             lex::Tkn::Str(s) if s.as_str() == "unlimit" => {
+                self.advance_tkn().unwrap();
                 Some((0usize, 0xFFFF_FFFF_FFFF_FFFFusize))
             }
             _ => None,
