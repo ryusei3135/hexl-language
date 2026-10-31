@@ -12,7 +12,7 @@ impl AsmEmitter {
             // ポインタ型はアドレス(常に8byte)を保持するため、
             // 64bitレジスタ(`%rcx`など)を経由してメモリを参照する
             let reg = self.reg64(&var_info.reg)?;
-            Ok(self.asm_fmt.fmt_ref_operand(&reg, ty.to_bytes()))
+            Ok(reg.to_string())
         } else {
             // Result型を返している
             match var_info.reg {
@@ -69,19 +69,23 @@ impl AsmEmitter {
         };
         let var_info = self.get_var_all_info(name)?;
         if let Some(pointee) = var_info.size.is_pointer() {
-            // ポインタは要素0を指し、要素`i`は`ポインタ - i * サイズ`
+            // ポインタは要素0を指し、要素`i`は`ポインタ + i * サイズ`(上向き)
             let pos = pointee.to_bytes() * index_value;
             let base = self.extract_operand_text(dst, this_is_self)?;
-            Ok(self.ref_base_offset(&base, pos))
+            Ok(self.asm_fmt.fmt_ref_operand_up(&base, pos))
         } else {
-            // 要素`i`は`%rbp - (arr_base + (i + 1) * size)`に置かれる
-            // (添字が変数の場合のアドレス計算と同じ配置)
+            // 要素`i`は`%rbp - arr_base + i * size`に置かれる(上向き。
+            // `arr_base`は要素0の位置。添字が変数の場合のアドレス計算と同じ配置)
             //
             // ベースは常に`%rbp`にする。`dst`のオペランドは配列自身を指す
             // `-4(%rbp)`のようなメモリ参照なので、ベースに使うと
             // `-4(-4(%rbp))`になってしまう(`arr_ref_base`と同じ理由)
-            let size = var_info.size.to_bytes();
-            let pos = var_info.arr_base + size * (index_value + 1);
+            // 配列型の変数は要素のサイズを使う(`to_bytes`は配列全体のサイズになる)
+            let size = match &var_info.size {
+                Size::Array { size, .. } => size.to_bytes(),
+                other => other.to_bytes(),
+            };
+            let pos = var_info.arr_base.saturating_sub(size * index_value);
             Ok(self.rbp_ref(pos))
         }
     }
@@ -103,6 +107,7 @@ impl AsmEmitter {
         member_size: usize,
     ) -> Result<String, err::ErrKind> {
         let size = Self::struct_member_offset(pos, member_size);
+        println!("oooooooooffset {}", size);
         let var_info = self.get_var_all_info(src)?;
 
         // レジスタが足りずスタックに置いたポインタ変数(`is_stack`だが構造体ではない)は、
@@ -206,20 +211,20 @@ impl AsmEmitter {
 
         let mut txt = String::new();
 
-        // 要素0が最も%rbpに近い位置に来て、要素が増えるほどアドレスが
-        // 小さくなる。領域全体を先に確保し、要素`k`のオフセットは
-        // `arr_base + (k + 1) * 要素のサイズ`(要素0のオフセットが`head_offset`)
+        // 要素は上向き(アドレスが大きい側)に並ぶ。領域全体を先に確保し、
+        // 要素0を領域の一番下(`%rbp`から最も遠い位置`head_offset`)に置く。
+        // 要素`k`のオフセットは`head_offset - k * 要素のサイズ`
         let elem_bytes = size.to_bytes();
-        let arr_base = self.stk_use_counter;
-        let head_offset = arr_base + elem_bytes;
-        self.stk_use_counter = arr_base + elem_bytes * ids.len();
+        let arr_start = self.stk_use_counter;
+        let head_offset = arr_start + elem_bytes * ids.len();
+        self.stk_use_counter = head_offset;
 
         for (k, id) in ids.iter().enumerate() {
             let value = self.extract_operand_text(*id, this_is_self)?;
 
             let dst = self
                 .asm_fmt
-                .fmt_ref_operand(&assign_reg, arr_base + (k + 1) * elem_bytes);
+                .fmt_ref_operand(&assign_reg, head_offset - k * elem_bytes);
 
             txt.push_str(&self_load);
             txt.push_str(&self.mov_line(&dst, &value, &size, true));

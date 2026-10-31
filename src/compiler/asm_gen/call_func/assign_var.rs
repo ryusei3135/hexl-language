@@ -106,7 +106,7 @@ impl AsmEmitter {
         let RegisterMode::Normal(current_reg) = current_reg else {
             panic!("non-floating-point value assigned to a floating-point register");
         };
-        let mnemonic = if self.curr_inst[value].is_pointer() {
+        let mnemonic = if self.curr_inst[value].is_pointer() && !self.is_ptr_cell_load(value) {
             "address"
         } else {
             "mov"

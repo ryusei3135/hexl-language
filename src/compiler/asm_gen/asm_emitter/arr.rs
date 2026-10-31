@@ -4,14 +4,13 @@ use super::*;
 struct ArrRefBase {
     /// 要素1つのバイト数
     elem_size: usize,
-    /// 要素0の位置(`%rbp`からのオフセット。ポインタは0)
+    /// 要素0の位置(`%rbp`からのオフセット。ポインタは0)。
+    /// 要素は上向き(アドレスが大きい側)に並ぶので、要素`i`は`%rbp - arr_base + i * 要素サイズ`
     arr_base: usize,
     /// ポインタか(配列ならfalse)
     is_ptr: bool,
     /// ベースになるレジスタ名
     base: String,
-    /// 配列の要素数(ポインタは0)
-    arr_len: usize,
 }
 
 impl AsmEmitter {
@@ -65,7 +64,7 @@ impl AsmEmitter {
     /// 書き込み後に`write_mem`が解放する
     ///
     /// 流れ: 前回の一時レジスタの解放 → 基準の取得(`arr_ref_base`) →
-    /// 添字の読み込み(`load_index_reg`) → 符号の反転と補正(`adjust_index_reg`) →
+    /// 添字の読み込み(`load_index_reg`。符号拡張/ゼロ拡張のみで反転しない) →
     /// オペランドの組み立て
     fn ref_arr_indexed(
         &mut self,
@@ -83,7 +82,6 @@ impl AsmEmitter {
             arr_base,
             is_ptr,
             base,
-            arr_len,
         } = self.arr_ref_base(name)?;
 
         // 添字を、添字用のレジスタへ読み込む
@@ -97,7 +95,7 @@ impl AsmEmitter {
 
         let reg64 = self.reg64(&RegisterMode::Normal(reg_num))?;
         self.load_index_reg(index_operand, index_size, reg_num, &reg64)?;
-        let offset = self.adjust_index_reg(&reg64, is_ptr, arr_len, arr_base, elem_size);
+        let offset = if is_ptr { 0 } else { arr_base };
         Ok(self
             .asm_fmt
             .fmt_ref_operand_indexed(&base, &reg64, elem_size, offset))
@@ -117,26 +115,23 @@ impl AsmEmitter {
             None
         };
         Ok(match &var_info.size {
-            Size::Array { size, len } => ArrRefBase {
+            Size::Array { size, .. } => ArrRefBase {
                 elem_size: size.to_bytes(),
                 arr_base: var_info.arr_base,
                 is_ptr: false,
                 base: FRAME_BASE_REG.to_string(),
-                arr_len: *len,
             },
             Size::Pointer { ty, .. } => ArrRefBase {
                 elem_size: ty.to_bytes(),
                 arr_base: 0,
                 is_ptr: true,
                 base: ptr_base.expect("ポインタ変数のベースレジスタがありません"),
-                arr_len: 0,
             },
             other => ArrRefBase {
                 elem_size: other.to_bytes(),
                 arr_base: var_info.arr_base,
                 is_ptr: false,
                 base: FRAME_BASE_REG.to_string(),
-                arr_len: 1,
             },
         })
     }
@@ -193,37 +188,5 @@ impl AsmEmitter {
             }
         }
         Ok(())
-    }
-
-    /// 添字のレジスタ`reg64`の符号を反転し、配列なら`要素数 - 1 - 添字`に
-    /// 補正して、参照に使うオフセットを返す
-    fn adjust_index_reg(
-        &mut self,
-        reg64: &str,
-        is_ptr: bool,
-        arr_len: usize,
-        arr_base: usize,
-        elem_size: usize,
-    ) -> usize {
-        // 64bitへ符号拡張した添字の符号を反転する
-        // (要素はアドレスが小さくなる向きに並んでいる)
-        let neg = self.asm_fmt.get_neg(reg64);
-        let neg = self.asm_fmt.fmt_mnemonic_resize("neg", &neg, &Size::DQ);
-        self.asm_text.push_str(&neg);
-
-        // 配列は添字を `要素数 - 1 - 添字` に反転して、最後の要素
-        // (最も%rbpから遠い要素)の位置を基準に参照する
-        // (ポインタは要素0を指しているのでオフセットなし)
-        if is_ptr {
-            return 0;
-        }
-        if arr_len > 1 {
-            let add = self
-                .asm_fmt
-                .get_add_imm(&self.asm_fmt.get_fmt_num(&(arr_len - 1).to_string()), reg64);
-            let add = self.asm_fmt.fmt_mnemonic_resize("add", &add, &Size::DQ);
-            self.asm_text.push_str(&add);
-        }
-        arr_base + elem_size * arr_len.max(1)
     }
 }

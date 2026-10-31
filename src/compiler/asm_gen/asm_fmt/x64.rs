@@ -543,6 +543,21 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}add $16, %rsp\n",
             },
         ),
+        // 関数呼び出しの直前に`%rsp`を16byte境界へ揃えるための、8byteの確保/解放
+        (
+            "sp_alloc_8",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}sub $8, %rsp\n",
+            },
+        ),
+        (
+            "sp_free_8",
+            StaticOperandInfo {
+                len: 0,
+                template: "{space}add $8, %rsp\n",
+            },
+        ),
         (
             "sp_ref",
             StaticOperandInfo {

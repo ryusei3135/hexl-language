@@ -90,6 +90,20 @@ impl MngAsmFmt {
             .replace("{size}", size.to_string().as_str())
     }
 
+    /// `reg`から正の向き(アドレスが大きい側)に`size`バイト進んだ位置のメモリ参照
+    /// (AT&Tなら`8(%rax)`)。`size`が0ならオフセットを付けない
+    pub(in crate::compiler::asm_gen) fn fmt_ref_operand_up(&self, reg: &str, size: usize) -> String {
+        if size == 0 {
+            return self.fmt_ref_operand_no_offset(reg);
+        }
+        self.fmt
+            .fmt
+            .ref_stack
+            .replace("{src}", reg)
+            .replace("-{size}", "{size}")
+            .replace("{size}", size.to_string().as_str())
+    }
+
     /// 添字レジスタ付きのメモリ参照を返す
     /// (AT&Tなら`-offset(base, index, scale)`)
     ///
@@ -518,6 +532,16 @@ impl MngAsmFmt {
     /// `get_stack_alloc_16`で確保したスタックを解放する
     pub(in crate::compiler::asm_gen) fn get_stack_free_16(&self) -> String {
         self.tmpl_or_default("sp_free_16")
+    }
+
+    /// `%rsp`を16byte境界へ揃えるための、スタックの8byteの確保
+    pub(in crate::compiler::asm_gen) fn get_stack_alloc_8(&self) -> String {
+        self.tmpl_or_default("sp_alloc_8")
+    }
+
+    /// `get_stack_alloc_8`で確保したスタックの解放
+    pub(in crate::compiler::asm_gen) fn get_stack_free_8(&self) -> String {
+        self.tmpl_or_default("sp_free_8")
     }
 
     /// スタックの先頭(`%rsp`)のメモリ参照

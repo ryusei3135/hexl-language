@@ -1,16 +1,20 @@
 
 
 
-variant Result<R, E> {
+pub variant Result<R, E> {
     Ok(R)
     Err(E)
+
+    pub is_ok(self: Self*): bool {
+        cond Self::Ok(v):=self {
+            ret 1
+        } else {
+            ret 0
+        }
+    }
 }
 
-#define main {body} {{
-_main() {
-    body
+pub variant Option<T> {
+    Some(T)
+    None
 }
-_start() {
-    _main()
-}
-}}

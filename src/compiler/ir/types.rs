@@ -229,7 +229,10 @@ impl Size {
             Self::DD | Self::UDD | Self::F32 => 4,
             Self::DQ | Self::UDQ | Self::F64 => 8,
             Self::Array { size, len } => size.to_bytes() * len,
-            Self::Pointer { ty, .. } => (*ty).to_bytes(),
+            // ポインタ自身は指す先に関わらず8バイト(指す先のサイズは`is_pointer()`の`ty`で取る)。
+            // 以前は指す先のサイズを返していたため、構造体のポインタ型メンバーが4バイトと
+            // 数えられ、次のメンバーと領域が重なっていた
+            Self::Pointer { .. } => 8,
             Self::Struct(struct_size) => {
                 let mut size_counter = 0;
                 for mem in struct_size.iter() {

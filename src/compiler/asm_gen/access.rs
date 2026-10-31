@@ -223,6 +223,50 @@ impl AsmEmitter {
 // 命令の1行
 // ===========================================================================
 impl AsmEmitter {
+    /// ノード`idx`が、メモリ上に置かれた「ポインタ型の値」(構造体のポインタ型メンバー
+    /// `self.ptr`や、ポインタの配列の要素)を読み出すものか
+    ///
+    /// この場合、欲しいのはメモリの中身(ポインタの値)なので`mov`で読み込む。
+    /// `lea`にするとメンバー自身のアドレス(`self`の先頭など)が入ってしまい、
+    /// `self.ptr[i] = v`が構造体自身へ書き込む(ヒープのポインタが`v`で上書きされる)。
+    /// 配列やメンバーのアドレスそのものが欲しい場合(`lea`)とは区別する
+    pub(in crate::compiler::asm_gen) fn is_ptr_cell_load(&self, idx: usize) -> bool {
+        match &self.curr_inst[idx] {
+            inst::Inst::RefStruct { size, .. } | inst::Inst::RefStructPtr { size, .. } => {
+                size.is_pointer().is_some()
+            }
+            inst::Inst::InsertArr { name, .. } => {
+                self.find_var_info(name).is_some() && self.arr_elem_ty(name).is_pointer().is_some()
+            }
+            _ => false,
+        }
+    }
+
+    /// オペランドのテキスト`text`が、汎用レジスタそのもの(`%rcx`など)か
+    /// (`(%rcx)`や`-8(%rbp)`のようなメモリ参照・即値は`false`)
+    pub(in crate::compiler::asm_gen) fn is_gp_reg_operand(&self, text: &str) -> bool {
+        let text = text.trim();
+        self.asm_fmt
+            .all_reg_names()
+            .map(|names| {
+                names
+                    .iter()
+                    .any(|(reg, name)| matches!(reg, RegisterMode::Normal(_)) && name == text)
+            })
+            .unwrap_or(false)
+    }
+
+    /// `address`(`lea`)はメモリ参照のアドレスを求める命令なので、
+    /// 元がレジスタ(すでにアドレスの値を持つポインタ)なら`mov`にする。
+    /// `leaq %rcx, %rbx`は不正な命令で、`movq %rcx, %rbx`が正しい
+    fn address_opcode_for<'a>(&self, opcode: &'a str, src: &str) -> &'a str {
+        if opcode == "address" && self.is_gp_reg_operand(src) {
+            "mov"
+        } else {
+            opcode
+        }
+    }
+
     /// フォーマットファイルの`opcode`のテンプレートの`{dst}`と`{src1}`を
     /// 埋めた1行を返す(ニーモニックのサイズ接尾辞はまだ調整しない)
     pub(in crate::compiler::asm_gen) fn fill_tmpl(
@@ -231,6 +275,7 @@ impl AsmEmitter {
         dst: &str,
         src: &str,
     ) -> String {
+        let opcode = self.address_opcode_for(opcode, src);
         self.asm_fmt
             .get_opcode_tmpl(opcode)
             .replace("{dst}", dst)
@@ -250,6 +295,7 @@ impl AsmEmitter {
         size: &Size,
         is_memory: bool,
     ) -> String {
+        let opcode = self.address_opcode_for(opcode, src);
         let line = self.fill_tmpl(opcode, dst, src);
         if is_memory {
             self.asm_fmt.fmt_memory_mnemonic_resize(opcode, &line, size)

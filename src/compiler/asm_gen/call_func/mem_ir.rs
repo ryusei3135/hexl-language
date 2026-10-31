@@ -51,7 +51,8 @@ impl AsmEmitter {
     /// 配列リテラル(`Inst::InitArr`)で初期化する配列変数を定義する
     ///
     /// 領域全体(`要素のサイズ * len`)を`stk_use_counter`から先に確保し、
-    /// 要素`k`を`arr_base + (k + 1) * 要素のサイズ`へ書き込む。
+    /// 要素0を領域の一番下(`arr_base`)に置き、要素`k`を`arr_base - k * 要素のサイズ`へ
+    /// 書き込む(要素は上向きに並ぶ)。
     /// リテラルの要素数が`len`より少ない場合(`arr: [uint 3] = {0}`)、
     /// 残りの要素は0で埋める
     fn init_array_node(
@@ -78,8 +79,8 @@ impl AsmEmitter {
         );
 
         let elem_bytes = elem.to_bytes();
-        let arr_base = self.stk_use_counter;
-        self.stk_use_counter = arr_base + elem_bytes * len;
+        let arr_base = self.stk_use_counter + elem_bytes * len;
+        self.stk_use_counter = arr_base;
 
         let store_size = if elem.is_pointer().is_some() {
             Size::DQ
@@ -95,7 +96,7 @@ impl AsmEmitter {
             };
             let elem_ref = self
                 .asm_fmt
-                .fmt_ref_operand(FRAME_BASE_REG, arr_base + (k + 1) * elem_bytes);
+                .fmt_ref_operand(FRAME_BASE_REG, arr_base - k * elem_bytes);
             txt.push_str(&self.mov_line(&elem_ref, &value, &store_size, true));
         }
         self.asm_text.push_str(txt.as_str());
@@ -322,7 +323,15 @@ impl AsmEmitter {
         // そのまま即値をレジスタへ書き込む
         let is_literal_num = matches!(self.curr_inst[src], inst::Inst::Num { .. });
 
-        let result = if size.is_pointer().is_some() && is_literal_num {
+        let result = if size.is_pointer().is_some() && self.is_ptr_cell_load(src) {
+            // `p: int* = self.ptr`: メモリの中のポインタの値を読み込む(`lea`ではない)
+            let RegisterMode::Normal(_) = reg else {
+                panic!("pointer variable is not stored in a normal register");
+            };
+            let dst_reg = self.reg64(&reg)?;
+            let value_operand = self.extract_operand_text(src, this_is_self)?;
+            self.mov_line(&dst_reg, &value_operand, &Size::DQ, true)
+        } else if size.is_pointer().is_some() && is_literal_num {
             let dst_reg = self.reg64(&reg)?;
             let value_operand = self.extract_operand_text(src, this_is_self)?;
             self.mov_line(&dst_reg, &value_operand, &Size::DQ, false)
@@ -408,18 +417,17 @@ impl AsmEmitter {
         };
 
         let mut txt = String::new();
-        // 要素0が最も%rbpに近い位置(`-4(%rbp)`)に来て、要素が
-        // 増えるほどアドレスが小さくなる(`-4`, `-8`, `-12`, ...)。
-        // 領域全体(`要素のサイズ * 要素数`)を先に確保し、
-        // 要素`k`のオフセットは `arr_base + (k + 1) * 要素のサイズ`
+        // 要素は上向き(アドレスが大きい側)に並ぶ。領域全体(`要素のサイズ * 要素数`)を
+        // 先に確保し、要素0を一番下(`arr_base`)に置く。
+        // 要素`k`のオフセットは `arr_base - k * 要素のサイズ`
         let elem_bytes = size.to_bytes();
-        let arr_base = self.stk_use_counter;
-        self.stk_use_counter = arr_base + elem_bytes * src.len();
+        let arr_base = self.stk_use_counter + elem_bytes * src.len();
+        self.stk_use_counter = arr_base;
         for (k, idx) in src.iter().enumerate() {
             let value = self.extract_operand_text(*idx, dst_size.as_ref())?;
             let elem_ref = self
                 .asm_fmt
-                .fmt_ref_operand(&base, arr_base + (k + 1) * elem_bytes);
+                .fmt_ref_operand(&base, arr_base - k * elem_bytes);
             let store_size = if size.is_pointer().is_some() {
                 Size::DQ
             } else {

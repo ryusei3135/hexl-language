@@ -73,10 +73,15 @@ impl AsmEmitter {
     /// インラインアセンブラが暗黙に書き換えるレジスタ
     /// (`syscall`は`%rcx`と`%r11`を書き換える)
     fn implicit_clobbered_regs(&self, lines: &[(String, Vec<usize>)]) -> Vec<RegisterMode> {
-        if !lines
-            .iter()
-            .any(|(template, _)| template.contains("syscall"))
-        {
+        // `syscall`は復帰先の`%rip`を`%rcx`へ、`%rflags`を`%r11`へ書き込む。
+        // 大文字・小文字の違いや、`syscall; ret`のような同じ行の並びも検出する
+        let has_syscall = lines.iter().any(|(template, _)| {
+            template
+                .to_ascii_lowercase()
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|word| word == "syscall")
+        });
+        if !has_syscall {
             return Vec::new();
         }
         [1, 11].into_iter().map(RegisterMode::Normal).collect()

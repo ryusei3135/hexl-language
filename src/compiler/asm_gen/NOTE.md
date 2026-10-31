@@ -140,3 +140,23 @@
 - 呼び出す関数: `get_label_fmt` / `get_jmp` / `is_jmp_line` / `get_ret` / `get_stack_alloc_16` / `get_stack_free_16` /
     `get_stack_top_ref` / `get_zero_reg` / `get_div_inst` / `get_sign_extend_acc`。`FRAME_BASE_REG`の定義も`x64.rs`にある。
 - `ret`/`jmp`/ラベルは`{space}`付きのテンプレートになったので、出力のインデントが2文字増える(動作は同じ)。
+
+## アセンブラ生成のバグ修正(2026-10-31)
+- `call_func.rs`の`caller_save_pair`: 呼び出し前後の`push`/`pop`を同じレジスタ列から同時に作る
+    (復元は逆順。以前は`pop`が無効化されていた)。退避が16byteの奇数倍なら`sub $8, %rsp`の余白を挟み、
+    `call`の時点で`%rsp`を16byte境界にする。
+- `fix_callee_saved`: `callee_saved`の`push`が奇数個なら8byteの余白を足す(復元では先に解放)。
+    `_start`はフレームを作るときに余白を足す(入口の`%rsp`は`push %rbp`前から16byte境界)。
+- `access.rs`の`fill_tmpl`/`tmpl_line`: `address`(`lea`)のsrcが汎用レジスタなら`mov`にする
+    (`leaq %rcx, %rbx`は不正な命令)。
+- `inline_asm.rs`: `syscall`の検出を大文字小文字・区切り文字に対応させた(`%rcx`/`%r11`は破壊される扱い)。
+- 未修正(要確認): 構造体メンバーのレイアウト(`struct_member_offset`)は、小さいメンバーの後に大きいメンバーが
+    続くと領域が重なる。IR側でパディング/オフセットを決める必要がある。
+
+## ポインタ/配列の添字を上向きに変更(2026-10-31)
+- 要素`i`は`ptr + i * 要素サイズ`(ポインタ)、`%rbp - arr_base + i * 要素サイズ`(スタック配列)。以前は下向き。
+    `malloc`した領域(上向きに使う)と、スタック配列へのポインタの両方で同じ向きになる。
+- `arr_base`の意味を「要素0の位置(領域の一番下)」に変更した(`mem_ir.rs`の2か所・`operand_txt.rs`の`init_arr_txt`)。
+- `types::Size::Pointer`の`to_bytes()`を、指す先のサイズから8に変更(`types.rs`)。
+    構造体のポインタ型メンバーが4バイトと数えられ、`len`のメンバーと重なっていた。
+    `ir`側で`Pointer`の`to_bytes()`を「指す先のサイズ」として使っている箇所があれば、`is_pointer()`の`ty`を使うこと。

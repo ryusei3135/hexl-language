@@ -408,9 +408,16 @@ impl AsmEmitter {
                 )
             } else {
                 let self_ptr_reg = self.self_ptr_reg();
-                let line =
-                    self.fill_tmpl("address", &self.get_reg_txt(dst, &Size::DQ)?, &self_ptr_reg);
-                self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ)
+                // `self`のポインタはレジスタに入っているので、`fill_tmpl`が`address`を
+                // `mov`に置き換える(`leaq %rdi, ..`は不正な命令)。
+                // どちらでも、ポインタを渡すので64bitで扱う
+                let line = self.fill_tmpl(
+                    "address",
+                    &self.get_reg_txt(dst, &Size::DQ)?,
+                    &self_ptr_reg,
+                );
+                let line = self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ);
+                self.asm_fmt.fmt_mnemonic_resize("mov", &line, &Size::DQ)
             }
         } else {
             self.fill_tmpl(opcode, &self.get_reg_txt(dst, &base_size)?, FRAME_BASE_REG)
@@ -720,6 +727,7 @@ impl AsmEmitter {
     pub(super) fn format_expr_inst(
         &mut self,
         expr: &inst::ExprInst,
+        size: Option<Size>,
     ) -> Result<String, err::ErrKind> {
         // `/`と`%`は`%rax`/`%rdx`を使う専用の手順で生成する
         // (`div_ir.rs`)。テンプレートでは、割られる数を`%rax`ではなく
@@ -731,7 +739,12 @@ impl AsmEmitter {
         let key = Self::expr_tmpl_key(&expr, &self.curr_inst)?;
         let mnemonic = Self::expr_mnemonic(&expr.kind)?;
 
-        let resolved_size: Size = self.get_expr_ty(expr.ls);
+        let resolved_size: Size = if let Some(t) = size {
+            t
+        } else {
+            self.get_expr_ty(expr.ls)
+        };
+        println!("JJJJJJJJJJJJJJJ {:?}", resolved_size);
         if matches!(expr.kind, inst::ExprKind::Inc | inst::ExprKind::Dec) {
             let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some();
             let operand = self.extract_operand_text(expr.ls, None)?;
@@ -758,6 +771,7 @@ impl AsmEmitter {
                 | inst::ExprKind::LessThenEq
                 | inst::ExprKind::GreaterThenEq
         ) && (resolved_size.is_unsigned()
+            || self.get_expr_ty(expr.ls).is_unsigned()
             || self.get_expr_ty(expr.rs).is_unsigned());
         let wrap_size = resolved_size.wrap_dst_size();
 

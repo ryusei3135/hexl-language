@@ -12,10 +12,9 @@ pub struct VarIndexInfo {
     pub size: types::Size,
     pub index: usize,
     pub is_stack: bool,
-    /// 配列変数の場合の、先頭要素を置く直前の`stk_use_counter`
-    /// (`%rbp`からのバイトオフセット)。要素`i`は
-    /// `%rbp - (arr_base + (i + 1) * 要素サイズ)`に置かれる
-    /// (要素0が最も`%rbp`に近い)。配列以外では`0`
+    /// 配列変数の場合の、要素0の位置(`%rbp`からのバイトオフセット。領域の一番下)。
+    /// 要素`i`は`%rbp - arr_base + i * 要素サイズ`に置かれる
+    /// (上向き。ポインタの添字`ptr + i * 要素サイズ`と同じ向き)。配列以外では`0`
     pub arr_base: usize,
     /// スタック上のメモリ(配列など、`mem_val_ir`で確保した領域)に
     /// 実体がある変数かどうか。`true`の場合、`reg`はレジスタ番号として

@@ -86,7 +86,11 @@ impl AsmEmitter {
             }
         }
         call_func.push_str(&self.spill_store_regs(&lazy_regs)?);
-        call_func.push_str(&self.push_caller_saved_regs(&eager_regs)?.concat());
+        // `push`と`pop`は同じ`regs`から同時に作り、対応が崩れないようにする。
+        // 退避の合計が16byteの奇数倍なら、`call`の直前に`%rsp`が16byte境界に
+        // なるよう、8byteの余白を挟む(System V AMD64 ABI)
+        let (caller_save_asm, caller_restore_asm) = self.caller_save_pair(&eager_regs)?;
+        call_func.push_str(&caller_save_asm);
 
         // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
         self.used_reg.start_scope();
@@ -97,7 +101,8 @@ impl AsmEmitter {
         // 引数で使ったレジスタを解放
         self.used_reg.end_scope();
 
-        // call_func.push_str(&self.pop_caller_saved_regs(&eager_regs));
+        // 退避した順の逆順に復元する(余白があれば先に解放する)
+        call_func.push_str(&caller_restore_asm);
         call_func.push_str(&self.after_call_spills(&lazy_regs)?);
         Ok(call_func)
     }
@@ -167,17 +172,19 @@ impl AsmEmitter {
         }
     }
 
-    fn push_caller_saved_regs(&self, regs: &[RegisterMode]) -> Result<Vec<String>, err::ErrKind> {
-        let emit_caller_reg = |reg: &asm_gen::RegisterMode| -> Result<String, err::ErrKind> {
-            Ok(match reg {
-                RegisterMode::Normal(index) => {
-                    let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ)?;
-                    self.asm_fmt.get_push(&reg_name)
-                }
-                RegisterMode::Float(_) => {
-                    let size = self.float_reg_size(*reg);
-                    let opcode = Self::float_move_opcode(&size);
-                    let operand = self.reg_mode_operand(*reg, &size)?;
+    /// 1つのレジスタを退避する命令(`push`、浮動小数点数は16byteの領域へ`mov`)と、
+    /// そのレジスタが使うスタックのバイト数
+    fn caller_save_one(&self, reg: RegisterMode) -> Result<(String, usize), err::ErrKind> {
+        Ok(match reg {
+            RegisterMode::Normal(index) => {
+                let reg_name = self.asm_fmt.get_fmt_reg(index, &Size::DQ)?;
+                (self.asm_fmt.get_push(&reg_name), 8)
+            }
+            RegisterMode::Float(_) => {
+                let size = self.float_reg_size(reg);
+                let opcode = Self::float_move_opcode(&size);
+                let operand = self.reg_mode_operand(reg, &size)?;
+                (
                     format!(
                         "{}{}",
                         self.asm_fmt.get_stack_alloc_16(),
@@ -185,44 +192,67 @@ impl AsmEmitter {
                             .get_opcode_tmpl(opcode)
                             .replace("{src1}", &operand)
                             .replace("{dst}", &self.asm_fmt.get_stack_top_ref())
-                    )
-                }
-            })
-        };
-        let result = regs
-            .iter()
-            .filter(|reg| !self.is_callee_saved(**reg))
-            .map(emit_caller_reg)
-            .collect::<Result<Vec<String>, err::ErrKind>>()?;
-        Ok(result)
+                    ),
+                    16,
+                )
+            }
+        })
     }
 
-    // /// `push_caller_saved_regs`で退避したレジスタを、退避した時とは逆順に復元する
-    // fn pop_caller_saved_regs(&self, regs: &[RegisterMode]) -> String {
-    //     regs.iter()
-    //         .rev()
-    //         .filter(|reg| !self.is_callee_saved(**reg))
-    //         .map(|reg| {
-    //             match reg {
-    //                 RegisterMode::Normal(index) => {
-    //                     let reg_name = self.asm_fmt.get_fmt_reg(*index, &Size::DQ);
-    //                     self.asm_fmt.get_pop(&reg_name)
-    //                 }
-    //                 RegisterMode::Float(_) => {
-    //                     let size = self.float_reg_size(*reg);
-    //                     let opcode = Self::float_move_opcode(&size);
-    //                     let operand = self.reg_mode_operand(*reg, &size);
-    //                     let restore = self
-    //                         .asm_fmt
-    //                         .get_opcode_tmpl(opcode)
-    //                         .replace("{src1}", "(%rsp)")
-    //                         .replace("{dst}", &operand);
-    //                     format!("{restore}add $16, %rsp\n")
-    //                 }
-    //             }
-    //         })
-    //         .collect::<String>()
-    // }
+    /// `caller_save_one`で退避したレジスタ1つを復元する命令
+    fn caller_restore_one(&self, reg: RegisterMode) -> Result<String, err::ErrKind> {
+        Ok(match reg {
+            RegisterMode::Normal(index) => {
+                let reg_name = self.asm_fmt.get_fmt_reg(index, &Size::DQ)?;
+                self.asm_fmt.get_pop(&reg_name)
+            }
+            RegisterMode::Float(_) => {
+                let size = self.float_reg_size(reg);
+                let opcode = Self::float_move_opcode(&size);
+                let operand = self.reg_mode_operand(reg, &size)?;
+                format!(
+                    "{}{}",
+                    self.asm_fmt
+                        .get_opcode_tmpl(opcode)
+                        .replace("{src1}", &self.asm_fmt.get_stack_top_ref())
+                        .replace("{dst}", &operand),
+                    self.asm_fmt.get_stack_free_16()
+                )
+            }
+        })
+    }
+
+    /// 関数呼び出しの前後で`regs`(callerが保存するレジスタ)を退避/復元する
+    /// 命令の組`(退避, 復元)`を、同じ`regs`から同時に作る
+    ///
+    /// - 退避は`regs`の順、復元はその逆順なので、`push`と`pop`が必ず対応する
+    /// - 退避したバイト数が16の倍数でなければ、退避の最後に8byteの余白を確保し、
+    ///   復元の最初に解放する。これで`call`の時点の`%rsp`が16byte境界になる
+    ///   (関数の入口側で、`callee_saved`の退避を含めてフレームを16byte境界に
+    ///   揃えている。`fix_callee_saved`を参照)
+    fn caller_save_pair(&self, regs: &[RegisterMode]) -> Result<(String, String), err::ErrKind> {
+        let regs: Vec<RegisterMode> = regs
+            .iter()
+            .copied()
+            .filter(|reg| !self.is_callee_saved(*reg))
+            .collect();
+        let mut save = String::new();
+        let mut restore = String::new();
+        let mut bytes = 0usize;
+        for reg in &regs {
+            let (asm, used) = self.caller_save_one(*reg)?;
+            save.push_str(&asm);
+            bytes += used;
+        }
+        if bytes % 16 != 0 {
+            save.push_str(&self.asm_fmt.get_stack_alloc_8());
+            restore.push_str(&self.asm_fmt.get_stack_free_8());
+        }
+        for reg in regs.iter().rev() {
+            restore.push_str(&self.caller_restore_one(*reg)?);
+        }
+        Ok((save, restore))
+    }
 
     /// 引数`param`を引数レジスタへ渡す命令の種類を決める
     ///
@@ -231,6 +261,9 @@ impl AsmEmitter {
     fn arg_opcode(&self, param: usize, index: usize, expand_struct_return: bool) -> &'static str {
         if expand_struct_return && index == 0 {
             "address"
+        } else if self.is_ptr_cell_load(param) {
+            // `self.ptr`のように、メモリに置かれたポインタの値を渡す
+            "mov"
         } else if self.curr_inst[param].is_pointer() {
             "address"
         } else if self.curr_inst[param].is_float(&self.curr_inst) {
@@ -301,7 +334,7 @@ impl AsmEmitter {
 
             let opcode = self.arg_opcode(*param, index, expand_struct_return);
 
-            let resize_size = if opcode == "address" {
+            let resize_size = if opcode == "address" || param_ty.is_pointer().is_some() {
                 Size::DQ
             } else {
                 param_ty.clone()
@@ -723,20 +756,33 @@ impl AsmEmitter {
             .iter()
             .map(fmt_reg_fn)
             .collect::<Result<Vec<String>, _>>()?;
-        let save_asm = caller_name
+        // `push %rbp`の直後の`%rsp`は16byte境界にあり、フレームも16の倍数で確保する。
+        // `callee_saved`の`push`が奇数個だと、以降の`call`の時点で8byteずれるので、
+        // 奇数個のときは8byteの余白を足す(復元では先に解放する)
+        let needs_pad = callee_regs.len() % 2 == 1;
+        let mut save_asm = caller_name
             .iter()
             .map(|name| self.asm_fmt.get_push(name))
             .collect::<String>();
+        if needs_pad {
+            save_asm.push_str(&self.asm_fmt.get_stack_alloc_8());
+        }
 
         let callee_names: Vec<String> = callee_regs
             .iter()
             .rev()
             .map(fmt_reg_fn)
             .collect::<Result<Vec<String>, _>>()?;
-        let restore_asm = callee_names
-            .iter()
-            .map(|name| self.asm_fmt.get_pop(name))
-            .collect::<String>();
+        let mut restore_asm = String::new();
+        if needs_pad {
+            restore_asm.push_str(&self.asm_fmt.get_stack_free_8());
+        }
+        restore_asm.push_str(
+            &callee_names
+                .iter()
+                .map(|name| self.asm_fmt.get_pop(name))
+                .collect::<String>(),
+        );
 
         // スタックフレームの作り直し(`build_fn_process`の`replace_range`)は
         // `prologue_end`より前の範囲だけを書き換えるので、先に本体側の目印を置き換えておく
@@ -754,7 +800,14 @@ impl AsmEmitter {
     /// - `stk_size == 0`: 確保せずフレームだけ作る(`_start`は作らない)
     fn gen_fn_prologue(&self, fn_name: &str, stk_size: usize) -> String {
         if stk_size != 0 {
-            self.asm_fmt.gen_stack_frame(stk_size)
+            let frame = self.asm_fmt.gen_stack_frame(stk_size);
+            if fn_name == "_start" {
+                // `_start`は`call`で呼ばれないので、入口の`%rsp`が既に16byte境界にある。
+                // `push %rbp`で8byteずれるので、余白を足して境界に戻す
+                format!("{}{}", frame, self.asm_fmt.get_stack_alloc_8())
+            } else {
+                frame
+            }
         } else if fn_name != "_start" {
             self.asm_fmt.func_frame_fmt()
         } else {
@@ -807,6 +860,34 @@ impl AsmEmitter {
         self.data_idx += 1;
     }
 
+    /// 式の計算に使うレジスタ/ニーモニックのサイズを決める
+    ///
+    /// 基本は右辺の型。ただし右辺が数値リテラルのときは、リテラルの型(`int`=32bit)ではなく
+    /// 左辺の型に合わせる。そうしないと、64bitの変数`ret`に対する`ret < 0`や`ret + 0`が
+    /// `cmpl $0, %rbx`/`movl %rbx, %esi`のように、32bitの命令へ64bitのレジスタが混ざる
+    /// (アセンブラの`register size mismatch`)
+    fn expr_operand_size(&self, expr: &inst::ExprInst) -> Size {
+        let rs_ty = self.get_expr_ty(expr.rs);
+        if !matches!(self.curr_inst[expr.rs], inst::Inst::Num { .. }) || rs_ty.is_float() {
+            return rs_ty;
+        }
+        let ls_ty = self.get_expr_ty(expr.ls);
+        if ls_ty.is_float() {
+            return rs_ty;
+        }
+        let ls_ty = match ls_ty {
+            Size::Pointer { .. } | Size::Array { .. } | Size::Struct(..) => {
+                Self::value_reg_size(&ls_ty)
+            }
+            other => other,
+        };
+        if ls_ty.to_bytes() >= rs_ty.to_bytes() {
+            ls_ty
+        } else {
+            rs_ty
+        }
+    }
+
     #[inline(always)]
     pub(super) fn gen_expr_asm(&mut self, expr: &inst::ExprInst) -> Result<(), err::ErrKind> {
         // 三項演算子(`asm_emitter/ternary.rs`)
@@ -824,13 +905,11 @@ impl AsmEmitter {
         }
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
-        // (以前は`reg_idx`を進めるだけだったため、引数の`%rdi`などまで
-        //  上書きしていた)
-        let size = self.get_expr_ty(expr.ls);
+        let size = self.expr_operand_size(expr);
         let dst = self.alloc_reg(&size);
         self.reg_idx = dst.index();
 
-        let asm = self.format_expr_inst(&expr)?;
+        let asm = self.format_expr_inst(&expr, Some(size))?;
 
         self.asm_text.push_str(&asm);
 
