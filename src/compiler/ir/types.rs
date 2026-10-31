@@ -319,13 +319,30 @@ impl IR {
         &self,
         ty: &TyNode,
     ) -> Result<types::Size, err::ErrKind> {
-        // バリアント型は`struct_tree`では解決できないので先に調べる
-        if let TyNode::Ty(name) = ty {
-            if self.variant_tree.contains_key(name) {
-                return Ok(self.size_of(ty));
-            }
+        // バリアント型は`struct_tree`では解決できないので先に調べる。
+        // `Self*`は`Option$int*`のようなポインタ型に解決されているので、
+        // ポインタ・配列・契約・参照の内側の型もたどって調べる
+        if self.ty_base_is_variant(ty) {
+            return Ok(self.size_of(ty));
         }
         types::Size::try_from_or_emit_struct(&mut |name| self.struct_tree.get_struct_size(name), ty)
+    }
+
+    /// `ty`の包みを外した、いちばん内側の型がバリアント型か
+    /// (`Option$int` / `Option$int*` / `[Option$int 4]` / `Option$int* must=free`)
+    fn ty_base_is_variant(&self, ty: &TyNode) -> bool {
+        match ty {
+            TyNode::Ty(name) | TyNode::SelfTy(name) => self.variant_tree.contains_key(name),
+            TyNode::Pointer { ty_name, .. } => self.ty_base_is_variant(ty_name),
+            TyNode::Stack { name, .. } | TyNode::Static { name, .. } => {
+                self.ty_base_is_variant(name)
+            }
+            TyNode::RefTy(inner) => self.ty_base_is_variant(inner),
+            TyNode::ConstractMust(inner) | TyNode::ConstractOf(inner) => {
+                self.ty_base_is_variant(&inner.unwrap_ty())
+            }
+            TyNode::Auto => false,
+        }
     }
 
     /// バリアント型の定義から`types::Size::Variant`を作る

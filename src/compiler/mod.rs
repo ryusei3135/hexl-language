@@ -7,6 +7,7 @@ pub mod err;
 pub mod hexl_frontend;
 pub mod ir;
 pub mod models;
+mod optimization;
 
 pub use ast::*;
 
