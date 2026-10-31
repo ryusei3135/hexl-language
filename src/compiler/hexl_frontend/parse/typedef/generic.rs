@@ -355,11 +355,13 @@ impl Parser {
         let Some(tkns) = self.tkns.as_ref() else {
             return false;
         };
-        matches!(tkns.get(self.idx + 1).map(|t| &t.tkn), Some(lex::Tkn::Name(_)))
-            && matches!(
-                tkns.get(self.idx + 2).map(|t| &t.tkn),
-                Some(lex::Tkn::LAngleBracket)
-            )
+        matches!(
+            tkns.get(self.idx + 1).map(|t| &t.tkn),
+            Some(lex::Tkn::Name(_))
+        ) && matches!(
+            tkns.get(self.idx + 2).map(|t| &t.tkn),
+            Some(lex::Tkn::LAngleBracket)
+        )
     }
 
     /// ジェネリクスな型エイリアス`type Name<T, U> = Pair<T, U>*`を読み込み、

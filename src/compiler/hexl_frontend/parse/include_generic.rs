@@ -63,9 +63,9 @@ impl Parser {
         }
         self.idx = saved_idx;
 
-        for path in paths {
-            self.collect_generics_of_include(&path);
-        }
+        paths.iter().for_each(|p| {
+            self.collect_generics_of_include(p);
+        });
         Ok(())
     }
 
@@ -342,10 +342,12 @@ impl Parser {
                 }
             }
         }
-        for (n, def) in called {
-            self.instantiate_generic_def(&n, Some(module), def, &[], &[])?;
-        }
-        Ok(())
+        called
+            .iter()
+            .try_for_each(|(n, def)| -> Result<(), err::ErrKind> {
+                self.instantiate_generic_def(&n, Some(module), def.clone(), &[], &[])?;
+                Ok(())
+            })
     }
 
     /// 実体化する本体のトークン列の中で、`#include`先の関数の呼び出し
