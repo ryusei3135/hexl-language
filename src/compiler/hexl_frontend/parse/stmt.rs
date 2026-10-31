@@ -60,6 +60,17 @@ pub(super) struct GenericType {
     pub(super) public: bool,
 }
 
+/// ジェネリクスな型エイリアス(`type Name<T> = Pair<T>*`)の定義。
+/// 使われるたびに型パラメータをトークンごと置き換えて、型として解析し直す
+/// (`typedef/generic.rs`の`generic_alias_ref`)
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct GenericAlias {
+    /// `<T, U>`の型パラメータの名前
+    pub(super) params: Vec<String>,
+    /// `=`の右側の型を構成するトークン
+    pub(super) tkns: Vec<lex::LocatedTkn>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parser {
     pub(super) gen_nodes: Vec<Group1Node>,
@@ -98,6 +109,13 @@ pub struct Parser {
     pub(super) included_generic_types: HashMap<String, HashMap<String, GenericType>>,
     /// 定義済みのジェネリクスな構造体/バリアント(型名 -> 定義)
     pub(super) generic_types: HashMap<String, GenericType>,
+    /// 定義を集め終えた`#include`先(`ファイル|モジュール名`)。
+    /// include先がさらにincludeしているファイルのジェネリクスも集めるときに、
+    /// 同じファイルを何度も読んだり、循環して止まらなくなったりしないために使う
+    pub(super) included_visited: std::collections::HashSet<String>,
+    /// 定義済みのジェネリクスな型エイリアス(型名 -> 定義)。
+    /// 使用より前に定義されている必要がある
+    pub(super) generic_aliases: HashMap<String, GenericAlias>,
     /// 作成済みの(型名, `<>`の中身)。同じ型引数での使用が
     /// 何度あっても、その型の構造体/バリアントは1つだけ作るために使う
     pub(super) generated_types: Vec<(String, Vec<TyNode>)>,
@@ -134,6 +152,8 @@ impl Parser {
             generic_depth: 0,
             included_generic_types: HashMap::new(),
             generic_types: HashMap::new(),
+            included_visited: std::collections::HashSet::new(),
+            generic_aliases: HashMap::new(),
             generated_types: Vec::new(),
             pending_types: Vec::new(),
             reserved_impls: HashMap::new(),
@@ -278,9 +298,16 @@ impl Parser {
                         }
                         // `type T = BaseTy`
                         lex::Tkn::KeyWordType => {
-                            let binding = self.type_alias_node();
-                            let node = C::handle_ty::<Group1Node>(&self.err_pool, binding)?;
-                            self.gen_nodes.push(node);
+                            // ジェネリクス(`type Name<T> = Pair<T>`)は、使われるまで
+                            // ノードを作らないので、定義を記録するだけにする
+                            if self.is_generic_alias_head() {
+                                let result = self.generic_alias_def();
+                                C::handle(&self.err_pool, result)?;
+                            } else {
+                                let binding = self.type_alias_node();
+                                let node = C::handle_ty::<Group1Node>(&self.err_pool, binding)?;
+                                self.gen_nodes.push(node);
+                            }
                         }
                         t => {
                             return crate::err_at!(self.unexpect_tkn_in_stmt(t));
@@ -466,6 +493,10 @@ impl Parser {
             }
             // `pub type T = BaseTy`
             lex::Tkn::KeyWordType => {
+                // `pub type Name<T> = ..`も、使われるまでノードを作らない
+                if self.is_generic_alias_head() {
+                    return self.generic_alias_def();
+                }
                 let mut node = self.type_alias_node()?;
                 node.set_public(true);
                 self.gen_nodes.push(node);

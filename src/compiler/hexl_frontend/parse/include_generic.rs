@@ -11,7 +11,9 @@
 //! ## 制限
 //! - 関数の本体は呼び出し側のファイルとして解析される。そのため本体の中から
 //!   include先の非公開の関数や型を使っていると、解決できない。
-//! - include先がさらに`#include`しているファイルのジェネリクスは集めない。
+//! - include先がさらに`#include`しているファイルのジェネリクスも集める
+//!   (モジュール名は、include先のファイルでの名前のまま登録する。
+//!   呼び出し側が同じ名前で別のファイルをincludeしていると、衝突する)。
 //! - 対応するのは関数のみ(include先の構造体/バリアントのジェネリクスは未対応)。
 
 use super::*;
@@ -122,12 +124,35 @@ impl Parser {
                 file
             );
         }
+        // 同じファイルを同じモジュール名で、2度は集めない(循環の防止)
+        let visited_key = format!(
+            "{}|{}",
+            file,
+            match &kind {
+                ImportKind::Module(Some(module)) => module.as_str(),
+                _ => "",
+            }
+        );
+        if !self.included_visited.insert(visited_key) {
+            return;
+        }
         let Ok(content) = std::fs::read_to_string(&file) else {
             return;
         };
         let mut lexer = lex::Lexer::new(&Rc::new(file.clone()));
         if lexer.analy(&content).is_err() {
             return;
+        }
+
+        // include先がさらに`#include`しているファイルの、ジェネリクスな関数/型も集める。
+        // 実体化する本体(`Vec<T>`の中の`lib::Option<T>`や`mem::malloc<T>`)は、
+        // 呼び出し側のファイルとして解析されるが、`lib`/`mem`は呼び出し側が
+        // `#include`していないことがあるため。モジュール名は、include先の
+        // ファイルでの名前のまま登録する
+        {
+            let saved = self.tkns.replace(lexer.gen_tkns.clone());
+            let _ = self.collect_included_generics();
+            self.tkns = saved;
         }
 
         // include先のトークン列で、定義を集める。今のファイルの状態は

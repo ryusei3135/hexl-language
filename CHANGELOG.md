@@ -6,9 +6,11 @@
 
 ## [1.3.0] - 2026-10-31
 ### Added
+- LSPを追加
 - 標準ライブラリ
     - `vec.hexl`
         - pop()メゾットOptionを返す
+        - len()配列の長さを取得
     - `lib.hexl`
         - is_ok()
         - is_err()

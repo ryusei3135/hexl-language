@@ -41,7 +41,8 @@ impl Parser {
         } else {
             0
         };
-        matches!(tkn_at(0), Some(lex::Tkn::Name(_)))
+        // `Self::M(val)`の`Self`も、型の名前として使える
+        matches!(tkn_at(0), Some(lex::Tkn::Name(_) | lex::Tkn::KeyWordSelf))
             && matches!(tkn_at(off), Some(lex::Tkn::Name(_)))
             && matches!(tkn_at(off + 1), Some(lex::Tkn::LParen))
             && matches!(tkn_at(off + 2), Some(lex::Tkn::Name(_)))
@@ -73,11 +74,19 @@ impl Parser {
         // 条件式の中なので、構造体を初期化する式は使えない
         const STRUCT_NOT_INIT: bool = false;
 
-        // M または Type::M
-        let lex::Tkn::Name(first) = self.next_tkn(&["name"])? else {
-            return crate::err_at!(
-                self.variant_bind_unexpected("name", self.current_tkn().clone())
-            );
+        // M または Type::M(`Self::M`の`Self`は、処理中の型の名前にする。
+        // ジェネリクスな型なら`Option$int`のような型引数を含んだ名前になる)
+        let first = match self.next_tkn(&["name", "Self"])? {
+            lex::Tkn::Name(name) => name,
+            lex::Tkn::KeyWordSelf => match self.struct_self_name.clone() {
+                Some(self_name) => self_name,
+                None => return crate::err_at!(self.self_outside_of_type()),
+            },
+            _ => {
+                return crate::err_at!(
+                    self.variant_bind_unexpected("name", self.current_tkn().clone())
+                );
+            }
         };
         // 束縛の位置(`M`か`Type`の位置)
         let span = self.build_err_span();

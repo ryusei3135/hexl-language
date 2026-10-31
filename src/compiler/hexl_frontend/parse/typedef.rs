@@ -302,13 +302,19 @@ impl Parser {
                     match self.next_tkn(&["<", "*", "["])? {
                         // ジェネリクスな構造体/バリアント: `Name<int>`
                         lex::Tkn::LAngleBracket => {
-                            if !self.generic_types.contains_key(&name) {
+                            let generic_ty = if self.generic_types.contains_key(&name) {
+                                // その型引数の構造体/バリアントを(まだ無ければ)作り、
+                                // 作った型の名前の型にする。終了時は`>`を指す
+                                let generic_name = self.generic_type_ref(&name)?;
+                                self.is_constract_ty(TyNode::Ty(generic_name))?
+                            } else if self.generic_aliases.contains_key(&name) {
+                                // ジェネリクスな型エイリアス: `Alias<int>`を、
+                                // 型パラメータを置き換えた型にする。終了時は`>`を指す
+                                self.generic_alias_ref(&name)?
+                            } else {
+                                // ジェネリクスな型でも型エイリアスでもない型に、型引数が付いている
                                 return crate::err_at!(self.generics_not_supported_yet());
-                            }
-                            // その型引数の構造体/バリアントを(まだ無ければ)作り、
-                            // 作った型の名前の型にする。終了時は`>`を指す
-                            let generic_name = self.generic_type_ref(&name)?;
-                            let generic_ty = self.is_constract_ty(TyNode::Ty(generic_name))?;
+                            };
                             match self.next_tkn(&["*", "["])? {
                                 lex::Tkn::LBracket => {
                                     self.next_tkn(&["["])?;

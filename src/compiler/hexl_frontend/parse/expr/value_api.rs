@@ -98,6 +98,13 @@ impl Parser {
             self.advance_tkn_checked()?;
             return self.generic_type_expr::<false>(&mem_name, init_struct);
         }
+        // `mod::Type::Mem` / `mod::Type::func(..)`: `name`は`#include`先のモジュール名。
+        // モジュール名は型の名前に含めない(型は`Type`としてこのファイルに作られる)ので、
+        // `Type`を型の名前として`Type::Mem`と同じに読む。
+        // 現在は`Type`を指していて、次のトークンが`::`なので、そのまま再帰できる
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::ModPathTkn)) {
+            return self.scope_member_node(mem_name, init_struct);
+        }
         if self.is_variant_field(&name, &mem_name) {
             // unsafeな共用体の初期化: `Type::mem { mem: expr }`
             // (`Type::Mem(expr)`はタグ付き共用体用なので、`{`が続くときだけここに入る)

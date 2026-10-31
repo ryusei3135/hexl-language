@@ -1,6 +1,7 @@
 #include std::"os/mem.hexl"
 #include std::"lib.hexl"
 
+
 pub struct Vec<T> {
     val: T*"unlimit" must=free
     len: u64
@@ -24,7 +25,7 @@ pub struct Vec<T> {
         self->len++
     }
 
-    pub pop(self mut: Self*) -> lib::Option<T> {
+    pub pop(self mut: Self*): lib::Option<T> {
         cond self->len >= 2 {
             self->len -= 1
             r := [self->val self->len]
@@ -33,6 +34,10 @@ pub struct Vec<T> {
         } else {
             ret lib::Option::None
         }
+    }
+
+    pub len(self: Self*): u64 {
+        ret self->len
     }
 
     pub del(self: Self*) {

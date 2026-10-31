@@ -347,6 +347,145 @@ impl Parser {
         }
     }
 
+    // ===== ジェネリクスな型エイリアス =====
+
+    /// 現在のトークン(`type`)が、ジェネリクスな型エイリアスの定義
+    /// (`type Name<`)の先頭か
+    pub(in crate::compiler::hexl_frontend::parse) fn is_generic_alias_head(&self) -> bool {
+        let Some(tkns) = self.tkns.as_ref() else {
+            return false;
+        };
+        matches!(tkns.get(self.idx + 1).map(|t| &t.tkn), Some(lex::Tkn::Name(_)))
+            && matches!(
+                tkns.get(self.idx + 2).map(|t| &t.tkn),
+                Some(lex::Tkn::LAngleBracket)
+            )
+    }
+
+    /// ジェネリクスな型エイリアス`type Name<T, U> = Pair<T, U>*`を読み込み、
+    /// `generic_aliases`に登録する(ノードは作らない)。
+    /// 呼び出し時の`current_tkn()`は`type`で、終了時は`=`の右側の型の最後の
+    /// トークンを指す(`type_alias_node`と同じ)。
+    ///
+    /// `=`の右側は、`Name` / `Name<..>`(型引数の中のジェネリクスも可)に、
+    /// 0個以上の`*`が付いた形
+    pub(in crate::compiler::hexl_frontend::parse) fn generic_alias_def(
+        &mut self,
+    ) -> Result<(), err::ErrKind> {
+        let name_tkn = self.next_tkn(&["name"])?;
+        let lex::Tkn::Name(name) = name_tkn.clone() else {
+            return crate::err_at!(self.expected_tkn("type alias name", name_tkn));
+        };
+        // `<`
+        self.next_tkn(&["<"])?;
+
+        // `<T, U>`の型パラメータ
+        let mut params = Vec::<String>::new();
+        loop {
+            let param_tkn = self.next_tkn(&["name"])?;
+            let lex::Tkn::Name(param) = param_tkn.clone() else {
+                return crate::err_at!(self.expected_tkn("type parameter name", param_tkn));
+            };
+            // 型パラメータ同士、エイリアス自身の名前と同じ名前は使えない
+            if params.contains(&param) || param == name {
+                return crate::err_at!(self.expected_tkn("unique type parameter name", param_tkn));
+            }
+            params.push(param);
+            match self.next_tkn(&[",", ">"])? {
+                lex::Tkn::Comma => continue,
+                lex::Tkn::RAngleBracket => break,
+                t => return crate::err_at!(self.expected_tkn(", or `>`", t)),
+            }
+        }
+
+        // `=`
+        let eq_tkn = self.next_tkn(&["="])?;
+        if !matches!(eq_tkn, lex::Tkn::Equal) {
+            return crate::err_at!(self.expected_tkn("=", eq_tkn));
+        }
+
+        // `=`の右側の型: `Name` / `Name<..>` / `*`
+        let base_tkn = self.next_tkn(&["type name"])?;
+        if !matches!(base_tkn, lex::Tkn::Name(_)) {
+            return crate::err_at!(self.expected_tkn("type name", base_tkn));
+        }
+        let start = self.idx;
+        if matches!(self.peek_tkn(), Ok(lex::Tkn::LAngleBracket)) {
+            self.next_tkn(&["<"])?;
+            let Some(gt_idx) = self.generic_args_end(self.idx) else {
+                let found = self.current_tkn().clone();
+                return crate::err_at!(self.expected_tkn("type arguments", found));
+            };
+            self.idx = gt_idx;
+        }
+        while matches!(self.peek_tkn(), Ok(lex::Tkn::Mul)) {
+            self.next_tkn(&["*"])?;
+        }
+        let end = self.idx;
+
+        let Some(tkns) = self
+            .tkns
+            .as_ref()
+            .and_then(|tkns| tkns.get(start..=end))
+            .map(|t| t.to_vec())
+        else {
+            return crate::err_at!(self.internal_state_err("type alias tokens"));
+        };
+        self.generic_aliases
+            .insert(name, GenericAlias { params, tkns });
+        Ok(())
+    }
+
+    /// `Alias<int, byte>`の型引数を読み込み、エイリアスの型パラメータを
+    /// 置き換えた型を返す。
+    /// 呼び出し時の`current_tkn()`は`<`で、終了時は`>`を指す
+    ///
+    /// ## Errors
+    /// `name`が定義済みのジェネリクスな型エイリアスでない場合
+    /// (呼び出し元で`generic_aliases`を確認しておくこと)
+    pub(in crate::compiler::hexl_frontend::parse) fn generic_alias_ref(
+        &mut self,
+        name: &str,
+    ) -> Result<TyNode, err::ErrKind> {
+        let Some(alias) = self.generic_aliases.get(name).cloned() else {
+            return crate::err_at!(self.internal_state_err("defined generic type alias"));
+        };
+        // `type A<T> = A<T>`のような循環で、無限に展開しないようにする
+        if self.generic_depth >= MAX_GENERIC_DEPTH {
+            return crate::err_at!(
+                self.fn_not_implemented("型が増え続ける再帰的なジェネリクスな型エイリアス")
+            );
+        }
+        // 型引数の読み込みは、ジェネリクス関数・型と共通
+        let (_, ty_tkns) = self.generic_type_args(alias.params.len())?;
+
+        let Some(first) = alias.tkns.first() else {
+            return crate::err_at!(self.internal_state_err("type alias tokens"));
+        };
+        // `substitute_params`は先頭のトークンを置き換えない(関数名/`struct`用)ので、
+        // `type Id<T> = T`の先頭の`T`も置き換えられるよう、ダミーを先頭に付ける。
+        // ダミーは、型の前の区切り(`<`)と、後ろの区切り(`>`)を兼ねる
+        let mut with_delims = Vec::with_capacity(alias.tkns.len() + 2);
+        with_delims.push(first.clone());
+        with_delims.extend(alias.tkns.iter().cloned());
+        let mut tkns = Self::substitute_params(&with_delims, &alias.params, &ty_tkns);
+        tkns[0].tkn = lex::Tkn::LAngleBracket;
+        let mut close = tkns[0].clone();
+        close.tkn = lex::Tkn::RAngleBracket;
+        tkns.push(close);
+
+        // 呼び出し元の解析の状態を退避して、置き換えたトークン列だけを型として解析する。
+        // エラーでも、必ず状態を元に戻してから返す
+        let saved_tkns = self.tkns.replace(tkns);
+        let saved_idx = std::mem::replace(&mut self.idx, 0);
+        self.generic_depth += 1;
+        let result = self.ty_node_after_delim();
+        self.generic_depth -= 1;
+        self.idx = saved_idx;
+        self.tkns = saved_tkns;
+        result
+    }
+
     // ===== 型の作成 =====
 
     /// 型引数を含んだ、作った構造体/バリアントの名前を作る。
@@ -907,6 +1046,44 @@ mod generic_type_tests {
     #[test]
     fn duplicate_type_param_is_err() {
         assert!(try_build("struct Pair<T, T> { a: T }").is_err());
+    }
+
+    #[test]
+    fn generic_alias_expands_to_instance_type() {
+        let nodes = build(
+            "
+            struct Pair<T> { a: T b: T }
+            type IntPair<T> = Pair<T>
+            f(p: IntPair<int>): int { ret 0 }
+            ",
+        );
+        assert_eq!(func(&nodes, "f").params[0].ty, ty("Pair$int"));
+        // エイリアスはノードを作らず、使われた型の構造体だけができる
+        assert_eq!(structs(&nodes).len(), 1);
+    }
+
+    #[test]
+    fn generic_alias_pointer_and_identity() {
+        let nodes = build(
+            "
+            type Id<T> = T
+            f(p: Id<int>): int { ret 0 }
+            ",
+        );
+        assert_eq!(func(&nodes, "f").params[0].ty, ty("int"));
+    }
+
+    #[test]
+    fn generic_alias_wrong_arg_count_is_err() {
+        assert!(
+            try_build(
+                "
+            type Id<T> = T
+            f(p: Id<int, byte>): int { ret 0 }
+            "
+            )
+            .is_err()
+        );
     }
 
     #[test]
