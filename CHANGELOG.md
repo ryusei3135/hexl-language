@@ -10,7 +10,6 @@
 - LSPを追加
 - 標準ライブラリ
     - `vec.hexl`
-        - pop()メゾットOptionを返す
         - len()配列の長さを取得
     - `lib.hexl`
         - is_ok()
