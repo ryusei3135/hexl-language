@@ -12,9 +12,33 @@ pub variant Result<R, E> {
             ret 0
         }
     }
+
+    pub is_err(self: Self*): bool {
+        cond Self::Err(e):= self {
+            ret 1
+        } else {
+            ret 0
+        }
+    }
 }
 
 pub variant Option<T> {
     Some(T)
     None
+
+    pub is_some(self: Self*): bool {
+        cond Self::Some(r):=self {
+            ret 1
+        } else {
+            ret 0
+        }
+    }
+
+    pub is_some(self: Self*): bool {
+        cond Self::Some(r):=self {
+            ret 0
+        } else {
+            ret 1
+        }
+    }
 }

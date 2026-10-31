@@ -411,11 +411,8 @@ impl AsmEmitter {
                 // `self`のポインタはレジスタに入っているので、`fill_tmpl`が`address`を
                 // `mov`に置き換える(`leaq %rdi, ..`は不正な命令)。
                 // どちらでも、ポインタを渡すので64bitで扱う
-                let line = self.fill_tmpl(
-                    "address",
-                    &self.get_reg_txt(dst, &Size::DQ)?,
-                    &self_ptr_reg,
-                );
+                let line =
+                    self.fill_tmpl("address", &self.get_reg_txt(dst, &Size::DQ)?, &self_ptr_reg);
                 let line = self.asm_fmt.fmt_mnemonic_resize("lea", &line, &Size::DQ);
                 self.asm_fmt.fmt_mnemonic_resize("mov", &line, &Size::DQ)
             }

@@ -1,6 +1,5 @@
 use super::*;
 
-
 impl MngAsmFmt {
     /// 外部に定義されている物のフォーマット
     pub(in crate::compiler::asm_gen) fn get_extern_func(&self, name: &str) -> String {

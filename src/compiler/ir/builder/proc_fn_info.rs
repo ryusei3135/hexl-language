@@ -22,7 +22,11 @@ impl IR {
         self.scope_states.clear();
         // `ir/param.rs`
         self.push_param_meta_data(&info.params)?;
-        self.gen_inst::<M>(&info.body.clone())?;
+        // `:=`(`TyNode::Auto`)のうち、使われ方(`ret x`など)から型が決まるものを
+        // 先に決めておく(`src/ir/builder/infer_auto.rs`)
+        let mut body = info.body.clone();
+        infer_auto::resolve_auto_by_usage(&mut body, &info.params, &info.ret_ty);
+        self.gen_inst::<M>(&body)?;
         // 関数の処理内容をpush
         self.push_fn_ir_tree(&info);
         // 使うデータを初期化

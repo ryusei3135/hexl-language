@@ -1,6 +1,5 @@
 use super::*;
 
-
 impl IR {
     /// `[ptr->member index else else_idx]`(`PtrMember`の`target`が`RefArray`)を、
     /// ポインタを一時変数に入れた通常の配列アクセスに展開する
@@ -15,7 +14,7 @@ impl IR {
     /// アクセスになってしまう。
     ///
     /// 戻り値は、(一時変数の名前, 配列アクセスの式)
-    pub(in super) fn ptr_member_arr_to_tmp<M: ResultMod>(
+    pub(super) fn ptr_member_arr_to_tmp<M: ResultMod>(
         &mut self,
         dst: &Expr,
     ) -> Result<(String, Expr), err::ErrKind> {
@@ -97,10 +96,9 @@ impl IR {
         Ok((tmp, arr))
     }
 
-
     /// `value`が、ポインタ`ptr_name`の指す構造体のメンバー`member`を
     /// 引数に含む関数呼び出し(`f(self->val, ..)` / `mod::f<T>(self->val, ..)`)か
-    pub(in super) fn value_hands_over_member(value: &Expr, ptr_name: &str, member: &str) -> bool {
+    pub(super) fn value_hands_over_member(value: &Expr, ptr_name: &str, member: &str) -> bool {
         fn is_member(arg: &Expr, ptr_name: &str, member: &str) -> bool {
             match &arg.node {
                 ExprNode::ConnectAddr(target) => is_member(target, ptr_name, member),

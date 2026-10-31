@@ -4,6 +4,18 @@
 
 ## [Released]
 
+## [1.3.0] - 2026-10-31
+### Added
+- 標準ライブラリ
+    - `vec.hexl`
+        - pop()メゾットOptionを返す
+    - `lib.hexl`
+        - is_ok()
+        - is_err()
+        - is_some()
+        - is_none()
+
+
 ## [1.2.6] - 2026-10-31
 ### Changed
 - `ir/builder/node_process/expr_stmt.rs`の中身を分割

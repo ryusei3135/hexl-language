@@ -73,6 +73,12 @@ impl IR {
         var_attr: &parse::VarMutAttr,
         register_ty: Option<TyNode>,
     ) -> Result<inst::Inst, err::ErrKind> {
+        // `name := value`(`TyNode::Auto`)は、ここで型を決める。
+        // 以降の処理は、`Auto`の存在を知らなくてよい
+        // (`src/ir/builder/infer_auto.rs`)
+        if matches!(var.ty, TyNode::Auto) {
+            var.ty = self.resolve_auto_var_ty(&var)?;
+        }
         match &var.ty.clone() {
             TyNode::ConstractMust(constract) | TyNode::ConstractOf(constract) => {
                 // let _constract_ty = var.ty.clone();

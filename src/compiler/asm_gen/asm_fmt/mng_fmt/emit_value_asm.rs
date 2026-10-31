@@ -1,6 +1,5 @@
 use super::*;
 
-
 impl MngAsmFmt {
     /// レジスタに即値を足す命令を返す(AT&Tなら`add $4, %rcx`)。
     /// フォーマットに`add_imm`が定義されていればそのテンプレートを使う

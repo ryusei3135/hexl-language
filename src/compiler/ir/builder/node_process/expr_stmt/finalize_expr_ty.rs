@@ -3,10 +3,9 @@
 
 use super::*;
 
-
 impl IR {
     /// 型が決まっていない即値(`10`や`1.5`、即値だけの式`1 + 2`)か
-    pub(in super) fn is_untyped_literal(expr: &Expr) -> bool {
+    pub(super) fn is_untyped_literal(expr: &Expr) -> bool {
         match &expr.node {
             ExprNode::Number(_) | ExprNode::Float(_) => true,
             ExprNode::Add(n)
@@ -117,7 +116,7 @@ impl IR {
     }
 
     /// 即値の式の中に小数(`Expr::Float`)があるか
-    pub(in super) fn literal_has_float(expr: &Expr) -> bool {
+    pub(super) fn literal_has_float(expr: &Expr) -> bool {
         match &expr.node {
             ExprNode::Float(_) => true,
             ExprNode::Add(n)

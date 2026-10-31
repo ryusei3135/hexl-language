@@ -1,6 +1,7 @@
 mod err_factory;
 /// ここに処理が分割されている
 mod generater;
+mod infer_auto;
 mod member;
 mod node_process;
 mod preproc;

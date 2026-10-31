@@ -109,7 +109,8 @@ impl IR {
             );
         };
         // `M(val): ty = value`は、`ty`が`M`の中身の型と同じでなければならない
-        if let Some(ty) = &bind.ty {
+        // `Auto`(`:=`)は、右辺の型(`M`の中身の型)をそのまま使う
+        if let Some(ty) = bind.ty.as_ref().filter(|t| !matches!(t, TyNode::Auto)) {
             if ty != &field_ty {
                 panic!(
                     "`{}({}): {:?} = ..`の型が、バリアント型 `{}` のメンバー `{}` の型({:?})と一致しません",

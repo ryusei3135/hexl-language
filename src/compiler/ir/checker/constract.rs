@@ -8,10 +8,10 @@ use crate::compiler::err::CompileErr;
 // 条件分岐・反復処理・共通の処理は、それぞれ別のファイルに分けている
 mod branch;
 mod common;
-mod embe_expr;
-mod loop_check;
 #[cfg(test)]
 mod contract_test;
+mod embe_expr;
+mod loop_check;
 
 use common::{MustVar, MustVarsTy};
 

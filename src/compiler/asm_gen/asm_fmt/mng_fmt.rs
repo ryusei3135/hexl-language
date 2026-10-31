@@ -1,9 +1,9 @@
 //! 出力するアセンブリ言語のフォーマットを管理する
 //! アセンブリ言語のフォーマットを提供する:
 
-mod register_fmt;
-mod func_asm_parts;
 mod emit_value_asm;
+mod func_asm_parts;
+mod register_fmt;
 
 use std::collections::HashMap;
 
@@ -92,7 +92,11 @@ impl MngAsmFmt {
 
     /// `reg`から正の向き(アドレスが大きい側)に`size`バイト進んだ位置のメモリ参照
     /// (AT&Tなら`8(%rax)`)。`size`が0ならオフセットを付けない
-    pub(in crate::compiler::asm_gen) fn fmt_ref_operand_up(&self, reg: &str, size: usize) -> String {
+    pub(in crate::compiler::asm_gen) fn fmt_ref_operand_up(
+        &self,
+        reg: &str,
+        size: usize,
+    ) -> String {
         if size == 0 {
             return self.fmt_ref_operand_no_offset(reg);
         }
@@ -522,7 +526,6 @@ impl MngAsmFmt {
         let line = line.trim().trim_start_matches("{space}").trim_start();
         line.starts_with(head.trim_start())
     }
-
 
     /// 浮動小数点レジスタの退避用に、スタックを16byte確保する
     pub(in crate::compiler::asm_gen) fn get_stack_alloc_16(&self) -> String {

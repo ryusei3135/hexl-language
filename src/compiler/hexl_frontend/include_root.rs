@@ -122,12 +122,17 @@ mod tests {
         // 標準ライブラリは、ROOTに関係なく`<hexl本体のディレクトリ>/library/...`
         assert_eq!(
             resolve_std_in("os/vec.hexl", Some(Path::new("/opt/hexl"))),
-            Path::new("/opt/hexl").join("library").join("os/vec.hexl").to_string_lossy()
+            Path::new("/opt/hexl")
+                .join("library")
+                .join("os/vec.hexl")
+                .to_string_lossy()
         );
         // `"std/..."`は、ただの`ROOT`基準のパス
         assert_eq!(
             resolve("std/os/vec.hexl"),
-            Path::new("proj/src").join("std/os/vec.hexl").to_string_lossy()
+            Path::new("proj/src")
+                .join("std/os/vec.hexl")
+                .to_string_lossy()
         );
         // 外に出たら、次の最外ファイルで更新できる
         set_root_from_file(Path::new("other/main.hexl"));

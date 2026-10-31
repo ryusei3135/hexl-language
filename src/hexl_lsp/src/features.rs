@@ -2,9 +2,9 @@
 //! セマンティックトークン / 折りたたみ / シンボル)
 
 use crate::index::{Doc, Index};
-use crate::scan::{func_paren, Sym, SymKind, TokKind, DIRECTIVES, KEYWORDS};
+use crate::scan::{DIRECTIVES, KEYWORDS, Sym, SymKind, TokKind, func_paren};
 use crate::util::{is_ident_char, is_ident_start, path_to_uri};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 
@@ -41,7 +41,9 @@ impl Found {
         &self.doc.r.syms[self.idx]
     }
     fn container_name(&self) -> Option<&str> {
-        self.sym().container.map(|c| self.doc.r.syms[c].name.as_str())
+        self.sym()
+            .container
+            .map(|c| self.doc.r.syms[c].name.as_str())
     }
 }
 
@@ -120,7 +122,9 @@ pub fn keyword_doc(k: &str) -> &'static str {
 
 fn directive_doc(d: &str) -> &'static str {
     match d {
-        "include" => "ファイルを取り込む。`#include \"a.hexl\"` / `Name=\"a.hexl\"` / `\"a.hexl\"::func` / `\"a.hexl\"::*` / `std::\"os/vec.hexl\"`",
+        "include" => {
+            "ファイルを取り込む。`#include \"a.hexl\"` / `Name=\"a.hexl\"` / `\"a.hexl\"::func` / `\"a.hexl\"::*` / `std::\"os/vec.hexl\"`"
+        }
         "define" => "マクロ定義。`#define N 10` / `#define F(a) ..` / `#define M{a} ..`",
         "if" => "条件付きコンパイル。`#if #windows` ... `#endif`",
         "elif" => "`#if` の続きの条件",
@@ -172,7 +176,10 @@ fn find_syms<F: Fn(&Sym, &Doc) -> bool>(ix: &mut Index, doc: &Rc<Doc>, pred: F) 
     for d in ix.scope_docs(doc) {
         for (i, s) in d.r.syms.iter().enumerate() {
             if pred(s, &d) {
-                out.push(Found { doc: Rc::clone(&d), idx: i });
+                out.push(Found {
+                    doc: Rc::clone(&d),
+                    idx: i,
+                });
             }
         }
     }
@@ -202,7 +209,10 @@ fn module_members(ix: &mut Index, doc: &Rc<Doc>, module: &str) -> Vec<Found> {
         if m.as_deref() == Some(module) {
             for (i, s) in d.r.syms.iter().enumerate() {
                 if s.container.is_none() && s.kind != SymKind::Impl {
-                    out.push(Found { doc: Rc::clone(&d), idx: i });
+                    out.push(Found {
+                        doc: Rc::clone(&d),
+                        idx: i,
+                    });
                 }
             }
         }
@@ -245,7 +255,9 @@ fn lookup(ix: &mut Index, doc: &Rc<Doc>, tidx: usize) -> Vec<Found> {
                 return r;
             }
         }
-        if (p.is_op(".") || p.is_op("->")) && (q.is_kw("self") || (q.kind == TokKind::Name && q.text == "self")) {
+        if (p.is_op(".") || p.is_op("->"))
+            && (q.is_kw("self") || (q.kind == TokKind::Name && q.text == "self"))
+        {
             if let Some(c) = enclosing_container(doc, t.line) {
                 let r: Vec<Found> = members_of(ix, doc, &c)
                     .into_iter()
@@ -273,7 +285,10 @@ fn lookup(ix: &mut Index, doc: &Rc<Doc>, tidx: usize) -> Vec<Found> {
         for d in ix.all_docs(Some(doc)) {
             for (i, s) in d.r.syms.iter().enumerate() {
                 if s.name == name && s.container.is_none() && s.kind != SymKind::Impl {
-                    r.push(Found { doc: Rc::clone(&d), idx: i });
+                    r.push(Found {
+                        doc: Rc::clone(&d),
+                        idx: i,
+                    });
                 }
             }
         }
@@ -282,9 +297,13 @@ fn lookup(ix: &mut Index, doc: &Rc<Doc>, tidx: usize) -> Vec<Found> {
 }
 
 pub fn definition(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
-    let Some(ti) = doc.tok_idx_at(line, ch) else { return Value::Null };
+    let Some(ti) = doc.tok_idx_at(line, ch) else {
+        return Value::Null;
+    };
     let t = &doc.r.tkns[ti];
     // `#include "..."` のパスからファイルへ
     if t.kind == TokKind::Str {
@@ -299,16 +318,22 @@ pub fn definition(ix: &mut Index, p: &Value) -> Value {
     if found.is_empty() {
         return Value::Null;
     }
-    json!(found
-        .iter()
-        .map(|f| loc(&f.doc.uri, f.sym().line, f.sym().col, f.sym().name_len))
-        .collect::<Vec<_>>())
+    json!(
+        found
+            .iter()
+            .map(|f| loc(&f.doc.uri, f.sym().line, f.sym().col, f.sym().name_len))
+            .collect::<Vec<_>>()
+    )
 }
 
 pub fn hover(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
-    let Some(ti) = doc.tok_idx_at(line, ch) else { return Value::Null };
+    let Some(ti) = doc.tok_idx_at(line, ch) else {
+        return Value::Null;
+    };
     let t = doc.r.tkns[ti].clone();
     let text = match t.kind {
         TokKind::Keyword => format!("**{}**: {}", t.text, keyword_doc(&t.text)),
@@ -327,7 +352,9 @@ pub fn hover(ix: &mut Index, p: &Value) -> Value {
                 format!("**#{}**: {}", name, directive_doc(name))
             } else {
                 let found = lookup(ix, &doc, ti);
-                let Some(f) = found.first() else { return Value::Null };
+                let Some(f) = found.first() else {
+                    return Value::Null;
+                };
                 let s = f.sym();
                 let qual = match f.container_name() {
                     Some(c) => format!("{}::{}", c, s.name),
@@ -421,7 +448,9 @@ fn include_path_items(ix: &Index, doc: &Doc, partial: &str, std: bool) -> Vec<Va
     };
     let mut items = Vec::new();
     for b in bases {
-        let Ok(rd) = std::fs::read_dir(b.join(dir_part)) else { continue };
+        let Ok(rd) = std::fs::read_dir(b.join(dir_part)) else {
+            continue;
+        };
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().into_owned();
             if name.starts_with('.') {
@@ -439,7 +468,9 @@ fn include_path_items(ix: &Index, doc: &Doc, partial: &str, std: bool) -> Vec<Va
 }
 
 pub fn completion(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return json!([]) };
+    let Some(doc) = get_doc(ix, p) else {
+        return json!([]);
+    };
     let (line, ch) = position(p);
     let prefix = doc.line_prefix(line, ch);
     let mut ws = prefix.len();
@@ -505,7 +536,9 @@ pub fn completion(ix: &mut Index, p: &Value) -> Value {
         };
         let found = if found.is_empty() {
             // 受け手の型は分からないので、見えているメンバーを全部出す
-            find_syms(ix, &doc, |s, _| matches!(s.kind, SymKind::Field | SymKind::Method))
+            find_syms(ix, &doc, |s, _| {
+                matches!(s.kind, SymKind::Field | SymKind::Method)
+            })
         } else {
             found
         };
@@ -517,14 +550,28 @@ pub fn completion(ix: &mut Index, p: &Value) -> Value {
         .map(|k| json!({"label": k, "kind": 14, "detail": keyword_doc(k)}))
         .collect();
     items.push(snippet("struct", "構造体", "struct ${1:Name} {\n\t$0\n}"));
-    items.push(snippet("variant", "バリアント", "variant ${1:Name} {\n\t$0\n}"));
-    items.push(snippet("impl", "メゾットの追加", "impl ${1:Name} {\n\t$0\n}"));
+    items.push(snippet(
+        "variant",
+        "バリアント",
+        "variant ${1:Name} {\n\t$0\n}",
+    ));
+    items.push(snippet(
+        "impl",
+        "メゾットの追加",
+        "impl ${1:Name} {\n\t$0\n}",
+    ));
     items.push(snippet("loop", "ループ", "loop ${1:cond} {\n\t$0\n}"));
     items.push(snippet("cond", "条件分岐", "cond ${1:expr} {\n\t$0\n}"));
-    items.push(snippet("fn", "関数の雛形", "${1:name}(${2}): ${3:int} {\n\t$0\n}"));
+    items.push(snippet(
+        "fn",
+        "関数の雛形",
+        "${1:name}(${2}): ${3:int} {\n\t$0\n}",
+    ));
     items.push(snippet("#include", "取り込み", "#include \"$0\""));
     let mut known: HashSet<String> = HashSet::new();
-    for f in find_syms(ix, &doc, |s, _| s.container.is_none() && s.kind != SymKind::Impl) {
+    for f in find_syms(ix, &doc, |s, _| {
+        s.container.is_none() && s.kind != SymKind::Impl
+    }) {
         known.insert(f.sym().name.clone());
         items.push(sym_item(&f));
     }
@@ -548,7 +595,9 @@ pub fn completion(ix: &mut Index, p: &Value) -> Value {
 
 /// `(a: int, b: T)` の引数を文字列に分ける
 fn split_params(sig: &str) -> Vec<String> {
-    let Some(open) = sig.find('(') else { return Vec::new() };
+    let Some(open) = sig.find('(') else {
+        return Vec::new();
+    };
     let mut depth = 0i32;
     let mut cur = String::new();
     let mut out = Vec::new();
@@ -581,11 +630,16 @@ fn split_params(sig: &str) -> Vec<String> {
 }
 
 pub fn signature_help(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
     let tkns = &doc.r.tkns;
     // カーソルより前のトークン
-    let n = tkns.iter().take_while(|t| (t.line, t.col) < (line, ch)).count();
+    let n = tkns
+        .iter()
+        .take_while(|t| (t.line, t.col) < (line, ch))
+        .count();
     // 対応していない `(` を後ろ向きに探し、途中の `,` を数える
     let (mut depth, mut commas, mut open) = (0i32, 0usize, None);
     for k in (0..n).rev() {
@@ -630,7 +684,10 @@ pub fn signature_help(ix: &mut Index, p: &Value) -> Value {
     }
     let ni = k - 1;
     let found = lookup(ix, &doc, ni);
-    let Some(f) = found.iter().find(|f| matches!(f.sym().kind, SymKind::Func | SymKind::Method)) else {
+    let Some(f) = found
+        .iter()
+        .find(|f| matches!(f.sym().kind, SymKind::Func | SymKind::Method))
+    else {
         return Value::Null;
     };
     let s = f.sym();
@@ -638,7 +695,11 @@ pub fn signature_help(ix: &mut Index, p: &Value) -> Value {
     // `x.method(..)` のときは `self` を引数に数えない
     let via_member = ni > 0 && (tkns[ni - 1].is_op(".") || tkns[ni - 1].is_op("->"));
     let mut shown = params.clone();
-    if via_member && params.first().map_or(false, |p| p == "self" || p.starts_with("self:")) {
+    if via_member
+        && params
+            .first()
+            .map_or(false, |p| p == "self" || p.starts_with("self:"))
+    {
         params.remove(0);
         shown = params.clone();
     }
@@ -682,21 +743,35 @@ fn refs_in(doc: &Doc, name: &str) -> Vec<(usize, usize, usize)> {
 }
 
 pub fn document_highlight(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
-    let Some(ti) = doc.tok_idx_at(line, ch) else { return Value::Null };
-    let Some((name, ..)) = ref_key(&doc.r.tkns[ti]) else { return Value::Null };
-    json!(refs_in(&doc, &name)
-        .into_iter()
-        .map(|(l, c, n)| json!({"range": range(l, c, l, c + n), "kind": 1}))
-        .collect::<Vec<_>>())
+    let Some(ti) = doc.tok_idx_at(line, ch) else {
+        return Value::Null;
+    };
+    let Some((name, ..)) = ref_key(&doc.r.tkns[ti]) else {
+        return Value::Null;
+    };
+    json!(
+        refs_in(&doc, &name)
+            .into_iter()
+            .map(|(l, c, n)| json!({"range": range(l, c, l, c + n), "kind": 1}))
+            .collect::<Vec<_>>()
+    )
 }
 
 pub fn references(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
-    let Some(ti) = doc.tok_idx_at(line, ch) else { return Value::Null };
-    let Some((name, ..)) = ref_key(&doc.r.tkns[ti]) else { return Value::Null };
+    let Some(ti) = doc.tok_idx_at(line, ch) else {
+        return Value::Null;
+    };
+    let Some((name, ..)) = ref_key(&doc.r.tkns[ti]) else {
+        return Value::Null;
+    };
     let mut out = Vec::new();
     for d in ix.all_docs(Some(&doc)) {
         for (l, c, n) in refs_in(&d, &name) {
@@ -714,11 +789,17 @@ fn is_keyword_or_bad(name: &str) -> bool {
 }
 
 pub fn prepare_rename(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
-    let Some(ti) = doc.tok_idx_at(line, ch) else { return Value::Null };
+    let Some(ti) = doc.tok_idx_at(line, ch) else {
+        return Value::Null;
+    };
     let t = &doc.r.tkns[ti];
-    let Some((name, col, len)) = ref_key(t) else { return Value::Null };
+    let Some((name, col, len)) = ref_key(t) else {
+        return Value::Null;
+    };
     // 定義が見つかる名前(関数 / 型 / メンバー / マクロ)だけを対象にする。
     // ローカル変数は同名の別物と区別できないので、リネームしない
     if lookup(ix, &doc, ti).is_empty() {
@@ -728,14 +809,20 @@ pub fn prepare_rename(ix: &mut Index, p: &Value) -> Value {
 }
 
 pub fn rename(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return Value::Null };
+    let Some(doc) = get_doc(ix, p) else {
+        return Value::Null;
+    };
     let (line, ch) = position(p);
     let new_name = p["newName"].as_str().unwrap_or("");
     if is_keyword_or_bad(new_name) {
         return Value::Null;
     }
-    let Some(ti) = doc.tok_idx_at(line, ch) else { return Value::Null };
-    let Some((name, ..)) = ref_key(&doc.r.tkns[ti]) else { return Value::Null };
+    let Some(ti) = doc.tok_idx_at(line, ch) else {
+        return Value::Null;
+    };
+    let Some((name, ..)) = ref_key(&doc.r.tkns[ti]) else {
+        return Value::Null;
+    };
     if lookup(ix, &doc, ti).is_empty() {
         return Value::Null;
     }
@@ -755,11 +842,16 @@ pub fn rename(ix: &mut Index, p: &Value) -> Value {
 // ---------------------------------------------------------------- シンボル
 
 pub fn document_symbols(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return json!([]) };
+    let Some(doc) = get_doc(ix, p) else {
+        return json!([]);
+    };
     let syms = &doc.r.syms;
     let node = |i: usize| -> Value {
         let s = &syms[i];
-        let f = Found { doc: Rc::clone(&doc), idx: i };
+        let f = Found {
+            doc: Rc::clone(&doc),
+            idx: i,
+        };
         json!({
             "name": s.name, "kind": symbol_kind(&f), "detail": s.sig,
             "range": range(s.line, 0, s.end_line, 10_000),
@@ -793,7 +885,10 @@ pub fn workspace_symbols(idx: &mut Index, query: &str) -> Value {
             if s.kind == SymKind::Impl || !s.name.to_lowercase().contains(&q) {
                 continue;
             }
-            let f = Found { doc: Rc::clone(&d), idx: i };
+            let f = Found {
+                doc: Rc::clone(&d),
+                idx: i,
+            };
             out.push(json!({
                 "name": s.name, "kind": symbol_kind(&f),
                 "containerName": f.container_name().unwrap_or(""),
@@ -810,7 +905,9 @@ pub fn workspace_symbols(idx: &mut Index, query: &str) -> Value {
 // ---------------------------------------------------------------- 折りたたみ
 
 pub fn folding_ranges(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return json!([]) };
+    let Some(doc) = get_doc(ix, p) else {
+        return json!([]);
+    };
     let mut seen: HashSet<(usize, usize)> = HashSet::new();
     let mut out = Vec::new();
     for f in &doc.r.folds {
@@ -828,11 +925,21 @@ pub fn folding_ranges(ix: &mut Index, p: &Value) -> Value {
 // ---------------------------------------------------------------- セマンティックトークン
 
 pub const TOKEN_TYPES: &[&str] = &[
-    "keyword", "type", "function", "macro", "string", "number", "property", "method", "namespace",
+    "keyword",
+    "type",
+    "function",
+    "macro",
+    "string",
+    "number",
+    "property",
+    "method",
+    "namespace",
 ];
 
 pub fn semantic_tokens(ix: &mut Index, p: &Value) -> Value {
-    let Some(doc) = get_doc(ix, p) else { return json!({"data": []}) };
+    let Some(doc) = get_doc(ix, p) else {
+        return json!({"data": []});
+    };
     let mut types: HashSet<String> = HashSet::new();
     let mut modules: HashSet<String> = HashSet::new();
     for (m, d) in ix.scope(&doc) {

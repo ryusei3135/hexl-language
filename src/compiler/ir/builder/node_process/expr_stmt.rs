@@ -1,9 +1,9 @@
 //! 式の処理: 型の推論、二項/単項演算、キャスト、`++`/`--`、代入
 
-mod cond_expr_node;
-mod prepros_expr;
-mod finalize_expr_ty;
 mod access_member;
+mod cond_expr_node;
+mod finalize_expr_ty;
+mod prepros_expr;
 
 use crate::compiler::ast::Expr;
 
@@ -375,7 +375,6 @@ impl IR {
         let cond = self.gen_ternary_cond_ir::<M>(&*cond)?;
         Ok((cond, left, right))
     }
-
 
     pub(in super::super) fn assign_expr_node<M: ResultMod>(
         &mut self,

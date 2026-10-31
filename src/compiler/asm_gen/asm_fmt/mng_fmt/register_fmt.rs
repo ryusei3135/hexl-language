@@ -3,10 +3,9 @@
 use super::*;
 
 impl MngAsmFmt {
-
     /// オペランドの並びから、最後のレジスタオペランドの幅に対応する接尾辞を返す
     /// (`(%rbp)`のようなメモリ参照の中のレジスタは数えない)
-    pub(in super) fn last_reg_suffix(operands: &str) -> Option<char> {
+    pub(super) fn last_reg_suffix(operands: &str) -> Option<char> {
         let mut depth = 0i32;
         let mut parts = Vec::<&str>::new();
         let mut start = 0;
@@ -32,7 +31,7 @@ impl MngAsmFmt {
         })
     }
 
-    pub(in super) fn reg_width_suffix(name: &str) -> Option<char> {
+    pub(super) fn reg_width_suffix(name: &str) -> Option<char> {
         const Q: &[&str] = &["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp"];
         const L: &[&str] = &["eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp"];
         const W: &[&str] = &["ax", "bx", "cx", "dx", "si", "di", "bp", "sp"];
@@ -145,7 +144,7 @@ impl MngAsmFmt {
         }
         Ok(result)
     }
-    
+
     /// 静的領域の変数に%ripをつけて返す
     #[inline(always)]
     pub(in crate::compiler::asm_gen) fn fmt_static_var_rip(&self, name: &str) -> String {

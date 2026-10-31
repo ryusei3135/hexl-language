@@ -12,7 +12,9 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 /// プリプロセッサの命令(`#include` など。lex/PREPROCESSOR.md)
-pub const DIRECTIVES: &[&str] = &["include", "define", "if", "elif", "else", "endif", "line", "asm"];
+pub const DIRECTIVES: &[&str] = &[
+    "include", "define", "if", "elif", "else", "endif", "line", "asm",
+];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum TokKind {
@@ -173,7 +175,11 @@ pub fn scan(src: &str) -> ScanResult {
                 s.push(chars[i]);
                 adv!();
             }
-            let s = s.trim_end_matches('\r').trim_start_matches('/').trim().to_string();
+            let s = s
+                .trim_end_matches('\r')
+                .trim_start_matches('/')
+                .trim()
+                .to_string();
             line_comments.insert(l, s);
             continue;
         }
@@ -194,7 +200,11 @@ pub fn scan(src: &str) -> ScanResult {
             }
             if closed {
                 if line > sl {
-                    folds.push(Fold { start: sl, end: line, comment: true });
+                    folds.push(Fold {
+                        start: sl,
+                        end: line,
+                        comment: true,
+                    });
                 }
             } else {
                 diags.push(Diag {
@@ -341,7 +351,15 @@ pub fn scan(src: &str) -> ScanResult {
         }
 
         let len = col - sc;
-        tkns.push(Tok { kind, text, line: sl, col: sc, len, off: so, end: i });
+        tkns.push(Tok {
+            kind,
+            text,
+            line: sl,
+            col: sc,
+            len,
+            off: so,
+            end: i,
+        });
     }
 
     for (o, l, c, _) in stack {
@@ -365,7 +383,11 @@ pub fn scan(src: &str) -> ScanResult {
                 if let Some(o) = st.pop() {
                     brace_match.insert(o, k);
                     if tkns[o].line < t.line {
-                        folds.push(Fold { start: tkns[o].line, end: t.line, comment: false });
+                        folds.push(Fold {
+                            start: tkns[o].line,
+                            end: t.line,
+                            comment: false,
+                        });
                     }
                 }
             }
@@ -374,7 +396,14 @@ pub fn scan(src: &str) -> ScanResult {
 
     let (syms, includes) = find_symbols(&chars, &tkns, &brace_match, &line_comments, &mut folds);
     check_duplicates(&syms, &mut diags);
-    ScanResult { tkns, syms, diags, includes, folds, brace_match }
+    ScanResult {
+        tkns,
+        syms,
+        diags,
+        includes,
+        folds,
+        brace_match,
+    }
 }
 
 fn collapse_ws(s: &str) -> String {
@@ -455,12 +484,19 @@ fn find_symbols(
                 cond_depth = cond_depth.saturating_sub(1);
                 if let Some(s) = cond_starts.pop() {
                     if t.line > s {
-                        folds.push(Fold { start: s, end: t.line, comment: false });
+                        folds.push(Fold {
+                            start: s,
+                            end: t.line,
+                            comment: false,
+                        });
                     }
                 }
             }
             (TokKind::Preproc, "#define") => {
-                if let Some(n) = tkns.get(i + 1).filter(|n| n.kind == TokKind::Name && n.line == t.line) {
+                if let Some(n) = tkns
+                    .get(i + 1)
+                    .filter(|n| n.kind == TokKind::Name && n.line == t.line)
+                {
                     syms.push(Sym {
                         name: n.text.clone(),
                         kind: SymKind::Define,
@@ -529,7 +565,10 @@ fn find_symbols(
                 if tkns.get(j).map_or(false, |x| x.is_kw("mut")) {
                     j += 1;
                 }
-                if let Some(n) = tkns.get(j).filter(|n| n.kind == TokKind::Name && n.line == t.line) {
+                if let Some(n) = tkns
+                    .get(j)
+                    .filter(|n| n.kind == TokKind::Name && n.line == t.line)
+                {
                     syms.push(Sym {
                         name: n.text.clone(),
                         kind: SymKind::Var,
@@ -546,21 +585,34 @@ fn find_symbols(
                 }
             }
             (TokKind::Name, _) if top_level => {
-                let member_access = prev.map_or(false, |p| p.is_op(".") || p.is_op("->") || p.is_op("::"));
+                let member_access =
+                    prev.map_or(false, |p| p.is_op(".") || p.is_op("->") || p.is_op("::"));
                 if !member_access {
                     // 関数 / メゾット
-                    if let Some(lb) = func_paren(tkns, i + 1).and_then(|open| body_brace(tkns, open)) {
+                    if let Some(lb) =
+                        func_paren(tkns, i + 1).and_then(|open| body_brace(tkns, open))
+                    {
                         let end_line = matches.get(&lb).map_or(tkns[lb].line, |&c| tkns[c].line);
                         syms.push(Sym {
                             name: t.text.clone(),
-                            kind: if at_container { SymKind::Method } else { SymKind::Func },
+                            kind: if at_container {
+                                SymKind::Method
+                            } else {
+                                SymKind::Func
+                            },
                             line: t.line,
                             col: t.col,
                             name_len: t.len,
                             end_line,
-                            sig: collapse_ws(&chars[t.off..tkns[lb].off].iter().collect::<String>()),
+                            sig: collapse_ws(
+                                &chars[t.off..tkns[lb].off].iter().collect::<String>(),
+                            ),
                             doc: doc_for(t.line, comments),
-                            container: if at_container { containers.last().map(|c| c.0) } else { None },
+                            container: if at_container {
+                                containers.last().map(|c| c.0)
+                            } else {
+                                None
+                            },
                             in_cond: cond_depth > 0,
                             public: prev.map_or(false, |p| p.is_kw("pub")),
                         });
@@ -608,7 +660,10 @@ fn find_symbols(
 /// `[Name=] ([std::]"path" | a::b) [::func | ::*]`
 fn parse_include(tkns: &[Tok], at: usize) -> Option<Include> {
     let line = tkns[at].line;
-    let rest: Vec<&Tok> = tkns[at + 1..].iter().take_while(|t| t.line == line).collect();
+    let rest: Vec<&Tok> = tkns[at + 1..]
+        .iter()
+        .take_while(|t| t.line == line)
+        .collect();
     let mut k = 0;
     let mut alias = None;
     if rest.len() >= 2 && rest[0].kind == TokKind::Name && rest[1].is_op("=") {
@@ -616,7 +671,9 @@ fn parse_include(tkns: &[Tok], at: usize) -> Option<Include> {
         k = 2;
     }
     let mut is_std = false;
-    if rest.get(k).map_or(false, |t| t.kind == TokKind::Name && t.text == "std")
+    if rest
+        .get(k)
+        .map_or(false, |t| t.kind == TokKind::Name && t.text == "std")
         && rest.get(k + 1).map_or(false, |t| t.is_op("::"))
         && rest.get(k + 2).map_or(false, |t| t.kind == TokKind::Str)
     {
@@ -638,7 +695,9 @@ fn parse_include(tkns: &[Tok], at: usize) -> Option<Include> {
             let mut segs = vec![first.text.clone()];
             last = k;
             while rest.get(last + 1).map_or(false, |t| t.is_op("::"))
-                && rest.get(last + 2).map_or(false, |t| t.kind == TokKind::Name)
+                && rest
+                    .get(last + 2)
+                    .map_or(false, |t| t.kind == TokKind::Name)
             {
                 segs.push(rest[last + 2].text.clone());
                 last += 2;
@@ -695,7 +754,11 @@ fn check_duplicates(syms: &[Sym], diags: &mut Vec<Diag>) {
                 line: s.line,
                 col: s.col,
                 len: s.name_len,
-                msg: format!("'{}' が重複して定義されています({}行目)", s.name, first_line + 1),
+                msg: format!(
+                    "'{}' が重複して定義されています({}行目)",
+                    s.name,
+                    first_line + 1
+                ),
                 severity: 2,
             }),
             Some(_) => {}
@@ -793,7 +856,11 @@ mod tests {
         assert!(n.contains(&("add".into(), SymKind::Func)));
         // 引数の `self: P` をメンバーと誤認しない
         assert!(!n.iter().any(|(s, k)| s == "self" && *k == SymKind::Field));
-        let p = r.syms.iter().find(|s| s.name == "P" && s.kind == SymKind::Struct).unwrap();
+        let p = r
+            .syms
+            .iter()
+            .find(|s| s.name == "P" && s.kind == SymKind::Struct)
+            .unwrap();
         assert_eq!(p.doc, "点");
         assert!(p.public);
         assert_eq!(p.end_line, 7);
@@ -804,7 +871,12 @@ mod tests {
     #[test]
     fn variant_members() {
         let r = scan("variant V {\n  A\n  B(int)\n}\n");
-        let f: Vec<_> = r.syms.iter().filter(|s| s.kind == SymKind::Field).map(|s| s.name.as_str()).collect();
+        let f: Vec<_> = r
+            .syms
+            .iter()
+            .filter(|s| s.kind == SymKind::Field)
+            .map(|s| s.name.as_str())
+            .collect();
         assert_eq!(f, vec!["A", "B"]);
     }
 
@@ -816,7 +888,10 @@ mod tests {
         );
         let v = &r.includes;
         assert_eq!(v.len(), 6);
-        assert_eq!((v[0].path.as_str(), v[0].module.as_str()), ("lib/a.hexl", "a"));
+        assert_eq!(
+            (v[0].path.as_str(), v[0].module.as_str()),
+            ("lib/a.hexl", "a")
+        );
         assert_eq!(v[1].module, "M");
         assert_eq!(v[2].select, Select::Func("f".into()));
         assert_eq!(v[3].select, Select::Star);

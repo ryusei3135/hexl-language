@@ -1,4 +1,3 @@
-
 // ===== テスト =====
 #[cfg(test)]
 mod constract_ir_test {

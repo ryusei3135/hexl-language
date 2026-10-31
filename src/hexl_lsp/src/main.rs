@@ -13,9 +13,9 @@ mod scan;
 mod util;
 
 use index::Index;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn read_msg(stdin: &mut impl BufRead) -> Option<Value> {
     let mut len: Option<usize> = None;
@@ -55,8 +55,10 @@ fn reply_err(id: &Value, code: i64, msg: &str) {
 fn publish(ix: &mut Index, uri: &str) {
     if let Some(doc) = ix.doc(uri) {
         let ds = features::diagnostics(ix, &doc);
-        send(&json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics",
-            "params":{"uri":uri,"diagnostics":ds}}));
+        send(
+            &json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics",
+            "params":{"uri":uri,"diagnostics":ds}}),
+        );
     }
 }
 
@@ -162,8 +164,10 @@ fn main() {
             }
             "textDocument/didClose" => {
                 ix.close(&uri);
-                send(&json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics",
-                    "params":{"uri":uri,"diagnostics":[]}}));
+                send(
+                    &json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics",
+                    "params":{"uri":uri,"diagnostics":[]}}),
+                );
             }
             "workspace/didChangeWatchedFiles" | "workspace/didChangeWorkspaceFolders" => {
                 ix.invalidate_workspace();

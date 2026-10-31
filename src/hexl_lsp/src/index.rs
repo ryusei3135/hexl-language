@@ -1,6 +1,6 @@
 //! ドキュメントの管理、`#include` の解決、ワークスペース内の `.hexl` ファイルの走査
 
-use crate::scan::{scan, Include, ScanResult, TokKind};
+use crate::scan::{Include, ScanResult, TokKind, scan};
 use crate::util::{path_to_uri, uri_to_path};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -20,12 +20,19 @@ impl Doc {
             .split('\n')
             .map(|l| l.trim_end_matches('\r').chars().collect())
             .collect();
-        Doc { uri: uri.to_string(), path: uri_to_path(uri), lines, r: scan(text) }
+        Doc {
+            uri: uri.to_string(),
+            path: uri_to_path(uri),
+            lines,
+            r: scan(text),
+        }
     }
 
     /// カーソル(UTF-16 の列)より前の、その行の文字列
     pub fn line_prefix(&self, line: usize, ch16: usize) -> Vec<char> {
-        let Some(l) = self.lines.get(line) else { return Vec::new() };
+        let Some(l) = self.lines.get(line) else {
+            return Vec::new();
+        };
         let idx = crate::util::utf16_to_char_idx(l, ch16);
         l[..idx].to_vec()
     }
@@ -36,7 +43,11 @@ impl Doc {
             self.r.tkns.iter().position(|t| {
                 t.line == line
                     && t.col <= ch
-                    && (if strict { ch < t.col + t.len } else { ch == t.col + t.len })
+                    && (if strict {
+                        ch < t.col + t.len
+                    } else {
+                        ch == t.col + t.len
+                    })
                     && matches!(
                         t.kind,
                         TokKind::Name | TokKind::Keyword | TokKind::Preproc | TokKind::Str
@@ -232,7 +243,9 @@ fn walk(dir: &Path, output: &mut Vec<PathBuf>, depth: usize) {
     if depth > 12 || output.len() > 3000 {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     let mut entries: Vec<_> = rd.flatten().collect();
     entries.sort_by_key(|e| e.file_name());
     for e in entries {
