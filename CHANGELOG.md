@@ -5,6 +5,8 @@
 ## [Released]
 
 ## [1.2.6] - 2026-10-31
+### Changed
+- `ir/builder/node_process/expr_stmt.rs`の中身を分割
 ### Fixed
 - `+=`などの演算子がself->nなどのポインタ越しでは使えないバグを修正
 - 生成した`*.o`ファイルが残り続けるバグを修正
