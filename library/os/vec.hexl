@@ -26,10 +26,11 @@ pub struct Vec<T> {
     }
 
     pub pop(self mut: Self*): lib::Option<T> {
-        cond self->len >= 2 {
+        cond self->len >= 1 {
             self->len -= 1
-            r := [self->val self->len]
-            v := lib::Option::Some(r)
+            l: u64 = self->len
+            r: T = [self->val l else 0]
+            v := lib::Option<T>::Some(r)
             ret v
         } else {
             ret lib::Option::None

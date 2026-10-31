@@ -620,6 +620,7 @@ impl Parser {
         if matches!(
             self.peek_tkn(),
             Ok(lex::Tkn::AddEq
+                | lex::Tkn::SubEq
                 | lex::Tkn::MulEq
                 | lex::Tkn::DivEq
                 | lex::Tkn::SurplusEq

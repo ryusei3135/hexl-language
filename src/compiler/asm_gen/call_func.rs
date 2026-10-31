@@ -906,7 +906,7 @@ impl AsmEmitter {
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
         let size = self.expr_operand_size(expr);
-        let dst = self.alloc_reg(&size);
+        let dst = self.alloc_reg(&size).unwrap();
         self.reg_idx = dst.index();
 
         let asm = self.format_expr_inst(&expr, Some(size))?;

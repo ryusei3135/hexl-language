@@ -53,7 +53,7 @@ impl AsmEmitter {
         let is_mem = self.check_node_is_mem_val(src).is_some();
 
         // 結果を置くレジスタ。変換の途中で使う一時レジスタと被らないよう、先に使用中にする
-        let dst = self.alloc_reg(after);
+        let dst = self.alloc_reg(after).unwrap();
         self.used_reg.mark_used(&dst);
         self.reg_idx = dst.index();
 
@@ -135,7 +135,7 @@ impl AsmEmitter {
 
         let mut asm = String::new();
         let src_txt = if need_tmp {
-            let tmp = self.alloc_reg(&Size::DQ);
+            let tmp = self.alloc_reg(&Size::DQ).unwrap();
             let tmp32 = self.asm_fmt.get_fmt_reg(tmp.index(), &Size::DD)?;
             if is_imm {
                 // 即値: 32bitまでは`movl`、64bitは`movq`で置く

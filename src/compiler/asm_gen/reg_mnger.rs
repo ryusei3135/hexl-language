@@ -493,9 +493,8 @@ impl AsmEmitter {
     ///
     /// 返したレジスタを使用中にするのは呼び出し側の責任
     /// (`mark_used`を呼ぶ)。
-    pub(in crate::compiler::asm_gen) fn alloc_reg(&self, size: &Size) -> RegisterMode {
+    pub(in crate::compiler::asm_gen) fn alloc_reg(&self, size: &Size) -> Option<RegisterMode> {
         self.try_alloc_reg(size)
-            .expect("使用できるレジスタが足りません")
     }
 
     /// [`alloc_reg`](Self::alloc_reg)と同じ条件で空きレジスタを探し、

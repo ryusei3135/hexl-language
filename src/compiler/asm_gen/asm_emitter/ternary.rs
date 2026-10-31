@@ -87,7 +87,7 @@ impl AsmEmitter {
         // `cmp`の比較される側(`src1`)は即値にできないので、一時レジスタへ移す
         let mut tmp: Option<RegisterMode> = None;
         if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
-            let reg = self.alloc_reg(&size);
+            let reg = self.alloc_reg(&size).unwrap();
             self.used_reg.mark_used(&reg);
             let reg_txt = self.get_reg_txt(Some(reg.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &src1, &size, false));
@@ -139,7 +139,7 @@ impl AsmEmitter {
 
         // 結果を置くレジスタ。左辺・右辺のレジスタとは別のものになる
         // (それらは、この命令が終わるまで解放しない)
-        let dst = self.alloc_reg(&size);
+        let dst = self.alloc_reg(&size).unwrap();
         self.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
         let dst_txt = self.get_reg_txt(Some(dst.index()), &size)?;
@@ -155,7 +155,7 @@ impl AsmEmitter {
         // (`mov`はフラグを変えない)
         let mut tmp: Option<RegisterMode> = None;
         let left = if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
-            let reg = self.alloc_reg(&size);
+            let reg = self.alloc_reg(&size).unwrap();
             self.used_reg.mark_used(&reg);
             let reg_txt = self.get_reg_txt(Some(reg.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &left, &size, false));
