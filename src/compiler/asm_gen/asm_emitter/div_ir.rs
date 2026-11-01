@@ -20,6 +20,8 @@
 //! (push したものを逆順に pop)
 //! ```
 //!
+//! `x / 2^k`(2のべき乗の定数での除算)は、ここへ来る前にシフトで生成する(`opt/div_opt.rs`)。
+//!
 //! 符号なし整数(`UDB`〜`UDQ`)の場合は、符号拡張(`cqto`/`cltd`)と`idiv`の
 //! 代わりに、`%rdx`をゼロクリアして`div`を使う。
 //! ```text
@@ -40,6 +42,12 @@ impl AsmEmitter {
         &mut self,
         expr: &inst::ExprInst,
     ) -> Result<String, err::ErrKind> {
+        // 2のべき乗での除算(`x / 2^k`)は、`idiv`/`div`ではなくシフトにする
+        // (`opt/div_opt.rs`)
+        if let Some(optimized) = self.format_const_div(expr)? {
+            return Ok(optimized);
+        }
+
         let dst = self.reg_idx;
         let ty = self.get_expr_ty(expr.ls);
         let wrap_size = ty.wrap_dst_size();

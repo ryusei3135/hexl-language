@@ -726,6 +726,28 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}lea ({src1},{src1},{scale}), {dst}\n",
             },
         ),
+        // ===== 2のべき乗での除算の最適化(`asm_emitter/opt/div_opt.rs`) =====
+        (
+            "div_shr",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}shr {src1}, {dst}\n",
+            },
+        ),
+        (
+            "div_sar",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}sar {src1}, {dst}\n",
+            },
+        ),
+        (
+            "div_add",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}add {src1}, {dst}\n",
+            },
+        ),
         // `x * 8`を作る(`x * 7`で使う。続けて`x`を引く)
         (
             "mul_lea_x8",

@@ -161,3 +161,12 @@ movzbl dst8, dst32     # movzbl(上位32bitも0になる)
 - `x * 7`で結果のレジスタと`x`のレジスタが同じ場合は、`x`が消えるので通常の乗算にする。
 - シフト量が型の幅以上になる定数(`1<<32`を32bitで掛けるなど)は置き換えない。
 - テンプレート: `x64.rs`の`mul_lea_scale` / `mul_lea_x8`。
+
+## 2のべき乗での除算の最適化 (`opt/div_opt.rs`)
+- `format_div_expr_inst`(`div_ir.rs`)の先頭で`format_const_div`を呼ぶ。`x / 2^k`(k>=1)が対象。`%`は対象外。
+    - 符号なし: `mov` + `shr $k`
+    - 符号付き(32/64bit): `mov` + 補正(`%rax`に`sar $(bits-1)`→`shr $(bits-k)`を作り`add`)+ `sar $k`
+      (`sar`だけだと負数が負の無限大方向に丸まるため。`%rax`が使用中なら`push`/`pop`で退避)
+- 対象外(従来の`idiv`/`div`): 除数が1・2のべき乗でない・負数・型の幅以上、割られる数も定数、
+  浮動小数点数、符号付き8/16bit。
+- テンプレート: `x64.rs`の`div_shr` / `div_sar` / `div_add`。
