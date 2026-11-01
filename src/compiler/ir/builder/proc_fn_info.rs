@@ -226,10 +226,11 @@ impl IR {
             _ => return None,
         };
         let dst = self.id_counter;
+        // 長さの情報を作成
         self.ir_tree.push(inst::Inst::StrLen {
             dst,
             str_id,
-            len,
+            len: len - 1,
             size: size.clone(),
         });
         self.id_counter += 1;

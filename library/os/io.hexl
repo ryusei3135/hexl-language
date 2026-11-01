@@ -70,7 +70,5 @@ pub print(data: byte*, len: i64): int {
 
 pub print_line(data: byte*, len: i64): int {
     result: int = print(data, len)
-
-    newline: byte = 10
-    ret print([newline], 1)
+    ret print("\n", 1)
 }
