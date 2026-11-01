@@ -72,7 +72,7 @@ impl MngAsmFmt {
         size: &Size,
     ) -> Result<String, err::ErrKind> {
         let reg = match &size {
-            Size::DB | Size::UDB => &self.reg_fmt.db,
+            Size::DB | Size::UDB | Size::Bool => &self.reg_fmt.db,
             Size::DW | Size::UDW => &self.reg_fmt.dw,
             Size::DD | Size::UDD => &self.reg_fmt.dd,
             Size::DQ | Size::UDQ => &self.reg_fmt.dq,
@@ -81,7 +81,7 @@ impl MngAsmFmt {
                 crate::GenCompilerErr!(CompilerErrKind::ThisTyIsCantConvertRegsiter(size.clone()))?
             }
         };
-        // ここでほかのレジスタが壊れる可能性がある
+        // ここでほかのレジスタが壊れる可能性があるので、`reg_num`が範囲外の場合は0番のレジスタを返す
         Ok(self
             .fmt
             .fmt
