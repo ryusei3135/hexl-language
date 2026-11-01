@@ -405,7 +405,7 @@ impl MngAsmFmt {
         }
 
         let s_fmt = match &size {
-            types::Size::DB | types::Size::UDB => crate::mov_size_fmt!(self, db),
+            types::Size::DB | types::Size::UDB | types::Size::Bool => crate::mov_size_fmt!(self, db),
             types::Size::DW | types::Size::UDW => crate::mov_size_fmt!(self, dw),
             types::Size::DD | types::Size::UDD => crate::mov_size_fmt!(self, dd),
             types::Size::DQ | types::Size::UDQ => crate::mov_size_fmt!(self, dq),
