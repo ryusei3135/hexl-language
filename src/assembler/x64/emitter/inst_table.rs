@@ -99,6 +99,57 @@ mod tests {
         );
     }
 
+    #[test]
+    fn movzbl_zero_extends_register_and_memory_sources() {
+        assert_eq!(
+            reg_reg_bytes("movzbl", Reg::Al, Reg::Ecx),
+            [0x0F, 0xB6, 0xC8]
+        );
+        assert_eq!(
+            reg_reg_bytes("movzbl", Reg::Sil, Reg::R8d),
+            [0x44, 0x0F, 0xB6, 0xC6]
+        );
+        assert_eq!(
+            reg_reg_bytes("movzbl", Reg::R9b, Reg::R10d),
+            [0x45, 0x0F, 0xB6, 0xD1]
+        );
+
+        let mut emitter = Emitter::new();
+        dispatch(
+            &mut emitter,
+            &Instruction {
+                mnemonic: "movzbl".to_owned(),
+                operands: vec![
+                    Operand::Memory(base_mem(Reg::Rbp, -4)),
+                    Operand::Register(Reg::R8d),
+                ],
+            },
+        )
+        .unwrap();
+        assert_eq!(emitter.text, [0x44, 0x0F, 0xB6, 0x45, 0xFC]);
+    }
+
+    #[test]
+    fn movzbl_rejects_invalid_operand_widths() {
+        for operands in [
+            vec![Operand::Register(Reg::Ax), Operand::Register(Reg::Eax)],
+            vec![Operand::Register(Reg::Al), Operand::Register(Reg::Rax)],
+            vec![Operand::Immediate(1), Operand::Register(Reg::Eax)],
+        ] {
+            let mut emitter = Emitter::new();
+            assert!(
+                dispatch(
+                    &mut emitter,
+                    &Instruction {
+                        mnemonic: "movzbl".to_owned(),
+                        operands,
+                    },
+                )
+                .is_err()
+            );
+        }
+    }
+
     fn reg_reg_bytes(mnemonic: &str, src: Reg, dst: Reg) -> Vec<u8> {
         let mut emitter = Emitter::new();
         dispatch(
@@ -440,6 +491,8 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
         }
 
         "movslq" => e.emit_movslq(&inst.operands),
+
+        "movzbl" => e.emit_movzbl(&inst.operands),
 
         "cmp" | "cmpq" | "cmpl" | "cmpw" | "cmpb" => {
             e.emit_cmp(&inst.operands, cmp_size_bits(name))
@@ -1004,6 +1057,56 @@ impl Emitter {
             }
 
             _ => Err("invalid movslq source operand".into()),
+        }
+    }
+
+    // --------------------------------------------------------
+    // movzbl  (0F B6 /r)
+    //
+    // 8bit値をゼロ拡張して32bitレジスタへ書き込む。
+    // --------------------------------------------------------
+    fn emit_movzbl(&mut self, operands: &[Operand]) -> Result<(), String> {
+        if operands.len() != 2 {
+            return Err("movzbl requires two operands".into());
+        }
+
+        let dst = match &operands[1] {
+            Operand::Register(reg) if reg.bits() == 32 => *reg,
+            _ => return Err("movzbl destination must be a 32-bit register".into()),
+        };
+
+        match &operands[0] {
+            Operand::Register(src) => {
+                if src.bits() != 8 {
+                    return Err("movzbl source register must be 8-bit".into());
+                }
+
+                // SPL/BPL/SIL/DIL は REX がないと AH/CH/DH/BH として解釈される。
+                if (4..8).contains(&src.id()) {
+                    self.emit_u8(0x40 | (((dst.id() >= 8) as u8) << 2));
+                } else {
+                    self.emit_rex(false, dst.id() >= 8, false, src.id() >= 8);
+                }
+                self.emit_u8(0x0F);
+                self.emit_u8(0xB6);
+                self.emit_u8(0b11_000_000 | ((dst.id() & 7) << 3) | (src.id() & 7));
+
+                Ok(())
+            }
+
+            Operand::Memory(mem) => {
+                self.emit_rex(
+                    false,
+                    dst.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                );
+                self.emit_u8(0x0F);
+                self.emit_u8(0xB6);
+                self.emit_memory_modrm(dst.id(), mem)
+            }
+
+            _ => Err("invalid movzbl source operand".into()),
         }
     }
 }
