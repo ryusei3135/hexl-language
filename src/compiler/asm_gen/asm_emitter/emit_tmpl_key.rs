@@ -39,7 +39,7 @@ impl AsmEmitter {
                 inst::ExprKind::XorCalcul => "xor",
                 inst::ExprKind::OrCalcul => "or",
                 inst::ExprKind::LShift => "lshift",
-                inst::ExprKind::RShift => "rshist",
+                inst::ExprKind::RShift => "rshift",
                 inst::ExprKind::Add => "add",
                 inst::ExprKind::Sub => "sub",
                 // 乗算は`add`のテンプレートの命令を`imul`に置き換えて使う
@@ -106,7 +106,7 @@ impl AsmEmitter {
             inst::ExprKind::XorCalcul => "xor",
             inst::ExprKind::OrCalcul => "or",
             inst::ExprKind::LShift => "lshift",
-            inst::ExprKind::RShift => "rshist",
+            inst::ExprKind::RShift => "rshift",
             inst::ExprKind::Add => "add",
             inst::ExprKind::Sub => "sub",
             inst::ExprKind::Mul => "imul",
