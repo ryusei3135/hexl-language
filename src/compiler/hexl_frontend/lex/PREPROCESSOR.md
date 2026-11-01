@@ -97,10 +97,10 @@ ret #A + 1      // ret 10 + 1
 
 ## `#include "dir/file"`(2026-10-23変更)
 ```
-#include "lib/io.hexl"          // ROOT/lib/io.hexl のpubの関数を、io::func()で使う
-#include "lib/io.hexl"::func    // funcだけを、そのまま使う
-#include "lib/io.hexl"::*       // pubの関数を全て、そのまま使う
-#include Name="lib/io.hexl"     // Name::func()で使う
+#include "lib/io.hexl"          // pubの関数をio::func()で、pubの型をio::Typeで使う
+#include "lib/io.hexl"::func    // funcだけを、そのまま使う(型は取り込まない)
+#include "lib/io.hexl"::*       // pubの関数と型を全て、そのまま使う
+#include Name="lib/io.hexl"     // Name::func() / Name::Typeで使う
 #include "lib/a.c"              // C言語のファイル名を保存するだけ(`.c` / `.h`)
 ```
 - **プリプロセッサは`.hexl`を展開しない**(以前の「その場にインライン展開」はやめた)。
@@ -108,7 +108,9 @@ ret #A + 1      // ret 10 + 1
 - パスの基準は`ROOT`。`ROOT`は、**最初にコンパイルを始めたファイルのあるディレクトリ**で、
   `#include`を書いたファイルの場所ではない。入れ子の`#include`の中でも`ROOT/dir/file`になる
   (`hexl_frontend/include_root.rs`。`Lexer::set_source_file`が最も外側のファイルで設定する)。
-- 取り込んだファイルのうち、**`pub`が付いた関数だけ**が使える。`pub`の無い関数は見えない。
+- 取り込んだファイルのうち、**`pub`が付いた関数と型**が使える。`pub`の無い定義は見えない。
+  モジュール形式では型を`Name::Type`で、`::*`形式では型名をそのまま使う。
+  `::func`形式は指定された関数だけを取り込み、型は取り込まない。
 - 取り込んだファイルの`#define`は、`#include`の位置で集めて取り込んだ側に登録する(2026-11-01)。
     - 対象は`.hexl`の`#include`(`"file"` / `"file"::func` / `"file"::*` / `Name="file"` / `std::"file"`)。
     - コードは展開しない(後段が別ファイルとして処理する)。ここでは`#define`の登録と、そのために必要な

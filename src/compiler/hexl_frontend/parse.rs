@@ -9,6 +9,8 @@ mod expr;
 mod func;
 /// `#include`先のジェネリクス関数を呼び出し側で実体化するAPIを提供
 mod include_generic;
+/// `#include`先の公開型ノードを呼び出し側へ取り込む
+mod include_types;
 mod mut_var;
 mod path;
 /// プリプロセッサのノードを作成するAPIを提供

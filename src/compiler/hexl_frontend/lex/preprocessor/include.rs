@@ -11,8 +11,8 @@ impl Preprocessor {
     ///
     /// `#include "file.c"` / `#include "file.h"` だけは、ここで名前を保存する(展開しない)。
     /// それ以外(`.hexl`)は展開せず、`#include`のまま後段に任せる。
-    /// 後段は`ROOT/dir/file`として読み込み、`pub`の付いた
-    /// 関数だけを取り込む(`include_root`、`ir/builder/preproc.rs`)。
+    /// 後段は`ROOT/dir/file`として読み込み、`pub`の付いた関数をIRへ取り込み、
+    /// 公開型ノードは呼び出し側のASTへ取り込む。
     ///
     /// 名前を保存して、この行の処理を終えたら`true`
     /// (無効な`#if`の枝の中の`#include`は処理しないので`false`)

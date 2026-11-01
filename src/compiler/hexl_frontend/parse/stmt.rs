@@ -113,6 +113,10 @@ pub struct Parser {
     /// include先がさらにincludeしているファイルのジェネリクスも集めるときに、
     /// 同じファイルを何度も読んだり、循環して止まらなくなったりしないために使う
     pub(super) included_visited: std::collections::HashSet<String>,
+    /// 公開型ノードを収集済みの`#include`先。入れ子や循環includeを処理する。
+    pub(super) included_type_visited: std::collections::HashSet<String>,
+    /// 呼び出し側に追加するinclude先の公開型ノード。
+    pub(super) included_type_nodes: Vec<Group1Node>,
     /// 定義済みのジェネリクスな型エイリアス(型名 -> 定義)。
     /// 使用より前に定義されている必要がある
     pub(super) generic_aliases: HashMap<String, GenericAlias>,
@@ -153,6 +157,8 @@ impl Parser {
             included_generic_types: HashMap::new(),
             generic_types: HashMap::new(),
             included_visited: std::collections::HashSet::new(),
+            included_type_visited: std::collections::HashSet::new(),
+            included_type_nodes: Vec::new(),
             generic_aliases: HashMap::new(),
             generated_types: Vec::new(),
             pending_types: Vec::new(),
@@ -237,6 +243,8 @@ impl Parser {
         self.collect_generic_types()?;
         // `#include`先の公開ジェネリクス関数も、使えるように集める
         self.collect_included_generics()?;
+        // `#include`先の公開された構造体/バリアント/型エイリアスを取り込む
+        self.collect_included_types()?;
         self.collect_generic_funcs()?;
         self.parse_loop::<stmt::ParseLoopPushPool>()?;
 
@@ -252,6 +260,23 @@ impl Parser {
         // 作った関数を、通常のノードの後ろに追加する
         self.gen_nodes.append(&mut self.pending_types);
         self.gen_nodes.append(&mut self.pending_funcs);
+        for node in std::mem::take(&mut self.included_type_nodes) {
+            let name = match &node {
+                Group1Node::StructDefine(def) => &def.name,
+                Group1Node::VariantDefine(def) => &def.name,
+                Group1Node::TypeAlias(def) => &def.name,
+                _ => continue,
+            };
+            if self.gen_nodes.iter().any(|existing| match existing {
+                Group1Node::StructDefine(def) => &def.name == name,
+                Group1Node::VariantDefine(def) => &def.name == name,
+                Group1Node::TypeAlias(def) => &def.name == name,
+                _ => false,
+            }) {
+                continue;
+            }
+            self.gen_nodes.push(node);
+        }
         Ok(&self.gen_nodes)
     }
 
