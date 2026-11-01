@@ -81,11 +81,12 @@ impl MngAsmFmt {
                 crate::GenCompilerErr!(CompilerErrKind::ThisTyIsCantConvertRegsiter(size.clone()))?
             }
         };
+        // ここでほかのレジスタが壊れる可能性がある
         Ok(self
             .fmt
             .fmt
             .reg
-            .replace("{}", reg[reg_num].as_str())
+            .replace("{}", reg.get(reg_num).unwrap_or(&reg[0]).as_str())
             .to_string())
     }
 
