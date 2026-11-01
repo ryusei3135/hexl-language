@@ -27,6 +27,7 @@ use compiler::{Lexer, Parser, asm_gen, ast, err, ir};
 use std::{error::Error, fs, process, sync::Mutex};
 
 use crate::compiler::{err::Span, stmt_node::StmtNode::Continue};
+use crate::compiler::asm_gen::OptMode;
 
 // ---------------------------------------------------------------------------
 // コマンドラインオプション
@@ -308,6 +309,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         settings.fmt_name.as_deref(),
         os.as_str(),
         &err_pool,
+        OptMode::O1,
     )
     // `AsmSettingError` は Display で日本語メッセージになる。`run` がそれを表示する
     .map_err(|e| format!("アセンブリコードの生成に失敗しました: {}", e))?;

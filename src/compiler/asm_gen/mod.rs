@@ -64,6 +64,12 @@ pub(in crate::compiler::asm_gen) const DEFERRED_REG_FMT_OPS: &[inst::ExprKind; 3
     inst::ExprKind::Surplus,
 ];
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum OptMode {
+    O0,
+    O1,
+}
+
 /// 式の結果や変数を置くレジスタとして、自動では割り当てないレジスタ。
 ///
 /// - `0`: `%rax` 戻り値・`idiv`の商・システムコール番号
@@ -151,6 +157,8 @@ pub struct AsmEmitter {
     float_caller_saved: Rc<Vec<usize>>,
 
     err_pool: Rc<RefCell<err_pool::ErrPool>>,
+
+    optimization_mode: OptMode,
 }
 
 pub trait ResultRet {

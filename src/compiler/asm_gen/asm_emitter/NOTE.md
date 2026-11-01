@@ -147,3 +147,17 @@ movzbl dst8, dst32     # movzbl(上位32bitも0になる)
 
 - `extract_operand_text`が`Result<String, _>`になる前提で、呼び出し側はすべて`?`で伝播する。
 - `set_cc`/`ternary`は、レジスタを確保する前に種類と小数を確認する(Errを返したときにレジスタを使用中のまま残さない)。
+
+## 定数との乗算の最適化 (`mul_opt.rs`)
+- `format_expr_inst`の`*`(整数)で、片方が整数リテラルなら`imul`の代わりに次を生成する。
+  方針は`optimization/x64/asm_gen/mul_strength.rs`の`plan_mul`、生成は`format_const_mul`。
+    - `x * 2` → `mov` + `add dst, dst`
+    - `x * 2^k` (k>=2) → `mov` + `shl $k`
+    - `x * 3/5/9` → `lea (r,r,2/4/8)`
+    - `x * 7` → `lea 0(,r,8)` + `sub x`
+- 定数は左辺でも右辺でもよい。それ以外の定数・浮動小数点数・ポインタは従来どおり。
+- `lea`はサイズ接尾辞を自分で付ける(`ensure_mnemonic_size`は`lea`を常に`q`にするため)。
+  結果が64bitなら`leaq`、それ以外は`leal`(下位ビットは乗算と同じ)。
+- `x * 7`で結果のレジスタと`x`のレジスタが同じ場合は、`x`が消えるので通常の乗算にする。
+- シフト量が型の幅以上になる定数(`1<<32`を32bitで掛けるなど)は置き換えない。
+- テンプレート: `x64.rs`の`mul_lea_scale` / `mul_lea_x8`。

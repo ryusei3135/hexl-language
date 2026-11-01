@@ -716,6 +716,24 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: "{space}lea {src1}, {dst}\n",
             },
         ),
+        // ===== 定数との乗算の最適化(`asm_emitter/mul_opt.rs`) =====
+        // `{src1}`は64bitのレジスタ。`lea`は接尾辞(`l`/`q`)を`mul_opt.rs`が付ける
+        // `x * 3/5/9`: {src1} * (1 + scale)
+        (
+            "mul_lea_scale",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}lea ({src1},{src1},{scale}), {dst}\n",
+            },
+        ),
+        // `x * 8`を作る(`x * 7`で使う。続けて`x`を引く)
+        (
+            "mul_lea_x8",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}lea 0(,{src1},8), {dst}\n",
+            },
+        ),
         // ===== 型変換(`asm_emitter/cast.rs`) =====
         // 整数 → 浮動小数点数(`l`は32bit、`q`は64bitの整数)
         (

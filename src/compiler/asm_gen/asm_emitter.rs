@@ -9,6 +9,7 @@ mod operand_txt;
 mod set_cc;
 mod ternary;
 mod var_mnger;
+mod opt;
 
 use super::emit_fn_name::emit_fn_name_id;
 use super::*;
@@ -27,6 +28,7 @@ impl AsmEmitter {
         asm_fmt: AsmFmtData,
         os: &str,
         err_pool: &Rc<RefCell<err_pool::ErrPool>>,
+        opt_mode: OptMode,
     ) -> Self {
         let caller = Rc::new(vec![1, 4, 5, 6, 7, 8, 9]);
         let callee = Rc::new(vec![3, 10, 11, 12, 13]);
@@ -77,6 +79,8 @@ impl AsmEmitter {
             float_caller_saved: Rc::clone(&float_caller),
 
             err_pool: Rc::clone(&err_pool),
+
+            optimization_mode: opt_mode,
         };
         me.data_sec_text
             .push_str(&me.asm_fmt.get_section_fmt("data"));
@@ -741,7 +745,15 @@ impl AsmEmitter {
         } else {
             self.get_expr_ty(expr.ls)
         };
-        println!("JJJJJJJJJJJJJJJ {:?}", resolved_size);
+        // 定数との乗算(`x * 2`/`x * 8`/`x * 3`など)は、`imul`ではなく
+        // `add`・シフト・`lea`にする(`mul_opt.rs`)
+        if expr.kind == inst::ExprKind::Mul {
+            if self.optimization_mode != OptMode::O0 {
+                if let Some(optimized) = self.format_const_mul(expr, &resolved_size)? {
+                    return Ok(optimized);
+                }
+            }
+        }
         if matches!(expr.kind, inst::ExprKind::Inc | inst::ExprKind::Dec) {
             let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some();
             let operand = self.extract_operand_text(expr.ls, None)?;
