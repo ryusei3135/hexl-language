@@ -140,7 +140,8 @@ mod collect_defines_tests {
 
     /// テスト用の一時ディレクトリに、`files`(パス, 中身)を作り、`main.hexl`を`ROOT`にする
     fn setup(name: &str, files: &[(&str, &str)]) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("hexl_collect_{}_{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("hexl_collect_{}_{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         for (path, content) in files {
             let file = dir.join(path);
@@ -162,15 +163,27 @@ mod collect_defines_tests {
         assert_eq!(t(" \"a.hexl\"::func"), Some(("a.hexl".to_string(), false)));
         assert_eq!(t(" \"a.hexl\"::*"), Some(("a.hexl".to_string(), false)));
         assert_eq!(t(" io=\"a.hexl\""), Some(("a.hexl".to_string(), false)));
-        assert_eq!(t(" std::\"os/v.hexl\""), Some(("os/v.hexl".to_string(), true)));
-        assert_eq!(t(" io=std::\"os/v.hexl\""), Some(("os/v.hexl".to_string(), true)));
+        assert_eq!(
+            t(" std::\"os/v.hexl\""),
+            Some(("os/v.hexl".to_string(), true))
+        );
+        assert_eq!(
+            t(" io=std::\"os/v.hexl\""),
+            Some(("os/v.hexl".to_string(), true))
+        );
         // 文字列が無い従来の書き方は、パスが分からない
         assert_eq!(t(" mod::file"), None);
     }
 
     #[test]
     fn collects_defines_of_included_file() {
-        let dir = setup("basic", &[("a.hexl", "#define A 10\n#define F(x) x + 1\npub f(): int { ret 0 }\n")]);
+        let dir = setup(
+            "basic",
+            &[(
+                "a.hexl",
+                "#define A 10\n#define F(x) x + 1\npub f(): int { ret 0 }\n",
+            )],
+        );
         let mut p = pp();
         let out = p.preprocess("#include \"a.hexl\"\nret #A + #F(2)").unwrap();
         // `#include`は展開せずに残し、`#define`だけを取り込む

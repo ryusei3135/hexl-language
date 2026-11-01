@@ -464,7 +464,9 @@ impl ErrPool {
             K::GenericsNotSupportedYet => {
                 "ここの`ジェネリクス`はまだ実装されていません".to_string()
             }
-            K::ThisContractOptIsNotFound(name) => format!("この契約のオプションはありません {}", name),
+            K::ThisContractOptIsNotFound(name) => {
+                format!("この契約のオプションはありません {}", name)
+            }
         }
     }
 

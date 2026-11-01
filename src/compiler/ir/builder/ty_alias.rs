@@ -260,7 +260,7 @@ fn expr(e: &mut ast::Expr, map: &AliasMap) {
             }
             expr(target, map);
         }
-        E::GetContractMemLen(..) => {},
+        E::GetContractMemLen(..) => {}
 
         E::RangeNode(_) | E::Number(_) | E::Float(_) | E::Str(_) | E::Var(_) => {}
     }

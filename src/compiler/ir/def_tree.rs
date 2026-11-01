@@ -150,13 +150,9 @@ impl VarTree {
     pub(in crate::compiler) fn get_var(&self, name: &str) -> Result<VarMetaData, err::ErrKind> {
         self.hash
             .get(name)
-            .ok_or_else(
-                || crate::GenUndefErrResult!(
-                    UndefVar,
-                    "none var".to_string(),
-                    Some(name.to_owned())
-                )
-            )
+            .ok_or_else(|| {
+                crate::GenUndefErrResult!(UndefVar, "none var".to_string(), Some(name.to_owned()))
+            })
             .cloned()
     }
 

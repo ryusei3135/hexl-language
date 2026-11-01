@@ -274,7 +274,9 @@ mod str_len_arg_tests {
             "write(p: [b1 11], n: uint64): int { ret 0 } \
              _start(): int { data: [b1 11] = \"hello world\" write(data, data\"len\") ret 0 }",
         );
-        let str_id = body.iter().position(|i| matches!(i, inst::Inst::Str { .. }));
+        let str_id = body
+            .iter()
+            .position(|i| matches!(i, inst::Inst::Str { .. }));
         let str_len = body.iter().find_map(|i| match i {
             inst::Inst::StrLen { str_id, len, .. } => Some((*str_id, *len)),
             _ => None,

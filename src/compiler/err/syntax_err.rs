@@ -156,7 +156,9 @@ impl fmt::Display for SyntaxErrKind {
                 write!(f, "`{:?}`の後に`{}`は指定できません", context, found)
             }
             Self::GenericsNotSupportedYet => write!(f, "`ジェネリクス`はまだ実装されていません"),
-            Self::ThisContractOptIsNotFound(name) => write!(f,"この契約のオプションはありません -> {}", name),
+            Self::ThisContractOptIsNotFound(name) => {
+                write!(f, "この契約のオプションはありません -> {}", name)
+            }
         }
     }
 }

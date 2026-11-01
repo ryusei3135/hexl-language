@@ -1,6 +1,6 @@
+use super::tracking_contract_len::{VarLenFn, contract_mem_len, var_len_from_tree};
 use super::*;
 use crate::compiler::ir::{def_tree, types::Size};
-use super::tracking_contract_len::{VarLenFn, contract_mem_len, var_len_from_tree};
 
 /// 定数式の評価結果。
 ///
@@ -229,7 +229,9 @@ fn tracking_expr_node(expr: &ast::Expr, var_len: VarLenFn) -> Option<ValKind> {
         }
         // `Str`/`Array`のリテラルは要素数、変数は変数の情報から長さを求める。
         // 長さが分からない場合は`0`
-        ExprNode::GetContractMemLen(var) => Some(Num(contract_mem_len(var, var_len).unwrap_or(0) as i128)),
+        ExprNode::GetContractMemLen(var) => {
+            Some(Num(contract_mem_len(var, var_len).unwrap_or(0) as i128))
+        }
 
         // これらは値を安全に決定できない、または式の評価自体に副作用がある。
         ExprNode::RangeNode(_)

@@ -614,9 +614,9 @@ impl AsmEmitter {
             }
             // 文字列の長さの静的データ(`M0Len(%rip)`)
             inst::Inst::StrLen { .. } => {
-                let label = self
-                    .static_label(parent_id)
-                    .ok_or_else(|| err::ErrKind::asm_emit_label_not_found("string len", parent_id))?;
+                let label = self.static_label(parent_id).ok_or_else(|| {
+                    err::ErrKind::asm_emit_label_not_found("string len", parent_id)
+                })?;
                 Ok(self.asm_fmt.fmt_static_var_rip(&label))
             }
             inst::Inst::Mov { ref name, src, .. } => {

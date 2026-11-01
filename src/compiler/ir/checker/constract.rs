@@ -5,8 +5,7 @@ use super::*;
 use crate::compiler::ast::{ArgsNode, ConstractTy, Expr, ExprNode, FuncDefine, TyNode};
 use crate::compiler::err::CompileErr;
 use crate::compiler::optimization::x64::gen_ir::tracking_contract_len::{
-    var_len_from_tree,
-    contract_mem_len
+    contract_mem_len, var_len_from_tree,
 };
 
 // 条件分岐・反復処理・共通の処理は、それぞれ別のファイルに分けている

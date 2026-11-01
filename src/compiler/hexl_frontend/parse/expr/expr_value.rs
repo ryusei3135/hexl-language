@@ -67,7 +67,7 @@ impl Parser {
         Ok(())
     }
 
-    pub(in super) fn expr_value_node(&mut self, init_struct: bool) -> Result<Expr, err::ErrKind> {
+    pub(super) fn expr_value_node(&mut self, init_struct: bool) -> Result<Expr, err::ErrKind> {
         // ## 値のトークンが出たら
         // - 呼び出し元で、次のトークンに進めるのでNumberやRParenがきたら終了
         if let lex::Tkn::Name(name) = self.current_tkn().clone() {

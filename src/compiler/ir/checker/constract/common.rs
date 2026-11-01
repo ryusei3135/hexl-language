@@ -388,7 +388,7 @@ impl IR {
             ExprNode::Number(..) | ExprNode::Float(..) | ExprNode::Var(..) | ExprNode::Str(..) => {
                 Ok(())
             }
-            ExprNode::GetContractMemLen(var) => Ok(())
+            ExprNode::GetContractMemLen(var) => Ok(()),
         }
     }
 

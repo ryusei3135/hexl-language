@@ -81,7 +81,6 @@ fn var_origin_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<VarO
     None
 }
 
-
 /// 変数の情報(`VarTree`)から、変数名で長さを引く(引数などはたどる)。
 pub fn var_len_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<u64> {
     resolve_var_len(name, &|n| var_origin_from_tree(n, var_tree))
@@ -120,7 +119,10 @@ mod tests {
         let var = || ExprNode::Var("a".to_string()).with_span(sp());
         let known = |name: &str| (name == "a").then_some(5_u64);
         assert_eq!(constant_folding(&len(var()), &known), Some(ValKind::Num(5)));
-        assert_eq!(constant_folding(&len(var()), &no_var), Some(ValKind::Num(0)));
+        assert_eq!(
+            constant_folding(&len(var()), &no_var),
+            Some(ValKind::Num(0))
+        );
     }
 
     #[test]
@@ -148,7 +150,13 @@ mod tests {
             ExprNode::GetContractMemLen(Box::new(ExprNode::Var(name.to_string()).with_span(sp())))
                 .with_span(sp())
         };
-        assert_eq!(constant_folding(&len("copy"), &var_len), Some(ValKind::Num(4)));
-        assert_eq!(constant_folding(&len("loop_a"), &var_len), Some(ValKind::Num(0)));
+        assert_eq!(
+            constant_folding(&len("copy"), &var_len),
+            Some(ValKind::Num(4))
+        );
+        assert_eq!(
+            constant_folding(&len("loop_a"), &var_len),
+            Some(ValKind::Num(0))
+        );
     }
 }

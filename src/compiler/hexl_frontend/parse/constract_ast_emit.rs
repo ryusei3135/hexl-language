@@ -8,7 +8,8 @@ impl Parser {
     /// ```
     #[inline(always)]
     fn ty_constract_must(&mut self, base_ty: TyNode) -> Result<TyNode, err::ErrKind> {
-        if self.current_tkn() == &lex::Tkn::LAngleBracket {
+        if self.current_tkn() == &lex::Tkn::LBracket {
+            self.advance_tkn().unwrap();
             let n = TyNode::RefContract(Box::new(self.ty_constract_must(base_ty)?));
             self.advance_tkn().unwrap();
             return Ok(n);

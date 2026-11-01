@@ -148,9 +148,10 @@ impl IR {
                 self.scan_loop_call(fn_name, call_info, None, scope)?;
             }
             // `S::f(..)`: 呼び出し先は`S`のメゾット
-            ExprNode::Scope { scope: path, target }
-                if matches!(target.node, ExprNode::CallFunc(..)) =>
-            {
+            ExprNode::Scope {
+                scope: path,
+                target,
+            } if matches!(target.node, ExprNode::CallFunc(..)) => {
                 let ExprNode::CallFunc(call_info) = &target.node else {
                     unreachable!()
                 };

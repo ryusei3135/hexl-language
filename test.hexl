@@ -74,14 +74,13 @@ func5(a: int of func4): Result<int, byte> {
     ret Result::Ok(a + 10)
 }
 
-func6(a: int must=func5, f: float) {
+func6(a: int [must=func5], f: float) {
     r: Result<int, int> = Result<int, int>::Ok(10)
     cond Result::Ok(v) := r {
         c: int = 0
     } else {
         b: int = 0
     }
-    func5(a)
 }
 
 add(a mut: int, b: int): Option<int> {
@@ -133,6 +132,7 @@ test_arr(idx: uint): i64 {
     }
     u: u64 = sizeof(int)
     func6(h, 2.3)
+    func5(h)
     add(s.name, a)
     add(a, 0)
     test_arr(1)
