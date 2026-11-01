@@ -2,6 +2,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
@@ -195,13 +196,16 @@ impl AsmSetting {
                 .as_str()
         };
 
-        let path = format!("asm_fmts/{}", file_name);
+        let path = find_asset_path(&Path::new("asm_fmts").join(file_name));
 
         let text = fs::read_to_string(&path).map_err(|source| AsmSettingError::ReadFile {
-            path: path.clone(),
+            path: path.display().to_string(),
             source,
         })?;
-        serde_yaml::from_str(&text).map_err(|source| AsmSettingError::ParseYaml { path, source })
+        serde_yaml::from_str(&text).map_err(|source| AsmSettingError::ParseYaml {
+            path: path.display().to_string(),
+            source,
+        })
     }
 
     pub fn get_inline_asm_list(&self) -> Vec<String> {
@@ -210,15 +214,37 @@ impl AsmSetting {
 }
 
 pub fn load_setting() -> Result<AsmSetting, AsmSettingError> {
-    let path = "asm.yaml";
-    let setting = fs::read_to_string(path).map_err(|source| AsmSettingError::ReadFile {
-        path: path.to_string(),
+    let path = find_asset_path(Path::new("asm.yaml"));
+    let setting = fs::read_to_string(&path).map_err(|source| AsmSettingError::ReadFile {
+        path: path.display().to_string(),
         source,
     })?;
     serde_yaml::from_str(&setting).map_err(|source| AsmSettingError::ParseYaml {
-        path: path.to_string(),
+        path: path.display().to_string(),
         source,
     })
+}
+
+fn find_asset_path(path: &Path) -> PathBuf {
+    if path.exists() {
+        return path.to_path_buf();
+    }
+
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        let exe_path = exe_dir.join(path);
+        if exe_path.exists() {
+            return exe_path;
+        }
+    }
+
+    let dev_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
+    if dev_path.exists() {
+        return dev_path;
+    }
+    path.to_path_buf()
 }
 
 /// アセンブリ言語のフォーマットを取得し、生成する

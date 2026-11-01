@@ -24,7 +24,13 @@ const DEFAULT: &str = "linux";
 #[allow(unused_imports)]
 use compiler::{Lexer, Parser, asm_gen, ast, err, ir};
 
-use std::{error::Error, fs, process, sync::Mutex};
+use std::{
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+    process,
+    sync::Mutex,
+};
 
 use crate::compiler::asm_gen::OptMode;
 use crate::compiler::{err::Span, stmt_node::StmtNode::Continue};
@@ -204,18 +210,64 @@ fn take_generated_bin() -> Vec<String> {
 }
 
 /// 記憶した全てのオブジェクトファイルのパスを、登録順に出力する
-fn print_binaries() {
+fn print_binaries(output_path: &Path, os: &str) -> Result<(), Box<dyn Error>> {
     let paths = take_generated_bin();
     if paths.is_empty() {
-        return;
+        return Ok(());
     }
     println!("生成したオブジェクトファイル:");
-    let output = linker::linker(paths.clone()).unwrap();
-    paths.iter().for_each(|f| fs::remove_file(f).unwrap());
-    output.write_to_file("a.out").unwrap();
+    let options = if os == "windows" {
+        linker::LinkOptions::pe()
+    } else {
+        linker::LinkOptions::default()
+    };
+    let output = linker::linker_with_options(paths.clone(), options)
+        .map_err(|e| format!("実行ファイルのリンクに失敗しました: {}", e))?;
+    output.write_to_file(output_path).map_err(|e| {
+        format!(
+            "実行ファイル`{}`を書き込めません: {}",
+            output_path.display(),
+            e
+        )
+    })?;
+    for path in paths {
+        if let Err(e) = fs::remove_file(&path) {
+            eprintln!(
+                "警告: オブジェクトファイル`{}`を削除できません: {}",
+                path, e
+            );
+        }
+    }
+    println!("実行ファイルを生成しました: {}", output_path.display());
     // for path in &paths {
     //     println!("  {}", path);
     // }
+    Ok(())
+}
+
+/// 相対パスはまず呼び出し元の作業ディレクトリから解決し、
+/// 見つからない場合は hexl 実行ファイルの隣も探す。
+fn resolve_input_path(file_name: &str) -> PathBuf {
+    let input = Path::new(file_name);
+    if input.is_absolute() {
+        return input.to_path_buf();
+    }
+
+    if input.exists() {
+        return input.to_path_buf();
+    }
+
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        let exe_dir_path = exe_dir.join(input);
+        if exe_dir_path.exists() {
+            return exe_dir_path;
+        }
+    }
+
+    input.to_path_buf()
 }
 
 // ---------------------------------------------------------------------------
@@ -234,14 +286,15 @@ fn print_binaries() {
 /// - アセンブリ言語ファイルの書き込みに失敗した場合
 pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>, Box<dyn Error>> {
     // 初期化
-    let file_name = Rc::new(
+    let file_path = resolve_input_path(
         settings
             .file_name
-            .clone()
+            .as_deref()
             .ok_or_else(|| "ファイル名が指定されていません".to_string())?,
     );
+    let file_name = Rc::new(file_path.to_string_lossy().into_owned());
 
-    let content = fs::read_to_string((*file_name).as_str())
+    let content = fs::read_to_string(&file_path)
         .map_err(|e| format!("ファイル`{}`を読み込めません: {}", file_name, e))?;
 
     // `--linux` / `--windows` で選んだOS(未指定なら実行環境のOS)
@@ -388,7 +441,11 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
     let args_refs: Vec<&str> = args_vec.iter().map(String::as_str).collect();
 
     // オプションなどの設定
-    let settings = mng_opt_cmd(&args_refs);
+    let mut settings = mng_opt_cmd(&args_refs);
+
+    if let Some(file_name) = settings.file_name.as_deref() {
+        settings.file_name = Some(resolve_input_path(file_name).to_string_lossy().into_owned());
+    }
 
     // 設定ファイルが読めない場合は panic せず、メッセージを表示して終了する
     if let Err(e) = asm_setting::load_setting() {
@@ -416,8 +473,29 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
     match build(&settings) {
         Ok(_) => {
             // `#include` したファイルも含め、生成した全てのバイナリのパスを出力する
-            print_binaries();
-            process::ExitCode::SUCCESS
+            let source_path = settings
+                .file_name
+                .as_deref()
+                .map(Path::new)
+                .unwrap_or_else(|| Path::new("."));
+            let output_name = if settings.os.as_deref().unwrap_or(DEFAULT) == "windows" {
+                "a.exe"
+            } else {
+                "a.out"
+            };
+            let output_path = source_path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."))
+                .join(output_name);
+            match print_binaries(&output_path, settings.os.as_deref().unwrap_or(DEFAULT)) {
+                Ok(()) => process::ExitCode::SUCCESS,
+                Err(e) => {
+                    take_generated_bin();
+                    eprintln!("エラー: {}", e);
+                    process::ExitCode::FAILURE
+                }
+            }
         }
         Err(e) => {
             take_generated_bin();

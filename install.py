@@ -2,6 +2,7 @@ import os
 import sys
 import platform
 import subprocess
+import shutil  # ファイルコピー用に追加
 
 
 def setup_path():
@@ -23,12 +24,48 @@ def setup_path():
         print(f"❌ {bin_name} が見つかりません。先に 'cargo build --release' を実行してください。")
         sys.exit(1)
 
+    print(f"🔍 ターゲットディレクトリを検出: {target_dir}")
+
+    # PATH経由でどこから実行しても標準ライブラリとアセンブリ定義を使えるようにする
+    for asset_dir in ["library", "asm_fmts"]:
+        src_dir = os.path.join(project_root, asset_dir)
+        dst_dir = os.path.join(target_dir, asset_dir)
+        if os.path.isdir(src_dir) and not os.path.exists(dst_dir):
+            shutil.copytree(src_dir, dst_dir)
+            print(f"📦 {asset_dir} を {target_dir} へコピーしました。")
+
     # library と asm_fmt が存在するか確認（なければ警告）
     if not os.path.exists(os.path.join(target_dir, "library")) or not os.path.exists(os.path.join(target_dir, "asm_fmts")):
-        print(f"⚠️ 警告: {target_dir} 内に 'library' または 'asm_fmt' ディレクトリが見つかりません。")
+        print(f"⚠️ 警告: {target_dir} 内に 'library' または 'asm_fmts' ディレクトリが見つかりません。")
         print("   プログラムが正常に動作しない可能性があります。")
 
-    print(f"🔍 ターゲットディレクトリを検出: {target_dir}")
+    # --- 💡 asm.yaml のコピー処理を追加 ---
+    # .yaml と .yml の両方の拡張子に対応
+    yaml_names = ["asm.yaml", "asm.yml"]
+    yaml_found = False
+
+    for y_name in yaml_names:
+        src_yaml = os.path.join(project_root, y_name)
+        dst_yaml = os.path.join(target_dir, y_name)
+
+        # プロジェクトルートに asm.yaml があり、かつターゲットディレクトリにまだ無い（または別場所の）場合
+        if os.path.exists(src_yaml):
+            yaml_found = True
+            if src_yaml != dst_yaml:
+                try:
+                    shutil.copy2(src_yaml, dst_yaml)
+                    print(f"📦 {y_name} を {target_dir} へコピーしました。")
+                except Exception as e:
+                    print(f"⚠️ {y_name} のコピーに失敗しました: {e}")
+            break
+        # すでにターゲットディレクトリに直接配置されている場合
+        elif os.path.exists(dst_yaml):
+            yaml_found = True
+            break
+
+    if not yaml_found:
+        print("⚠️ 警告: プロジェクトルートに 'asm.yaml' が見つかりませんでした。")
+    # -------------------------------------
 
     # 3. OSごとのPATH登録処理
     if is_windows:
