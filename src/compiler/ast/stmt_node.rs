@@ -79,6 +79,17 @@ impl FuncDefine {
         }
         self.body.push(node);
     }
+
+    pub(in crate::compiler) fn declaration_only(&self) -> Self {
+        let mut declaration = self.clone();
+        declaration.body.clear();
+        declaration.def_info = DefOnly;
+        declaration
+    }
+
+    pub(in crate::compiler) fn is_declaration_only(&self) -> bool {
+        self.def_info == DefOnly
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

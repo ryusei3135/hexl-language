@@ -225,7 +225,7 @@ impl IR {
                 // (`src/ir/counter_mnger.rs`)
                 self.count_var_use(&var_name);
 
-                let binding: TyNode = self.var_tree.get_ty_node(&var_name).unwrap();
+                let binding: TyNode = self.var_tree.get_ty_node(&var_name).expect(&format!("Variable not found: {}", var_name));
                 // 組み込み型ならそのまま、そうでなければ(構造体/バリアント型)
                 // `struct_tree`/`variant_tree`から探して型を決める
                 let mut ty: Size = match Size::try_from(binding.clone()) {

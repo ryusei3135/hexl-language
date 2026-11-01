@@ -5,6 +5,31 @@ use crate::compiler::hexl_frontend::include_root;
 use std::rc::Rc;
 
 impl Parser {
+    fn type_reference(node: &Group1Node) -> Group1Node {
+        match node {
+            Group1Node::StructDefine(def) => {
+                let mut def = def.clone();
+                Self::make_method_declarations(&mut def.methods);
+                Group1Node::StructDefine(def)
+            }
+            Group1Node::VariantDefine(def) => {
+                let mut def = def.clone();
+                Self::make_method_declarations(&mut def.methods);
+                Group1Node::VariantDefine(def)
+            }
+            Group1Node::TypeAlias(def) => Group1Node::TypeAlias(def.clone()),
+            _ => unreachable!("only type definitions are imported"),
+        }
+    }
+
+    fn make_method_declarations(methods: &mut [Group1Node]) {
+        for method in methods {
+            if let Group1Node::FuncDefine(def) = method {
+                *def = def.declaration_only();
+            }
+        }
+    }
+
     pub(super) fn collect_included_types(&mut self) -> Result<(), err::ErrKind> {
         let Some(tkns) = self.tkns.as_ref() else {
             return crate::err_at!(self.tkn_is_eof(Vec::new()));
@@ -90,7 +115,7 @@ impl Parser {
                                 | Group1Node::TypeAlias(_)
                         )
                 })
-                .cloned(),
+                .map(Self::type_reference),
         );
         Ok(())
     }
@@ -119,7 +144,7 @@ mod tests {
         std::fs::write(
             dir.join("types.hexl"),
             "#include nested=\"nested.hexl\"\n\
-             pub struct Item { value: int }\n\
+             pub struct Item { value: int pub get(self: Self): int { ret 0 } }\n\
              pub variant State { Ready }\n\
              pub type Count = int\n\
              struct Private { value: int }\n\
@@ -163,6 +188,18 @@ mod tests {
         assert!(names.contains(&"State".to_string()));
         assert!(names.contains(&"Count".to_string()));
         assert!(!names.contains(&"Private".to_string()));
+
+        let item = nodes.iter().find_map(|node| match node {
+            Group1Node::StructDefine(def) if def.name == "Item" => Some(def),
+            _ => None,
+        });
+        let method = item.unwrap().methods.iter().find_map(|node| match node {
+            Group1Node::FuncDefine(def) if def.name == "get" => Some(def),
+            _ => None,
+        });
+        let method = method.unwrap();
+        assert!(method.is_declaration_only());
+        assert!(method.body.is_empty());
     }
 
     #[test]

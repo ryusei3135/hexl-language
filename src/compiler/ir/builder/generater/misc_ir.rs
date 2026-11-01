@@ -179,6 +179,9 @@ impl IR {
                     kind, owner, method
                 );
             };
+            if method_info.is_declaration_only() {
+                continue;
+            }
 
             let mut method_info = self.resolve_self_ty(&method_info);
             method_info.module = Some(owner.to_string());
@@ -415,6 +418,25 @@ mod struct_method_expand_tests {
         // モジュール名(構造体名)を指定しない場合は解決できない
         // (トップレベルの関数と名前空間が混ざらないようにするため)
         assert!(ir.func_tree.get(&"get_num".to_string(), None).is_none());
+    }
+
+    #[test]
+    fn declaration_only_method_is_not_generated() {
+        let mut nodes =
+            parse_test_source("struct Point { x: int pub get(self: Self): int { ret 1 } }");
+        let ast::Group1Node::StructDefine(def) = &mut nodes[0] else {
+            panic!("expected struct definition");
+        };
+        let ast::Group1Node::FuncDefine(method) = &mut def.methods[0] else {
+            panic!("expected method definition");
+        };
+        *method = method.declaration_only();
+
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+
+        assert!(ir.test_only_get_method_body("Point", "get").is_empty());
     }
 
     #[test]
