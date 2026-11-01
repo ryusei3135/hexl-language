@@ -695,6 +695,14 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
                 template: ".align 4\n{name}: .long {value}\n",
             },
         ),
+        // 文字列の長さ(`M0Len`)など、8バイトの静的データ
+        (
+            "data_quad",
+            StaticOperandInfo {
+                len: 0,
+                template: ".align 8\n{name}: .quad {value}\n",
+            },
+        ),
         (
             "data_float",
             StaticOperandInfo {

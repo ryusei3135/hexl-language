@@ -161,7 +161,11 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
                 if val.ends_with(".hexl") {
                     settings.file_name = Some(val.to_string());
                 } else {
-                    panic!();
+                    if val.ends_with(".o") || val.ends_with(".out") {
+                        settings.file_name = Some(val.to_string());
+                    } else {
+                        panic!();
+                    }
                 }
             } // // フラグ以外の文字
               // _ => {

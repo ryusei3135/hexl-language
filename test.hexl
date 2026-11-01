@@ -91,7 +91,7 @@ add(a mut: int, b: int): Option<int> {
     loop a > 0 {
         cond {
             a > 5 => {
-                io::print_line(c, 12)
+                io::print_line(c, c"len")
             }
             else => {
                 io::print_line(d, 8)

@@ -3,7 +3,7 @@
 use crate::compiler::ir::def_tree::FnDefInfo;
 
 use super::*;
-use crate::compiler::ast::{CallInfo, FuncDefine, TyNode};
+use crate::compiler::ast::{self, CallInfo, FuncDefine, TyNode};
 
 impl IR {
     /// 関数の戻り値の型や引数などの情報を登録し
@@ -165,10 +165,75 @@ impl IR {
             self.check_constract_arg(meta_data.name.as_str(), &def_args[index], &expr_arg)?;
 
             let ty = self.size_of(&def_args[index].ty).clone();
-            let idx = self.gen_expr_ir::<M>(&expr_arg, Some(&ty))?;
+            // `data"len"`: 文字列リテラルの長さは、静的データ`M0Len`にして参照する
+            let idx = match self.gen_str_len_arg_ir(&expr_arg, &ty) {
+                Some(idx) => idx,
+                None => self.gen_expr_ir::<M>(&expr_arg, Some(&ty))?,
+            };
             func_meta_data.insert_param_parent_id(idx);
         }
         Ok(inst::Inst::CallFunc(func_meta_data))
+    }
+
+    /// 関数の引数`data"len"`(`GetContractMemLen`)が、文字列リテラルの長さなら
+    /// 静的データ`M{n}Len`を参照する`Inst::StrLen`を作り、そのidを返す
+    ///
+    /// ```text
+    /// M0     "hello world"
+    /// M0Len  11
+    /// ```
+    ///
+    /// - 文字列リテラルの長さを直接指定した場合(`"hello world"`の長さ): `Str`も作る
+    /// - 変数`data`の場合: 変数を定義したときの`Str`(`M{n}`)を使い回す。
+    ///   変更できる変数(`mut`)は、別の値に変わっている可能性があるので対象外
+    ///
+    /// 長さが静的に分からない場合は`None`(従来どおり、定数畳み込みなどで処理する)
+    fn gen_str_len_arg_ir(&mut self, arg: &ast::Expr, size: &types::Size) -> Option<usize> {
+        let ast::ExprNode::GetContractMemLen(target) = &arg.node else {
+            return None;
+        };
+        let (str_id, len) = match &target.node {
+            ast::ExprNode::Str(value) => {
+                let str_id = self.id_counter;
+                self.ir_tree.push(inst::Inst::Str {
+                    dst: str_id,
+                    value: value.to_string(),
+                });
+                self.id_counter += 1;
+                (str_id, value.len())
+            }
+            ast::ExprNode::Var(name) => {
+                if !matches!(self.var_tree.is_mut(name), parse::VarMutAttr::Invar) {
+                    return None;
+                }
+                let Ok(meta) = self.var_tree.get_var(name) else {
+                    return None;
+                };
+                // 変数の定義(`Mov`)から、値の`Str`を辿る
+                let def_tree::VarType::Local(def_idx) = meta.attribute else {
+                    return None;
+                };
+                let Some(inst::Inst::Mov { src, .. }) = self.ir_tree.get(def_idx) else {
+                    return None;
+                };
+                let Some(inst::Inst::Str { value, .. }) = self.ir_tree.get(*src) else {
+                    return None;
+                };
+                let found = (*src, value.len());
+                self.count_var_use(name);
+                found
+            }
+            _ => return None,
+        };
+        let dst = self.id_counter;
+        self.ir_tree.push(inst::Inst::StrLen {
+            dst,
+            str_id,
+            len,
+            size: size.clone(),
+        });
+        self.id_counter += 1;
+        Some(dst)
     }
 
     #[inline(always)]
@@ -186,5 +251,33 @@ impl IR {
         if flag {
             self.constract_flag.constract_fn(fn_def.ret_ty.as_ref());
         }
+    }
+}
+
+#[cfg(test)]
+mod str_len_arg_tests {
+    use super::*;
+
+    fn build_func_body(src: &str) -> Vec<inst::Inst> {
+        let nodes = parse_test_source(src);
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+        ir.test_only_get_func_body("_start").to_vec()
+    }
+
+    /// `data"len"`を関数の引数にすると、`Str`(`M0`)と対になる`StrLen`(`M0Len`)を参照する
+    #[test]
+    fn str_len_arg_refers_to_static_len() {
+        let body = build_func_body(
+            "write(p: [b1 11], n: uint64): int { ret 0 } \
+             _start(): int { data: [b1 11] = \"hello world\" write(data, data\"len\") ret 0 }",
+        );
+        let str_id = body.iter().position(|i| matches!(i, inst::Inst::Str { .. }));
+        let str_len = body.iter().find_map(|i| match i {
+            inst::Inst::StrLen { str_id, len, .. } => Some((*str_id, *len)),
+            _ => None,
+        });
+        assert_eq!(str_len, str_id.map(|id| (id, 11)), "{:?}", body);
     }
 }

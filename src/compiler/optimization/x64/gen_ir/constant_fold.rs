@@ -229,7 +229,7 @@ fn tracking_expr_node(expr: &ast::Expr, var_len: VarLenFn) -> Option<ValKind> {
         }
         // `Str`/`Array`のリテラルは要素数、変数は変数の情報から長さを求める。
         // 長さが分からない場合は`0`
-        ExprNode::GetContractMemLen(var) => Some(Num(contract_mem_len(var, var_len))),
+        ExprNode::GetContractMemLen(var) => Some(Num(contract_mem_len(var, var_len).unwrap_or(0) as i128)),
 
         // これらは値を安全に決定できない、または式の評価自体に副作用がある。
         ExprNode::RangeNode(_)
@@ -339,7 +339,7 @@ mod tests {
     use std::rc::Rc;
 
     /// 変数の長さが何も分からない
-    fn no_var(_: &str) -> Option<i128> {
+    fn no_var(_: &str) -> Option<u64> {
         None
     }
 

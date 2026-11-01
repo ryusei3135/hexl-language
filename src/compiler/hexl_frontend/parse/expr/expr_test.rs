@@ -54,6 +54,57 @@ mod expr_tests {
         );
     }
 
+    /// `data"len"`は、関数の引数の中でも`GetContractMemLen`になる
+    #[test]
+    fn check_contract_len_in_call_args() {
+        let mut p = parse::Parser::new_for_test();
+        let tkns = gen_nodes("main(): b1 { written: i64 = write(data, data\"len\") }");
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        let def = node.body[0].get_node();
+        let ExprNode::DefVar(def) = &def.node else {
+            panic!("not def var");
+        };
+        let ExprNode::CallFunc(call) = &def.value.node else {
+            panic!("not call");
+        };
+        assert_eq!(call.args.len(), 2);
+        assert_eq!(call.args[0], ex(ExprNode::Var("data".to_string())));
+        assert_eq!(
+            call.args[1],
+            ex(ExprNode::GetContractMemLen(Box::new(ex(ExprNode::Var(
+                "data".to_string()
+            )))))
+        );
+    }
+
+    /// `a + data"len"`のように、式の途中・末尾でも次のトークンを読み飛ばさない
+    #[test]
+    fn check_contract_len_in_expr() {
+        let mut p = parse::Parser::new_for_test();
+        let tkns = gen_nodes("main(): b1 { n: int = data\"len\" + 1 }");
+        let Group1Node::FuncDefine(ref node) = p.parser_for_test(&tkns).expect("node is err")[0]
+        else {
+            panic!("not func");
+        };
+        let def = node.body[0].get_node();
+        let ExprNode::DefVar(def) = &def.node else {
+            panic!("not def var");
+        };
+        let ExprNode::Add(pair) = &def.value.node else {
+            panic!("not add");
+        };
+        assert_eq!(
+            *pair.0,
+            ex(ExprNode::GetContractMemLen(Box::new(ex(ExprNode::Var(
+                "data".to_string()
+            )))))
+        );
+        assert_eq!(*pair.1, ex(ExprNode::Number("1".to_string())));
+    }
+
     #[test]
     fn check_call_func_node() {
         let mut p = parse::Parser::new_for_test();

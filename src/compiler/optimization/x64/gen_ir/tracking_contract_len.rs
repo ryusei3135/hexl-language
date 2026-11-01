@@ -15,7 +15,7 @@ use crate::compiler::ir::{def_tree, types::Size};
 
 /// 変数名から、その変数(配列・文字列)の長さを返す関数。
 /// 長さが分からない変数は`None`を返す。
-pub type VarLenFn<'a> = &'a dyn Fn(&str) -> Option<i128>;
+pub type VarLenFn<'a> = &'a dyn Fn(&str) -> Option<u64>;
 
 /// `GetContractMemLen(var)`の長さを返す。
 ///
@@ -23,13 +23,13 @@ pub type VarLenFn<'a> = &'a dyn Fn(&str) -> Option<i128>;
 /// - 配列リテラル → 要素数
 /// - 変数 → `var_len`(変数の情報)から引いた長さ
 /// - それ以外・長さが分からない場合 → `0`
-pub fn contract_mem_len(var: &ast::Expr, var_len: VarLenFn) -> i128 {
+pub fn contract_mem_len(var: &ast::Expr, var_len: VarLenFn) -> Option<u64> {
     use ast::ExprNode;
     match &var.node {
-        ExprNode::Str(v) => v.len() as i128,
-        ExprNode::Array(v) => v.len() as i128,
-        ExprNode::Var(name) => var_len(name).unwrap_or(0),
-        _ => 0,
+        ExprNode::Str(v) => Some(v.len() as u64),
+        ExprNode::Array(v) => Some(v.len() as u64),
+        ExprNode::Var(name) => var_len(name),
+        _ => return None,
     }
 }
 
@@ -37,7 +37,7 @@ pub fn contract_mem_len(var: &ast::Expr, var_len: VarLenFn) -> i128 {
 #[derive(Clone, Debug, PartialEq)]
 pub enum VarOrigin {
     /// 長さが分かっている(配列型の変数・引数の型に書かれた長さなど)
-    Len(i128),
+    Len(u64),
     /// 別の変数の値を受け取っている(引数・`b = a`のような代入など)。
     /// その変数の長さをたどる
     Alias(String),
@@ -47,7 +47,7 @@ pub enum VarOrigin {
 ///
 /// 引数や別の変数から受け取った変数(`Alias`)は、元の変数までたどる。
 /// 長さが分からない・たどれない・循環している場合は`None`。
-pub fn resolve_var_len(name: &str, origin: &dyn Fn(&str) -> Option<VarOrigin>) -> Option<i128> {
+pub fn resolve_var_len(name: &str, origin: &dyn Fn(&str) -> Option<VarOrigin>) -> Option<u64> {
     let mut visited: Vec<String> = Vec::new();
     let mut curr = name.to_string();
     loop {
@@ -75,7 +75,7 @@ fn var_origin_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<VarO
     let meta = var_tree.get_var(name).ok()?;
     if let Ok(ref ty) = meta.size.try_into() {
         if let Size::Array { len, .. } = ty {
-            return i128::try_from(*len).ok().map(VarOrigin::Len);
+            return u64::try_from(*len).ok().map(VarOrigin::Len);
         }
     }
     None
@@ -83,7 +83,7 @@ fn var_origin_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<VarO
 
 
 /// 変数の情報(`VarTree`)から、変数名で長さを引く(引数などはたどる)。
-pub fn var_len_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<i128> {
+pub fn var_len_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<u64> {
     resolve_var_len(name, &|n| var_origin_from_tree(n, var_tree))
 }
 
@@ -103,7 +103,7 @@ mod tests {
     }
 
     /// 変数の長さが何も分からない
-    fn no_var(_: &str) -> Option<i128> {
+    fn no_var(_: &str) -> Option<u64> {
         None
     }
 
@@ -118,7 +118,7 @@ mod tests {
 
         // 変数: 長さが分かれば その長さ、分からなければ0
         let var = || ExprNode::Var("a".to_string()).with_span(sp());
-        let known = |name: &str| (name == "a").then_some(5_i128);
+        let known = |name: &str| (name == "a").then_some(5_u64);
         assert_eq!(constant_folding(&len(var()), &known), Some(ValKind::Num(5)));
         assert_eq!(constant_folding(&len(var()), &no_var), Some(ValKind::Num(0)));
     }

@@ -31,6 +31,24 @@ impl MngAsmFmt {
             .replace("{value}", &value.replace("$", ""))
     }
 
+    /// 文字列の長さを入れる静的データ(`M0Len: .quad 11`)を返す。
+    /// 8バイトの型(`DQ`など)は`.quad`、それ以外は`.long`
+    pub(in crate::compiler::asm_gen) fn get_static_len_fmt(
+        &self,
+        len: usize,
+        label: &str,
+        size: &types::Size,
+    ) -> String {
+        let key = if size.to_bytes() >= 8 {
+            "data_quad"
+        } else {
+            "data_long"
+        };
+        self.tmpl_or_default(key)
+            .replace("{name}", label)
+            .replace("{value}", &len.to_string())
+    }
+
     pub(in crate::compiler::asm_gen) fn get_float_fmt(
         &self,
         value: &str,

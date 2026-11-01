@@ -222,6 +222,16 @@ pub enum Inst {
         dst: ValueId,
         value: String,
     },
+    /// 文字列リテラル(`Str`、静的データ`M0`)の長さを入れた静的データ`M0Len`を参照する。
+    /// `"hello world"`なら`M0 "hello world"`と`M0Len 11`が並んで出力される。
+    /// `str_id`は対応する`Str`のid(`M{n}`の`n`が決まる元)で、`len`は`M{n}Len`に入れる値。
+    /// `size`は`M{n}Len`の大きさ(関数の引数の型)
+    StrLen {
+        dst: ValueId,
+        str_id: ValueId,
+        len: usize,
+        size: types::Size,
+    },
     InitArr(Vec<usize>),
     /// 配列にアクセスするノード
     InsertArr {
@@ -300,7 +310,8 @@ impl Inst {
             | Self::Float { size, .. }
             | Self::Mov { size, .. }
             | Self::RefStruct { size, .. }
-            | Self::RefStructPtr { size, .. } => Some(size.clone()),
+            | Self::RefStructPtr { size, .. }
+            | Self::StrLen { size, .. } => Some(size.clone()),
             Self::Param(param) => Some(param.ty.clone()),
             Self::MemoryValue(MemoryInst::Memory { size, .. })
             | Self::MemoryValue(MemoryInst::Member { size, .. }) => Some(size.clone()),
@@ -331,6 +342,7 @@ impl Inst {
             inst::Inst::Float { size, .. } => Some(size.clone()),
             inst::Inst::RefStruct { size, .. } => Some(size.clone()),
             inst::Inst::RefStructPtr { size, .. } => Some(size.clone()),
+            inst::Inst::StrLen { size, .. } => Some(size.clone()),
             inst::Inst::MemoryValue(inst::MemoryInst::Memory { size, .. }) => Some(size.clone()),
             inst::Inst::Mov { size, .. } => Some(size.clone()),
             inst::Inst::Str { value, .. } => Some(types::Size::Pointer {

@@ -599,10 +599,17 @@ impl AsmEmitter {
             | inst::Inst::Cast { .. }
             | inst::Inst::Float { .. }
             | inst::Inst::Str { .. }
+            | inst::Inst::StrLen { .. }
                 if self.unused_var_nodes.contains(&node_idx) => {}
             // `asm_emitter/cast.rs`
             inst::Inst::Cast { src, after } => self.gen_cast_asm(node_idx, *src, after)?,
             inst::Inst::Str { dst, value } => self.gen_str_asm(*dst, value),
+            inst::Inst::StrLen {
+                dst,
+                str_id,
+                len,
+                size,
+            } => self.gen_str_len_asm(*dst, *str_id, *len, size)?,
             inst::Inst::Expr(expr) => self.gen_expr_asm(expr)?,
             inst::Inst::Num { .. } => {}
             inst::Inst::Float { dst, value, size } => self.gen_float_asm(*dst, value, size),
@@ -849,6 +856,33 @@ impl AsmEmitter {
         self.data_sec_text.push_str(&fmt_data);
         self.data_map.push((dst, label_name));
         self.data_idx += 1;
+    }
+
+    /// 文字列`M0`の長さを入れる静的データ`M0Len`を出力する
+    ///
+    /// ```text
+    /// M0:    .ascii "hello world"
+    /// M0Len: .quad 11
+    /// ```
+    /// `dst`のラベルを`M0Len`として登録するので、オペランドは`M0Len(%rip)`になる
+    pub(super) fn gen_str_len_asm(
+        &mut self,
+        dst: usize,
+        str_id: usize,
+        len: usize,
+        size: &types::Size,
+    ) -> Result<(), err::ErrKind> {
+        let str_label = self
+            .static_label(str_id)
+            .ok_or_else(|| err::ErrKind::asm_emit_label_not_found("string", str_id))?;
+        let label_name = format!("{}Len", str_label);
+        // 同じ文字列の長さを何度も渡しても、`M0Len`は1つだけ出力する
+        if !self.data_map.iter().any(|(_, l)| *l == label_name) {
+            let fmt_data = self.asm_fmt.get_static_len_fmt(len, &label_name, size);
+            self.data_sec_text.push_str(&fmt_data);
+        }
+        self.data_map.push((dst, label_name));
+        Ok(())
     }
 
     #[inline(always)]

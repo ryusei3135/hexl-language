@@ -174,7 +174,10 @@ impl AsmEmitter {
                     && self.collect_node_refs(*value, visited, names)
             }
             inst::Inst::Ret(idx) => self.collect_node_refs(*idx, visited, names),
-            inst::Inst::Num { .. } | inst::Inst::Float { .. } | inst::Inst::Str { .. } => true,
+            inst::Inst::Num { .. }
+            | inst::Inst::Float { .. }
+            | inst::Inst::Str { .. }
+            | inst::Inst::StrLen { .. } => true,
             _ => false,
         }
     }
@@ -215,6 +218,7 @@ impl AsmEmitter {
             inst::Inst::Num { .. }
             | inst::Inst::Float { .. }
             | inst::Inst::Str { .. }
+            | inst::Inst::StrLen { .. }
             | inst::Inst::InitArr(_)
             | inst::Inst::Param(_) => return Ok(()),
             _ => false,

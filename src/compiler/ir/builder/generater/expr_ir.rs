@@ -370,6 +370,13 @@ impl IR {
             | ast::ExprNode::LeftDec(..) => {
                 unreachable!("単項演算子は`desugar_unary`で展開されている")
             }
+            ast::ExprNode::GetContractMemLen(val) => {
+                if let Some(ref n) = fold_expr(&*val, &expect_byte, &self.var_tree) {
+                    return self.gen_expr_ir::<M>(n, Some(expect_byte));
+                } else {
+                    panic!("無効な式 {:?}", val);
+                }
+            }
             // `&&` `||` `? :`など、IRの生成が未対応のノード
             other => panic!("この式のIR生成はまだ対応していません: {:?}", other),
         };

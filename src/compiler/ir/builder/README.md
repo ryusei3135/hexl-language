@@ -66,3 +66,14 @@
 - 型が決まっていない即値(`x := 10`)は、使われ方からも決まらなければエラー。
 - `M(val) := value`の`val`は、右辺(`value`)のバリアント型のメンバー`M`の中身の型。`M(val): := value`の`Auto`も同じ扱い。
 - 同じ名前を1つの関数の中で複数回定義している変数は、使われ方からの推論の対象外(右辺からの推論のみ)。
+
+
+## 関数の引数の`data"len"`(`proc_fn_info.rs`の`gen_str_len_arg_ir`)(2026-11-01)
+- 関数を呼ぶとき、引数が`GetContractMemLen`(`data"len"`)で、対象が文字列リテラル(または、文字列リテラルで定義した変更できない変数)なら、
+  長さを即値にせず、静的データ`M{n}Len`を参照する`Inst::StrLen { dst, str_id, len, size }`にする。
+- `str_id`は対応する`Inst::Str`のid。アセンブリ出力では、`M{n}`と`M{n}Len`を並べて出力する。
+  ```
+  M0     "hello world"
+  M0Len  11
+  ```
+- 変数(`mut`)や、長さが静的に分からないものは、従来どおり`GetContractMemLen`の定数畳み込みで処理する。

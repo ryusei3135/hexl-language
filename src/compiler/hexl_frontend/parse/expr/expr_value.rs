@@ -184,26 +184,42 @@ impl Parser {
             lex::Tkn::Str(value) => Expr::new(ExprNode::Str(value), span),
             lex::Tkn::Name(name) => {
                 let var = self.gen_name_node::<false>(name, init_struct)?;
-                match self.current_tkn() {
-                    lex::Tkn::Inc => {
-                        self.advance_tkn();
-                        return Ok(Expr::new(ExprNode::Inc(Box::new(var)), span));
+                // 変数の契約の情報(`data"len"`)。
+                // - 単純な変数: `gen_name_node`は名前を現在のトークンのまま返すので、
+                //   契約の文字列は次のトークン。ここで`"len"`まで進めておく
+                //   (`skiped_tkn`が、その次の`,`や`)`まで進める)
+                // - 呼び出しなど: すでに値の次のトークンまで進んでいるので、現在のトークン
+                let contract = match &var.node {
+                    ExprNode::Var(_) => match self.next_tkn_ref(&[]) {
+                        Ok(lex::Tkn::Str(contract)) => {
+                            self.advance_tkn_checked()?;
+                            Some(contract)
+                        }
+                        _ => None,
+                    },
+                    _ => match self.current_tkn() {
+                        lex::Tkn::Str(contract) => Some(contract.clone()),
+                        _ => None,
+                    },
+                };
+                if let Some(contract) = contract {
+                    // 変数の契約の情報や設定をするもの
+                    match contract.as_str() {
+                        "len" => Expr::new(ExprNode::GetContractMemLen(Box::new(var)), span),
+                        opt => self.this_contract_opt_is_not_found(opt.to_string())?,
                     }
-                    lex::Tkn::Dec => {
-                        self.advance_tkn();
-                        return Ok(Expr::new(ExprNode::Dec(Box::new(var)), span));
+                } else {
+                    match self.current_tkn() {
+                        lex::Tkn::Inc => {
+                            self.advance_tkn();
+                            return Ok(Expr::new(ExprNode::Inc(Box::new(var)), span));
+                        }
+                        lex::Tkn::Dec => {
+                            self.advance_tkn();
+                            return Ok(Expr::new(ExprNode::Dec(Box::new(var)), span));
+                        }
+                        _ => var,
                     }
-                    lex::Tkn::Str(contract) => {
-                        // 変数の契約の情報や設定をするもの
-                        let node = match contract.as_str() {
-                            "len" => Expr::new(ExprNode::GetContractMemLen(Box::new(var)), span),
-                            opt => self.this_contract_opt_is_not_found(opt.to_string())?,
-                        };
-                        self.advance_tkn().unwrap();
-
-                        node
-                    }
-                    _ => var,
                 }
             }
             lex::Tkn::LParen => {
