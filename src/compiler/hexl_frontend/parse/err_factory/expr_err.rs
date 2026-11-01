@@ -237,4 +237,16 @@ impl Parser {
             Rc::clone(&self.file_name)
         )
     }
+
+    pub(in crate::compiler::hexl_frontend::parse) fn this_contract_opt_is_not_found(
+        &self,
+        opt: String,
+    ) -> Result<Expr, err::ErrKind> {
+        crate::err_generated_by!();
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::ThisContractOptIsNotFound(opt),
+            Rc::clone(&self.file_name)
+        )
+    }
 }

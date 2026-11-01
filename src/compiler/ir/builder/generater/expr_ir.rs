@@ -64,7 +64,7 @@ impl IR {
         // 畳み込めない場合(範囲外、0除算、変数を含むなど)は、そのまま下で生成する
         // (`src/optimization/x64/gen_ir/constant_fold.rs`)
         if let Some(folded) =
-            crate::compiler::optimization::x64::gen_ir::constant_fold::fold_expr(&expr, expect_byte)
+            crate::compiler::optimization::x64::gen_ir::constant_fold::fold_expr(&expr, expect_byte, &self.var_tree)
         {
             return self.gen_expr_ir::<M>(&folded, Some(expect_byte));
         }

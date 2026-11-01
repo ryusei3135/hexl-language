@@ -415,6 +415,9 @@ pub enum ExprNode {
         else_idx: Option<Box<Expr>>,
         target: Box<Expr>,
     },
+
+    /// 任意の式や変数の契約したメモリの長さを取得する
+    GetContractMemLen(Box<Expr>),
 }
 
 impl ExprNode {

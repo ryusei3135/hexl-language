@@ -6,10 +6,10 @@ mod emit_tmpl_key;
 mod insert_fmt_reg;
 ///! 関数の中身を生成する関数は`src/gen/call_func.rs`にある
 mod operand_txt;
+mod opt;
 mod set_cc;
 mod ternary;
 mod var_mnger;
-mod opt;
 
 use super::emit_fn_name::emit_fn_name_id;
 use super::*;

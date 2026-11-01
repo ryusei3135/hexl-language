@@ -1,5 +1,5 @@
 use super::*;
-use crate::compiler::ir::types::Size;
+use crate::compiler::ir::{def_tree, types::Size};
 
 /// 定数式の評価結果。
 ///
@@ -35,12 +35,43 @@ impl ValKind {
     }
 }
 
+/// 変数名から、その変数(配列・文字列)の長さを返す関数。
+/// 長さが分からない変数は`None`を返す。
+pub type VarLenFn<'a> = &'a dyn Fn(&str) -> Option<i128>;
+
 /// 式が定数式であれば、その値を返す。
 ///
 /// 評価できない式、型が合わない式、整数オーバーフロー、0除算などの場合は
 /// `None` を返す。通常の式までコンパイルエラーにしないため、ここでは panic しない。
-pub fn constant_folding(expr: &ast::Expr) -> Option<ValKind> {
-    tracking_expr_node(expr)
+pub fn constant_folding(expr: &ast::Expr, var_len: VarLenFn) -> Option<ValKind> {
+    tracking_expr_node(expr, var_len)
+}
+
+/// `GetContractMemLen(var)`の長さを返す。
+///
+/// - 文字列リテラル → 文字列の長さ(バイト数)
+/// - 配列リテラル → 要素数
+/// - 変数 → `var_len`(変数の情報)から引いた長さ
+/// - それ以外・長さが分からない場合 → `0`
+fn contract_mem_len(var: &ast::Expr, var_len: VarLenFn) -> i128 {
+    use ast::ExprNode;
+    match &var.node {
+        ExprNode::Str(v) => v.len() as i128,
+        ExprNode::Array(v) => v.len() as i128,
+        ExprNode::Var(name) => var_len(name).unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// 変数の情報(`VarTree`)から、変数名で配列の長さを引く。
+///
+/// TODO: `VarTree`/`Size::Array`の実際のAPIに合わせてここだけ直す。
+/// (ここ以外は`VarTree`の中身に依存しない)
+fn var_len_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<i128> {
+    match &var_tree.get_var(name)?.size {
+        Size::Array { len, .. } => i128::try_from(*len).ok(),
+        _ => None,
+    }
 }
 
 fn parse_int(value: &str) -> Option<i128> {
@@ -58,12 +89,16 @@ fn parse_float(value: &str) -> Option<f64> {
     }
 }
 
-fn eval_pair<F>(pair: &(Box<ast::Expr>, Box<ast::Expr>), op: F) -> Option<ValKind>
+fn eval_pair<F>(
+    pair: &(Box<ast::Expr>, Box<ast::Expr>),
+    var_len: VarLenFn,
+    op: F,
+) -> Option<ValKind>
 where
     F: FnOnce(ValKind, ValKind) -> Option<ValKind>,
 {
-    let left = tracking_expr_node(&pair.0)?;
-    let right = tracking_expr_node(&pair.1)?;
+    let left = tracking_expr_node(&pair.0, var_len)?;
+    let right = tracking_expr_node(&pair.1, var_len)?;
     op(left, right)
 }
 
@@ -75,15 +110,9 @@ where
 
     let ordering = match (left, right) {
         (ValKind::Num(left), ValKind::Num(right)) => left.cmp(&right),
-        (ValKind::Float(left), ValKind::Float(right)) => {
-            left.partial_cmp(&right)?
-        }
-        (ValKind::Num(left), ValKind::Float(right)) => {
-            (left as f64).partial_cmp(&right)?
-        }
-        (ValKind::Float(left), ValKind::Num(right)) => {
-            left.partial_cmp(&(right as f64))?
-        }
+        (ValKind::Float(left), ValKind::Float(right)) => left.partial_cmp(&right)?,
+        (ValKind::Num(left), ValKind::Float(right)) => (left as f64).partial_cmp(&right)?,
+        (ValKind::Float(left), ValKind::Num(right)) => left.partial_cmp(&(right as f64))?,
         _ => return None,
     };
 
@@ -92,9 +121,9 @@ where
     Some(ValKind::Bool(compare(ordering)))
 }
 
-fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
-    use ast::ExprNode;
+fn tracking_expr_node(expr: &ast::Expr, var_len: VarLenFn) -> Option<ValKind> {
     use ValKind::{Bool, Float, Num};
+    use ast::ExprNode;
 
     match &expr.node {
         ExprNode::Number(value) => Some(Num(parse_int(value)?)),
@@ -102,7 +131,7 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
 
         // 単項演算
         ExprNode::Sign((is_positive, value)) => {
-            let value = tracking_expr_node(value)?;
+            let value = tracking_expr_node(value, var_len)?;
             match value {
                 // `+a`は`a`のまま、`-a`は符号を反転する(`desugar_unary`と同じ)
                 Num(value) => Some(Num(if *is_positive {
@@ -117,25 +146,25 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
         // `~a`は、型の幅(符号付きは-1、符号なしは型の最大値とのxor)で結果が変わる
         // (`desugar_unary`)ので、型の分からないここでは畳み込まない
         ExprNode::Inversion(_) => None,
-        ExprNode::CmpNot(value) => match tracking_expr_node(value)? {
+        ExprNode::CmpNot(value) => match tracking_expr_node(value, var_len)? {
             Bool(value) => Some(Bool(!value)),
             _ => None,
         },
 
         // 算術演算
-        ExprNode::Add(pair) => eval_pair(pair, |left, right| match (left, right) {
+        ExprNode::Add(pair) => eval_pair(pair, var_len, |left, right| match (left, right) {
             (Num(left), Num(right)) => Some(Num(left.checked_add(right)?)),
             (left, right) => Some(Float(left.as_float()? + right.as_float()?)),
         }),
-        ExprNode::Sub(pair) => eval_pair(pair, |left, right| match (left, right) {
+        ExprNode::Sub(pair) => eval_pair(pair, var_len, |left, right| match (left, right) {
             (Num(left), Num(right)) => Some(Num(left.checked_sub(right)?)),
             (left, right) => Some(Float(left.as_float()? - right.as_float()?)),
         }),
-        ExprNode::Mul(pair) => eval_pair(pair, |left, right| match (left, right) {
+        ExprNode::Mul(pair) => eval_pair(pair, var_len, |left, right| match (left, right) {
             (Num(left), Num(right)) => Some(Num(left.checked_mul(right)?)),
             (left, right) => Some(Float(left.as_float()? * right.as_float()?)),
         }),
-        ExprNode::Div(pair) => eval_pair(pair, |left, right| match (left, right) {
+        ExprNode::Div(pair) => eval_pair(pair, var_len, |left, right| match (left, right) {
             (Num(_), Num(0)) => None,
             (Num(left), Num(right)) => Some(Num(left.checked_div(right)?)),
             (left, right) => {
@@ -147,7 +176,7 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
                 }
             }
         }),
-        ExprNode::Surplus(pair) => eval_pair(pair, |left, right| match (left, right) {
+        ExprNode::Surplus(pair) => eval_pair(pair, var_len, |left, right| match (left, right) {
             (Num(_), Num(0)) => None,
             (Num(left), Num(right)) => Some(Num(left.checked_rem(right)?)),
             (left, right) => {
@@ -161,21 +190,21 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
         }),
 
         // ビット演算は整数だけを対象にする。
-        ExprNode::AndCalcul(pair) => eval_pair(pair, |left, right| {
+        ExprNode::AndCalcul(pair) => eval_pair(pair, var_len, |left, right| {
             Some(Num(left.as_num()? & right.as_num()?))
         }),
-        ExprNode::XorCalcul(pair) => eval_pair(pair, |left, right| {
+        ExprNode::XorCalcul(pair) => eval_pair(pair, var_len, |left, right| {
             Some(Num(left.as_num()? ^ right.as_num()?))
         }),
-        ExprNode::OrCalcul(pair) => eval_pair(pair, |left, right| {
+        ExprNode::OrCalcul(pair) => eval_pair(pair, var_len, |left, right| {
             Some(Num(left.as_num()? | right.as_num()?))
         }),
-        ExprNode::LShift(pair) => eval_pair(pair, |left, right| {
+        ExprNode::LShift(pair) => eval_pair(pair, var_len, |left, right| {
             let left = left.as_num()?;
             let shift = u32::try_from(right.as_num()?).ok().filter(|s| *s < 64)?;
             Some(Num(left.checked_shl(shift)?))
         }),
-        ExprNode::RShift(pair) => eval_pair(pair, |left, right| {
+        ExprNode::RShift(pair) => eval_pair(pair, var_len, |left, right| {
             let left = left.as_num()?;
             let shift = u32::try_from(right.as_num()?).ok().filter(|s| *s < 64)?;
             Some(Num(left.checked_shr(shift)?))
@@ -183,36 +212,36 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
 
         // 論理演算。左辺だけで結果が決まる場合は右辺を評価しない。
         ExprNode::CmpAnd(pair) => {
-            let left = tracking_expr_node(&pair.0)?.as_bool()?;
+            let left = tracking_expr_node(&pair.0, var_len)?.as_bool()?;
             if !left {
                 Some(Bool(false))
             } else {
-                Some(Bool(tracking_expr_node(&pair.1)?.as_bool()?))
+                Some(Bool(tracking_expr_node(&pair.1, var_len)?.as_bool()?))
             }
         }
         ExprNode::CmpOr(pair) => {
-            let left = tracking_expr_node(&pair.0)?.as_bool()?;
+            let left = tracking_expr_node(&pair.0, var_len)?.as_bool()?;
             if left {
                 Some(Bool(true))
             } else {
-                Some(Bool(tracking_expr_node(&pair.1)?.as_bool()?))
+                Some(Bool(tracking_expr_node(&pair.1, var_len)?.as_bool()?))
             }
         }
 
         // 比較演算
-        ExprNode::LessThen(pair) => eval_pair(pair, |left, right| {
+        ExprNode::LessThen(pair) => eval_pair(pair, var_len, |left, right| {
             compare_values(left, right, |order| order == std::cmp::Ordering::Less)
         }),
-        ExprNode::LessThenEq(pair) => eval_pair(pair, |left, right| {
+        ExprNode::LessThenEq(pair) => eval_pair(pair, var_len, |left, right| {
             compare_values(left, right, |order| order != std::cmp::Ordering::Greater)
         }),
-        ExprNode::GreaterThen(pair) => eval_pair(pair, |left, right| {
+        ExprNode::GreaterThen(pair) => eval_pair(pair, var_len, |left, right| {
             compare_values(left, right, |order| order == std::cmp::Ordering::Greater)
         }),
-        ExprNode::GreaterThenEq(pair) => eval_pair(pair, |left, right| {
+        ExprNode::GreaterThenEq(pair) => eval_pair(pair, var_len, |left, right| {
             compare_values(left, right, |order| order != std::cmp::Ordering::Less)
         }),
-        ExprNode::Equal(pair) => eval_pair(pair, |left, right| {
+        ExprNode::Equal(pair) => eval_pair(pair, var_len, |left, right| {
             let equal = match (left, right) {
                 (Num(left), Num(right)) => left == right,
                 (Float(left), Float(right)) => left == right,
@@ -223,7 +252,7 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
             };
             Some(Bool(equal))
         }),
-        ExprNode::NotEq(pair) => eval_pair(pair, |left, right| {
+        ExprNode::NotEq(pair) => eval_pair(pair, var_len, |left, right| {
             let equal = match (left, right) {
                 (Num(left), Num(right)) => left == right,
                 (Float(left), Float(right)) => left == right,
@@ -237,12 +266,15 @@ fn tracking_expr_node(expr: &ast::Expr) -> Option<ValKind> {
 
         // 条件式の条件が定数なら、選択された側だけを評価する。
         ExprNode::Ternary((condition, then_expr, else_expr)) => {
-            if tracking_expr_node(condition)?.as_bool()? {
-                tracking_expr_node(then_expr)
+            if tracking_expr_node(condition, var_len)?.as_bool()? {
+                tracking_expr_node(then_expr, var_len)
             } else {
-                tracking_expr_node(else_expr)
+                tracking_expr_node(else_expr, var_len)
             }
         }
+        // `Str`/`Array`のリテラルは要素数、変数は変数の情報から長さを求める。
+        // 長さが分からない場合は`0`
+        ExprNode::GetContractMemLen(var) => Some(Num(contract_mem_len(var, var_len))),
 
         // これらは値を安全に決定できない、または式の評価自体に副作用がある。
         ExprNode::RangeNode(_)
@@ -312,7 +344,17 @@ fn float_literal(value: f64) -> Option<String> {
 /// - `expect`が整数/`bool`/`f64`以外(ポインタ・構造体など)
 ///
 /// 比較・論理演算の結果(`Bool`)は、`1`/`0`の整数にする。
-pub fn fold_expr(expr: &ast::Expr, expect: &Size) -> Option<ast::Expr> {
+pub fn fold_expr(
+    expr: &ast::Expr,
+    expect: &Size,
+    var_tree: &def_tree::VarTree,
+) -> Option<ast::Expr> {
+    fold_expr_with(expr, expect, &|name| var_len_from_tree(name, var_tree))
+}
+
+/// `fold_expr`の本体。変数の長さを引く関数`var_len`を直接受け取る
+/// (`VarTree`を用意せずにテストできる)
+pub fn fold_expr_with(expr: &ast::Expr, expect: &Size, var_len: VarLenFn) -> Option<ast::Expr> {
     use ast::ExprNode;
 
     // リテラルは、そのままIRにできる
@@ -320,7 +362,7 @@ pub fn fold_expr(expr: &ast::Expr, expect: &Size) -> Option<ast::Expr> {
         return None;
     }
 
-    let node = match (constant_folding(expr)?, expect) {
+    let node = match (constant_folding(expr, var_len)?, expect) {
         (ValKind::Bool(value), size) if !size.is_float() => {
             let value = i128::from(value);
             int_fits(value, size).then(|| ExprNode::Number(value.to_string()))?
@@ -341,6 +383,11 @@ mod tests {
     use ast::ExprNode;
     use std::rc::Rc;
 
+    /// 変数の長さが何も分からない
+    fn no_var(_: &str) -> Option<i128> {
+        None
+    }
+
     fn sp() -> Rc<crate::compiler::err::Span> {
         Rc::new(crate::compiler::err::Span::unknown())
     }
@@ -353,30 +400,41 @@ mod tests {
         ExprNode::Float(v.to_string()).with_span(sp())
     }
 
-    fn bin(f: fn((Box<ast::Expr>, Box<ast::Expr>)) -> ExprNode, a: ast::Expr, b: ast::Expr) -> ast::Expr {
+    fn bin(
+        f: fn((Box<ast::Expr>, Box<ast::Expr>)) -> ExprNode,
+        a: ast::Expr,
+        b: ast::Expr,
+    ) -> ast::Expr {
         f(ast::Expr::wrap(a, b)).with_span(sp())
     }
 
     #[test]
     fn folds_nested_arithmetic() {
         // 1 + 2 * 3
-        let e = bin(ExprNode::Add, num("1"), bin(ExprNode::Mul, num("2"), num("3")));
-        assert_eq!(constant_folding(&e), Some(ValKind::Num(7)));
-        let folded = fold_expr(&e, &Size::DD).unwrap();
+        let e = bin(
+            ExprNode::Add,
+            num("1"),
+            bin(ExprNode::Mul, num("2"), num("3")),
+        );
+        assert_eq!(constant_folding(&e, &no_var), Some(ValKind::Num(7)));
+        let folded = fold_expr_with(&e, &Size::DD, &no_var).unwrap();
         assert_eq!(folded.node, ExprNode::Number("7".to_string()));
     }
 
     #[test]
     fn unary_plus_is_identity() {
-        let e = ExprNode::Sign((true, Box::new(ExprNode::Sign((false, Box::new(num("5")))).with_span(sp()))))
-            .with_span(sp());
-        assert_eq!(constant_folding(&e), Some(ValKind::Num(-5)));
+        let e = ExprNode::Sign((
+            true,
+            Box::new(ExprNode::Sign((false, Box::new(num("5")))).with_span(sp())),
+        ))
+        .with_span(sp());
+        assert_eq!(constant_folding(&e, &no_var), Some(ValKind::Num(-5)));
     }
 
     #[test]
     fn comparison_becomes_0_or_1() {
         let e = bin(ExprNode::LessThen, num("1"), num("2"));
-        let folded = fold_expr(&e, &Size::DD).unwrap();
+        let folded = fold_expr_with(&e, &Size::DD, &no_var).unwrap();
         assert_eq!(folded.node, ExprNode::Number("1".to_string()));
     }
 
@@ -384,31 +442,51 @@ mod tests {
     fn does_not_fold_out_of_range_or_div_zero() {
         // int(i32)に収まらない
         let big = bin(ExprNode::Add, num("2147483647"), num("1"));
-        assert!(fold_expr(&big, &Size::DD).is_none());
-        assert!(fold_expr(&big, &Size::DQ).is_some());
+        assert!(fold_expr_with(&big, &Size::DD, &no_var).is_none());
+        assert!(fold_expr_with(&big, &Size::DQ, &no_var).is_some());
         // 符号なしに負の値
         let neg = bin(ExprNode::Sub, num("1"), num("2"));
-        assert!(fold_expr(&neg, &Size::UDD).is_none());
+        assert!(fold_expr_with(&neg, &Size::UDD, &no_var).is_none());
         // 0除算
         let div0 = bin(ExprNode::Div, num("1"), num("0"));
-        assert!(fold_expr(&div0, &Size::DD).is_none());
+        assert!(fold_expr_with(&div0, &Size::DD, &no_var).is_none());
     }
 
     #[test]
     fn float_only_into_f64() {
         let e = bin(ExprNode::Add, flt("1.5"), flt("2.0"));
         assert_eq!(
-            fold_expr(&e, &Size::F64).unwrap().node,
+            fold_expr_with(&e, &Size::F64, &no_var).unwrap().node,
             ExprNode::Float("3.5".to_string())
         );
-        assert!(fold_expr(&e, &Size::F32).is_none());
-        assert!(fold_expr(&e, &Size::DD).is_none());
+        assert!(fold_expr_with(&e, &Size::F32, &no_var).is_none());
+        assert!(fold_expr_with(&e, &Size::DD, &no_var).is_none());
     }
 
     #[test]
     fn literal_and_variable_are_left_alone() {
-        assert!(fold_expr(&num("1"), &Size::DD).is_none());
-        let v = bin(ExprNode::Add, ExprNode::Var("a".to_string()).with_span(sp()), num("1"));
-        assert!(fold_expr(&v, &Size::DD).is_none());
+        assert!(fold_expr_with(&num("1"), &Size::DD, &no_var).is_none());
+        let v = bin(
+            ExprNode::Add,
+            ExprNode::Var("a".to_string()).with_span(sp()),
+            num("1"),
+        );
+        assert!(fold_expr_with(&v, &Size::DD, &no_var).is_none());
+    }
+
+    #[test]
+    fn contract_mem_len_of_literals_and_vars() {
+        let arr = ExprNode::Array(vec![num("1"), num("2"), num("3")]).with_span(sp());
+        let len = |e: ast::Expr| ExprNode::GetContractMemLen(Box::new(e)).with_span(sp());
+        assert_eq!(constant_folding(&len(arr), &no_var), Some(ValKind::Num(3)));
+
+        let s = ExprNode::Str("abcd".to_string()).with_span(sp());
+        assert_eq!(constant_folding(&len(s), &no_var), Some(ValKind::Num(4)));
+
+        // 変数: 長さが分かれば その長さ、分からなければ0
+        let var = || ExprNode::Var("a".to_string()).with_span(sp());
+        let known = |name: &str| (name == "a").then_some(5_i128);
+        assert_eq!(constant_folding(&len(var()), &known), Some(ValKind::Num(5)));
+        assert_eq!(constant_folding(&len(var()), &no_var), Some(ValKind::Num(0)));
     }
 }

@@ -26,8 +26,8 @@ use compiler::{Lexer, Parser, asm_gen, ast, err, ir};
 
 use std::{error::Error, fs, process, sync::Mutex};
 
-use crate::compiler::{err::Span, stmt_node::StmtNode::Continue};
 use crate::compiler::asm_gen::OptMode;
+use crate::compiler::{err::Span, stmt_node::StmtNode::Continue};
 
 // ---------------------------------------------------------------------------
 // コマンドラインオプション

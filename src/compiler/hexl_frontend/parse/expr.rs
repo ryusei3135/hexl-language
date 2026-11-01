@@ -17,7 +17,7 @@ pub(in crate::compiler::hexl_frontend::parse) mod range;
 mod value_api;
 /// `cond`の条件式の中だけで使える`M(val) := value`
 mod variant_bind;
-use crate::compiler::hexl_frontend::lex;
+use crate::compiler::{err::syntax_err, hexl_frontend::lex};
 
 impl Parser {
     pub(in crate::compiler::hexl_frontend::parse) fn expr_define_var(
@@ -522,9 +522,18 @@ impl Parser {
                         self.advance_tkn();
                         return Ok(Expr::new(ExprNode::Dec(Box::new(var)), span));
                     }
-                    _ => {}
+                    lex::Tkn::Str(contract) => {
+                        // 変数の契約の情報や設定をするもの
+                        let node = match contract.as_str() {
+                            "len" => Expr::new(ExprNode::GetContractMemLen(Box::new(var)), span),
+                            opt => self.this_contract_opt_is_not_found(opt.to_string())?,
+                        };
+                        self.advance_tkn().unwrap();
+
+                        Ok(node)
+                    }
+                    _ => var,
                 }
-                var
             }
             lex::Tkn::LParen => {
                 // キャスト: `(T)var` -> `Cast((T, Box(var)))`

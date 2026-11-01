@@ -21,7 +21,7 @@
 //!   置き換えず通常の乗算に任せる(`Ok(None)`)。
 
 use super::*;
-use crate::compiler::optimization::x64::asm_gen::mul_strength::{plan_mul, MulPlan};
+use crate::compiler::optimization::x64::asm_gen::mul_strength::{MulPlan, plan_mul};
 
 impl AsmEmitter {
     /// `expr`(`*`)の片方が整数の定数なら、`(もう片方のid, 定数)`を返す。

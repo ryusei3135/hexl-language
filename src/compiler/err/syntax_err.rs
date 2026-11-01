@@ -67,6 +67,7 @@ pub enum SyntaxErrKind {
     UnexpectTknInStmt {
         found: lex::Tkn,
     },
+    ThisContractOptIsNotFound(String),
     /// ある種類のトークン(名前・数字・記号など)が期待されていた
     /// 場所に、それとは異なるトークンが出現した(汎用)
     ///
