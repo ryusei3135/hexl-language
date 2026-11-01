@@ -18,7 +18,7 @@ use self::cond::{CondFrame, cond_else, cond_endif, is_active};
 use self::define::read_multiline_define;
 use self::include::is_kept_directive;
 use super::comment::strip_comments;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// `#define NAME VALUE` の右辺として実際に登録される値。
 /// 今後 `define` 以外のプリプロセッサ命令が増える前提のため、
@@ -65,6 +65,13 @@ pub(in crate::compiler::hexl_frontend::lex) struct Preprocessor {
     /// (書かれたとおりの名前。読み込みや展開はせず、名前を保存するだけ。
     /// `Lexer`が`take_c_files`で受け取り、`include_c_file_list`に入れる)
     c_files: Vec<String>,
+    /// `#include`先の`#define`を集めている間(`include.rs`の`collect_defines`)は`true`。
+    /// この間は、定義の登録と`#if`の判定だけを行い、`#NAME`の展開はしない
+    /// (出力は捨てるので、展開すると未定義のマクロで`panic`するだけになる)
+    collect_only: bool,
+    /// `#define`を集め終えた(集めている途中の)`#include`先のファイルのパス。
+    /// 同じファイルを2回読まない(入れ子・循環した`#include`で止まらなくならないようにする)
+    collected_files: HashSet<String>,
 }
 
 impl Preprocessor {
@@ -72,6 +79,8 @@ impl Preprocessor {
         Self {
             tables: HashMap::new(),
             c_files: Vec::new(),
+            collect_only: false,
+            collected_files: HashSet::new(),
         }
     }
 
@@ -247,7 +256,9 @@ impl Preprocessor {
                     // (`next`は、展開で読み飛ばした分を進めた後の位置)
                     let mut next = j;
                     if is_active(&cond_stack) {
-                        if is_kept_directive(&name) {
+                        if self.collect_only {
+                            // `#include`先の`#define`を集めている間は、展開しない
+                        } else if is_kept_directive(&name) {
                             // `#asm(...)` は構文として残し、後段のパーサーが
                             // 直接解釈する。ここで未定義マクロ扱いにしてはならない。
                             output.push('#');

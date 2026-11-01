@@ -396,6 +396,32 @@ fn is_define_header(head: &str) -> bool {
     }
 }
 
+/// `NAME {arg, ..}` / `NAME (arg, ..)`(名前と括弧の間に空白がある見出し)を、
+/// 空白を除いた`NAME{arg, ..}` / `NAME(arg, ..)`にする。
+///
+/// 複数行の定義(`{{ .. }}`)の見出しだけで使う。`{{`が続かない
+/// `#define A {1}` / `#define A (1)`は、従来どおり値のマクロ。
+/// 括弧の中が識別子のカンマ区切りでない場合(`#define A {x + 1} {{`など)は`None`
+/// (=値のマクロの見出しではない)。
+fn join_spaced_params(header: &str) -> Option<String> {
+    let name_end = header.find(|c: char| !is_name_char(c))?;
+    if name_end == 0 {
+        return None;
+    }
+    let (name, rest) = header.split_at(name_end);
+    let rest = rest.trim_start();
+    let inner = match (rest.chars().next()?, rest.chars().last()?) {
+        ('{', '}') | ('(', ')') if rest.len() >= 2 => &rest[1..rest.len() - 1],
+        _ => return None,
+    };
+    let valid = inner.trim().is_empty()
+        || inner
+            .split(',')
+            .map(str::trim)
+            .all(|p| !p.is_empty() && p.chars().all(is_name_char));
+    valid.then(|| format!("{}{}", name, rest))
+}
+
 /// `#define NAME {{ BODY }}` / `#define NAME(args..) {{ BODY }}` /
 /// `#define NAME{args..} {{ BODY }}` を読む。
 ///
@@ -412,10 +438,15 @@ pub(super) fn read_multiline_define(
 ) -> Option<(String, usize)> {
     let head: String = chars[head_start..line_end].iter().collect();
     let open = head.find("{{")?;
-    let header = head[..open].trim();
-    if !is_define_header(header) {
-        return None;
-    }
+    let raw_header = head[..open].trim();
+    // `#define main {body} {{`のように、名前と`{args}`の間に空白があっても、
+    // 後ろに`{{`が続くときは関数形式マクロの見出しとして読む
+    let spaced = if is_define_header(raw_header) {
+        None
+    } else {
+        Some(join_spaced_params(raw_header)?)
+    };
+    let header = spaced.as_deref().unwrap_or(raw_header);
 
     let body_start = head_start + head[..open].chars().count() + 2;
     let mut close = body_start;
@@ -436,4 +467,39 @@ pub(super) fn read_multiline_define(
         end += 1;
     }
     Some((format!("{} {}", header, body.trim()), end))
+}
+
+#[cfg(test)]
+mod spaced_header_tests {
+    use super::*;
+
+    fn read(src: &str) -> Option<(String, usize)> {
+        let chars: Vec<char> = src.chars().collect();
+        // `#define`の直後(`src`の先頭)から、1行目の末尾まで
+        let line_end = chars.iter().position(|c| *c == '\n').unwrap_or(chars.len());
+        read_multiline_define(&chars, 0, line_end)
+    }
+
+    #[test]
+    fn spaced_brace_header_is_fn_macro() {
+        let (text, _) = read(" main {body} {{\n_start() {\n    body\n}\n}}").unwrap();
+        assert_eq!(text, "main{body} _start() {\n    body\n}");
+        let (_, kind) = sort_preproc("define", &text).unwrap();
+        assert!(matches!(kind, PreprocKind::DefineFn { brace: true, .. }));
+    }
+
+    #[test]
+    fn spaced_paren_and_empty_params() {
+        assert_eq!(read(" F (a, b) {{ a b }}").unwrap().0, "F(a, b) a b");
+        assert_eq!(read(" G {} {{ 1 }}").unwrap().0, "G{} 1");
+    }
+
+    #[test]
+    fn non_param_braces_stay_value_macro() {
+        // `{x + 1}`は仮引数ではないので、複数行の定義の見出しにしない
+        assert!(read(" A {x + 1} {{ 1 }}").is_none());
+        // 従来の書き方
+        assert_eq!(read(" A {{ 1 }}").unwrap().0, "A 1");
+        assert_eq!(read(" M{a} {{ a }}").unwrap().0, "M{a} a");
+    }
 }

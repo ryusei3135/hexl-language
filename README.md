@@ -47,11 +47,11 @@ c言語を書きたいけどメモリの管理がめんどくさい
 ./a.out
 
 // src
-#include io="library/os/io.hexl"
-_start(): int {
+#include std::"/os/io.hexl"
+#include std::"os/lib.hexl"
+#main{
     msg: byte* = "hello world\n"
-    io::print_line(msg, 12)
-    io::exit()
+    io::print_line(msg, msg"len")
 }
 ```
 - これで実行ファイルが作成可能

@@ -65,7 +65,9 @@ ret #A + 1      // ret 10 + 1
     ```
 - 本体は`{{`と**最初の`}}`**の間。本体の前後の空白・改行は取り除き、途中の改行とインデントはそのまま残す。
     `{{ 1 }}`のように1行で書いてもよい(本体は`1`)。
-- `{{`は名前(または`NAME(args..)`)と同じ行に書く。`}}`の後ろには、同じ行に何も書けない。
+- `{{`は名前(または`NAME(args..)`)と同じ行に書く。
+    名前と括弧の間に空白があっても、後ろに`{{`が続けば関数形式マクロになる(`#define main {body} {{`は`#define main{body} {{`と同じ。2026-11-01)。
+    括弧の中が識別子のカンマ区切りでないとき(`#define A {x + 1} {{`)や、`{{`が続かない1行の定義(`#define A {1}`)は、値のマクロのまま。`}}`の後ろには、同じ行に何も書けない。
 - 本体の中に`}}`を書きたいときは、`} }`のように空白を入れる(`{ loop { x }}`のような入れ子の`}}`で
     閉じてしまうため)。文字列リテラルの中の`}}`も閉じる印として扱う。
 - `}}`で閉じていない、`}}`の後ろに文字がある場合は`panic`する。
@@ -106,7 +108,15 @@ ret #A + 1      // ret 10 + 1
   `#include`を書いたファイルの場所ではない。入れ子の`#include`の中でも`ROOT/dir/file`になる
   (`hexl_frontend/include_root.rs`。`Lexer::set_source_file`が最も外側のファイルで設定する)。
 - 取り込んだファイルのうち、**`pub`が付いた関数だけ**が使える。`pub`の無い関数は見えない。
-- 取り込んだファイルの`#define`は、取り込んだ側には引き継がれない(別ファイルとして処理するため)。
+- 取り込んだファイルの`#define`は、`#include`の位置で集めて取り込んだ側に登録する(2026-11-01)。
+    - 対象は`.hexl`の`#include`(`"file"` / `"file"::func` / `"file"::*` / `Name="file"` / `std::"file"`)。
+    - コードは展開しない(後段が別ファイルとして処理する)。ここでは`#define`の登録と、そのために必要な
+        `#if` / `#elif` / `#else` / `#endif`の判定だけを行い、`#NAME`の展開はしない。
+    - 入れ子の`#include`も辿る。同じファイルは1回しか読まない(循環しても止まる)。
+    - `#include`より後ろで、`#NAME`として使える。同名は先に定義した方が残る(`#include`より前の定義が優先される)。
+    - 無効な`#if`の枝の中の`#include`は読まない。ファイルが読めなくても何もしない(エラーは後段が出す)。
+    - 集めた`#define`は、`#include`した側のファイルだけでなく、同じ`Lexer`で続けて処理するソースにも残る。
+    - 取り込んだファイル自身は、後段が別の`Lexer`で処理するので、そちらの`#define`は互いに独立している。
 - 無効な`#if`の枝の中の`#include`は処理しない(`.c` / `.h`の名前も保存しない)。
 - ファイルが無い場合は、IR側が`panic`する。
 - `.c` / `.h`だけは、従来どおりプリプロセッサが名前を保存する(`take_c_files`)。
@@ -124,6 +134,7 @@ ret #A + 1      // ret 10 + 1
 | | 展開(実引数→置き換え→再展開) | `Preprocessor::expand_fn_macro` / `expand_inline` / `expand_call` |
 | | `#define`行の登録・無効な枝の読み飛ばし | `Preprocessor::define_directive` |
 | `preprocessor/include.rs` | `#include "file.c"`の判定と名前の保存 | `plain_include_path` / `Preprocessor::include_directive` |
+| | `#include`先の`#define`を集める | `Preprocessor::collect_defines` / `include_target` |
 | | `#asm` / `#include`を展開せず残す判定 | `is_kept_directive` |
 | `preprocessor/cond.rs` | `#if` / `#elif` / `#else` / `#endif` | `cond_if` / `cond_elif` / `cond_else` / `cond_endif` / `is_active` |
 | `preprocessor/line.rs` | `#line`(行番号への置き換え) | `line_text` |

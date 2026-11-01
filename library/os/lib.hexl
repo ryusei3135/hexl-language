@@ -1,0 +1,7 @@
+
+#define main {body} {{
+_start() {
+    body
+    io::exit()
+}
+}}
