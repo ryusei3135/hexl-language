@@ -156,6 +156,7 @@ impl fmt::Display for SyntaxErrKind {
                 write!(f, "`{:?}`の後に`{}`は指定できません", context, found)
             }
             Self::GenericsNotSupportedYet => write!(f, "`ジェネリクス`はまだ実装されていません"),
+            Self::ThisContractOptIsNotFound(name) => write!(f,"この契約のオプションはありません -> {}", name),
         }
     }
 }
@@ -403,6 +404,7 @@ impl SyntaxErrKind {
             Self::MissingEqualsAfterMust { .. } => "E0216",
             Self::MissingIdentAfterOf { .. } => "E0217",
             Self::GenericsNotSupportedYet => "E0218",
+            Self::ThisContractOptIsNotFound(..) => "E0219",
             Self::Cond(kind) => kind.code(),
         }
     }

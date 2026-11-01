@@ -1,5 +1,6 @@
 use super::*;
 use crate::compiler::ir::{def_tree, types::Size};
+use super::tracking_contract_len::{VarLenFn, contract_mem_len, var_len_from_tree};
 
 /// 定数式の評価結果。
 ///
@@ -35,58 +36,12 @@ impl ValKind {
     }
 }
 
-/// 変数名から、その変数(配列・文字列)の長さを返す関数。
-/// 長さが分からない変数は`None`を返す。
-pub type VarLenFn<'a> = &'a dyn Fn(&str) -> Option<i128>;
-
 /// 式が定数式であれば、その値を返す。
 ///
 /// 評価できない式、型が合わない式、整数オーバーフロー、0除算などの場合は
 /// `None` を返す。通常の式までコンパイルエラーにしないため、ここでは panic しない。
 pub fn constant_folding(expr: &ast::Expr, var_len: VarLenFn) -> Option<ValKind> {
     tracking_expr_node(expr, var_len)
-}
-
-/// `GetContractMemLen(var)`の長さを返す。
-///
-/// - 文字列リテラル → 文字列の長さ(バイト数)
-/// - 配列リテラル → 要素数
-/// - 変数 → `var_len`(変数の情報)から引いた長さ
-/// - それ以外・長さが分からない場合 → `0`
-fn contract_mem_len(var: &ast::Expr, var_len: VarLenFn) -> i128 {
-    use ast::ExprNode;
-    match &var.node {
-        ExprNode::Str(v) => v.len() as i128,
-        ExprNode::Array(v) => v.len() as i128,
-        ExprNode::Var(name) => var_len(name).unwrap_or(0),
-        _ => 0,
-    }
-}
-
-/// 変数の情報(`VarTree`)から、変数名で配列の長さを引く。
-///
-/// TODO: `VarTree`/`Size::Array`の実際のAPIに合わせてここだけ直す。
-/// (ここ以外は`VarTree`の中身に依存しない)
-fn var_len_from_tree(name: &str, var_tree: &def_tree::VarTree) -> Option<i128> {
-    match &var_tree.get_var(name)?.size {
-        Size::Array { len, .. } => i128::try_from(*len).ok(),
-        _ => None,
-    }
-}
-
-fn parse_int(value: &str) -> Option<i128> {
-    let value = value.replace('_', "");
-    value.parse::<i128>().ok()
-}
-
-fn parse_float(value: &str) -> Option<f64> {
-    let value = value.replace('_', "");
-    let parsed = value.parse::<f64>().ok()?;
-    if parsed.is_finite() {
-        Some(parsed)
-    } else {
-        None
-    }
 }
 
 fn eval_pair<F>(
@@ -126,8 +81,8 @@ fn tracking_expr_node(expr: &ast::Expr, var_len: VarLenFn) -> Option<ValKind> {
     use ast::ExprNode;
 
     match &expr.node {
-        ExprNode::Number(value) => Some(Num(parse_int(value)?)),
-        ExprNode::Float(value) => Some(Float(parse_float(value)?)),
+        ExprNode::Number(value) => Some(Num(value.parse::<i128>().unwrap())),
+        ExprNode::Float(value) => Some(Float(value.parse::<f64>().unwrap())),
 
         // 単項演算
         ExprNode::Sign((is_positive, value)) => {
@@ -472,21 +427,5 @@ mod tests {
             num("1"),
         );
         assert!(fold_expr_with(&v, &Size::DD, &no_var).is_none());
-    }
-
-    #[test]
-    fn contract_mem_len_of_literals_and_vars() {
-        let arr = ExprNode::Array(vec![num("1"), num("2"), num("3")]).with_span(sp());
-        let len = |e: ast::Expr| ExprNode::GetContractMemLen(Box::new(e)).with_span(sp());
-        assert_eq!(constant_folding(&len(arr), &no_var), Some(ValKind::Num(3)));
-
-        let s = ExprNode::Str("abcd".to_string()).with_span(sp());
-        assert_eq!(constant_folding(&len(s), &no_var), Some(ValKind::Num(4)));
-
-        // 変数: 長さが分かれば その長さ、分からなければ0
-        let var = || ExprNode::Var("a".to_string()).with_span(sp());
-        let known = |name: &str| (name == "a").then_some(5_i128);
-        assert_eq!(constant_folding(&len(var()), &known), Some(ValKind::Num(5)));
-        assert_eq!(constant_folding(&len(var()), &no_var), Some(ValKind::Num(0)));
     }
 }

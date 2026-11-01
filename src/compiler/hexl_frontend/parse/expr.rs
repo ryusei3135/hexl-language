@@ -530,7 +530,7 @@ impl Parser {
                         };
                         self.advance_tkn().unwrap();
 
-                        Ok(node)
+                        node
                     }
                     _ => var,
                 }

@@ -145,6 +145,20 @@ impl VarTree {
     }
 
     #[inline(always)]
+    pub(in crate::compiler) fn get_var(&self, name: &str) -> Result<VarMetaData, err::ErrKind> {
+        self.hash
+            .get(name)
+            .ok_or_else(
+                || crate::GenUndefErrResult!(
+                    UndefVar,
+                    "none var".to_string(),
+                    Some(name.to_owned())
+                )
+            )
+            .cloned()
+    }
+
+    #[inline(always)]
     pub(in crate::compiler::ir) fn is_mut(&self, name: &str) -> parse::VarMutAttr {
         self.hash
             .get(name)

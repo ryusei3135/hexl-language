@@ -7,7 +7,6 @@ use std::rc::Rc;
 
 use super::*;
 use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
-use crate::compiler::ir::checker::constract::branch::Exits;
 use crate::err::{self, Span};
 
 impl IR {

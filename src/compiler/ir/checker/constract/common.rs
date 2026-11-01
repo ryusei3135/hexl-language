@@ -3,7 +3,6 @@
 
 use super::*;
 use crate::compiler::{
-    ExprNode::Number,
     ast::{Expr, ExprNode, Group2Node, StmtNode},
 };
 
@@ -284,6 +283,7 @@ impl IR {
             ExprNode::Number(..) | ExprNode::Float(..) | ExprNode::Var(..) | ExprNode::Str(..) => {
                 Ok(())
             }
+            ExprNode::GetContractMemLen(var) => Ok(())
         }
     }
 
