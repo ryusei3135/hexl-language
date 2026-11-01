@@ -69,7 +69,7 @@
 ### `asm_emitter.rs`
 - `extract_operand_text`(ノードのオペランドの文字列を返す)
     - 関数呼び出しのノード → `call_result_operand`(未生成なら`emit_call_func`で生成し、戻り値のレジスタ`%eax`などを返す)
-    - 式などの計算結果のノード → `expr_result_operand`(`last_inst_idx`のレジスタを、式自身の型のサイズで返す)
+    - 式などの計算結果のノード → `expr_result_operand`(`last_inst_idx`のレジスタ、または退避先のスタックを返す)
 - `format_line`(1行の命令を作る)は、`src1`の種類で振り分ける
     - バリアント → `format_variant_init_line`
     - 構造体 → `format_struct_init_line`

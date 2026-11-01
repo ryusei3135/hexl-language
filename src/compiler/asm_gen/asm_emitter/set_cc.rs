@@ -71,7 +71,7 @@ impl AsmEmitter {
 
         // 結果を置くレジスタ。`ls`/`rs`のレジスタとは別のものになる
         // (それらは、この命令が終わるまで解放しない)
-        let dst = self.alloc_reg(&Size::DD).unwrap();
+        let dst = self.alloc_reg(&Size::DD)?.unwrap();
         self.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
         let dst8 = self.get_reg_txt(Some(dst.index()), &Size::DB)?;
@@ -79,15 +79,21 @@ impl AsmEmitter {
 
         let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
         let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
+        let both_memory = self.check_node_is_mem_val(expr.ls).is_some()
+            && self.check_node_is_mem_val(expr.rs).is_some();
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
             || self.check_node_is_mem_val(expr.rs).is_some();
 
         let mut output = String::new();
         // `cmp`の比較される側(`src1`)は即値にできないので、結果のレジスタへ移す
-        // (`setcc`で上書きするので、そのレジスタは一時的に使える)
+        // メモリ同士も比較できないため、その場合も結果のレジスタを一時的に使う
         if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
             let reg_txt = self.get_reg_txt(Some(dst.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &src1, &size, false));
+            src1 = reg_txt;
+        } else if both_memory {
+            let reg_txt = self.get_reg_txt(Some(dst.index()), &size)?;
+            output.push_str(&self.mov_line(&reg_txt, &src1, &size, true));
             src1 = reg_txt;
         }
 

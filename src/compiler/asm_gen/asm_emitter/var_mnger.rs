@@ -118,6 +118,77 @@ impl AsmEmitter {
         offset
     }
 
+    /// 式の結果または変数を保持しているレジスタをスタックへ退避する
+    pub(in crate::compiler::asm_gen) fn spill_reg_to_stack(
+        &mut self,
+        reg: RegisterMode,
+    ) -> Result<bool, err::ErrKind> {
+        let var_names: Vec<String> = self
+            .var_hash_map
+            .iter()
+            .filter(|(name, var)| {
+                !self.dead_vars.contains(name.as_str())
+                    && !var.is_stack
+                    && !var.in_mem
+                    && var.reg == reg
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        let expr_ids: Vec<usize> = self
+            .last_inst_idx
+            .iter()
+            .filter(|(_, result_reg)| *result_reg == reg)
+            .map(|(id, _)| *id)
+            .collect();
+        if var_names.is_empty() && expr_ids.is_empty() {
+            if self.spilled_regs.remove(&reg).is_some() {
+                self.used_reg.release(&reg);
+                return Ok(true);
+            }
+            return Ok(false);
+        }
+
+        if self.spilled_regs.contains_key(&reg) && !expr_ids.is_empty() {
+            return Ok(false);
+        }
+        let spilled_offset = self.spilled_regs.remove(&reg);
+        let offset = match spilled_offset {
+            Some(offset) => offset,
+            None => {
+                let offset = self.alloc_var_slot();
+                let slot = self.rbp_ref(offset);
+                let store = match reg {
+                    RegisterMode::Normal(_) => {
+                        self.mov_line(&slot, &self.reg64(&reg)?, &Size::DQ, true)
+                    }
+                    RegisterMode::Float(_) => {
+                        let size = self.float_reg_size(reg);
+                        let opcode = Self::float_move_opcode(&size);
+                        self.asm_fmt
+                            .get_opcode_tmpl(opcode)
+                            .replace("{src1}", &self.reg_mode_operand(reg, &size)?)
+                            .replace("{dst}", &slot)
+                    }
+                };
+                self.asm_text.push_str(&store);
+                offset
+            }
+        };
+
+        for name in var_names {
+            let var = self.var_info_mut(&name);
+            var.reg = RegisterMode::Normal(VarIndexInfo::NO_REG);
+            var.offset = offset;
+            var.is_stack = true;
+        }
+        for id in expr_ids {
+            self.last_inst_idx.retain(|(node_id, _)| *node_id != id);
+            self.spilled_expr_results.push((id, offset));
+        }
+        self.used_reg.release(&reg);
+        Ok(true)
+    }
+
     /// レジスタが足りない変数が、スタックに置かれているスカラー(整数・浮動小数点・
     /// ポインタ)か(構造体の変数は含まない)
     pub(in crate::compiler::asm_gen) fn is_spilled_scalar(&self, name: &str) -> bool {

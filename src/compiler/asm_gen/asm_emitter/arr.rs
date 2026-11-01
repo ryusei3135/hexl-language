@@ -85,8 +85,9 @@ impl AsmEmitter {
         } = self.arr_ref_base(name)?;
 
         // 添字を、添字用のレジスタへ読み込む
-        let RegisterMode::Normal(reg_num) =
-            self.alloc_reg(&Size::DQ).unwrap_or(RegisterMode::Normal(0))
+        let RegisterMode::Normal(reg_num) = self
+            .try_alloc_reg(&Size::DQ)
+            .unwrap_or(RegisterMode::Normal(0))
         else {
             return Err(err::ErrKind::asm_emit_reg_not_normal(
                 "配列の添字用のレジスタ",

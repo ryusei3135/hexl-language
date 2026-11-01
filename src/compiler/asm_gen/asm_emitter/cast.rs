@@ -47,26 +47,39 @@ impl AsmEmitter {
         after: &Size,
     ) -> Result<(), err::ErrKind> {
         let before = self.get_expr_ty(src);
-        // 変換元の値のオペランド(レジスタ/メモリ/即値)
-        let operand = self.extract_operand_text(src, None)?;
-        let is_imm = matches!(self.inst_at(src), inst::Inst::Num { .. });
-        let is_mem = self.check_node_is_mem_val(src).is_some();
-
-        // 結果を置くレジスタ。変換の途中で使う一時レジスタと被らないよう、先に使用中にする
-        let dst = self.alloc_reg(after).unwrap();
+        let dst = self.alloc_reg(after)?.unwrap();
         self.used_reg.mark_used(&dst);
         self.reg_idx = dst.index();
+
+        let is_imm = matches!(self.inst_at(src), inst::Inst::Num { .. });
+        let tmp = if !before.is_float()
+            && after.is_float()
+            && (is_imm || before.to_bytes() < 4 || (before.to_bytes() == 4 && before.is_unsigned()))
+        {
+            let tmp = self.alloc_reg(&Size::DQ)?.unwrap();
+            self.used_reg.mark_used(&tmp);
+            Some(tmp)
+        } else {
+            None
+        };
+
+        // 変換元の値のオペランド(レジスタ/メモリ/即値)
+        let operand = self.extract_operand_text(src, None)?;
+        let is_mem = self.check_node_is_mem_val(src).is_some();
 
         let asm = match (before.is_float(), after.is_float()) {
             (false, false) => {
                 self.cast_int_to_int(&operand, &before, after, dst, is_imm, is_mem)?
             }
-            (false, true) => self.cast_int_to_float(&operand, &before, after, dst, is_imm)?,
+            (false, true) => self.cast_int_to_float(&operand, &before, after, dst, tmp, is_imm)?,
             (true, false) => self.cast_float_to_int(&operand, &before, after, dst)?,
             (true, true) => self.cast_float_to_float(&operand, &before, after, dst)?,
         };
         self.asm_text.push_str(&asm);
 
+        if let Some(tmp) = tmp {
+            self.used_reg.release(&tmp);
+        }
         self.last_inst_idx.push((node_idx, dst));
         // キャスト元が式の一時的な結果なら、使い終わったので解放する
         self.release_expr_temp(src);
@@ -123,6 +136,7 @@ impl AsmEmitter {
         before: &Size,
         after: &Size,
         dst: RegisterMode,
+        tmp: Option<RegisterMode>,
         is_imm: bool,
     ) -> Result<String, err::ErrKind> {
         let bytes = before.to_bytes();
@@ -135,7 +149,7 @@ impl AsmEmitter {
 
         let mut asm = String::new();
         let src_txt = if need_tmp {
-            let tmp = self.alloc_reg(&Size::DQ).unwrap();
+            let tmp = tmp.expect("変換用レジスタが確保されていません");
             let tmp32 = self.asm_fmt.get_fmt_reg(tmp.index(), &Size::DD)?;
             if is_imm {
                 // 即値: 32bitまでは`movl`、64bitは`movq`で置く

@@ -119,6 +119,8 @@
 ## レジスタが足りない変数のスタック配置(2026-10-23)
 - 変数を定義するとき(`call_func/mem_ir.rs`の`bind_var_reg`)、割り当て済みのレジスタも
     空きレジスタ(`try_alloc_reg`)も無ければ、変数をスタックへ置く(以前は`alloc_reg`がpanicしていた)。
+- 式の結果を置くレジスタ(`alloc_reg`)が足りない場合は、生きている値をスタックへ退避してレジスタを再利用する。
+    退避した式の結果は`spilled_expr_results`でオフセットを管理し、後続のオペランドとしてスタックから参照する。
 - `define_spilled_var`(`asm_emitter/var_mnger.rs`)が、8byteの領域を`stk_use_counter`から確保し、
     初期値を書き込んで、`VarIndexInfo::new_stack(offset, size, dst)`で変数として登録する。
     以降の参照は`var_operand`が`-N(%rbp)`のメモリ参照にする。

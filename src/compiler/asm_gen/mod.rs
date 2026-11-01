@@ -96,6 +96,8 @@ pub struct AsmEmitter {
     // (親のid, 変数の名前)
     pub(in crate::compiler::asm_gen) data_map: Vec<(usize, String)>,
     pub(in crate::compiler::asm_gen) last_inst_idx: Vec<(usize, RegisterMode)>,
+    /// スタックへ退避した式の結果ノード -> `%rbp`からのオフセット
+    pub(in crate::compiler::asm_gen) spilled_expr_results: Vec<(usize, usize)>,
     pub(in crate::compiler::asm_gen) var_hash_map: HashMap<String, asm_emitter::VarIndexInfo>,
     // 現在使用中のレジスタを管理する
     pub(in crate::compiler::asm_gen) used_reg: reg_mnger::UsedRegManager,

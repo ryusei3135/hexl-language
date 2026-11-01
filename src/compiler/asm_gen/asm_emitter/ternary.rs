@@ -78,21 +78,32 @@ impl AsmEmitter {
         let size = Self::value_reg_size(&ls_ty);
         let wrap_size = size.wrap_dst_size();
 
+        let needs_tmp = matches!(self.inst_at(expr.ls), inst::Inst::Num { .. })
+            || (self.check_node_is_mem_val(expr.ls).is_some()
+                && self.check_node_is_mem_val(expr.rs).is_some());
+        let tmp = if needs_tmp {
+            let reg = self.alloc_reg(&size)?.unwrap();
+            self.used_reg.mark_used(&reg);
+            Some(reg)
+        } else {
+            None
+        };
         let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
         let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
             || self.check_node_is_mem_val(expr.rs).is_some();
 
         let mut output = String::new();
-        // `cmp`の比較される側(`src1`)は即値にできないので、一時レジスタへ移す
-        let mut tmp: Option<RegisterMode> = None;
-        if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
-            let reg = self.alloc_reg(&size).unwrap();
-            self.used_reg.mark_used(&reg);
+        // `cmp`の比較される側(`src1`)は即値にできず、メモリ同士も比較できない
+        if let Some(reg) = tmp {
             let reg_txt = self.get_reg_txt(Some(reg.index()), &size)?;
-            output.push_str(&self.mov_line(&reg_txt, &src1, &size, false));
+            output.push_str(&self.mov_line(
+                &reg_txt,
+                &src1,
+                &size,
+                self.check_node_is_mem_val(expr.ls).is_some(),
+            ));
             src1 = reg_txt;
-            tmp = Some(reg);
         }
 
         let cmp = self
@@ -139,34 +150,33 @@ impl AsmEmitter {
 
         // 結果を置くレジスタ。左辺・右辺のレジスタとは別のものになる
         // (それらは、この命令が終わるまで解放しない)
-        let dst = self.alloc_reg(&size).unwrap();
+        let dst = self.alloc_reg(&size)?.unwrap();
         self.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
         let dst_txt = self.get_reg_txt(Some(dst.index()), &size)?;
 
-        // 8bitの値のレジスタは、32bitのレジスタ名にそろえる
-        let left = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
-        let right = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
-        let left = self.asm_fmt.resize_reg_operand(&left, &size)?;
-        let right = self.asm_fmt.resize_reg_operand(&right, &size)?;
-
-        let mut output = String::new();
-        // `cmov`の元は即値にできないので、左辺が即値なら一時レジスタへ移す
-        // (`mov`はフラグを変えない)
-        let mut tmp: Option<RegisterMode> = None;
-        let left = if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
-            let reg = self.alloc_reg(&size).unwrap();
+        let tmp = if matches!(self.inst_at(expr.ls), inst::Inst::Num { .. }) {
+            let reg = self.alloc_reg(&size)?.unwrap();
             self.used_reg.mark_used(&reg);
+            Some(reg)
+        } else {
+            None
+        };
+        // 8bitの値のレジスタは、32bitのレジスタ名にそろえる
+        let right = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
+        let left = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
+        let mut output = String::new();
+        // 偽のときの値(右辺)を先に入れ、必要なら即値の左辺を一時レジスタへ移す
+        // (`mov`はフラグを変えない)
+        output.push_str(&self.mov_line(&dst_txt, &right, &size, false));
+        let left = self.asm_fmt.resize_reg_operand(&left, &size)?;
+        let left = if let Some(reg) = tmp {
             let reg_txt = self.get_reg_txt(Some(reg.index()), &size)?;
             output.push_str(&self.mov_line(&reg_txt, &left, &size, false));
-            tmp = Some(reg);
             reg_txt
         } else {
             left
         };
-
-        // 偽のときの値(右辺)を先に入れておき、真のときだけ左辺で上書きする
-        output.push_str(&self.mov_line(&dst_txt, &right, &size, false));
 
         // `<` `>` `<=` `>=`は、どちらかのオペランドが符号なしなら符号なしの比較(`cmovb`など)
         let is_unsigned_cmp = matches!(

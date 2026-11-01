@@ -362,6 +362,20 @@ impl UsedRegManager {
         self.pending.contains(&reg)
     }
 
+    /// 未定義変数のために予約したレジスタを1つ解放する
+    pub(in crate::compiler::asm_gen) fn release_pending_reg(&mut self, float: bool) -> bool {
+        let Some(index) = self
+            .pending
+            .iter()
+            .position(|reg| matches!(reg, RegisterMode::Float(_)) == float)
+        else {
+            return false;
+        };
+        let reg = self.pending.remove(index);
+        self.allocated.retain(|_, allocated| *allocated != reg);
+        true
+    }
+
     /// 変数`name`を定義し、レジスタ`reg`に置いたことを記録する
     /// (割り当てたレジスタなら、取り置きをやめて使用中として扱う)
     pub(in crate::compiler::asm_gen) fn bind_var(&mut self, name: &str, reg: &RegisterMode) {
@@ -482,19 +496,43 @@ impl UsedRegManager {
 }
 
 impl AsmEmitter {
-    /// 式の結果や変数を置く、空いているレジスタを1つ確保して返す。
+    /// 式の結果や変数を置くレジスタを確保して返す。
     ///
     /// 以前は`self.reg_idx`を単純にインクリメントしていたため、
     /// 引数が入っているレジスタ(`%rdi`/`%rsi`など)や、他の変数が
     /// 使っているレジスタまで上書きしていた。ここでは
     /// - 使用中(引数・変数・まだ使う式の結果)のレジスタ
     /// - `RESERVED_REGS`(`%rax`/`%rdx`)
-    /// を避けて、最も小さい番号の空きレジスタを返す。
+    /// を避けて最も小さい番号の空きレジスタを返す。空きが無い場合は
+    /// 生きている値をスタックへ退避して、そのレジスタを再利用する。
     ///
     /// 返したレジスタを使用中にするのは呼び出し側の責任
     /// (`mark_used`を呼ぶ)。
-    pub(in crate::compiler::asm_gen) fn alloc_reg(&self, size: &Size) -> Option<RegisterMode> {
-        self.try_alloc_reg(size)
+    pub(in crate::compiler::asm_gen) fn alloc_reg(
+        &mut self,
+        size: &Size,
+    ) -> Result<Option<RegisterMode>, err::ErrKind> {
+        if let Some(reg) = self.try_alloc_reg(size) {
+            return Ok(Some(reg));
+        }
+
+        let wants_float = size.is_float();
+        let candidates = self.used_reg.used_regs();
+        for reg in candidates {
+            if matches!(reg, RegisterMode::Float(_)) != wants_float {
+                continue;
+            }
+            if self.spill_reg_to_stack(reg)? {
+                if let Some(free_reg) = self.try_alloc_reg(size) {
+                    return Ok(Some(free_reg));
+                }
+            }
+        }
+
+        if self.used_reg.release_pending_reg(wants_float) {
+            return Ok(self.try_alloc_reg(size));
+        }
+        Ok(None)
     }
 
     /// [`alloc_reg`](Self::alloc_reg)と同じ条件で空きレジスタを探し、

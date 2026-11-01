@@ -122,6 +122,7 @@ impl AsmEmitter {
         let curr_inst = mem::take(&mut self.curr_inst);
         let data_map = mem::take(&mut self.data_map);
         let last_inst_idx = mem::take(&mut self.last_inst_idx);
+        let spilled_expr_results = mem::take(&mut self.spilled_expr_results);
         let scope_outer_vars = mem::take(&mut self.scope_outer_vars);
         let emitted_calls = mem::take(&mut self.emitted_calls);
         let unused_var_nodes = mem::take(&mut self.unused_var_nodes);
@@ -148,6 +149,7 @@ impl AsmEmitter {
         self.curr_inst = curr_inst;
         self.data_map = data_map;
         self.last_inst_idx = last_inst_idx;
+        self.spilled_expr_results = spilled_expr_results;
         self.scope_outer_vars = scope_outer_vars;
         self.emitted_calls = emitted_calls;
         self.unused_var_nodes = unused_var_nodes;
@@ -940,7 +942,7 @@ impl AsmEmitter {
         // 結果を置くレジスタを、使用中のレジスタ(引数・変数・他の式の
         // 結果)と`%rax`/`%rdx`を避けて確保する。
         let size = self.expr_operand_size(expr);
-        let dst = self.alloc_reg(&size).unwrap();
+        let dst = self.alloc_reg(&size)?.unwrap();
         self.reg_idx = dst.index();
 
         let asm = self.format_expr_inst(&expr, Some(size))?;
