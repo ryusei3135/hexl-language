@@ -35,6 +35,8 @@ impl IR {
     /// - 引数の型が`of`なのに、渡された値が`must`でない -> エラー
     /// - 渡された値が`must`なのに、引数の型が`of`でない -> エラー
     /// - `must`の渡し先が呼び出し先と一致しない -> エラー
+    /// - 引数の型が`RefContract`なら、契約を移さずに借りる(`check_ref_contract_arg`)
+    /// - 借りている契約(`RefContract`の値)は、`of`や`must`の引数へ渡せない -> エラー
     pub(in crate::compiler::ir) fn check_constract_arg(
         &mut self,
         fn_name: &str,
@@ -43,6 +45,21 @@ impl IR {
         arg: &Expr,
     ) -> Result<(), err::ErrKind> {
         let arg_ty = self.expr_ty_node(arg);
+
+        // 契約を借りる引数: 契約は移動しない
+        if param.ty.is_ref_contract() {
+            return self.check_ref_contract_arg(fn_name, param, arg, &arg_ty);
+        }
+        // 借りているだけの契約は、呼び出し先でも終了できない
+        // (終了する`of`の引数にも、契約を引き取る`must`の引数にも渡せない)
+        if matches!(&arg_ty, ExprTy::Known(ty) if ty.is_ref_contract())
+            && (param.ty.is_contract_of() || param.ty.is_contract_must())
+        {
+            let var_name = Self::contract_var_name(arg).unwrap_or(&param.name);
+            return def_tree::VarTree::ref_contract_cannot_end(var_name, Rc::clone(&arg.span))
+                .map_err(|err| err.with_span(Rc::clone(&self.current_span)));
+        }
+
         // 型を確定できなかった式は、通常の値として扱わない。
         // `of`の引数には「`must`の値だ」と確認できた式しか渡せないので、
         // 確認できない式は`must`ではない値と同じエラーにする
@@ -103,6 +120,79 @@ impl IR {
                 .map_err(|err| err.with_span(Rc::clone(&self.current_span)))
             }
             (None, None) => Ok(()),
+        }
+    }
+
+    /// 契約を借りる(`RefContract`)引数1つ分のチェック
+    ///
+    /// 契約は移動しないので、渡した変数の契約は終了済みにならない
+    /// (呼び出し元が、これまでどおり自分で終了する)
+    ///
+    /// - 渡す値が契約を持っていない(`must`でも`RefContract`でもない) -> エラー
+    /// - 契約名が、引数の型の契約名と一致しない -> エラー
+    /// - 渡す変数の契約がすでに終了している -> エラー
+    fn check_ref_contract_arg(
+        &mut self,
+        fn_name: &str,
+        param: &ArgsNode,
+        arg: &Expr,
+        arg_ty: &ExprTy,
+    ) -> Result<(), err::ErrKind> {
+        // 引数の型の契約名(`int ref must=c`の`c`)。指定が無ければ、どの契約でも借りられる
+        let expected = param
+            .ty
+            .as_ref_contract()
+            .and_then(|inner| inner.as_contract_must())
+            .and_then(|must| must.must_name());
+
+        // 渡す値の契約名。型を確定できなかった式は、契約を持つとは認めない
+        // (`of`の引数と同じ扱い)
+        let held = match arg_ty {
+            ExprTy::Known(ty) => ty.held_contract_name(),
+            ExprTy::Plain | ExprTy::Unresolved => None,
+        };
+        let Some(held) = held else {
+            return CompileErr::constract_of_requires_must(
+                &fn_name,
+                &param.name,
+                ConstractTy::name_or_anon(expected.map(|v| v.as_str())),
+                Rc::clone(&arg.span),
+            )
+            .map_err(|err| err.with_span(Rc::clone(&self.current_span)));
+        };
+
+        if let (Some(held_name), Some(expected_name)) = (held, expected) {
+            if held_name != expected_name {
+                return CompileErr::constract_name_mismatch(
+                    &fn_name,
+                    &param.name,
+                    ConstractTy::name_or_anon(Some(held_name.as_str())),
+                    &expected_name.as_str(),
+                    Rc::clone(&arg.span),
+                )
+                .map_err(|err| err.with_span(Rc::clone(&self.current_span)));
+            }
+        }
+
+        // すでに終了した契約は借りられない。終了は記録しない(移動ではないので)
+        if let Some(var_name) = Self::contract_var_name(arg) {
+            self.var_tree
+                .ensure_contract_alive(var_name, Rc::clone(&arg.span))
+                .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
+        }
+        Ok(())
+    }
+
+    /// 契約を持つ値を渡す変数の名前(`&x` / `*x`のように包まれていても中身を辿る)
+    ///
+    /// `arg_var_name`と違い、`&x`も辿る(契約は移さず、変数の状態を調べるためだけに使う)
+    fn contract_var_name(arg: &Expr) -> Option<&String> {
+        match &arg.node {
+            ExprNode::Var(name) => Some(name),
+            ExprNode::ConnectAddr(target) | ExprNode::GetAddress(target) => {
+                Self::contract_var_name(target)
+            }
+            _ => None,
         }
     }
 
@@ -269,6 +359,16 @@ impl IR {
                 must_vars
                     .borrow_mut()
                     .push(MustVar::new(param.name.clone(), &func.span));
+            });
+        // 契約を借りた引数(`RefContract`)は、終了する義務が無い代わりに、
+        // この関数の中で終了することもできない(`del`などをエラーにするための印)
+        func.params
+            .iter()
+            .filter(|param| param.ty.is_ref_contract())
+            .for_each(|param| {
+                must_vars
+                    .borrow_mut()
+                    .push(MustVar::borrowed(param.name.clone(), &func.span));
             });
 
         self.walk_group2_nodes(&func.body, &must_vars, &func.name, false)?;

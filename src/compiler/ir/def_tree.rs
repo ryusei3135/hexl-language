@@ -132,6 +132,8 @@ impl VarTree {
                 TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => {
                     ty.unwrap_ty().get_ty_str_name()
                 }
+                // 契約を借りた型(`RefContract`)も、内側の型の名前を返す
+                TyNode::RefContract(_) => var.size.get_ty_str_name(),
                 t => panic!("{:?}", t),
             };
             Ok(r)
@@ -206,6 +208,41 @@ impl VarTree {
                 Some(var_name.to_owned())
             ))
         }
+    }
+
+    /// 契約を借りる(`RefContract`)引数へ渡す変数の契約が、まだ終了していないことを確認する
+    ///
+    /// 終了済みの契約は、借りることもできない(二重に終了するのと同じ扱い)。
+    /// 契約を持たない変数・契約を借りているだけの変数は、検査の対象外
+    pub(in crate::compiler::ir) fn ensure_contract_alive(
+        &self,
+        var_name: &str,
+        span: Rc<Span>,
+    ) -> Result<(), err::ErrKind> {
+        match self.hash.get(var_name) {
+            Some(var) if var.size.is_contract_must() && var.life == VarLife::EndConstract => {
+                crate::GenCompileErr!(
+                    VariableConstractExpired,
+                    format!("{var_name} 終了済みの契約は借りられません"),
+                    span
+                )
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// 契約を借りているだけ(`RefContract`)の変数の契約を、終了しようとしたときのエラー
+    ///
+    /// (専用のエラー種別を`CompileErrKind`へ足したら、ここだけ差し替えればよい)
+    pub(in crate::compiler::ir) fn ref_contract_cannot_end(
+        var_name: &str,
+        span: Rc<Span>,
+    ) -> Result<(), err::ErrKind> {
+        crate::GenCompileErr!(
+            VariableConstractExpired,
+            format!("{var_name} 借りている契約(RefContract)は、呼び出し先では終了できません"),
+            span
+        )
     }
 
     /// 全変数の契約の状態(`life`)を記録する(条件分岐の前に呼ぶ)

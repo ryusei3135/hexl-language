@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use super::*;
-use crate::compiler::ast::{Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
+use crate::compiler::ast::{CallInfo, Expr, ExprNode, Group2Node, StmtNode, stmt_node::MatchArm};
 use crate::err::{self, Span};
 
 impl IR {
@@ -145,12 +145,17 @@ impl IR {
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
             // (引数の中にも反復処理や分岐があり得るので、引数も同じ走査で辿る)
             ExprNode::CallFunc(call_info) => {
-                for arg in call_info.args.iter() {
-                    if let Some(name) = Self::arg_var_name(arg) {
-                        Self::mark_used(name, scope);
-                    }
-                    self.scan_loop_expr(fn_name, arg, scope)?;
-                }
+                self.scan_loop_call(fn_name, call_info, None, scope)?;
+            }
+            // `S::f(..)`: 呼び出し先は`S`のメゾット
+            ExprNode::Scope { scope: path, target }
+                if matches!(target.node, ExprNode::CallFunc(..)) =>
+            {
+                let ExprNode::CallFunc(call_info) = &target.node else {
+                    unreachable!()
+                };
+                let module = path.last().map(|name| name.as_str());
+                self.scan_loop_call(fn_name, call_info, module, scope)?;
             }
             // `a.del()`: `must`のフィールドを持つ構造体の契約を終了するメゾット
             ExprNode::Member {
@@ -167,6 +172,29 @@ impl IR {
             _ => Self::try_for_each_child(expr, &mut |child| {
                 self.scan_loop_expr(fn_name, child, scope)
             })?,
+        }
+        Ok(())
+    }
+
+    /// 関数の呼び出し1つ分を走査する
+    ///
+    /// 契約を借りる型(`RefContract`)の引数へ渡した変数は、契約が移動しないので
+    /// 終了済みにしない(`common.rs`の`walk_call`と同じ)
+    fn scan_loop_call(
+        &mut self,
+        fn_name: &str,
+        call_info: &CallInfo,
+        module: Option<&str>,
+        scope: &MustVarsTy,
+    ) -> Result<(), err::ErrKind> {
+        let borrows = self.ref_contract_arg_flags(call_info, module);
+        for (index, arg) in call_info.args.iter().enumerate() {
+            if !borrows[index] {
+                if let Some(name) = Self::arg_var_name(arg) {
+                    Self::mark_used(name, scope);
+                }
+            }
+            self.scan_loop_expr(fn_name, arg, scope)?;
         }
         Ok(())
     }

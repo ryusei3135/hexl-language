@@ -2,9 +2,7 @@
 //! (`must`の変数の追跡状態と、式を辿る処理)
 
 use super::*;
-use crate::compiler::{
-    ast::{Expr, ExprNode, Group2Node, StmtNode},
-};
+use crate::compiler::ast::{ArgsNode, CallInfo, Expr, ExprNode, Group2Node, StmtNode};
 
 /// 契約を持つ変数の一覧(共有して、あとから状態を書き換える)
 pub(super) type MustVarsTy = Rc<RefCell<Vec<MustVar>>>;
@@ -23,6 +21,11 @@ pub(super) struct MustVar {
     /// 名前の検索でこの要素に当たった変数は契約の対象ではないので、
     /// 外側の契約変数の状態を変えない。検査やエラーの対象にもならない
     pub(super) tracked: bool,
+    /// 契約を借りているだけ(`RefContract`の引数)の変数の印。
+    /// `tracked`は`false`なので、終了する義務は無い。
+    /// この変数の契約を終了しようとする(`del`など)とエラーにするために、
+    /// 名前の検索でこの要素に当たったかを調べる
+    pub(super) borrowed: bool,
     pub(super) span: Rc<Span>,
 }
 
@@ -33,7 +36,17 @@ impl MustVar {
             used: false,
             branch_mismatch: false,
             tracked: true,
+            borrowed: false,
             span: Rc::clone(&span),
+        }
+    }
+
+    /// 契約を借りているだけの変数(`RefContract`の引数)を表す要素
+    /// (`mask`と同じく検査やエラーの対象にならず、外側の変数の状態も変えない)
+    pub(super) fn borrowed(name: String, span: &Rc<Span>) -> Self {
+        Self {
+            borrowed: true,
+            ..Self::mask(name, span)
         }
     }
 
@@ -152,22 +165,24 @@ impl IR {
             }
             // 関数の呼び出し: 引数に渡された`must`の変数を消費済みにする
             ExprNode::CallFunc(call_info) => {
-                let mut ends: Vec<String> = Vec::new();
-                for arg in call_info.args.iter() {
-                    if let Some(name) = Self::arg_var_name(arg) {
-                        if Self::mark_used(name, must_vars) {
-                            Self::push_ends(&mut ends, vec![name.clone()]);
-                        }
-                    }
-                    let found = self.walk_expr(arg, must_vars, fn_name, in_loop)?;
-                    Self::push_ends(&mut ends, found);
-                }
-                Ok(ends)
+                self.walk_call(call_info, None, must_vars, fn_name, in_loop)
+            }
+            // `S::f(..)`: 呼び出し先は`S`のメゾット
+            ExprNode::Scope { scope, target } if matches!(target.node, ExprNode::CallFunc(..)) => {
+                let ExprNode::CallFunc(call_info) = &target.node else {
+                    unreachable!()
+                };
+                let module = scope.last().map(|name| name.as_str());
+                self.walk_call(call_info, module, must_vars, fn_name, in_loop)
             }
             // `a.del()`: `must`のフィールドを持つ構造体の契約を、このスコープで終了する
             ExprNode::Member { scope, target } if Self::is_contract_end_call(target) => {
                 let mut ends: Vec<String> = Vec::new();
                 if let Some(name) = scope.last() {
+                    // 契約を借りているだけ(`RefContract`の引数)なら、終了できない
+                    if Self::is_borrowed(name, must_vars) {
+                        def_tree::VarTree::ref_contract_cannot_end(name, Rc::clone(&expr.span))?;
+                    }
                     if Self::mark_used(name, must_vars) {
                         Self::push_ends(&mut ends, vec![name.clone()]);
                     }
@@ -190,6 +205,96 @@ impl IR {
                 Ok(ends)
             }
         }
+    }
+
+    /// 関数の呼び出し1つ分を辿る。引数に渡された`must`の変数を、終了済みにする
+    ///
+    /// 渡し先の仮引数が契約を借りる型(`RefContract`)なら、契約は移動しないので
+    /// 終了済みにしない(`module`は`S::f(..)`の`S`)
+    fn walk_call(
+        &mut self,
+        call_info: &CallInfo,
+        module: Option<&str>,
+        must_vars: &MustVarsTy,
+        fn_name: &str,
+        in_loop: bool,
+    ) -> Result<Vec<String>, err::ErrKind> {
+        let borrows = self.ref_contract_arg_flags(call_info, module);
+        let mut ends: Vec<String> = Vec::new();
+        for (index, arg) in call_info.args.iter().enumerate() {
+            if !borrows[index] {
+                if let Some(name) = Self::arg_var_name(arg) {
+                    if Self::mark_used(name, must_vars) {
+                        Self::push_ends(&mut ends, vec![name.clone()]);
+                    }
+                }
+            }
+            let found = self.walk_expr(arg, must_vars, fn_name, in_loop)?;
+            Self::push_ends(&mut ends, found);
+        }
+        Ok(ends)
+    }
+
+    /// 呼び出し先の仮引数(見つからなければ`None`)
+    fn callee_params(&self, call_info: &CallInfo, module: Option<&str>) -> Option<Vec<ArgsNode>> {
+        self.func_tree
+            .get_with_temp(&call_info.name, module, &call_info.temp_ty)
+            .map(|def| def.args)
+            .or_else(|| {
+                self.extern_func_tree
+                    .iter()
+                    .find(|v| v.name.as_str() == call_info.name.as_str() && v.module() == module)
+                    .map(|def| def.gen_fn_def(0).args)
+            })
+    }
+
+    /// 呼び出しの引数ごとに、渡し先の仮引数が契約を借りる型(`RefContract`)か
+    ///
+    /// 呼び出し先が見つからないときは、すべて`false`(契約を譲渡する扱い)。
+    /// 契約を借りる引数へ渡しても契約は移動しないので、呼び出し元の変数は
+    /// 終了済みにならない。
+    ///
+    /// 注意: `a.f(..)`のように、変数の型からでないと呼び出し先が決まらない
+    /// メゾット呼び出しは、この時点(IR生成の前)では解決できない
+    pub(super) fn ref_contract_arg_flags(
+        &self,
+        call_info: &CallInfo,
+        module: Option<&str>,
+    ) -> Vec<bool> {
+        let Some(params) = self.callee_params(call_info, module) else {
+            return vec![false; call_info.args.len()];
+        };
+        // `S::new(..)`のように、第一引数が`S*`のメゾットは、`self`の領域が
+        // 暗黙に先頭へ足される(`builder/scope.rs`の`scope_node`と同じ条件)
+        let offset = match (module, params.first()) {
+            (Some(module), Some(first))
+                if matches!(
+                    &first.ty,
+                    TyNode::Pointer { ty_name, .. }
+                        if matches!(&**ty_name, TyNode::Ty(name) if name == module)
+                ) =>
+            {
+                1
+            }
+            _ => 0,
+        };
+        (0..call_info.args.len())
+            .map(|index| {
+                params
+                    .get(index + offset)
+                    .is_some_and(|param| param.ty.is_ref_contract())
+            })
+            .collect()
+    }
+
+    /// 最も内側の同名の要素が、契約を借りているだけの変数か
+    pub(super) fn is_borrowed(name: &str, must_vars: &MustVarsTy) -> bool {
+        must_vars
+            .borrow()
+            .iter()
+            .rev()
+            .find(|var| var.name == name)
+            .is_some_and(|var| var.borrowed)
     }
 
     /// `&Box<Expr>`などを`&Expr`にそろえる(関数の引数での型強制を使う)

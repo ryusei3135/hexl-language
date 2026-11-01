@@ -69,6 +69,8 @@ impl TryFrom<&TyNode> for Size {
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
             TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => ty.unwrap_ty().try_into()?,
+            // 契約を借りる型(`RefContract`)も、サイズは内側の型と同じ
+            TyNode::RefContract(inner) => inner.as_ref().try_into()?,
             t => panic!("{:?}", t),
         };
         Ok(size_ty)
@@ -107,6 +109,8 @@ impl TryFrom<TyNode> for Size {
             // 契約(`must`/`of`)はコンパイル時にだけ意味を持つ情報なので、
             // サイズとしては内側の型と全く同じものとして扱う
             TyNode::ConstractMust(ty) | TyNode::ConstractOf(ty) => ty.unwrap_ty().try_into()?,
+            // 契約を借りる型(`RefContract`)も、サイズは内側の型と同じ
+            TyNode::RefContract(inner) => (*inner).try_into()?,
             t => panic!("{:?}", t),
         };
         Ok(size_ty)
@@ -337,7 +341,7 @@ impl IR {
             TyNode::Stack { name, .. } | TyNode::Static { name, .. } => {
                 self.ty_base_is_variant(name)
             }
-            TyNode::RefTy(inner) => self.ty_base_is_variant(inner),
+            TyNode::RefTy(inner) | TyNode::RefContract(inner) => self.ty_base_is_variant(inner),
             TyNode::ConstractMust(inner) | TyNode::ConstractOf(inner) => {
                 self.ty_base_is_variant(&inner.unwrap_ty())
             }
@@ -427,7 +431,7 @@ impl IR {
                     size
                 }
             }
-            TyNode::RefTy(inner) => self.size_of(inner),
+            TyNode::RefTy(inner) | TyNode::RefContract(inner) => self.size_of(inner),
             // `Self`はIRへ変換する前に、実際の構造体の型
             // (`TyNode::Ty`)やポインタ型へ解決されている必要がある
             TyNode::SelfTy(name) => self.size_of(&TyNode::Ty(name.to_string())),
@@ -532,7 +536,9 @@ impl IR {
                 let elem = self.byte_size_of_inner(name, visiting)?;
                 Ok(if *len >= 1 { elem * len } else { elem })
             }
-            TyNode::RefTy(inner) => self.byte_size_of_inner(inner, visiting),
+            TyNode::RefTy(inner) | TyNode::RefContract(inner) => {
+                self.byte_size_of_inner(inner, visiting)
+            }
             TyNode::SelfTy(name) => {
                 self.byte_size_of_inner(&TyNode::Ty(name.to_string()), visiting)
             }

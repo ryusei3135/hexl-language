@@ -59,7 +59,9 @@ impl IR {
         match ty {
             ast::TyNode::SelfTy(..) => true,
             ast::TyNode::Pointer { ty_name, .. } => Self::ty_contains_self(ty_name),
-            ast::TyNode::RefTy(inner) => Self::ty_contains_self(inner),
+            ast::TyNode::RefTy(inner) | ast::TyNode::RefContract(inner) => {
+                Self::ty_contains_self(inner)
+            }
             _ => false,
         }
     }
@@ -92,6 +94,13 @@ impl IR {
             ast::TyNode::RefTy(inner) => {
                 if Self::ty_contains_self(inner) {
                     ast::TyNode::RefTy(Box::new(Self::resolve_self_like_ty(inner)))
+                } else {
+                    ty.clone()
+                }
+            }
+            ast::TyNode::RefContract(inner) => {
+                if Self::ty_contains_self(inner) {
+                    ast::TyNode::RefContract(Box::new(Self::resolve_self_like_ty(inner)))
                 } else {
                     ty.clone()
                 }

@@ -8,6 +8,11 @@ impl Parser {
     /// ```
     #[inline(always)]
     fn ty_constract_must(&mut self, base_ty: TyNode) -> Result<TyNode, err::ErrKind> {
+        if self.current_tkn() == &lex::Tkn::LAngleBracket {
+            let n = TyNode::RefContract(Box::new(self.ty_constract_must(base_ty)?));
+            self.advance_tkn().unwrap();
+            return Ok(n);
+        }
         if self.current_tkn() != &lex::Tkn::KeyWordMust {
             return crate::err_at!(self.expected_at_current("must"));
         }
@@ -64,7 +69,7 @@ impl Parser {
         ty: TyNode,
     ) -> Result<TyNode, err::ErrKind> {
         let ty = match self.current_tkn() {
-            lex::Tkn::KeyWordMust => self.ty_constract_must(ty)?,
+            lex::Tkn::KeyWordMust | lex::Tkn::LBracket => self.ty_constract_must(ty)?,
             lex::Tkn::KeyWordOf => self.ty_constract_of(ty)?,
             _ => return Ok(ty),
         };
@@ -78,7 +83,7 @@ impl Parser {
         base_ty: TyNode,
     ) -> Result<TyNode, err::ErrKind> {
         match self.next_tkn_ref(&[])? {
-            lex::Tkn::KeyWordMust => {
+            lex::Tkn::KeyWordMust | lex::Tkn::LBracket => {
                 self.advance_tkn_checked()?;
                 self.ty_constract_must(base_ty)
             }

@@ -257,6 +257,11 @@ pub enum TyNode {
         len: usize,
     },
 
+    /// 契約を借りる型(関数の引数の型として使う)
+    /// - 呼び出し元: 契約は移動しない(渡した変数の契約は、呼び出し元が引き続き終了する)
+    /// - 呼び出し先: 契約を終了できない(`of`の引数や`must`の引数へ渡したり、`del`したりできない)
+    /// - 内側の型が`ConstractMust`なら、その契約名の`must`の値だけを受け取る
+    RefContract(Box<TyNode>),
     ConstractMust(ConstractTy),
     ConstractOf(ConstractTy),
 }
@@ -279,6 +284,7 @@ impl TyNode {
                 range: *range,
             },
             Self::RefTy(t) => Self::RefTy(Box::new(t.expand_alias(lookup))),
+            Self::RefContract(t) => Self::RefContract(Box::new(t.expand_alias(lookup))),
             Self::Stack { name, len } => Self::Stack {
                 name: Box::new(name.expand_alias(lookup)),
                 len: *len,
@@ -305,7 +311,7 @@ impl TyNode {
         match self {
             Self::Ty(name) => name.to_string(),
             Self::SelfTy(name) => name.to_string(),
-            Self::RefTy(t) => t.get_ty_str_name(),
+            Self::RefTy(t) | Self::RefContract(t) => t.get_ty_str_name(),
             Self::Stack { name, .. } => name.get_ty_str_name(),
             Self::Static { name, .. } => name.get_ty_str_name(),
             Self::Pointer { ty_name, .. } => ty_name.get_ty_str_name(),
@@ -328,6 +334,31 @@ impl TyNode {
     pub fn as_contract_of(&self) -> Option<&ConstractTy> {
         match self {
             Self::ConstractOf(ty) => Some(ty),
+            _ => None,
+        }
+    }
+
+    /// 契約を借りる型(`RefContract`)なら、その内側の型を返す
+    #[inline(always)]
+    pub fn as_ref_contract(&self) -> Option<&TyNode> {
+        match self {
+            Self::RefContract(inner) => Some(inner.as_ref()),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_ref_contract(&self) -> bool {
+        self.as_ref_contract().is_some()
+    }
+
+    /// 契約を持っている(所有している`must`、または借りている`RefContract`)型なら、
+    /// その契約名を`Some`で返す(無名の契約・契約名の指定が無い`RefContract`は`Some(None)`)。
+    /// 契約を持たない型は`None`
+    pub fn held_contract_name(&self) -> Option<Option<&String>> {
+        match self {
+            Self::ConstractMust(c) => Some(c.must_name()),
+            Self::RefContract(inner) => Some(inner.as_contract_must().and_then(|c| c.must_name())),
             _ => None,
         }
     }

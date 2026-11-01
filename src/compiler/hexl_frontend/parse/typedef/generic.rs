@@ -520,6 +520,7 @@ impl Parser {
             TyNode::ConstractMust(inner) | TyNode::ConstractOf(inner) => {
                 Self::mangle_ty(&inner.unwrap_ty())
             }
+            TyNode::RefContract(n) => Self::mangle_ty(&*n),
             TyNode::Auto => panic!(),
         }
     }

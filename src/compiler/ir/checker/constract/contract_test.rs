@@ -550,4 +550,120 @@ g(v: int must=d) { d(v) }
             "ReassignActiveContract",
         );
     }
+
+    // ------------------------------------------------------------------
+    // 15. 契約を借りる型(`RefContract`)
+    //     - 呼び出し元: 契約は移動しない(渡したあとも、自分で終了する)
+    //     - 呼び出し先: 契約を終了できない
+    // ------------------------------------------------------------------
+
+    /// `RefContract`の引数の型の書き方(`must=c`の契約を借りる)。
+    /// パーサーの構文に合わせて、ここだけ書き換える
+    const REF_C: &str = "int ref must=c";
+    /// 同じく、`must=d`の契約を借りる
+    const REF_D: &str = "int ref must=d";
+
+    /// `DEFS`に、契約を借りる関数を足したソース
+    ///
+    /// - `r`: 借りるだけ(何もしない)
+    /// - `r2`: 借りた契約を、さらに別の関数へ借りさせる
+    /// - `rd`: `must=d`の契約を借りる
+    fn ref_main_with(body: &str) -> String {
+        format!(
+            "r(v: {REF_C}) {{ }}\nr2(v: {REF_C}) {{ r(v) }}\nrd(v: {REF_D}) {{ }}\n{}",
+            main_with(body)
+        )
+    }
+
+    #[test]
+    fn borrowing_does_not_move_the_contract() {
+        // 借りたあとも、呼び出し元が`c`へ渡して終了する
+        assert_ok(&ref_main_with("x: int must=c = a()\nr(x)\nc(x)"));
+        // 何度借りてもよい
+        assert_ok(&ref_main_with("x: int must=c = a()\nr(x)\nr(x)\nc(x)"));
+        // 借りただけで終了しなければ、未終了のエラー
+        assert_err(&ref_main_with("x: int must=c = a()\nr(x)"));
+    }
+
+    #[test]
+    fn borrowing_then_ending_twice_is_error() {
+        assert_err(&ref_main_with("x: int must=c = a()\nr(x)\nc(x)\nc(x)"));
+    }
+
+    #[test]
+    fn borrowing_after_the_contract_ended_is_error() {
+        assert_err_kind(
+            &ref_main_with("x: int must=c = a()\nc(x)\nr(x)"),
+            "VariableConstractExpired",
+        );
+    }
+
+    #[test]
+    fn borrowing_in_one_branch_does_not_count_as_ending() {
+        // 借りた分岐で終了したことにはならない。終了は分岐のあとで1回
+        assert_ok(&ref_main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n r(x)\n} else {}\nc(x)",
+        ));
+        // 借りるだけの分岐と、終了する分岐が混ざっていたら、片方でしか終了していない
+        assert_err(&ref_main_with(
+            "x: int must=c = a()\ncond 1 == 1 {\n r(x)\n} else {\n c(x)\n}",
+        ));
+    }
+
+    #[test]
+    fn borrowing_in_loop_does_not_end_the_contract() {
+        assert_ok(&ref_main_with(
+            "x: int must=c = a()\nloop {\n r(x)\n break\n}\nc(x)",
+        ));
+    }
+
+    #[test]
+    fn borrowing_requires_a_contract_value() {
+        // 契約を持たない値は借りられない
+        assert_err(&ref_main_with("r(5)"));
+        assert_err(&ref_main_with("y: int = 1\nr(y)"));
+    }
+
+    #[test]
+    fn borrowing_with_other_contract_name_is_error() {
+        // `must=c`の契約は、`must=d`の契約を借りる引数へ渡せない
+        assert_err(&ref_main_with("x: int must=c = a()\nrd(x)\nc(x)"));
+    }
+
+    #[test]
+    fn borrowed_contract_has_no_duty_to_end() {
+        // 借りただけの引数は、何もしなくてもよい(`must`の引数と違って義務が無い)
+        assert_ok(&format!("{DEFS}\nh(v: {REF_C}) {{ }}"));
+        assert_err(&format!("{DEFS}\nh(v: int must=c) {{ }}"));
+    }
+
+    #[test]
+    fn borrowed_contract_can_be_lent_again() {
+        // 借りた契約を、さらに借りさせるのは、移動ではないので成功
+        assert_ok(&ref_main_with("x: int must=c = a()\nr2(x)\nc(x)"));
+    }
+
+    #[test]
+    fn borrowed_contract_cannot_be_ended_by_callee() {
+        // `of`の引数へ渡すと、契約を終了してしまう
+        assert_err_kind(
+            &format!("{DEFS}\nh(v: {REF_C}) {{ c(v) }}"),
+            "VariableConstractExpired",
+        );
+    }
+
+    #[test]
+    fn borrowed_contract_cannot_be_transferred_by_callee() {
+        // `must=c`の引数へ渡すと、契約を引き取らせてしまう
+        assert_err_kind(
+            &format!("{DEFS}\nh(v: {REF_C}) {{ f(v) }}"),
+            "VariableConstractExpired",
+        );
+    }
+
+    #[test]
+    fn borrowed_contract_can_be_used_as_plain_value() {
+        // 値として読むだけなら、契約は終了しない
+        assert_ok(&format!("{DEFS}\nh(v: {REF_C}): int {{ ret v }}"));
+    }
 }
