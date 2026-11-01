@@ -150,6 +150,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn movzbq_zero_extends_register_and_memory_sources() {
+        assert_eq!(
+            reg_reg_bytes("movzbq", Reg::Al, Reg::Rax),
+            [0x48, 0x0F, 0xB6, 0xC0]
+        );
+        assert_eq!(
+            reg_reg_bytes("movzbq", Reg::Sil, Reg::R8),
+            [0x4C, 0x0F, 0xB6, 0xC6]
+        );
+        assert_eq!(
+            reg_reg_bytes("movzbq", Reg::R9b, Reg::R10),
+            [0x4D, 0x0F, 0xB6, 0xD1]
+        );
+
+        let mut emitter = Emitter::new();
+        dispatch(
+            &mut emitter,
+            &Instruction {
+                mnemonic: "movzbq".to_owned(),
+                operands: vec![
+                    Operand::Memory(base_mem(Reg::Rbp, -4)),
+                    Operand::Register(Reg::R8),
+                ],
+            },
+        )
+        .unwrap();
+        assert_eq!(emitter.text, [0x4C, 0x0F, 0xB6, 0x45, 0xFC]);
+    }
+
+    #[test]
+    fn movzbq_rejects_invalid_operand_widths() {
+        for operands in [
+            vec![Operand::Register(Reg::Ax), Operand::Register(Reg::Rax)],
+            vec![Operand::Register(Reg::Al), Operand::Register(Reg::Eax)],
+            vec![Operand::Immediate(1), Operand::Register(Reg::Rax)],
+        ] {
+            let mut emitter = Emitter::new();
+            assert!(
+                dispatch(
+                    &mut emitter,
+                    &Instruction {
+                        mnemonic: "movzbq".to_owned(),
+                        operands,
+                    },
+                )
+                .is_err()
+            );
+        }
+    }
+
     fn reg_reg_bytes(mnemonic: &str, src: Reg, dst: Reg) -> Vec<u8> {
         let mut emitter = Emitter::new();
         dispatch(
@@ -492,7 +543,9 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "movslq" => e.emit_movslq(&inst.operands),
 
-        "movzbl" => e.emit_movzbl(&inst.operands),
+        "movzbl" => e.emit_movzb(&inst.operands, 32),
+
+        "movzbq" => e.emit_movzb(&inst.operands, 64),
 
         "cmp" | "cmpq" | "cmpl" | "cmpw" | "cmpb" => {
             e.emit_cmp(&inst.operands, cmp_size_bits(name))
@@ -1061,32 +1114,34 @@ impl Emitter {
     }
 
     // --------------------------------------------------------
-    // movzbl  (0F B6 /r)
+    // movzbl / movzbq (0F B6 /r)
     //
-    // 8bit値をゼロ拡張して32bitレジスタへ書き込む。
+    // 8bit値をゼロ拡張して32bit/64bitレジスタへ書き込む。
     // --------------------------------------------------------
-    fn emit_movzbl(&mut self, operands: &[Operand]) -> Result<(), String> {
+    fn emit_movzb(&mut self, operands: &[Operand], dst_bits: u16) -> Result<(), String> {
+        let mnemonic = if dst_bits == 64 { "movzbq" } else { "movzbl" };
         if operands.len() != 2 {
-            return Err("movzbl requires two operands".into());
+            return Err(format!("{} requires two operands", mnemonic));
         }
 
         let dst = match &operands[1] {
-            Operand::Register(reg) if reg.bits() == 32 => *reg,
-            _ => return Err("movzbl destination must be a 32-bit register".into()),
+            Operand::Register(reg) if reg.bits() == dst_bits => *reg,
+            _ => {
+                return Err(format!(
+                    "{} destination must be a {}-bit register",
+                    mnemonic, dst_bits
+                ));
+            }
         };
 
         match &operands[0] {
             Operand::Register(src) => {
                 if src.bits() != 8 {
-                    return Err("movzbl source register must be 8-bit".into());
+                    return Err(format!("{} source register must be 8-bit", mnemonic));
                 }
 
-                // SPL/BPL/SIL/DIL は REX がないと AH/CH/DH/BH として解釈される。
-                if (4..8).contains(&src.id()) {
-                    self.emit_u8(0x40 | (((dst.id() >= 8) as u8) << 2));
-                } else {
-                    self.emit_rex(false, dst.id() >= 8, false, src.id() >= 8);
-                }
+                // REX.Wで64bit宛先にし、REXの存在によりSPL/BPL/SIL/DILも正しく選ぶ。
+                self.emit_rex(dst_bits == 64, dst.id() >= 8, false, src.id() >= 8);
                 self.emit_u8(0x0F);
                 self.emit_u8(0xB6);
                 self.emit_u8(0b11_000_000 | ((dst.id() & 7) << 3) | (src.id() & 7));
@@ -1096,7 +1151,7 @@ impl Emitter {
 
             Operand::Memory(mem) => {
                 self.emit_rex(
-                    false,
+                    dst_bits == 64,
                     dst.id() >= 8,
                     self.memory_index_extended(mem),
                     self.memory_base_extended(mem),
@@ -1106,7 +1161,7 @@ impl Emitter {
                 self.emit_memory_modrm(dst.id(), mem)
             }
 
-            _ => Err("invalid movzbl source operand".into()),
+            _ => Err(format!("invalid {} source operand", mnemonic)),
         }
     }
 }
