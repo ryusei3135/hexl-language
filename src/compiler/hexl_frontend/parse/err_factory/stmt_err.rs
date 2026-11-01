@@ -37,7 +37,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::Syntax(Box::new(err::SyntaxErr {
+        Err(err::raise(err::ErrKind::Syntax(Box::new(err::SyntaxErr {
             span: self.build_err_span(),
             kind: err::SyntaxErrKind::UnexpectTknInStmt {
                 found: self.current_tkn().clone(),
@@ -46,7 +46,7 @@ impl Parser {
                 self.build_err_span(),
                 "parse::stmt::loop_control_node".to_string(),
             ),
-        })))
+        }))))
     }
 
     /// `pub`の次が、関数の名前・`struct`・`variant`・`type`のどれでもなかった

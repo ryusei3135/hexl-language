@@ -155,8 +155,7 @@ impl IR {
     /// 構造体・バリアント型・ポインタ・配列などは受け付けない
     ///
     /// - 組み込み型の名前でない(ユーザー定義の型名など): `TryFrom`が返す未定義の型のエラー
-    /// - `TyNode::Ty`以外の型: `UnexpectedToken`
-    ///   (専用のエラーを`err`に用意したら差し替える)
+    /// - `TyNode::Ty`以外の型: `CastToNonBuiltinType`
     pub(in super::super) fn build_cast_inst<M: ResultMod>(
         &mut self,
         ty: &TyNode,
@@ -164,12 +163,22 @@ impl IR {
     ) -> Result<inst::Inst, err::ErrKind> {
         let after = match ty {
             TyNode::Ty(_) => types::Size::try_from(ty)?,
-            _ => return Err(err::ErrKind::UnexpectedToken),
+            _ => {
+                return Err(err::CompileErr::at(
+                    err::CompileErrKind::CastToNonBuiltinType(format!("{:?}", ty)),
+                    Rc::clone(&target.span),
+                ));
+            }
         };
         // 変換元は、式自身の型で生成する(分からなければキャスト先の型)
         let before = self.infer_expr_ty(target).unwrap_or_else(|| after.clone());
         let src = self.gen_expr_ir::<M>(target, Some(&before))?;
         Ok(inst::Inst::Cast { src, after })
+    }
+
+    /// `++`/`--`の対象が、変数でも構造体のメンバーでもなかった
+    fn inc_dec_invalid_target(span: Rc<err::Span>) -> err::ErrKind {
+        err::CompileErr::at(err::CompileErrKind::IncDecInvalidTarget, span)
     }
 
     /// `++`/`--`できる型(整数型)か
@@ -223,19 +232,20 @@ impl IR {
         &mut self,
         target: &Expr,
     ) -> Result<Option<(String, types::Size)>, err::ErrKind> {
+        let span = Rc::clone(&target.span);
         // (メンバーを持つ変数, メンバー名, ポインタ経由か)
         let (owner, member, via_ptr) = match &target.node {
             ExprNode::PtrMember { name, target, .. } => match &target.node {
                 ExprNode::Var(member) => (name.clone(), member.clone(), true),
-                _ => return Err(err::ErrKind::UnexpectedToken),
+                _ => return Err(Self::inc_dec_invalid_target(span)),
             },
             ExprNode::Member { scope, target } => {
                 let Some(owner) = scope.last() else {
-                    return Err(err::ErrKind::UnexpectedToken);
+                    return Err(Self::inc_dec_invalid_target(span));
                 };
                 match &target.node {
                     ExprNode::Var(member) => (owner.clone(), member.clone(), false),
-                    _ => return Err(err::ErrKind::UnexpectedToken),
+                    _ => return Err(Self::inc_dec_invalid_target(span)),
                 }
             }
             _ => return Ok(None),
@@ -298,7 +308,7 @@ impl IR {
             }
             _ => self
                 .inc_dec_member_check::<M>(target)?
-                .ok_or(err::ErrKind::UnexpectedToken),
+                .ok_or_else(|| Self::inc_dec_invalid_target(Rc::clone(&target.span))),
         }
     }
 
@@ -340,7 +350,7 @@ impl IR {
     ) -> Result<inst::Inst, err::ErrKind> {
         // 変数のみ(メンバーは`desugar_unary`が代入に展開済み)
         if !matches!(&target.node, ExprNode::Var(_)) {
-            return Err(err::ErrKind::UnexpectedToken);
+            return Err(Self::inc_dec_invalid_target(Rc::clone(&target.span)));
         }
 
         let (_, ty) = self.inc_dec_var_ty::<M>(target)?;

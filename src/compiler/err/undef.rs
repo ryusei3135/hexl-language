@@ -49,22 +49,22 @@ pub struct UndefErrs {
 
 impl UndefErrs {
     pub fn undef_fn(found: &str) -> err::ErrKind {
-        err::ErrKind::Undef(Box::new(Self {
+        err::raise(err::ErrKind::Undef(Box::new(Self {
             kind: UndefKind::UndefFunc,
             found: found.to_owned(),
             expect: None,
             span: None,
-        }))
+        })))
     }
 
     /// 位置付きの`undef_fn`
     pub fn undef_fn_at(found: &str, span: Rc<err::Span>) -> err::ErrKind {
-        err::ErrKind::Undef(Box::new(Self {
+        err::raise(err::ErrKind::Undef(Box::new(Self {
             kind: UndefKind::UndefFunc,
             found: found.to_owned(),
             expect: None,
             span: Some(span),
-        }))
+        })))
     }
 
     /// 位置を付ける
@@ -197,19 +197,23 @@ impl UndefErrs {
 #[macro_export]
 macro_rules! GenUndefErrResult {
     ($kind:ident, $found:expr, $expect:expr) => {
-        err::ErrKind::Undef(Box::new(crate::compiler::err::undef::UndefErrs {
-            kind: $kind,
-            found: $found,
-            expect: $expect,
-            span: None,
-        }))
+        $crate::compiler::err::raise(err::ErrKind::Undef(Box::new(
+            crate::compiler::err::undef::UndefErrs {
+                kind: $kind,
+                found: $found,
+                expect: $expect,
+                span: None,
+            },
+        )))
     };
     ($kind:ident, $found:expr, $expect:expr, $span:expr) => {
-        err::ErrKind::Undef(Box::new(crate::compiler::err::undef::UndefErrs {
-            kind: $kind,
-            found: $found,
-            expect: $expect,
-            span: Some($span),
-        }))
+        $crate::compiler::err::raise(err::ErrKind::Undef(Box::new(
+            crate::compiler::err::undef::UndefErrs {
+                kind: $kind,
+                found: $found,
+                expect: $expect,
+                span: Some($span),
+            },
+        )))
     };
 }

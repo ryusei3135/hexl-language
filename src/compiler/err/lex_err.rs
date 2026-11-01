@@ -37,12 +37,25 @@ impl fmt::Display for LexErrs {
 
 impl std::error::Error for LexErrs {}
 
+/// 字句解析のエラーを作った直後に通す関数([`super::raise`]の字句解析版)
+///
+/// `DebugMode`が`true`なら、エラーの内容を載せて`panic!`する
+#[track_caller]
+pub fn raise(e: LexErrs) -> LexErrs {
+    if super::is_debug_mode() {
+        panic!("[DebugMode] {}", e);
+    }
+    e
+}
+
 #[macro_export]
 macro_rules! lex_err {
     ($span:expr, $kind:ident) => {
-        Err(crate::compiler::err::lex_err::LexErrs {
-            span: $span,
-            kind: crate::compiler::err::lex_err::LexErrKind::$kind,
-        })
+        Err($crate::compiler::err::lex_err::raise(
+            crate::compiler::err::lex_err::LexErrs {
+                span: $span,
+                kind: crate::compiler::err::lex_err::LexErrKind::$kind,
+            },
+        ))
     };
 }

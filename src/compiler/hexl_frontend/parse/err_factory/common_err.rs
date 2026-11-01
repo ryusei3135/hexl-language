@@ -30,14 +30,37 @@ impl Parser {
         expected: &'static str,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        crate::syntax_err!(
-            self.build_err_span(),
-            err::SyntaxErrKind::ExpectedKind {
-                expected,
-                found: self.current_tkn().clone(),
-            },
-            Rc::clone(&self.file_name)
-        )
+        self.expected_at_current_untraced(expected)
+    }
+
+    /// [`expected_at_current`](Self::expected_at_current)の本体(発生元の表示をしない)
+    ///
+    /// 現在のトークンが無い(トークン列の終わりを過ぎた)ときは、
+    /// 範囲外アクセスでpanicせず、EOFのエラーにする。
+    /// 他の生成関数が、自分の名前で発生元を表示したまま使うための関数
+    pub(in crate::compiler::hexl_frontend::parse) fn expected_at_current_untraced<T>(
+        &self,
+        expected: &'static str,
+    ) -> Result<T, err::ErrKind> {
+        let found = self
+            .tkns
+            .as_ref()
+            .and_then(|tkns| tkns.get(self.idx))
+            .map(|t| t.tkn.clone());
+        match found {
+            Some(found) => crate::syntax_err!(
+                self.build_err_span(),
+                err::SyntaxErrKind::ExpectedKind { expected, found },
+                Rc::clone(&self.file_name)
+            ),
+            None => crate::syntax_err!(
+                self.build_err_span(),
+                err::SyntaxErrKind::TknIsEof {
+                    expected: vec![expected],
+                },
+                Rc::clone(&self.file_name)
+            ),
+        }
     }
 
     /// 数値のトークンが、数値として読み取れなかった(桁あふれなど)

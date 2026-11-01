@@ -207,16 +207,16 @@ impl fmt::Display for SyntaxErr {
 macro_rules! syntax_err {
     ($span:expr, $kind:expr) => {{
         let __span: ::std::rc::Rc<$crate::compiler::err::Span> = $span;
-        Err::<_, $crate::compiler::err::ErrKind>($crate::compiler::err::ErrKind::Syntax(Box::new(
-            $crate::compiler::err::SyntaxErr {
+        Err::<_, $crate::compiler::err::ErrKind>($crate::compiler::err::raise(
+            $crate::compiler::err::ErrKind::Syntax(Box::new($crate::compiler::err::SyntaxErr {
                 kind: $kind,
                 loc: $crate::compiler::err::ErrLoc::new(
                     ::std::rc::Rc::clone(&__span),
                     $crate::func_name!(),
                 ),
                 span: __span,
-            },
-        )))
+            })),
+        ))
     }};
     ($span:expr, $kind:expr, $file_name:expr) => {
         $crate::syntax_err!($span, $kind)
@@ -298,6 +298,8 @@ pub enum PreprocErrs {
     NotFoundAsmName,
     /// `#asm(name`の後に`)`が来なかった
     ExpectedRParenAfterAsm,
+    /// `${...}`の中の文字列を、字句解析できなかった(中身は字句解析のエラーの文)
+    InvalidAsmOperandText(String),
 }
 
 impl fmt::Display for PreprocErrs {
@@ -317,6 +319,9 @@ impl fmt::Display for PreprocErrs {
             Self::ExpectedLParenAfterAsm => "`#asm`の後には`(`が必要です",
             Self::NotFoundAsmName => "`#asm(...)`にはアセンブラの名前が必要です",
             Self::ExpectedRParenAfterAsm => "`#asm(name`の後には`)`が必要です",
+            Self::InvalidAsmOperandText(detail) => {
+                return write!(f, "`${{...}}`の中の文字列を字句解析できません: {}", detail);
+            }
         };
         write!(f, "{}", msg)
     }
@@ -351,12 +356,14 @@ impl PreprocErrDetail {
 #[macro_export]
 macro_rules! preproc_err {
     ($span:expr, $kind:ident) => {
-        return Err($crate::compiler::err::ErrKind::Preproc(Box::new(
-            $crate::compiler::err::PreprocErrDetail {
-                kind: $crate::compiler::err::PreprocErrs::$kind,
-                loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
-            },
-        )))
+        return Err($crate::compiler::err::raise(
+            $crate::compiler::err::ErrKind::Preproc(Box::new(
+                $crate::compiler::err::PreprocErrDetail {
+                    kind: $crate::compiler::err::PreprocErrs::$kind,
+                    loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
+                },
+            )),
+        ))
     };
     ($span:expr, $kind:ident, $file_name:expr) => {
         $crate::preproc_err!($span, $kind)
@@ -375,10 +382,12 @@ macro_rules! preproc_err {
 #[macro_export]
 macro_rules! preproc_err_at {
     ($span:expr, $kind:ident) => {
-        $crate::compiler::err::ErrKind::Preproc(Box::new($crate::compiler::err::PreprocErrDetail {
-            kind: $crate::compiler::err::PreprocErrs::$kind,
-            loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
-        }))
+        $crate::compiler::err::raise($crate::compiler::err::ErrKind::Preproc(Box::new(
+            $crate::compiler::err::PreprocErrDetail {
+                kind: $crate::compiler::err::PreprocErrs::$kind,
+                loc: $crate::compiler::err::ErrLoc::new($span, $crate::func_name!()),
+            },
+        )))
     };
 }
 
@@ -436,6 +445,7 @@ impl PreprocErrs {
             Self::ExpectedLParenAfterAsm => "E0308",
             Self::NotFoundAsmName => "E0309",
             Self::ExpectedRParenAfterAsm => "E0310",
+            Self::InvalidAsmOperandText(..) => "E0311",
         }
     }
 }

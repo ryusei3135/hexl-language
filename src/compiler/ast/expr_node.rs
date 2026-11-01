@@ -93,7 +93,12 @@ impl ModPath {
                 segments.push(path_name.to_string());
                 Ok(())
             }
-            ImportPath::Literal(_) => Err(crate::compiler::err::ErrKind::UnexpectedToken),
+            ImportPath::Literal(_) => Err(crate::compiler::err::CompilerErr::at(
+                crate::compiler::err::CompilerErrKind::LiteralImportPathNotSupported {
+                    place: "ModPath::add_path",
+                },
+                None,
+            )),
         }
     }
 
@@ -134,7 +139,12 @@ impl ModPath {
         const PATH_START: usize = 0;
 
         let ImportPath::Segments(segments) = &self.path else {
-            return Err(crate::compiler::err::ErrKind::UnexpectedToken);
+            return Err(crate::compiler::err::CompilerErr::at(
+                crate::compiler::err::CompilerErrKind::LiteralImportPathNotSupported {
+                    place: "ModPath::gen_parent_path",
+                },
+                None,
+            ));
         };
 
         let mut path = String::new();

@@ -1,4 +1,3 @@
-use crate::compiler::err::compiler_err::CompilerErr;
 use crate::compiler::hexl_frontend::lex;
 use std::fmt;
 use std::rc::Rc;
@@ -13,6 +12,52 @@ pub mod compile;
 pub use compile::*;
 pub mod compiler_err;
 pub mod err_pool;
+
+// ---------------------------------------------------------------------
+// DebugMode
+// ---------------------------------------------------------------------
+
+/// `DebugMode`の状態。`true`のとき、エラーが作られた瞬間に`panic!`する
+static DEBUG_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `DebugMode`を切り替える
+///
+/// `true`にすると、エラー([`ErrKind`])が作られた瞬間(`syntax_err!`・
+/// `GenCompileErr!`・[`ErrPool::push_err_node`](err_pool::ErrPool::push_err_node)など)に
+/// エラーの内容を載せた`panic!`を起こす。エラーを`Result`で呼び出し元へ
+/// 返してまとめて表示する通常の動作と違い、エラーの発生元でスタックトレース
+/// (`RUST_BACKTRACE=1`)を見られる。コンパイラのデバッグ用。
+///
+/// ```ignore
+/// err::set_debug_mode(true); // コマンドラインオプションなどから設定する
+/// ```
+pub fn set_debug_mode(enabled: bool) {
+    DEBUG_MODE.store(enabled, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// `DebugMode`が有効か
+pub fn is_debug_mode() -> bool {
+    DEBUG_MODE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// エラーを作った直後に通す関数
+///
+/// `DebugMode`が`false`なら、受け取ったエラーをそのまま返す。
+/// `true`なら、エラーの内容(`Display`)を載せて`panic!`する。
+/// エラーを作るマクロ・関数は、すべてこの関数を通す
+#[track_caller]
+pub fn raise(e: ErrKind) -> ErrKind {
+    raise_with(e, is_debug_mode())
+}
+
+/// [`raise`]の本体。`DebugMode`の状態を引数で受け取る(テスト用に分けてある)
+#[track_caller]
+fn raise_with(e: ErrKind, debug_mode: bool) -> ErrKind {
+    if debug_mode {
+        panic!("[DebugMode] {}", e);
+    }
+    e
+}
 
 // ---------------------------------------------------------------------
 // 位置情報
@@ -187,8 +232,15 @@ pub struct ErrAt {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrKind {
     /// 見つかるべきトークンが見つからなかった(簡易版)
+    ///
+    /// 位置もメッセージも持たないため、現在はどこからも作らない。
+    /// 代わりに`SyntaxErrKind::ExpectedKind`などの位置付きのエラーを使う
     NotFoundTkn(Box<lex::Tkn>),
     /// 予期しないトークンだった(簡易版、詳細情報なし)
+    ///
+    /// 位置もメッセージも持たないため、現在はどこからも作らない。
+    /// 代わりに`SyntaxErrKind`・`CompileErrKind`・`CompilerErrKind`の
+    /// 専用のエラーを使う
     UnexpectedToken,
     CompileErr(Box<CompileErr>),
     CompileErrAt(Box<ErrAt>),
@@ -342,6 +394,67 @@ mod tests {
         )));
         assert!(!e.to_string().contains('['));
         assert_eq!(e.file_name(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "[DebugMode] コンパイルエラー: 反復処理の外")]
+    fn debug_mode_panics_with_the_error_message() {
+        let e = ErrKind::CompileErr(Box::new(CompileErr::new(
+            CompileErrKind::BreakOutsideLoop,
+            Rc::new(Span::unknown()),
+        )));
+        raise_with(e, true);
+    }
+
+    #[test]
+    fn debug_mode_off_returns_the_error_as_is() {
+        let e = ErrKind::UnexpectedToken;
+        assert_eq!(raise_with(e.clone(), false), e);
+    }
+
+    /// 以前は`UnexpectedToken`で済ませていたエラーの、メッセージとコード
+    #[test]
+    fn formerly_simple_errors_have_their_own_messages() {
+        let span = Rc::new(Span::new(4, 2, String::new(), &Rc::new("test".to_string())));
+        let cases = [
+            (CompileErrKind::InversionOnFloat, "E0036", "ビット反転"),
+            (
+                CompileErrKind::CastToNonBuiltinType("Pointer".into()),
+                "E0037",
+                "キャスト先の型`Pointer`",
+            ),
+            (CompileErrKind::IncDecInvalidTarget, "E0038", "`++`/`--`の対象"),
+            (
+                CompileErrKind::DuplicateTypeAlias("T".into()),
+                "E0039",
+                "型エイリアス`T`が重複",
+            ),
+            (
+                CompileErrKind::TypeAliasCycle("A".into()),
+                "E0040",
+                "型エイリアス`A`が循環",
+            ),
+        ];
+        for (kind, code, title) in cases {
+            assert_eq!(kind.code(), code);
+            assert!(kind.title().contains(title), "{}", kind.title());
+            let e = CompileErr::at(kind, Rc::clone(&span));
+            assert!(e.to_string().starts_with("コンパイルエラー: "), "{e}");
+        }
+
+        let e = CompilerErr::at(
+            CompilerErrKind::LiteralImportPathNotSupported { place: "add_path" },
+            None,
+        );
+        assert_eq!(
+            e.to_string(),
+            "内部エラー: `add_path`は、文字列リテラルの`#include`のパスには使えません"
+        );
+        assert_eq!(
+            PreprocErrs::InvalidAsmOperandText("x".into()).to_string(),
+            "`${...}`の中の文字列を字句解析できません: x"
+        );
+        assert_eq!(PreprocErrs::InvalidAsmOperandText(String::new()).code(), "E0311");
     }
 
     #[test]

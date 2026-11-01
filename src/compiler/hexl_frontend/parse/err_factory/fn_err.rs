@@ -79,7 +79,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
+        self.expected_at_current_untraced("`{`")
     }
 
     /// 引数の定義が`(`から始まっていなかった
@@ -87,7 +87,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LParen)))
+        self.expected_at_current_untraced("`(`")
     }
 
     /// 引数リストの後ろが、`:`でも`{`でもなかった

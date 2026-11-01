@@ -22,7 +22,14 @@ impl IR {
             name: ptr, target, ..
         } = &dst.node
         else {
-            return Err(err::ErrKind::UnexpectedToken);
+            return Err(err::CompilerErr::at(
+                err::CompilerErrKind::UnexpectedNodeKind {
+                    place: "ptr_member_arr_to_tmp",
+                    expected: "PtrMember",
+                    found: format!("{:?}", dst.node),
+                },
+                Some(Rc::clone(&dst.span)),
+            ));
         };
         let ExprNode::RefArray {
             name: member,
@@ -31,7 +38,14 @@ impl IR {
             ..
         } = &target.node
         else {
-            return Err(err::ErrKind::UnexpectedToken);
+            return Err(err::CompilerErr::at(
+                err::CompilerErrKind::UnexpectedNodeKind {
+                    place: "ptr_member_arr_to_tmp",
+                    expected: "RefArray",
+                    found: format!("{:?}", target.node),
+                },
+                Some(Rc::clone(&target.span)),
+            ));
         };
 
         // メンバーの型(ポインタ/配列)。`get_ty_name`は、ポインタ変数には指す先の構造体名を返す

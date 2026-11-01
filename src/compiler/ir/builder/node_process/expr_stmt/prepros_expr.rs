@@ -46,7 +46,12 @@ impl IR {
                     Size::UDW => u16::MAX.to_string(),
                     Size::UDD => u32::MAX.to_string(),
                     Size::UDQ => u64::MAX.to_string(),
-                    Size::F32 | Size::F64 => return Err(err::ErrKind::UnexpectedToken),
+                    Size::F32 | Size::F64 => {
+                        return Err(err::CompileErr::at(
+                            err::CompileErrKind::InversionOnFloat,
+                            Rc::clone(&expr.span),
+                        ));
+                    }
                     _ => "-1".to_string(),
                 };
                 ExprNode::XorCalcul(Expr::wrap(

@@ -162,7 +162,15 @@ impl Group2Node {
         match self {
             Self::Include(v) => Ok(Group1Node::Include(v)),
             Self::Line(v) => Ok(Group1Node::Line(v)),
-            _ => Err(crate::compiler::err::ErrKind::UnexpectedToken),
+            // 位置は、呼び出し元が`ErrKind::with_span`で付ける
+            other => Err(crate::compiler::err::CompilerErr::at(
+                crate::compiler::err::CompilerErrKind::UnexpectedNodeKind {
+                    place: "Group2Node::change_group1",
+                    expected: "Include or Line",
+                    found: format!("{:?}", other),
+                },
+                None,
+            )),
         }
     }
 }

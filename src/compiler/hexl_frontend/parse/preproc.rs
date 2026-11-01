@@ -20,7 +20,8 @@ impl Parser {
             //     panic!();
             // }
             "asm" => self.build_asm_ast()?,
-            _ => return crate::err_at!(self.preproc_unexpected_token()),
+            // `#`の次の名前が、プリプロセッサの命令ではなかった
+            _ => return crate::err_at!(self.preproc_unexpected_token("`include` or `asm`")),
         };
 
         Ok(result)
@@ -202,7 +203,8 @@ impl Parser {
             return Ok(nodes);
         }
 
-        crate::err_at!(self.preproc_unexpected_token())
+        // `#asm(name)`の次が`{`ではなかった
+        crate::err_at!(self.preproc_unexpected_token("`{`"))
     }
 
     /// inlineアセンブラの1行分の文字列から`InlineAsm`を作成する。
@@ -216,7 +218,12 @@ impl Parser {
         // この行(文字列)の位置
         let span = self.build_err_span();
         // 正規表現は定数なので失敗しないが、失敗した場合も`Err`で返す
-        let inline_var = Regex::new(r"\$\{([^}]+)\}").map_err(|_| err::ErrKind::UnexpectedToken)?;
+        let inline_var = Regex::new(r"\$\{([^}]+)\}").map_err(|e| {
+            err::CompilerErr::at(
+                err::CompilerErrKind::RegexBuildFailed(e.to_string()),
+                Some(Rc::clone(&span)),
+            )
+        })?;
 
         let mut operands = Vec::<Expr>::new();
         let mut parse_err: Option<err::ErrKind> = None;

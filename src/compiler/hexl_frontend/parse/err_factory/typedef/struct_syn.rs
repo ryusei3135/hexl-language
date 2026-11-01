@@ -70,7 +70,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        self.expected_at_current_untraced("`:`")
     }
 
     /// 構造体などの定義が`{`から始まっていなかった
@@ -78,7 +78,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::NotFoundTkn(Box::new(lex::Tkn::LBrace)))
+        self.expected_at_current_untraced("`{`")
     }
 
     /// メンバーの名前の次が、`:`でも`(`でもなかった
@@ -86,7 +86,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        self.expected_at_current_untraced("`:` or `(`")
     }
 
     /// メンバーの型の後ろが、`,`でも`}`でも、次のメンバーの始まりでもなかった

@@ -52,11 +52,32 @@ impl Parser {
     }
 
     /// プリプロセッサの構文として解釈できないトークンがあった
+    ///
+    /// ## Args
+    /// - expected そこに来るはずだったものの説明
     pub(in crate::compiler::hexl_frontend::parse) fn preproc_unexpected_token<T>(
         &self,
+        expected: &'static str,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        self.expected_at_current_untraced(expected)
+    }
+
+    /// `${}`の中の文字列を、字句解析できなかった
+    ///
+    /// ## Args
+    /// - detail 字句解析のエラーの文
+    pub(in crate::compiler::hexl_frontend::parse) fn invalid_asm_operand_text<T>(
+        &self,
+        detail: String,
+    ) -> Result<T, err::ErrKind> {
+        crate::err_generated_by!();
+        Err(err::raise(err::ErrKind::Preproc(Box::new(
+            err::PreprocErrDetail {
+                kind: err::PreprocErrs::InvalidAsmOperandText(detail),
+                loc: err::ErrLoc::new(self.build_err_span(), crate::func_name!()),
+            },
+        ))))
     }
 
     /// `${}`の中が空だった

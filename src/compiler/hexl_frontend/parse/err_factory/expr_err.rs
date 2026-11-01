@@ -52,7 +52,13 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        crate::syntax_err!(
+            self.build_err_span(),
+            err::SyntaxErrKind::UnexpectTknInExpr {
+                found: lex::Tkn::LBracket,
+            },
+            Rc::clone(&self.file_name)
+        )
     }
 
     /// `name.[member index]`の`member`が名前ではなかった
@@ -141,7 +147,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        self.expected_at_current_untraced("`*`")
     }
 
     /// `*`の次が、数字でも`const`/`mut`でもなかった
@@ -165,7 +171,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        self.expected_at_current_untraced("number")
     }
 
     /// 範囲の`..`が無かった
@@ -173,7 +179,7 @@ impl Parser {
         &self,
     ) -> Result<T, err::ErrKind> {
         crate::err_generated_by!();
-        Err(err::ErrKind::UnexpectedToken)
+        self.expected_at_current_untraced("`..`")
     }
 
     /// 範囲の終わりが数字ではなかった

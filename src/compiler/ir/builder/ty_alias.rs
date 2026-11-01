@@ -35,12 +35,18 @@ pub(super) fn expand_type_aliases(
 /// 全てのエイリアスを、他のエイリアスを含まない型へ解決した表を作る
 fn map_alias(nodes: &[ast::Group1Node]) -> Result<AliasMap, err::ErrKind> {
     let mut map: AliasMap = HashMap::new();
+    // 循環のエラーに付ける、`type`の位置
+    let mut spans: HashMap<String, Rc<err::Span>> = HashMap::new();
     for n in nodes {
         if let ast::Group1Node::TypeAlias(a) = n {
             if map.insert(a.name.clone(), a.ty.clone()).is_some() {
-                // 重複定義。専用のエラー種別があれば差し替える
-                return Err(err::ErrKind::UnexpectedToken);
+                // 重複定義
+                return Err(err::CompileErr::at(
+                    err::CompileErrKind::DuplicateTypeAlias(a.name.clone()),
+                    Rc::clone(&a.span),
+                ));
             }
+            spans.insert(a.name.clone(), Rc::clone(&a.span));
         }
     }
 
@@ -66,10 +72,13 @@ fn map_alias(nodes: &[ast::Group1Node]) -> Result<AliasMap, err::ErrKind> {
     for (name, ty) in &map {
         let leaf = ty.get_ty_str_name();
         if map.contains_key(&leaf) {
-            return Err(crate::GenUndefErrResult!(
-                UndefVarTy,
-                name.to_string(),
-                None
+            let span = spans
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| Rc::new(err::Span::unknown()));
+            return Err(err::CompileErr::at(
+                err::CompileErrKind::TypeAliasCycle(name.to_string()),
+                span,
             ));
         }
     }

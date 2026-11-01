@@ -69,6 +69,17 @@ pub enum CompileErrKind {
     ReassignActiveContract(String),
     /// 反復処理(`loop`)の外の条件分岐で`break`が使われた
     BreakOutsideLoop,
+    /// ビット反転(`~`)を小数型の値に使った
+    InversionOnFloat,
+    /// キャスト先に、組み込みの型ではない型(ポインタ・配列など)が指定された
+    /// (中身は、指定された型のデバッグ表示)
+    CastToNonBuiltinType(String),
+    /// `++`/`--`の対象が、変数でも構造体のメンバーでもない
+    IncDecInvalidTarget,
+    /// 同じ名前の型エイリアス(`type`)が2回以上定義された
+    DuplicateTypeAlias(String),
+    /// 型エイリアスが循環している(`type A = B` / `type B = A`など)
+    TypeAliasCycle(String),
 
     // ---- asm_emitter(アセンブリ生成)で、以前は`panic`していた状況 ----
     /// 構造体/バリアントのメンバーが`MemoryInst::Member`ではない(中身はデバッグ表示)
@@ -126,10 +137,10 @@ pub struct Suggestion {
 #[macro_export]
 macro_rules! GenCompileErr {
     ($kind:ident, $msg:expr, $span:expr) => {
-        Err(err::ErrKind::CompileErr(Box::new(CompileErr {
+        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(Box::new(CompileErr {
             kind: CompileErrKind::$kind($msg.to_string()),
             span: $span,
-        })))
+        }))))
     };
 }
 
@@ -138,10 +149,10 @@ macro_rules! GenCompileErr {
 #[macro_export]
 macro_rules! GenCompileErrNode {
     ($kind:ident, $msg:expr, $span:expr) => {
-        Err(err::ErrKind::CompileErr(Box::new(CompileErr {
+        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(Box::new(CompileErr {
             kind: CompileErrKind::$kind($msg.clone()),
             span: $span,
-        })))
+        }))))
     };
 }
 
@@ -150,10 +161,10 @@ macro_rules! GenCompileErrNode {
 #[macro_export]
 macro_rules! GenCompileErr2 {
     ($kind:expr, $span:expr) => {
-        Err(err::ErrKind::CompileErr(Box::new(CompileErr {
+        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(Box::new(CompileErr {
             kind: $kind,
             span: $span,
-        })))
+        }))))
     };
 }
 
@@ -168,7 +179,10 @@ impl CompileErr {
     }
 
     fn err<T>(kind: CompileErrKind, span: Rc<err::Span>) -> Result<T, err::ErrKind> {
-        Err(err::ErrKind::CompileErr(Box::new(Self { kind, span })))
+        Err(err::raise(err::ErrKind::CompileErr(Box::new(Self {
+            kind,
+            span,
+        }))))
     }
 
     pub fn assign_to_imm_var(var_name: &str, span: Rc<err::Span>) -> Result<Self, err::ErrKind> {
@@ -283,10 +297,15 @@ impl CompileErr {
     }
 
     pub fn inc_dec_requires_integer(var_name: &str, span: Rc<err::Span>) -> err::ErrKind {
-        err::ErrKind::CompileErr(Box::new(Self {
-            kind: CompileErrKind::IncDecRequiresInteger(var_name.to_string()),
-            span,
-        }))
+        Self::at(CompileErrKind::IncDecRequiresInteger(var_name.to_string()), span)
+    }
+
+    /// `kind`と位置から、`ErrKind`を作る(`Err(..)`で包まない版)
+    ///
+    /// `DebugMode`のときは、ここで`panic!`する
+    #[track_caller]
+    pub fn at(kind: CompileErrKind, span: Rc<err::Span>) -> err::ErrKind {
+        err::raise(err::ErrKind::CompileErr(Box::new(Self { kind, span })))
     }
 
     /// Rust風のエラー表示を作る
@@ -332,10 +351,10 @@ impl fmt::Display for CompileErr {
 /// 位置は`Span::unknown()`になる。`err::ErrKind::asm_emit_xxx(..)`の形で呼び出す
 impl err::ErrKind {
     fn asm_emit(kind: CompileErrKind) -> Self {
-        Self::CompileErr(Box::new(CompileErr {
+        err::raise(Self::CompileErr(Box::new(CompileErr {
             kind,
             span: Rc::new(err::Span::unknown()),
-        }))
+        })))
     }
 
     pub fn asm_emit_not_member_inst(found: String) -> Self {
@@ -445,6 +464,11 @@ impl CompileErrKind {
             Self::ConstractUnterminableScope(..) => "E0033",
             Self::BreakOutsideLoop => "E0034",
             Self::ConstractTernaryMismatch => "E0035",
+            Self::InversionOnFloat => "E0036",
+            Self::CastToNonBuiltinType(..) => "E0037",
+            Self::IncDecInvalidTarget => "E0038",
+            Self::DuplicateTypeAlias(..) => "E0039",
+            Self::TypeAliasCycle(..) => "E0040",
         }
     }
 
@@ -567,6 +591,19 @@ impl CompileErrKind {
                 format!("{place}に小数は使えません")
             }
             Self::BreakOutsideLoop => "反復処理の外の条件分岐では`break`を使えません".to_string(),
+            Self::InversionOnFloat => "ビット反転(`~`)は小数型の値には使えません".to_string(),
+            Self::CastToNonBuiltinType(ty) => {
+                format!("キャスト先の型`{ty}`は組み込みの型ではありません")
+            }
+            Self::IncDecInvalidTarget => {
+                "`++`/`--`の対象は、変数か構造体のメンバーである必要があります".to_string()
+            }
+            Self::DuplicateTypeAlias(name) => {
+                format!("型エイリアス`{name}`が重複して定義されています")
+            }
+            Self::TypeAliasCycle(name) => {
+                format!("型エイリアス`{name}`が循環しています")
+            }
         }
     }
 
@@ -606,6 +643,19 @@ impl CompileErrKind {
             }
             Self::BreakOutsideLoop => {
                 "`break`は反復処理(`loop`)の本体の中でだけ使えます".into()
+            }
+            Self::InversionOnFloat => {
+                "ビット反転は、整数型(`byte`/`int`/`u64`など)のビット列に対する演算です".into()
+            }
+            Self::CastToNonBuiltinType(..) => {
+                "キャスト先に指定できるのは`byte`/`int`/`u64`/`float`などの組み込みの型だけです".into()
+            }
+            Self::IncDecInvalidTarget => {
+                "`a++` / `self->len++` / `[ptr].len++` / `a.len++`のように、書き込める場所にだけ使えます".into()
+            }
+            Self::DuplicateTypeAlias(..) => "同じ名前の`type`は1つだけ定義できます".into(),
+            Self::TypeAliasCycle(..) => {
+                "エイリアスをたどっても、元の型(`int`など)にたどり着けません".into()
             }
             Self::AsmEmitFloatNotSupported(..) => {
                 "小数(`float`/`f64`)の比較は`comiss`/`comisd`のフラグの扱いが整数と違うため、ここでは生成できません".into()
@@ -658,6 +708,15 @@ impl CompileErrKind {
             }
             Self::AsmEmitFloatNotSupported(..) => "整数の式に書き換えてください".into(),
             Self::BreakOutsideLoop => "`break`を取り除くか、`loop`の中に移動してください".into(),
+            Self::InversionOnFloat => {
+                "整数型にキャストしてから使うか、`-`や`!`など別の演算子を使ってください".into()
+            }
+            Self::CastToNonBuiltinType(..) => "キャスト先を組み込みの型にしてください".into(),
+            Self::IncDecInvalidTarget => {
+                "`a = a + 1`のように代入で書くか、変数/メンバーに対して使ってください".into()
+            }
+            Self::DuplicateTypeAlias(..) => "どちらかの`type`を削除するか、名前を変えてください".into(),
+            Self::TypeAliasCycle(..) => "循環している`type`の参照を見直してください".into(),
             _ => return None,
         })
     }

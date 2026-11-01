@@ -25,9 +25,9 @@ impl Parser {
     ) -> Result<Expr, err::ErrKind> {
         let mut lexer = lex::Lexer::new(&self_file_name);
         // 字句解析のエラーは、`${}`の中の文字列が不正ということ
-        lexer
-            .analy(&src.to_string())
-            .map_err(|_| err::ErrKind::UnexpectedToken)?;
+        if let Err(e) = lexer.analy(&src.to_string()) {
+            return crate::err_at!(self.invalid_asm_operand_text(e.to_string()));
+        }
 
         if lexer.gen_tkns.is_empty() {
             return crate::err_at!(self.empty_asm_operand());

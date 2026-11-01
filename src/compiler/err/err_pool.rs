@@ -64,6 +64,8 @@ impl ErrPool {
     }
 
     pub fn push_err_node(&mut self, err_node: ErrKind) {
+        // `DebugMode`のときは、たまる前に止める
+        let err_node = err::raise(err_node);
         self.err_list.push(err_node);
     }
 
@@ -229,7 +231,7 @@ impl ErrPool {
         };
         self.render_diag(
             &Diag {
-                code: "E0900".to_string(),
+                code: n.kind.code().to_string(),
                 title: format!("内部エラー: {}", n.kind),
                 file,
                 line,

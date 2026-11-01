@@ -27,3 +27,21 @@
 - `pub struct Name<T>`は、使われて作った型(`Name$int`)に`pub`を引き継ぐ(`GenericType::public`)
 - `pub impl`はエラー。メゾットは`impl`の中で`pub`を付ける
 - `pub_keyword_node`はエラーを`?`でそのまま返す(エラープールへの登録は呼び出し元の`C::handle`が1度だけ行う)
+
+## 簡易エラー(`UnexpectedToken`/`NotFoundTkn`)の廃止と`DebugMode`(2026-11-02)
+- 位置もメッセージも持たない`ErrKind::UnexpectedToken`/`NotFoundTkn`を、どこからも作らないようにした(variantは互換のために残している)
+    - パーサー(`err_factory`): `SyntaxErrKind::ExpectedKind`(何が必要だったか+実際のトークン)にした
+        - 現在のトークンが無い(EOF)ときは`TknIsEof`になる(`expected_at_current_untraced`)
+        - `preproc_unexpected_token(expected)`は、何が来るはずだったかを引数で渡す
+        - `${}`の中を字句解析できない: `PreprocErrs::InvalidAsmOperandText`(`E0311`)
+    - IRの生成: `CompileErrKind`に追加した(位置付き)
+        - `InversionOnFloat`(E0036) / `CastToNonBuiltinType`(E0037) / `IncDecInvalidTarget`(E0038)
+        - `DuplicateTypeAlias`(E0039) / `TypeAliasCycle`(E0040。以前は`UndefVarTy`で代用していた)
+    - コンパイラ内部の不整合: `CompilerErrKind`に追加した(`E09xx`)
+        - `RegexBuildFailed`(E0901) / `UnexpectedNodeKind`(E0902) / `LiteralImportPathNotSupported`(E0903)
+        - 位置が無い場所(`ast`)で作ったものは、呼び出し元が`ErrKind::with_span`で付ける
+- `CompileErr::at(kind, span)` / `CompilerErr::at(kind, span)`: `Err`で包まずに`ErrKind`を作る
+- `DebugMode`: `err::set_debug_mode(true)`にすると、エラーが作られた瞬間に`panic!`する(`err::is_debug_mode()`で確認)
+    - 通常はエラーを`Result`で返してまとめて表示するが、`DebugMode`ではエラーの発生元のスタックトレースを見られる(`RUST_BACKTRACE=1`)
+    - エラーを作るマクロ・関数(`syntax_err!`・`preproc_err!`・`GenCompileErr*!`・`GenCompilerErr!`・`GenUndefErrResult!`・`lex_err!`・`CompileErr::at`など)と`ErrPool::push_err_node`が、`err::raise`を通す
+    - エラーを作る箇所を追加するときは、`err::raise(..)`を通すこと
