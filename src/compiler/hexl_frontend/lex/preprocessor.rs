@@ -276,7 +276,7 @@ impl Preprocessor {
                 }
             }
 
-            if is_active(&cond_stack) {
+            if is_active(&cond_stack) || c == '\n' {
                 output.push(c);
             }
             if c == '\n' {

@@ -1222,6 +1222,22 @@ mod tests {
     }
 
     #[test]
+    fn check_preprocessor_conditionals_preserve_line_numbers() {
+        let src = "#if #windows\nret 1\n#elif #linux\nret #line\n#else\nret 3\n#endif\nret #line";
+        let mut lex = Lexer::with_os("linux", "<test>");
+        lex.analy(src).unwrap();
+        let nums: Vec<(String, usize)> = lex
+            .gen_tkns
+            .iter()
+            .filter_map(|t| match &t.tkn {
+                Tkn::Number(n) => Some((n.clone(), t.span.line)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(nums, vec![("4".to_string(), 4), ("8".to_string(), 8)]);
+    }
+
+    #[test]
     #[should_panic]
     fn check_preprocessor_elif_after_else_panics() {
         let _ = ret_nums("linux", "#if #X\n#else\n#elif #linux\n#endif");

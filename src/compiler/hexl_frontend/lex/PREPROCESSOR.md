@@ -93,6 +93,7 @@ ret #A + 1      // ret 10 + 1
 - `#elif`は何個でも書ける。`#else`は省略可、入れ子も可。`#else`の後ろに`#elif`を書くと`panic`する。
 - 組み込みのOSシンボル`#linux` / `#windows`は、`--linux` / `--windows`で選んだOS(未指定なら実行環境のOS)の
   **1つだけ**が定義される。もう一方は未定義(`Lexer::with_os(os)` → `Preprocessor::setup_defines_for(os)`)。
+- 条件で無効になった行も改行は出力に残し、後続のトークンの行番号を保つ。
 
 ## `#include "dir/file"`(2026-10-23変更)
 ```
