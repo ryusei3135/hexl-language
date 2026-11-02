@@ -33,15 +33,19 @@ impl Parser {
 
         match self.current_tkn() {
             lex::Tkn::Colon => {
-                let ret_ty = self.define_ty_node()?;
+                let ret_ty = self.ty_node_after_delim()?;
+                // 戻り値の型が契約か調べ上書き
+                let contract_ret_ty = self.contract_after_ty(ret_ty.clone())?;
 
                 if self.current_tkn() == &lex::Tkn::LBrace {
                     Ok(FuncDefine::new(
                         func_name.clone(),
                         arg,
-                        ret_ty,
+                        ret_ty.clone(),
                         is_public,
                         Rc::clone(&span),
+                        // 契約の型と戻り値の型が同じ場合、契約の型は`None`にする
+                        if ret_ty == contract_ret_ty {None} else {Some(contract_ret_ty)},
                     ))
                 } else {
                     crate::err_at!(self.fn_lbrace_not_found())
@@ -55,6 +59,7 @@ impl Parser {
                 TyNode::Ty("int".to_string()),
                 is_public,
                 span,
+                None,
             )),
             t => crate::err_at!(self.fn_colon_or_lbrace_not_found(t.clone())),
         }
@@ -107,7 +112,10 @@ impl Parser {
                         );
                     }
                     self.next_tkn(&[])?;
-                    let ty = self.define_ty_node()?;
+                    let mut ty = self.define_ty_node()?;
+                    // 引数の型が契約か調べ上書き
+                    ty = self.contract_after_ty(ty)?;
+
                     args_params.push(ArgsNode {
                         name: name.clone(),
                         ty,

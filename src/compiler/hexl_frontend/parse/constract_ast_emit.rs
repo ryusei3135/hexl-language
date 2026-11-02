@@ -65,7 +65,7 @@ impl Parser {
     /// ポインタ型(`int* must=free`)のように、型名より後ろに契約が
     /// 書かれる場合はこちらを使う。契約はポインタ全体にかかる
     /// (`ConstractMust(Pointer(int))`)。
-    pub(in crate::compiler::hexl_frontend::parse) fn constract_after_ty(
+    pub(in crate::compiler::hexl_frontend::parse) fn contract_after_ty(
         &mut self,
         ty: TyNode,
     ) -> Result<TyNode, err::ErrKind> {

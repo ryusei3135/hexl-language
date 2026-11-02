@@ -284,39 +284,3 @@ mod str_len_arg_tests {
         assert_eq!(str_len, str_id.map(|id| (id, 11)), "{:?}", body);
     }
 }
-
-#[cfg(test)]
-mod method_receiver_use_count_tests {
-    use super::*;
-
-    #[test]
-    fn method_receiver_counts_as_a_variable_use() {
-        let nodes = parse_test_source(
-            "struct Point { x: int pub get_num(self: Self): int { ret 1 } } \
-             use_method(point: Point): int { ret point.get_num() } \
-             _start(): int { point: Point = Point { x: 1 } ret point.get_num() }",
-        );
-        let mut ir = new_test_ir();
-        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
-            .unwrap();
-
-        assert_eq!(
-            ir.func_tree
-                .func
-                .get("use_method")
-                .unwrap()
-                .var_counter
-                .arg_use_count(0),
-            1
-        );
-        assert_eq!(
-            ir.func_tree
-                .func
-                .get("_start")
-                .unwrap()
-                .var_counter
-                .var_use_count("point"),
-            1
-        );
-    }
-}

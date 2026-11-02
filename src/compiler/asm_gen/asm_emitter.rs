@@ -19,8 +19,6 @@ use crate::compiler::err::{self, err_pool};
 use crate::compiler::ir::inst::Inst;
 use crate::compiler::ir::types;
 
-use super::*;
-
 pub use var_mnger::VarIndexInfo;
 
 impl AsmEmitter {

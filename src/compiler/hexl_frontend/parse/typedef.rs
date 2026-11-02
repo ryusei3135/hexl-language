@@ -323,7 +323,7 @@ impl Parser {
                                 lex::Tkn::Mul => {
                                     let ptr_ty = self.ptr_ty_node(generic_ty)?;
                                     // `Pair<int>* must=free`
-                                    self.constract_after_ty(ptr_ty)?
+                                    self.contract_after_ty(ptr_ty)?
                                 }
                                 _ => generic_ty,
                             }
@@ -338,7 +338,7 @@ impl Parser {
                         lex::Tkn::Mul => {
                             let ptr_ty = self.ptr_ty_node(base_ty)?;
                             // `int* must=free` / `int* of free`
-                            self.constract_after_ty(ptr_ty)?
+                            self.contract_after_ty(ptr_ty)?
                         }
                         _ => {
                             // ジェネリクスに定義ずみの型がある
@@ -544,6 +544,7 @@ mod ty_tests {
             TyNode::Ty("int".to_string()),
             false,
             sp(),
+            None
         );
         let map: HashMap<String, Box<Expr>> = [
             (
@@ -585,6 +586,7 @@ mod ty_tests {
             TyNode::Ty("ty".to_string()),
             false,
             sp(),
+            None
         )];
         let Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
@@ -683,6 +685,7 @@ mod ty_tests {
             TyNode::Ty("ty".to_string()),
             false,
             sp(),
+            None
         )];
         let Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();

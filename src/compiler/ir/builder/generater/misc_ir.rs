@@ -276,7 +276,7 @@ mod self_ty_tests {
 
     fn make_func(name: &str, params: Vec<ArgsNode>, ret_ty: ast::TyNode) -> ast::FuncDefine {
         let mut func =
-            match ast::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span()) {
+            match ast::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span(), None) {
                 Group1Node::FuncDefine(func) => func,
                 _ => unreachable!(),
             };

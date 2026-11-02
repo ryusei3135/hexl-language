@@ -39,6 +39,7 @@ pub struct FuncDefine {
     pub module: Option<String>,
     def_info: FuncDefInfo,
     pub span: NodeSpan,
+    pub contract: Option<TyNode>,
 }
 
 impl FuncDefine {
@@ -48,6 +49,7 @@ impl FuncDefine {
         ret_ty: TyNode,
         public: bool,
         span: NodeSpan,
+        contract: Option<TyNode>,
     ) -> Group1Node {
         Group1Node::FuncDefine(Self {
             public,
@@ -59,6 +61,7 @@ impl FuncDefine {
             module: None,
             def_info: FuncDefInfo::DefOnly,
             span,
+            contract,
         })
     }
 
