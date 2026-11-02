@@ -1,0 +1,235 @@
+#include std::"os/mem.hexl"
+#include std::"lib.hexl"
+
+// Hexl string library.
+// Build with --linux or --windows so mem.hexl selects one backend.
+//
+// ■ 使い方
+//   s := Str::new("hello")         // 使い終わったら必ず del (must=del)
+//   s.push(33)                     // '!'
+//   s.push_str(" world")
+//   s.start_with("he")             // 1
+//   s.end_with("d!")               // 1
+//   s.len()                        // 12
+//   r := s.pop()                   // lib::Option<byte>: 空なら None
+//   s.del()
+//
+// ■ 仕様
+//   - 中身は NUL 終端しない。長さは len() で持つ。
+//   - init_msg / end_txt / start_txt / str は NUL 終端のバイト列。
+//   - メモリ確保に失敗したら buf は 0、len=0、cap=0 になる(以降の push は
+//     再確保を試みる)。
+//   - 値が無い(空の pop)は std の lib::Option で返す。
+
+// ---------------------------------------------------------------
+// 内部ヘルパ(OS非依存の x86-64 asm)
+// Windows x64 では rsi/rdi が呼び出し先保存レジスタなので push/pop で守る。
+// ---------------------------------------------------------------
+
+// src から dst へ n バイトコピーする。n が 0 以下なら何もしない。
+os_copy(dst: i64, src: i64, n: i64) {
+    cond n > 0 {
+        #asm(gcc_x64) {
+            "movq ${dst + 0}, %rax"
+            "movq ${src + 0}, %rdx"
+            "movq ${n}, %rcx"
+            "pushq %rsi"
+            "pushq %rdi"
+            "movq %rax, %rdi"
+            "movq %rdx, %rsi"
+            "cld"
+            "rep movsb"
+            "popq %rdi"
+            "popq %rsi"
+        }
+    }
+}
+
+// NUL 終端バイト列 addr の長さ(NUL は含まない)。addr が 0 なら 0。
+os_strlen(addr: i64): i64 {
+    cond addr == 0 {
+        ret 0
+    }
+    res: i64 = 0
+    #asm(gcc_x64) {
+        "movq ${addr + 0}, %rdx"
+        "movq $-1, %rcx"
+        "xorq %rax, %rax"
+        "pushq %rdi"
+        "movq %rdx, %rdi"
+        "cld"
+        // al(=0) と一致するまで進む。rcx は -1 から減っていく。
+        "repne scasb"
+        "popq %rdi"
+        // 長さ = (-1 - rcx) - 1 = ~rcx - 1
+        "notq %rcx"
+        "subq $1, %rcx"
+        "movq %rcx, ${res}"
+    }
+    ret res
+}
+
+// a と b の先頭 n バイトが等しければ 1、違えば 0。n が 0 以下なら 1。
+os_equal(a: i64, b: i64, n: i64): i64 {
+    cond n <= 0 {
+        ret 1
+    }
+    res: i64 = 0
+    #asm(gcc_x64) {
+        "movq ${a + 0}, %rax"
+        "movq ${b + 0}, %rdx"
+        "movq ${n}, %rcx"
+        "pushq %rsi"
+        "pushq %rdi"
+        "movq %rax, %rsi"
+        "movq %rdx, %rdi"
+        "cld"
+        // 全部一致なら最後に ZF=1
+        "repe cmpsb"
+        "sete %al"
+        "popq %rdi"
+        "popq %rsi"
+        "movzbq %al, %rax"
+        "movq %rax, ${res}"
+    }
+    ret res
+}
+
+// ---------------------------------------------------------------
+// Str
+// ---------------------------------------------------------------
+pub struct Str {
+    buf: byte*"unlimit" must=free
+    len: u64
+    cap: u64
+
+    // init_msg を複製して作る。使い終わったら del を呼ぶこと。
+    pub new(init_msg: byte*): Self must=del {
+        src: i64 = init_msg
+        n: u64 = os_strlen(src)
+        c: u64 = n * 2
+        cond c < 16 {
+            c = 16
+        }
+        s := Self {
+            buf: mem::malloc<byte>(c)
+            len: 0
+            cap: c
+        }
+        a: i64 = s.buf
+        cond a == 0 {
+            s.cap = 0
+        } else {
+            os_copy(a, src, n)
+            s.len = n
+        }
+        ret s
+    }
+
+    pub del(self: Self*of new) {
+        mem::free<byte>(self->buf)
+    }
+
+    // 末尾に1バイト追加する。再確保に失敗したら何もしない。
+    pub push(self mut: Self*, chr: byte) {
+        ok: u64 = reserve(self, self->len + 1)
+        cond ok == 1 {
+            l: u64 = self->len
+            [self->buf l else 0] = chr
+            self->len += 1
+        }
+    }
+
+    // 末尾の1バイトを取り出す。空なら None。
+    pub pop(self mut: Self*): lib::Option<byte> {
+        cond self->len >= 1 {
+            self->len -= 1
+            l: u64 = self->len
+            r: byte = [self->buf l else 0]
+            v := lib::Option<byte>::Some(r)
+            ret v
+        } else {
+            ret lib::Option<byte>::None
+        }
+    }
+
+    // 末尾が end_txt と一致すれば 1。空文字列は常に 1。
+    pub end_with(self: Self*, end_txt: byte*): bool {
+        e: i64 = end_txt
+        m: u64 = os_strlen(e)
+        cond m > self->len {
+            ret 0
+        }
+        base: i64 = self->buf
+        from: i64 = base + self->len - m
+        r: i64 = os_equal(from, e, m)
+        cond r == 1 {
+            ret 1
+        }
+        ret 0
+    }
+
+    // 先頭が start_txt と一致すれば 1。空文字列は常に 1。
+    pub start_with(self: Self*, start_txt: byte*): bool {
+        s: i64 = start_txt
+        m: u64 = os_strlen(s)
+        cond m > self->len {
+            ret 0
+        }
+        base: i64 = self->buf
+        r: i64 = os_equal(base, s, m)
+        cond r == 1 {
+            ret 1
+        }
+        ret 0
+    }
+
+    // 末尾に str(NUL 終端)を追加する。再確保に失敗したら何もしない。
+    pub push_str(self mut: Self*, str: byte*) {
+        src: i64 = str
+        m: u64 = os_strlen(src)
+        cond m > 0 {
+            ok: u64 = reserve(self, self->len + m)
+            cond ok == 1 {
+                base: i64 = self->buf
+                dst: i64 = base + self->len
+                os_copy(dst, src, m)
+                self->len += m
+            }
+        }
+    }
+
+    pub len(self: Self*): u64 {
+        ret self->len
+    }
+
+    // 容量を倍にする(0 のときは 16)。失敗したら 0 を返し、buf は空になる。
+    realloc(self mut: Self*): bool {
+        newcap: u64 = self->cap * 2
+        cond newcap < 16 {
+            newcap = 16
+        }
+        self->buf = mem::realloc<byte>(self->buf, newcap)
+        p: i64 = self->buf
+        cond p == 0 {
+            self->len = 0
+            self->cap = 0
+            ret 0
+        }
+        self->cap = newcap
+        ret 1
+    }
+}
+
+// need バイト入るまで realloc を繰り返す。入れば 1、失敗なら 0。
+// (realloc は倍々なので再帰の深さは対数)
+reserve(s: Str*, need: u64): u64 {
+    cond s->cap >= need {
+        ret 1
+    }
+    ok: bool = s->realloc()
+    cond ok == 1 {
+        ret reserve(s, need)
+    }
+    ret 0
+}
