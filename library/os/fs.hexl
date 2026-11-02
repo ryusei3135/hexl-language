@@ -73,7 +73,7 @@ os_find(addr: i64, n: i64, ch: i64): i64 {
         "subq %rcx, %rax"
         "subq $1, %rax"
         "testb %dl, %dl"
-        "cmovneq %rax, %r9"
+        "cmovne %rax, %r9"
         "movq %r9, ${res}"
     }
     ret res

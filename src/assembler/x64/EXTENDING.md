@@ -126,3 +126,121 @@ AT&T 構文で `op 元, 先` の順に書きます。サフィックス (`b` / `
 `leaq %rax, %rcx` のように元・先がともにレジスタの場合は、`movq %rax, %rcx` と同じ符号化で出力します
 (実機の `lea` はメモリオペランド必須で、`mod=11` は #UD になるため)。
 サイズ不一致 (`leaq %eax, %rcx` など) は `register size mismatch` エラーです。
+
+## 文字列命令と `rep` 系プレフィックス (`movs` / `cmps` / `stos` / `lods` / `scas`)
+
+`emitter/inst_table.rs` の `string_op_spec` (表) と `emit_string_op` / `emit_rep` が担当します。
+オペランドは暗黙 (`%rsi` / `%rdi` / `%al` など) なので、書くのはニーモニックだけです。
+
+| 命令 | 符号化 (8bit 版 / 16・32・64bit 版) | 動作 |
+|---|---|---|
+| `movsb` `movsw` `movsl` `movsq` | `A4` / `A5` | `[%rdi] <- [%rsi]` |
+| `cmpsb` `cmpsw` `cmpsl` `cmpsq` | `A6` / `A7` | `[%rsi]` と `[%rdi]` を比較 |
+| `stosb` `stosw` `stosl` `stosq` | `AA` / `AB` | `[%rdi] <- %al/%ax/%eax/%rax` |
+| `lodsb` `lodsw` `lodsl` `lodsq` | `AC` / `AD` | `%al/%ax/%eax/%rax <- [%rsi]` |
+| `scasb` `scasw` `scasl` `scasq` | `AE` / `AF` | `%al/%ax/%eax/%rax` と `[%rdi]` を比較 |
+| `cld` / `std` | `FC` / `FD` | 方向フラグ DF のクリア / セット |
+
+- サフィックスは必須です (`b` / `w` / `l` / `q`)。サイズを書かない `movs` などはエラーです。
+- `movsd` / `cmpsd` は SSE 命令と同じ名前です。**オペランドが無いときだけ**32bit の文字列命令
+  (`movsl` / `cmpsl` と同じ) になり、オペランドが有るときは従来どおり SSE 命令です。
+  GNU as に `stosd` / `lodsd` / `scasd` は無いので、これらもエラーです。
+- `rep` / `repe` / `repz` は `F3`、`repne` / `repnz` は `F2` を付けます。GNU as と同じく、
+  どのプレフィックスも5種類の文字列命令すべてに付けられます (`rep scasb` は `repe scasb` と同じ `F3 AE`)。
+- 出力の並びは `[66] [F3/F2] [REX.W] opcode` です (例: `rep movsw` は `66 F3 A5`、`rep movsq` は `F3 48 A5`)。
+- パーサは `rep movsb` を「ニーモニック `rep` + シンボル `movsb`」と読みます。
+  `rep` の後に文字列命令が同じ行に無い場合 (`rep` だけ、`rep nop`、`rep ret` など) はエラーです。
+- 明示オペランド付きの形 (`stosb %al, (%rdi)` など) は未対応です。
+
+```gas
+cld                  # 前方向 (DF=0)
+movq $16, %rcx
+rep movsb            # %rcx バイトを [%rsi] から [%rdi] へコピー
+
+movq $0, %rax
+repne scasb          # %al と一致するバイトまで [%rdi] を進める (見つかれば ZF=1)
+```
+
+## `test`
+
+`emit_test` が担当します。`and` と同じく結果は捨て、フラグだけを更新します。
+サフィックス (`b` / `w` / `l` / `q`) は省略できます。
+
+| 形 | 例 |
+|---|---|
+| レジスタ同士 | `testb %dl, %dl` / `test %eax, %ebx` |
+| レジスタとメモリ | `testl %eax, -4(%rbp)` / `testl 8(%r9), %eax` |
+| 即値とレジスタ | `testb $1, %al` / `testq $0x1000, %rcx` |
+| 即値とメモリ | `testl $1, -4(%rbp)` / `testb $0x80, (%rax)` |
+
+- `test` には 8bit 即値で済ませる短縮形 (`83`) が無いので、即値は常にオペランドサイズ幅で出力します
+  (`testl $1, %ecx` は `F7 C1 01 00 00 00`)。`%al` / `%ax` / `%eax` / `%rax` だけは `A8` / `A9` の短縮形です。
+- メモリ + 即値のサイズはサフィックスで決まり、無印は32bitです。
+- `symbol(%rip)` + 即値は、`cmpl` などと同じ理由で未対応です。
+- 符号化は GNU as の出力と一致することをテスト (`string_rep_tests`) で確認しています。
+  `file.hexl` のインラインasm (`os_copy` / `os_find`) と同じ並びのテストも含みます。
+
+## 既知の差 (GNU as との違い)
+
+`movq $-1, %rax` のように 64bit レジスタへ符号拡張で収まる即値を入れる場合、GNU as は
+`48 c7 c0 ff ff ff ff` (7バイト) を出しますが、このアセンブラは `movabs` (`48 b8` + 8バイト) を出します。
+どちらも同じ意味で、動作には影響しません。
+
+## 文字列命令と `rep` 系プレフィックス (`movs` / `cmps` / `stos` / `lods` / `scas`)
+
+`emitter/inst_table.rs` の `string_op_spec` (表) と `emit_string_op` / `emit_rep` が担当します。
+オペランドは暗黙 (`%rsi` / `%rdi` / `%al` など) なので、書くのはニーモニックだけです。
+
+| 命令 | 符号化 (8bit 版 / 16・32・64bit 版) | 動作 |
+|---|---|---|
+| `movsb` `movsw` `movsl` `movsq` | `A4` / `A5` | `[%rdi] <- [%rsi]` |
+| `cmpsb` `cmpsw` `cmpsl` `cmpsq` | `A6` / `A7` | `[%rsi]` と `[%rdi]` を比較 |
+| `stosb` `stosw` `stosl` `stosq` | `AA` / `AB` | `[%rdi] <- %al/%ax/%eax/%rax` |
+| `lodsb` `lodsw` `lodsl` `lodsq` | `AC` / `AD` | `%al/%ax/%eax/%rax <- [%rsi]` |
+| `scasb` `scasw` `scasl` `scasq` | `AE` / `AF` | `%al/%ax/%eax/%rax` と `[%rdi]` を比較 |
+| `cld` / `std` | `FC` / `FD` | 方向フラグ DF のクリア / セット |
+
+- サフィックスは必須です (`b` / `w` / `l` / `q`)。サイズを書かない `movs` などはエラーです。
+- `movsd` / `cmpsd` は SSE 命令と同じ名前です。**オペランドが無いときだけ**32bit の文字列命令
+  (`movsl` / `cmpsl` と同じ) になり、オペランドが有るときは従来どおり SSE 命令です。
+  GNU as に `stosd` / `lodsd` / `scasd` は無いので、これらもエラーです。
+- `rep` / `repe` / `repz` は `F3`、`repne` / `repnz` は `F2` を付けます。GNU as と同じく、
+  どのプレフィックスも5種類の文字列命令すべてに付けられます (`rep scasb` は `repe scasb` と同じ `F3 AE`)。
+- 出力の並びは `[66] [F3/F2] [REX.W] opcode` です (例: `rep movsw` は `66 F3 A5`、`rep movsq` は `F3 48 A5`)。
+- パーサは `rep movsb` を「ニーモニック `rep` + シンボル `movsb`」と読みます。
+  `rep` の後に文字列命令が同じ行に無い場合 (`rep` だけ、`rep nop`、`rep ret` など) はエラーです。
+- 明示オペランド付きの形 (`stosb %al, (%rdi)` など) は未対応です。
+
+```gas
+cld                  # 前方向 (DF=0)
+movq $16, %rcx
+rep movsb            # %rcx バイトを [%rsi] から [%rdi] へコピー
+
+movq $0, %rax
+repne scasb          # %al と一致するバイトまで [%rdi] を進める (見つかれば ZF=1)
+```
+
+## `test`
+
+`emit_test` が担当します。`and` と同じく結果は捨て、フラグだけを更新します。
+サフィックス (`b` / `w` / `l` / `q`) は省略できます。
+
+| 形 | 例 |
+|---|---|
+| レジスタ同士 | `testb %dl, %dl` / `test %eax, %ebx` |
+| レジスタとメモリ | `testl %eax, -4(%rbp)` / `testl 8(%r9), %eax` |
+| 即値とレジスタ | `testb $1, %al` / `testq $0x1000, %rcx` |
+| 即値とメモリ | `testl $1, -4(%rbp)` / `testb $0x80, (%rax)` |
+
+- `test` には 8bit 即値で済ませる短縮形 (`83`) が無いので、即値は常にオペランドサイズ幅で出力します
+  (`testl $1, %ecx` は `F7 C1 01 00 00 00`)。`%al` / `%ax` / `%eax` / `%rax` だけは `A8` / `A9` の短縮形です。
+- メモリ + 即値のサイズはサフィックスで決まり、無印は32bitです。
+- `symbol(%rip)` + 即値は、`cmpl` などと同じ理由で未対応です。
+- 符号化は GNU as の出力と一致することをテスト (`string_rep_tests`) で確認しています。
+  `file.hexl` のインラインasm (`os_copy` / `os_find`) と同じ並びのテストも含みます。
+
+## 既知の差 (GNU as との違い)
+
+`movq $-1, %rax` のように 64bit レジスタへ符号拡張で収まる即値を入れる場合、GNU as は
+`48 c7 c0 ff ff ff ff` (7バイト) を出しますが、このアセンブラは `movabs` (`48 b8` + 8バイト) を出します。
+どちらも同じ意味で、動作には影響しません。

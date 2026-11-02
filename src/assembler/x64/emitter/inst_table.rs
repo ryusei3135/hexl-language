@@ -259,6 +259,67 @@ fn mnemonic_suffix_bits(mnemonic: &str, base: &str) -> Option<u32> {
 }
 
 // ============================================================
+// 文字列命令 / rep プレフィックスの表
+// ============================================================
+
+/// 文字列命令の符号化 (オペコードとオペランドサイズ)
+#[derive(Clone, Copy)]
+struct StringOp {
+    opcode: u8,
+    bits: u32,
+}
+
+/// `rep` 系プレフィックスのバイトを返す。
+///
+/// `rep` / `repe` / `repz` は `F3`、`repne` / `repnz` は `F2`。
+/// GNU as と同じく、どのプレフィックスも5種類の文字列命令すべてに付けられる
+/// (`rep` を `cmps` / `scas` に付けると `repe` と同じ `F3` になる)。
+fn rep_prefix(name: &str) -> Option<u8> {
+    match name {
+        "rep" | "repe" | "repz" => Some(0xF3),
+        "repne" | "repnz" => Some(0xF2),
+        _ => None,
+    }
+}
+
+/// 文字列命令 (`movsb` / `cmpsw` / `stosl` / `lodsq` / `scasb` など) の符号化を返す。
+///
+/// 末尾のサフィックスが `b` / `w` / `l` / `q` のとき 8 / 16 / 32 / 64 bit。
+/// 8bit 版のオペコードに 1 を足したものが 16/32/64bit 版のオペコード。
+/// `movsd` / `cmpsd` は SSE 命令と同じ名前なので、オペランドが無いとき
+/// (`no_operands`) だけ 32bit の文字列命令として扱う (GNU as は `movsl` / `cmpsl` とみなす)。
+fn string_op_spec(name: &str, no_operands: bool) -> Option<StringOp> {
+    const FAMILIES: [(&str, u8); 5] = [
+        ("movs", 0xA4),
+        ("cmps", 0xA6),
+        ("stos", 0xAA),
+        ("lods", 0xAC),
+        ("scas", 0xAE),
+    ];
+
+    for (stem, byte_opcode) in FAMILIES {
+        let Some(suffix) = name.strip_prefix(stem) else {
+            continue;
+        };
+
+        let bits = match suffix {
+            "b" => 8,
+            "w" => 16,
+            "l" => 32,
+            "q" => 64,
+            "d" if no_operands && (stem == "movs" || stem == "cmps") => 32,
+            _ => return None,
+        };
+
+        let opcode = if bits == 8 { byte_opcode } else { byte_opcode + 1 };
+
+        return Some(StringOp { opcode, bits });
+    }
+
+    None
+}
+
+// ============================================================
 // SSE 命令の表
 // ============================================================
 
@@ -479,6 +540,17 @@ fn setcc_condition(name: &str) -> Option<Condition> {
 pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String> {
     let name = inst.mnemonic.as_str();
 
+    // `rep` / `repe` / `repz` / `repne` / `repnz` + 文字列命令 (`rep movsb` など)
+    if let Some(prefix) = rep_prefix(name) {
+        return e.emit_rep(name, prefix, &inst.operands);
+    }
+
+    // 文字列命令 (`movsb` / `stosq` / `scasb` ...)。オペランドは暗黙 (%rsi / %rdi / %al ...)。
+    // `movsd` / `cmpsd` はオペランドが無いときだけここで扱い、有るときは SSE 命令になる。
+    if let Some(op) = string_op_spec(name, inst.operands.is_empty()) {
+        return e.emit_string_op(name, op, None, &inst.operands);
+    }
+
     // SSE 命令は表 (`sse_spec`) で引く
     if let Some(spec) = sse_spec(name) {
         return e.emit_sse(name, spec, &inst.operands);
@@ -616,6 +688,15 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
         "syscall" => e.emit_syscall(&inst.operands),
 
         "nop" => e.emit_nop(&inst.operands),
+
+        // DF (方向フラグ) のクリア / セット。文字列命令の進む向きを決める
+        "cld" => e.emit_simple(name, 0xFC, &inst.operands),
+
+        "std" => e.emit_simple(name, 0xFD, &inst.operands),
+
+        "test" | "testq" | "testl" | "testw" | "testb" => {
+            e.emit_test(&inst.operands, mnemonic_suffix_bits(name, "test"))
+        }
 
         _ => Err(format!("unsupported instruction: {}", name)),
     }
@@ -760,6 +841,203 @@ impl Emitter {
         self.emit_u8(0x90);
 
         Ok(())
+    }
+
+    // --------------------------------------------------------
+    // オペランドもサイズも無い1バイト命令 (`cld` / `std`)
+    // --------------------------------------------------------
+    fn emit_simple(&mut self, name: &str, opcode: u8, operands: &[Operand]) -> Result<(), String> {
+        if !operands.is_empty() {
+            return Err(format!("{} takes no operands", name));
+        }
+        self.emit_u8(opcode);
+
+        Ok(())
+    }
+
+    // --------------------------------------------------------
+    // 文字列命令  (オペランドは暗黙)
+    //
+    //   movsb                    -> A4              [%rdi] <- [%rsi]
+    //   movsw / movsl / movsq    -> 66 A5 / A5 / 48 A5
+    //   cmpsb ...                -> A6 / A7         [%rsi] と [%rdi] を比較
+    //   stosb ...                -> AA / AB         [%rdi] <- %al/%ax/%eax/%rax
+    //   lodsb ...                -> AC / AD         %al/%ax/%eax/%rax <- [%rsi]
+    //   scasb ...                -> AE / AF         %al/%ax/%eax/%rax と [%rdi] を比較
+    //
+    // プレフィックスの並びは GNU as と同じ `[66] [F3/F2] [REX.W] opcode`。
+    // --------------------------------------------------------
+    fn emit_string_op(
+        &mut self,
+        name: &str,
+        op: StringOp,
+        prefix: Option<u8>,
+        operands: &[Operand],
+    ) -> Result<(), String> {
+        if !operands.is_empty() {
+            return Err(format!(
+                "{}: string instructions take no operands (they use %rsi / %rdi / %al implicitly)",
+                name
+            ));
+        }
+
+        if op.bits == 16 {
+            self.emit_u8(0x66);
+        }
+        if let Some(prefix) = prefix {
+            self.emit_u8(prefix);
+        }
+        if op.bits == 64 {
+            self.emit_u8(0x48);
+        }
+        self.emit_u8(op.opcode);
+
+        Ok(())
+    }
+
+    // --------------------------------------------------------
+    // rep / repe / repz / repne / repnz + 文字列命令
+    //
+    //   rep movsb      -> F3 A4
+    //   repne scasb    -> F2 AE
+    //
+    // パーサは `rep movsb` を「ニーモニック `rep` + シンボル `movsb`」と読むので、
+    // ここでシンボルを文字列命令の名前として取り出し、プレフィックス付きで出力する。
+    // --------------------------------------------------------
+    fn emit_rep(&mut self, name: &str, prefix: u8, operands: &[Operand]) -> Result<(), String> {
+        let [Operand::Symbol(inner)] = operands else {
+            return Err(format!(
+                "{}: must be followed by a string instruction on the same line (movs / cmps / stos / lods / scas)",
+                name
+            ));
+        };
+
+        let inner = inner.to_ascii_lowercase();
+
+        let Some(op) = string_op_spec(&inner, true) else {
+            return Err(format!(
+                "{}: only string instructions can follow this prefix, got {}",
+                name, inner
+            ));
+        };
+
+        self.emit_string_op(&inner, op, Some(prefix), &[])
+    }
+
+    // --------------------------------------------------------
+    // test  (AND の結果でフラグだけ更新する。結果は捨てる)
+    //
+    //   testb %dl, %dl         -> 84 d2
+    //   testl %eax, %ecx       -> 85 c1
+    //   testb $1, %al          -> A8 ib            (アキュムレータの短縮形)
+    //   testl $1, %ecx         -> F7 /0 id         (imm8 の形は無いので常に全幅)
+    //   testl $1, -4(%rbp)     -> F7 /0 id
+    //   testl %eax, -4(%rbp)   -> 85 /r
+    //
+    // `test` は左右を入れ替えても結果が同じなので、`mem, reg` の形も `reg, mem` と同じ符号化。
+    // --------------------------------------------------------
+    fn emit_test(&mut self, operands: &[Operand], suffix_bits: Option<u32>) -> Result<(), String> {
+        if operands.len() != 2 {
+            return Err("test requires two operands".into());
+        }
+
+        match (&operands[0], &operands[1]) {
+            (Operand::Immediate(value), Operand::Register(dst)) => {
+                let bits = dst.bits() as u32;
+                if !matches!(bits, 8 | 16 | 32 | 64) {
+                    return Err("test requires an 8-, 16-, 32-, or 64-bit register".into());
+                }
+                Self::check_suffix("test", suffix_bits, bits)?;
+                let value = normalize_imm("test", *value, bits)?;
+
+                if dst.id() == 0 {
+                    self.emit_sized_prefix(bits, false, false, false, false);
+                    self.emit_u8(if bits == 8 { 0xA8 } else { 0xA9 });
+                } else {
+                    self.emit_sized_prefix(
+                        bits,
+                        false,
+                        false,
+                        dst.id() >= 8,
+                        needs_empty_rex(*dst),
+                    );
+                    self.emit_u8(if bits == 8 { 0xF6 } else { 0xF7 });
+                    self.emit_u8(0b11_000_000 | (dst.id() & 7));
+                }
+                self.emit_test_imm(value, bits);
+                Ok(())
+            }
+
+            (Operand::Immediate(value), Operand::Memory(mem)) => {
+                let bits = suffix_bits.unwrap_or(32);
+                reject_rip_symbol_with_imm("test", mem)?;
+                let value = normalize_imm("test", *value, bits)?;
+
+                self.emit_sized_prefix(
+                    bits,
+                    false,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    false,
+                );
+                self.emit_u8(if bits == 8 { 0xF6 } else { 0xF7 });
+                self.emit_memory_modrm(0, mem)?;
+                self.emit_test_imm(value, bits);
+                Ok(())
+            }
+
+            (Operand::Register(src), Operand::Register(dst)) => {
+                if src.bits() != dst.bits() {
+                    return Err("test: register size mismatch".into());
+                }
+                let bits = src.bits() as u32;
+                if !matches!(bits, 8 | 16 | 32 | 64) {
+                    return Err("test requires 8-, 16-, 32-, or 64-bit registers".into());
+                }
+                Self::check_suffix("test", suffix_bits, bits)?;
+
+                self.emit_sized_prefix(
+                    bits,
+                    src.id() >= 8,
+                    false,
+                    dst.id() >= 8,
+                    needs_empty_rex(*src) || needs_empty_rex(*dst),
+                );
+                self.emit_u8(if bits == 8 { 0x84 } else { 0x85 });
+                self.emit_u8(0b11_000_000 | ((src.id() & 7) << 3) | (dst.id() & 7));
+                Ok(())
+            }
+
+            (Operand::Register(reg), Operand::Memory(mem))
+            | (Operand::Memory(mem), Operand::Register(reg)) => {
+                let bits = reg.bits() as u32;
+                if !matches!(bits, 8 | 16 | 32 | 64) {
+                    return Err("test requires an 8-, 16-, 32-, or 64-bit register".into());
+                }
+                Self::check_suffix("test", suffix_bits, bits)?;
+
+                self.emit_sized_prefix(
+                    bits,
+                    reg.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    needs_empty_rex(*reg),
+                );
+                self.emit_u8(if bits == 8 { 0x84 } else { 0x85 });
+                self.emit_memory_modrm(reg.id(), mem)
+            }
+
+            (l, r) => Err(format!("unsupported test operands {:?} {:?}", l, r)),
+        }
+    }
+
+    /// `test` の即値部分 (オペランドサイズの幅で出力する。64bit は 32bit を符号拡張)
+    fn emit_test_imm(&mut self, value: i64, bits: u32) {
+        match bits {
+            8 => self.emit_u8(value as u8),
+            16 => self.emit_u16(value as u16),
+            _ => self.emit_i32(value as i32),
+        }
     }
 
     // --------------------------------------------------------
@@ -2223,6 +2501,251 @@ mod setcc_tests {
             "sete %xmm0",
             "setq %al",
             "setl %eax",
+        ] {
+            assert!(assemble(&format!("{}\n", source)).is_err(), "{}", source);
+        }
+    }
+}
+
+#[cfg(test)]
+mod string_rep_tests {
+    use crate::assembler::x64::{Lexer, Parser, convert};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize()?;
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        emitter.finish()?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    fn check(cases: &[(&str, &str)]) {
+        for (source, expected) in cases {
+            assert_eq!(
+                hex(&assemble(&format!("{}\n", source)).unwrap()),
+                *expected,
+                "{}",
+                source
+            );
+        }
+    }
+
+    /// 期待値はすべて GNU as (`as` + `objdump -d`) の出力
+    #[test]
+    fn string_instructions_encode_each_operand_size() {
+        check(&[
+            ("movsb", "a4"),
+            ("movsw", "66a5"),
+            ("movsl", "a5"),
+            ("movsq", "48a5"),
+            ("stosb", "aa"),
+            ("stosw", "66ab"),
+            ("stosl", "ab"),
+            ("stosq", "48ab"),
+            ("lodsb", "ac"),
+            ("lodsw", "66ad"),
+            ("lodsl", "ad"),
+            ("lodsq", "48ad"),
+            ("scasb", "ae"),
+            ("scasw", "66af"),
+            ("scasl", "af"),
+            ("scasq", "48af"),
+            ("cmpsb", "a6"),
+            ("cmpsw", "66a7"),
+            ("cmpsl", "a7"),
+            ("cmpsq", "48a7"),
+            ("movsd", "a5"),
+            ("cmpsd", "a7"),
+        ]);
+    }
+
+    #[test]
+    fn rep_prefixes_encode_before_rex_and_after_operand_size() {
+        check(&[
+            ("rep movsb", "f3a4"),
+            ("rep movsw", "66f3a5"),
+            ("rep movsl", "f3a5"),
+            ("rep movsq", "f348a5"),
+            ("rep stosb", "f3aa"),
+            ("rep stosw", "66f3ab"),
+            ("rep stosl", "f3ab"),
+            ("rep stosq", "f348ab"),
+            ("rep lodsb", "f3ac"),
+            ("rep lodsq", "f348ad"),
+            ("repe cmpsb", "f3a6"),
+            ("repz cmpsl", "f3a7"),
+            ("repe cmpsw", "66f3a7"),
+            ("repe cmpsq", "f348a7"),
+            ("repne scasb", "f2ae"),
+            ("repnz scasw", "66f2af"),
+            ("repne scasl", "f2af"),
+            ("repne scasq", "f248af"),
+            ("repe scasb", "f3ae"),
+            ("rep scasb", "f3ae"),
+            ("rep cmpsb", "f3a6"),
+            ("repe movsb", "f3a4"),
+            ("repne movsb", "f2a4"),
+            ("repne cmpsb", "f2a6"),
+            ("rep movsd", "f3a5"),
+            ("repne cmpsd", "f2a7"),
+        ]);
+    }
+
+    #[test]
+    fn rep_is_case_insensitive_and_takes_separate_lines() {
+        check(&[("REP MOVSB", "f3a4"), ("RepNe ScasB", "f2ae")]);
+        assert_eq!(hex(&assemble("rep movsb\nrep stosq\n").unwrap()), "f3a4f348ab");
+    }
+
+    #[test]
+    fn cld_and_std_encode() {
+        check(&[
+            ("cld", "fc"),
+            ("std", "fd"),
+        ]);
+    }
+
+    #[test]
+    fn test_encodes_register_immediate_and_memory_forms() {
+        check(&[
+            ("testb %dl, %dl", "84d2"),
+            ("testb %cl, %dl", "84ca"),
+            ("testl %eax, %eax", "85c0"),
+            ("testq %rax, %rcx", "4885c1"),
+            ("testw %ax, %cx", "6685c1"),
+            ("test %al, %al", "84c0"),
+            ("test %eax, %ebx", "85c3"),
+            ("test %rax, %rax", "4885c0"),
+            ("testq %r8, %r9", "4d85c1"),
+            ("testl %r9d, %r10d", "4585ca"),
+            ("testb %spl, %dil", "4084e7"),
+            ("testb %sil, %al", "4084f0"),
+            ("testb %r8b, %r9b", "4584c1"),
+            ("testb $1, %al", "a801"),
+            ("testb $1, %cl", "f6c101"),
+            ("testb $0x80, %sil", "40f6c680"),
+            ("testb $0xff, %al", "a8ff"),
+            ("testb $-1, %dl", "f6c2ff"),
+            ("testb $1, %r8b", "41f6c001"),
+            ("testl $1, %eax", "a901000000"),
+            ("testl $0x1000, %eax", "a900100000"),
+            ("testl $1, %ecx", "f7c101000000"),
+            ("testq $1, %rax", "48a901000000"),
+            ("testq $0x12345678, %rcx", "48f7c178563412"),
+            ("testq $-1, %rax", "48a9ffffffff"),
+            ("testq $1, %r9", "49f7c101000000"),
+            ("testw $1, %ax", "66a90100"),
+            ("testw $0x1234, %cx", "66f7c13412"),
+            ("testl $1, %r8d", "41f7c001000000"),
+            ("test $1, %eax", "a901000000"),
+            ("test $0xff, %cl", "f6c1ff"),
+            ("testb $1, -1(%rbp)", "f645ff01"),
+            ("testl $1, -4(%rbp)", "f745fc01000000"),
+            ("testq $1, -8(%rbp)", "48f745f801000000"),
+            ("testw $1, -2(%rbp)", "66f745fe0100"),
+            ("testl $0x1000, (%rax)", "f70000100000"),
+            ("testb $1, 8(%r12)", "41f644240801"),
+            ("testl $1, (%rax,%rcx,4)", "f7048801000000"),
+            ("testl %eax, -4(%rbp)", "8545fc"),
+            ("testb %al, -1(%rbp)", "8445ff"),
+            ("testb %sil, -1(%rbp)", "408475ff"),
+            ("testq %r8, -8(%rbp)", "4c8545f8"),
+            ("testw %ax, (%rdx)", "668502"),
+            ("testl %eax, 8(%r9)", "41854108"),
+            ("testl 8(%r9), %eax", "41854108"),
+            ("testb -1(%rbp), %cl", "844dff"),
+            ("testq (%rax,%rcx,8), %rdx", "488514c8"),
+        ]);
+    }
+
+    /// `file.hexl` のインラインasm (os_copy / os_find / Windows の ReadFile 後処理) と同じ並び
+    #[test]
+    fn library_asm_blocks_match_gnu_as() {
+        let copy = "movq -8(%rbp), %rax\nmovq -16(%rbp), %rdx\nmovq -24(%rbp), %rcx\n\
+                    pushq %rsi\npushq %rdi\nmovq %rax, %rdi\nmovq %rdx, %rsi\ncld\n\
+                    rep movsb\npopq %rdi\npopq %rsi\n";
+        assert_eq!(
+            hex(&assemble(copy).unwrap()),
+            "488b45f8488b55f0488b4de856574889c74889d6fcf3a45f5e"
+        );
+
+        let find = "movq -8(%rbp), %rdx\nmovq -16(%rbp), %rcx\nmovq -24(%rbp), %rax\n\
+                    movq %rcx, %r8\nmovq %rcx, %r9\npushq %rdi\nmovq %rdx, %rdi\ncld\n\
+                    repne scasb\nsete %dl\npopq %rdi\nmovq %r8, %rax\nsubq %rcx, %rax\n\
+                    subq $1, %rax\ntestb %dl, %dl\ncmovneq %rax, %r9\nmovq %r9, -32(%rbp)\n";
+        assert_eq!(
+            hex(&assemble(find).unwrap()),
+            "488b55f8488b4df0488b45e84989c84989c9574889d7fcf2ae0f94c25f4c89c04829c84883e80184d24c0f45c84c894de0"
+        );
+
+        // `movq $-1, %rax` だけは GNU as (`48 c7 c0 ff ff ff ff`) と符号化が違う。
+        // このアセンブラは 64bit レジスタへの即値を常に `movabs` (`48 b8` + imm64) で出す。
+        // どちらも同じ意味で、この違いは `rep` / `test` とは無関係の既存の動作。
+        let win_read = "testl %eax, %eax\nmovl 40(%rsp), %edx\nmovq $-1, %rax\ncmovneq %rdx, %rax\n";
+        assert_eq!(
+            hex(&assemble(win_read).unwrap()),
+            "85c08b54242848b8ffffffffffffffff480f45c2"
+        );
+    }
+
+    /// 名前が似ている既存の命令(SSE の `movsd` / `movss`、`movslq`)が変わらないこと
+    #[test]
+    fn similar_existing_instructions_are_unchanged() {
+        check(&[
+            ("movsd %xmm0, %xmm1", "f20f10c8"),
+            ("movss -4(%rbp), %xmm0", "f30f1045fc"),
+            ("movsd -8(%rbp), %xmm2", "f20f1055f8"),
+            ("movslq %eax, %rcx", "4863c8"),
+            ("cmpltps %xmm1, %xmm0", "0fc2c101"),
+        ]);
+    }
+
+    #[test]
+    fn rep_and_string_instructions_reject_invalid_forms() {
+        for source in [
+            "rep",
+            "rep nop",
+            "rep ret",
+            "rep mov",
+            "rep movsd %xmm0, %xmm1",
+            "repnq movsb",
+            "movsb %al",
+            "stosb (%rdi)",
+            "rep stosb %al, (%rdi)",
+            "stosd",
+            "lodsd",
+            "scasd",
+            "movs",
+            "cld %al",
+            "std $1",
+        ] {
+            assert!(assemble(&format!("{}\n", source)).is_err(), "{}", source);
+        }
+    }
+
+    #[test]
+    fn test_rejects_invalid_operands() {
+        for source in [
+            "test",
+            "test %eax",
+            "testl %eax, %ebx, %ecx",
+            "testb %eax, %ebx",
+            "test %al, %eax",
+            "testl $1, %al",
+            "testq $0x100000000, %rax",
+            "testb $256, %al",
+            "test %xmm0, %xmm1",
+            "testl $1, foo(%rip)",
+            "test $1, $2",
+            "testl (%rax), (%rbx)",
         ] {
             assert!(assemble(&format!("{}\n", source)).is_err(), "{}", source);
         }
