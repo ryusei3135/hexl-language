@@ -18,6 +18,7 @@
 //!   取り込む場合は衝突することがある。
 
 use super::*;
+use crate::compiler::hexl_frontend::include_list::IncludeStage;
 use crate::compiler::hexl_frontend::include_root;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -134,7 +135,7 @@ impl Parser {
                 _ => "",
             }
         );
-        if !self.included_visited.insert(visited_key) {
+        if !self.include_list.insert(IncludeStage::Generic, visited_key) {
             return;
         }
         let Ok(content) = std::fs::read_to_string(&file) else {

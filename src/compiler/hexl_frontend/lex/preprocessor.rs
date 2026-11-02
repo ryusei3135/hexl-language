@@ -18,7 +18,8 @@ use self::cond::{CondFrame, cond_else, cond_endif, is_active};
 use self::define::read_multiline_define;
 use self::include::is_kept_directive;
 use super::comment::strip_comments;
-use std::collections::{HashMap, HashSet};
+use crate::compiler::hexl_frontend::include_list::IncludeList;
+use std::collections::HashMap;
 
 /// `#define NAME VALUE` の右辺として実際に登録される値。
 /// 今後 `define` 以外のプリプロセッサ命令が増える前提のため、
@@ -69,9 +70,11 @@ pub(in crate::compiler::hexl_frontend::lex) struct Preprocessor {
     /// この間は、定義の登録と`#if`の判定だけを行い、`#NAME`の展開はしない
     /// (出力は捨てるので、展開すると未定義のマクロで`panic`するだけになる)
     collect_only: bool,
-    /// `#define`を集め終えた(集めている途中の)`#include`先のファイルのパス。
-    /// 同じファイルを2回読まない(入れ子・循環した`#include`で止まらなくならないようにする)
-    collected_files: HashSet<String>,
+    /// 処理済みの`#include`のリスト(`include_list.rs`)。
+    /// - `Define`: `#define`を集め終えた(集めている途中の)`#include`先のファイルのパス。
+    ///   同じファイルを2回読まない(入れ子・循環した`#include`で止まらなくならないようにする)
+    /// - `CFile`: 保存済みの`.c` / `.h`のファイル名。同じ名前は2回保存しない
+    includes: IncludeList,
 }
 
 impl Preprocessor {
@@ -80,7 +83,7 @@ impl Preprocessor {
             tables: HashMap::new(),
             c_files: Vec::new(),
             collect_only: false,
-            collected_files: HashSet::new(),
+            includes: IncludeList::new(),
         }
     }
 

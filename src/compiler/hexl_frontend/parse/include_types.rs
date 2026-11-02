@@ -1,6 +1,7 @@
 //! `#include`先の公開型ノードを呼び出し側のASTへ取り込む。
 
 use super::*;
+use crate::compiler::hexl_frontend::include_list::IncludeStage;
 use crate::compiler::hexl_frontend::include_root;
 use std::rc::Rc;
 
@@ -85,7 +86,7 @@ impl Parser {
         if file.ends_with(".c") || file.ends_with(".h") || !std::path::Path::new(&file).exists() {
             return Ok(());
         }
-        if !self.included_type_visited.insert(file.clone()) {
+        if !self.include_list.insert(IncludeStage::Type, file.clone()) {
             return Ok(());
         }
 
@@ -99,9 +100,11 @@ impl Parser {
         }
 
         let mut parser = Parser::new(&file_name, Rc::clone(&self.err_pool));
-        parser.included_type_visited = self.included_type_visited.clone();
+        // 子へは`Type`の段だけを渡す(親の`Include`の記録で、子の`#include`が消えないように)
+        parser.include_list = self.include_list.only(IncludeStage::Type);
         let nodes = parser.parser(&lexer.gen_tkns, &[])?.to_vec();
-        self.included_type_visited = std::mem::take(&mut parser.included_type_visited);
+        self.include_list
+            .merge(&parser.include_list, IncludeStage::Type);
 
         self.included_type_nodes.extend(
             nodes

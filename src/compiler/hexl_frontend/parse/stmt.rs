@@ -6,6 +6,7 @@ use crate::syntax_err;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::compiler::hexl_frontend::include_list::{IncludeList, IncludeStage, include_key};
 
 use super::*;
 
@@ -109,12 +110,14 @@ pub struct Parser {
     pub(super) included_generic_types: HashMap<String, HashMap<String, GenericType>>,
     /// 定義済みのジェネリクスな構造体/バリアント(型名 -> 定義)
     pub(super) generic_types: HashMap<String, GenericType>,
-    /// 定義を集め終えた`#include`先(`ファイル|モジュール名`)。
-    /// include先がさらにincludeしているファイルのジェネリクスも集めるときに、
-    /// 同じファイルを何度も読んだり、循環して止まらなくなったりしないために使う
-    pub(super) included_visited: std::collections::HashSet<String>,
-    /// 公開型ノードを収集済みの`#include`先。入れ子や循環includeを処理する。
-    pub(super) included_type_visited: std::collections::HashSet<String>,
+    /// 処理済みの`#include`のリスト(`include_list.rs`)。同じものは2回処理せず無視する。
+    /// - `Generic`: ジェネリクスを集め終えた`#include`先(`ファイル|モジュール名`)。
+    ///   include先がさらにincludeしているファイルのジェネリクスも集めるときに、
+    ///   入れ子や循環したincludeで止まらなくならないようにする。
+    /// - `Type`: 公開型ノードを収集済みの`#include`先。入れ子や循環includeを処理する。
+    /// - `Include`: このファイルの`#include`ノード。同じ`#include`が2つ書かれていても、
+    ///   1つだけIRへ渡す。
+    pub(super) include_list: IncludeList,
     /// 呼び出し側に追加するinclude先の公開型ノード。
     pub(super) included_type_nodes: Vec<Group1Node>,
     /// 定義済みのジェネリクスな型エイリアス(型名 -> 定義)。
@@ -156,8 +159,7 @@ impl Parser {
             generic_depth: 0,
             included_generic_types: HashMap::new(),
             generic_types: HashMap::new(),
-            included_visited: std::collections::HashSet::new(),
-            included_type_visited: std::collections::HashSet::new(),
+            include_list: IncludeList::new(),
             included_type_nodes: Vec::new(),
             generic_aliases: HashMap::new(),
             generated_types: Vec::new(),
@@ -280,6 +282,17 @@ impl Parser {
         Ok(&self.gen_nodes)
     }
 
+    /// `node`が`#include`以外、または初めて現れる`#include`なら`true`。
+    /// 同じ`#include`(同じファイルを同じ取り込み方で)が2回目以降なら`false`。
+    fn is_new_include(&mut self, node: &Group1Node) -> bool {
+        match node {
+            Group1Node::Include(path) => self
+                .include_list
+                .insert(IncludeStage::Include, include_key(path)),
+            _ => true,
+        }
+    }
+
     /// `self.tkns`の先頭から順に、関数などのノードを`gen_nodes`へ作る。
     /// ジェネリクス関数の呼び出しで、型ごとの関数を作る際にも
     /// (トークン列を差し替えて)この関数が使われる
@@ -300,8 +313,11 @@ impl Parser {
                             let syntax_result = self.comple_syntax();
                             let node = C::handle_ty::<Group2Node>(&self.err_pool, syntax_result)?;
                             let result = node.change_group1();
-                            self.gen_nodes
-                                .push(C::handle_ty::<Group1Node>(&self.err_pool, result)?);
+                            let node = C::handle_ty::<Group1Node>(&self.err_pool, result)?;
+                            // 同じ`#include`が2回目以降なら無視する(`include_list.rs`)
+                            if self.is_new_include(&node) {
+                                self.gen_nodes.push(node);
+                            }
                         }
                         lex::Tkn::KeyWordStruct => {
                             // ジェネリクス(`struct Name<T> {..}`)は、使われるまで

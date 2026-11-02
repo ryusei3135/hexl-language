@@ -4,6 +4,7 @@
 //! `.c` / `.h`だけは、ここでファイル名を保存する。
 
 use super::Preprocessor;
+use crate::compiler::hexl_frontend::include_list::IncludeStage;
 use crate::compiler::hexl_frontend::include_root;
 
 impl Preprocessor {
@@ -25,7 +26,8 @@ impl Preprocessor {
             if rel.ends_with(".c") || rel.ends_with(".h") {
                 // `#define`を集めている間は保存しない
                 // (`.hexl`は別のファイルとして処理するときに、そちらが保存する)
-                if !self.collect_only && !self.c_files.iter().any(|f| *f == rel) {
+                // 同じ名前は、リストに載っていれば無視する
+                if !self.collect_only && self.includes.insert(IncludeStage::CFile, rel.clone()) {
                     self.c_files.push(rel);
                 }
                 return true;
@@ -59,7 +61,7 @@ impl Preprocessor {
             include_root::resolve(rel)
         };
         // すでに集めた(または集めている途中の)ファイルは読まない
-        if !self.collected_files.insert(path.clone()) {
+        if !self.includes.insert(IncludeStage::Define, path.clone()) {
             return;
         }
         let Ok(content) = std::fs::read_to_string(&path) else {
@@ -236,5 +238,13 @@ mod collect_defines_tests {
             .unwrap();
         assert!(!out.contains('x'), "{}", out);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn duplicate_c_includes_are_saved_once() {
+        let mut p = pp();
+        p.preprocess("#include \"a.c\"\n#include \"b.h\"\n#include \"a.c\"\n")
+            .unwrap();
+        assert_eq!(p.take_c_files(), vec!["a.c".to_string(), "b.h".to_string()]);
     }
 }
