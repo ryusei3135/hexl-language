@@ -37,6 +37,14 @@ impl IR {
 
     /// 関数の情報を関数ツリーに登録
     pub(super) fn push_fn_ir_tree(&mut self, info: &FuncDefine) {
+        let ret_ty = info.contract.as_ref().unwrap_or(&info.ret_ty);
+        let ret_size = self.size_of(ret_ty);
+        let ret_size = if matches!(&ret_size, types::Size::Struct(_)) {
+            None
+        } else {
+            Some(ret_size)
+        };
+
         // 関数のデータをpush
         self.func_tree.add(
             // 関数の処理
@@ -45,6 +53,7 @@ impl IR {
             &info,
             // 関数の戻り値
             &info.ret_ty,
+            ret_size,
             self.stk_counter,
             &self.var_counter,
         );
@@ -132,7 +141,16 @@ impl IR {
         func_meta_data.temp_ty = meta_data.temp_ty.clone();
 
         if return_var_name.is_some() {
-            if let Some(TyNode::Ty(struct_name)) = defined_func_data.ret_ty.as_ref() {
+            let ret_ty = defined_func_data
+                .ret_ty
+                .as_ref()
+                .map(|ret_ty| match ret_ty {
+                    TyNode::ConstractMust(contract) | TyNode::ConstractOf(contract) => {
+                        contract.unwrap_ty()
+                    }
+                    ty => ty.clone(),
+                });
+            if let Some(TyNode::Ty(struct_name)) = ret_ty.as_ref() {
                 if let Some(struct_info) = self.struct_tree.get(&struct_name).cloned() {
                     let size = struct_info
                         .fields
@@ -162,7 +180,12 @@ impl IR {
             let expr_arg = meta_data.args.get(index).unwrap().clone();
             // 契約(`must`/`of`)のチェック
             // (`src/ir/ty_checker/constract.rs`)
-            self.check_constract_arg(meta_data.name.as_str(), &def_args[index], &expr_arg)?;
+            self.check_constract_arg(
+                meta_data.name.as_str(),
+                module_name,
+                &def_args[index],
+                &expr_arg,
+            )?;
 
             let ty = self.size_of(&def_args[index].ty).clone();
             // `data"len"`: 文字列リテラルの長さは、静的データ`M0Len`にして参照する
@@ -282,5 +305,33 @@ mod str_len_arg_tests {
             _ => None,
         });
         assert_eq!(str_len, str_id.map(|id| (id, 11)), "{:?}", body);
+    }
+
+    #[test]
+    fn resolves_function_return_sizes_from_user_type_definitions() {
+        let nodes = parse_test_source(
+            "struct Point { x: int } \
+             make_point(): Point { ret Point { x: 1 } } \
+             variant Color { Red Green(int) } \
+             make_color(): Color { ret Color::Green(1) } \
+             variant Shade { Red Blue } \
+             make_shade(): Shade { ret Shade::Red }",
+        );
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+
+        assert_eq!(
+            ir.func_tree.get("make_point", None).unwrap().get_ret_ty(),
+            None
+        );
+        assert!(matches!(
+            ir.func_tree.get("make_color", None).unwrap().get_ret_ty(),
+            Some(types::Size::Variant { .. })
+        ));
+        assert_eq!(
+            ir.func_tree.get("make_shade", None).unwrap().get_ret_ty(),
+            Some(types::Size::DD)
+        );
     }
 }

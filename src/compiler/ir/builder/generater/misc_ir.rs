@@ -44,7 +44,36 @@ impl IR {
             );
         }
 
+        if let Some(owner) = func.module.as_deref() {
+            if let Some(contract) = func.contract.take() {
+                func.contract = Some(Self::resolve_method_contract(
+                    &contract,
+                    owner,
+                    &func.ret_ty,
+                ));
+            }
+        }
+
         func
+    }
+
+    /// メソッドの契約終了先を、所属する型のメソッド名として解決する
+    fn resolve_method_contract(
+        contract: &ast::TyNode,
+        owner: &str,
+        ret_ty: &ast::TyNode,
+    ) -> ast::TyNode {
+        match contract {
+            ast::TyNode::ConstractMust(inner) => {
+                let name = inner.must_name().map(|name| format!("{owner}::{name}"));
+                ast::ConstractTy::new::<{ ast::IS_MUST }>(name, None, Box::new(ret_ty.clone()))
+            }
+            ast::TyNode::ConstractOf(inner) => {
+                let name = inner.of_name().map(|name| format!("{owner}::{name}"));
+                ast::ConstractTy::new::<{ ast::IS_OF }>(None, name, Box::new(ret_ty.clone()))
+            }
+            other => other.clone(),
+        }
     }
 
     #[inline(always)]
@@ -105,6 +134,12 @@ impl IR {
                     ty.clone()
                 }
             }
+            ast::TyNode::ConstractMust(inner) => ast::TyNode::ConstractMust(
+                inner.with_ty(Self::resolve_self_like_ty(&inner.unwrap_ty())),
+            ),
+            ast::TyNode::ConstractOf(inner) => ast::TyNode::ConstractOf(
+                inner.with_ty(Self::resolve_self_like_ty(&inner.unwrap_ty())),
+            ),
             _ => ty.clone(),
         }
     }
@@ -127,8 +162,9 @@ impl IR {
                 // 関数定義以外は、`expand_methods`が報告する
                 continue;
             };
-            let mut method_info = self.resolve_self_ty(method_info);
+            let mut method_info = method_info.clone();
             method_info.module = Some(owner.to_string());
+            let method_info = self.resolve_self_ty(&method_info);
             self.func_tree.declare(&method_info);
         }
     }
@@ -183,8 +219,9 @@ impl IR {
                 continue;
             }
 
-            let mut method_info = self.resolve_self_ty(&method_info);
+            let mut method_info = method_info.clone();
             method_info.module = Some(owner.to_string());
+            let method_info = self.resolve_self_ty(&method_info);
 
             // 関数の情報を登録
             self.entry_fn_info(&method_info)?;
@@ -495,6 +532,39 @@ mod struct_method_expand_tests {
             "`Point::answer()`の呼び出しが生成される必要がある: {:?}",
             body
         );
+    }
+
+    #[test]
+    fn method_return_contract_targets_a_method_on_its_struct() {
+        let nodes = parse_test_source(
+            "struct Point { \
+                 x: int \
+                 pub new(): Self must=del { ret Self { x: 1 } } \
+                 pub get(self: Self*): int { ret 1 } \
+                 pub del(self: Self* of new) {} \
+             } \
+                 _start(): int { point: Point = Point::new() point.get() point.del() ret 0 }",
+        );
+
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+
+        let make = ir.func_tree.get("new", Some("Point")).unwrap();
+        assert_eq!(
+            make.ret_ty,
+            Some(ast::ConstractTy::new::<{ ast::IS_MUST }>(
+                Some("Point::del".to_string()),
+                None,
+                Box::new(ast::TyNode::Ty("Point".to_string())),
+            ))
+        );
+
+        assert!(ir
+            .var_tree
+            .get_ty_node("point")
+            .unwrap()
+            .is_contract_must());
     }
 }
 

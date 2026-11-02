@@ -33,7 +33,7 @@ impl Parser {
 
         match self.current_tkn() {
             lex::Tkn::Colon => {
-                let ret_ty = self.ty_node_after_delim()?;
+                let ret_ty = self.define_ty_node()?;
                 // 戻り値の型が契約か調べ上書き
                 let contract_ret_ty = self.contract_after_ty(ret_ty.clone())?;
 

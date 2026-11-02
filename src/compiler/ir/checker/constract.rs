@@ -39,6 +39,7 @@ impl IR {
     pub(in crate::compiler::ir) fn check_constract_arg(
         &mut self,
         fn_name: &str,
+        fn_module: Option<&str>,
         param: &ArgsNode,
         // 呼び出し元
         arg: &Expr,
@@ -66,6 +67,15 @@ impl IR {
             ExprTy::Known(ty) => ty.as_contract_must(),
             ExprTy::Plain | ExprTy::Unresolved => None,
         };
+        // 通常の`self: Self*`は受け手を借りるだけで、所有契約を移動しない
+        if arg_must.is_some() && Self::is_borrowed_method_receiver(fn_module, param) {
+            if let Some(var_name) = Self::contract_var_name(arg) {
+                self.var_tree
+                    .ensure_contract_alive(var_name, Rc::clone(&arg.span))
+                    .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
+            }
+            return Ok(());
+        }
         let param_of = param.ty.as_contract_of();
 
         match (param_of, arg_must) {
@@ -73,10 +83,19 @@ impl IR {
             (Some(_of), Some(must)) => {
                 // 渡す変数が契約しているのに渡す先の関数
                 // の型が契約じゃない
-                if must
-                    .must_name()
-                    .is_some_and(|name| name.as_str() != fn_name)
-                {
+                let expected_fn = must.must_name();
+                // メソッドの契約名は所属型で修飾される。通常の関数は従来どおり関数名で照合する
+                let actual_fn = expected_fn
+                    .filter(|name| name.contains("::"))
+                    .and_then(|_| fn_module.map(|module| format!("{module}::{fn_name}")));
+                let matches_fn = expected_fn.map_or(true, |expected| {
+                    if expected.contains("::") {
+                        actual_fn.as_deref() == Some(expected.as_str())
+                    } else {
+                        expected.as_str() == fn_name
+                    }
+                });
+                if !matches_fn {
                     CompileErr::constract_name_mismatch(
                         &fn_name,
                         &param.name,
@@ -120,6 +139,18 @@ impl IR {
             }
             (None, None) => Ok(()),
         }
+    }
+
+    fn is_borrowed_method_receiver(fn_module: Option<&str>, param: &ArgsNode) -> bool {
+        let Some(owner) = fn_module else {
+            return false;
+        };
+        param.name == "self"
+            && matches!(
+                &param.ty,
+                TyNode::Pointer { ty_name, .. }
+                    if matches!(&**ty_name, TyNode::Ty(name) if name == owner)
+            )
     }
 
     /// 契約を借りる(`RefContract`)引数1つ分のチェック
@@ -295,22 +326,39 @@ impl IR {
                 // 呼び出し先が見つからない場合のエラーは、呼び出しのIR生成が報告する
                 None => ExprTy::Plain,
             },
+            ExprNode::Scope { scope, target } => match &target.node {
+                ExprNode::CallFunc(call) => scope
+                    .last()
+                    .and_then(|module| self.method_ret_ty(call, module))
+                    .map_or(ExprTy::Plain, ExprTy::Known),
+                _ => ExprTy::Unresolved,
+            },
+            ExprNode::Member { scope, target } => match &target.node {
+                ExprNode::CallFunc(call) => scope
+                    .last()
+                    .and_then(|receiver| self.var_tree.get_ty_name(receiver).ok())
+                    .and_then(|module| self.method_ret_ty(call, &module))
+                    .map_or(ExprTy::Plain, ExprTy::Known),
+                _ => ExprTy::Unresolved,
+            },
+            ExprNode::PtrMember { name, target, .. } => match &target.node {
+                ExprNode::CallFunc(call) => self
+                    .var_tree
+                    .get_ty_name(name)
+                    .ok()
+                    .and_then(|module| self.method_ret_ty(call, &module))
+                    .map_or(ExprTy::Plain, ExprTy::Known),
+                ExprNode::Var(member) => self.ptr_member_ty(name, member),
+                _ => ExprTy::Unresolved,
+            },
             ExprNode::GetAddress(target) | ExprNode::ConnectAddr(target) => {
                 self.expr_ty_node(target)
             }
             // 代入式の値の型は、代入先の型
             ExprNode::Assign(assign) => self.expr_ty_node(&assign.dst),
-            // `self->name` / `[ptr].name`: ポインタ変数(`self`など)自身の型ではなく、
-            // 指す先の構造体のメンバー`name`の型で検査する
-            ExprNode::PtrMember { name, target, .. } => match &target.node {
-                ExprNode::Var(member) => self.ptr_member_ty(name, member),
-                // メゾット呼び出しや配列メンバーの要素は、ここでは型を解決できない
-                _ => ExprTy::Unresolved,
-            },
             // 契約を持つ値を取り出せる式だが、ここでは型を解決できない
             // (メンバー・配列の要素・分岐やループの値・変数の定義)
-            ExprNode::Scope { .. }
-            | ExprNode::Member { .. }
+            ExprNode::Member { .. }
             | ExprNode::RefArray { .. }
             | ExprNode::VariantBind(_)
             | ExprNode::DefVar(_)
@@ -322,6 +370,12 @@ impl IR {
         }
     }
 
+    fn method_ret_ty(&self, call: &crate::compiler::ast::CallInfo, module: &str) -> Option<TyNode> {
+        self.func_tree
+            .get_with_temp(&call.name, Some(module), &call.temp_ty)
+            .and_then(|func| func.ret_ty)
+    }
+
     /// `must`の引数が、戻り値の`must`へ契約を引き継ぐか
     ///
     /// 引数の型と戻り値の型が同じ名前の`must`(`realloc(ptr: T* must=free): T* must=free`)なら、
@@ -329,7 +383,8 @@ impl IR {
     /// この引数は、関数の中で別の関数へ渡さなくてよい
     /// (途中で`free`などへ渡して終了しても構わない)
     fn hands_over_to_ret(func: &FuncDefine, param: &ArgsNode) -> bool {
-        let Some(ret_must) = func.ret_ty.as_contract_must() else {
+        let ret_ty = func.contract.as_ref().unwrap_or(&func.ret_ty);
+        let Some(ret_must) = ret_ty.as_contract_must() else {
             return false;
         };
         ret_must.must_name().is_some()

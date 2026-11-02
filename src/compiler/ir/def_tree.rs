@@ -518,6 +518,8 @@ pub struct FnDefInfo {
     pub args: Vec<ArgsNode>,
     pub body: Vec<inst::Inst>,
     pub ret_ty: Option<TyNode>,
+    /// IRの型定義から解決したアセンブリ上の戻り値サイズ。構造体戻り値では`None`。
+    ret_size: Option<Size>,
     pub temp_ty: Vec<TyNode>,
     pub var_counter: counter_mnger::VarCounter,
     pub public: bool,
@@ -536,12 +538,18 @@ impl FnDefInfo {
         stk_size: usize,
         var_counter: counter_mnger::VarCounter,
     ) -> Self {
+        let ret_size = ret_ty.as_ref().and_then(|ty| match ty {
+            TyNode::SelfTy(..) => None,
+            TyNode::Ty(name) if !types::Size::is_builtin_ty_name(name) => None,
+            ty => ty.try_into().ok(),
+        });
         Self {
             name,
             module,
             args,
             body,
             ret_ty,
+            ret_size,
             temp_ty,
             var_counter,
             public,
@@ -564,11 +572,12 @@ impl FnDefInfo {
         if self.ret_ty.is_none() {
             return types::Size::Void.wrap_dst_size();
         }
-        match self.ret_ty.as_ref().unwrap() {
-            TyNode::SelfTy(..) => None,
-            TyNode::Ty(name) if !types::Size::is_builtin_ty_name(name) => None,
-            ty => Some(ty.try_into().unwrap()),
-        }
+        self.ret_size.clone()
+    }
+
+    fn with_ret_size(mut self, ret_size: Option<Size>) -> Self {
+        self.ret_size = ret_size;
+        self
     }
 }
 
@@ -628,6 +637,7 @@ impl FuncTree {
         body: &[inst::Inst],
         meta_data: &FuncDefine,
         ret_ty: &TyNode,
+        ret_size: Option<Size>,
         stk_size: usize,
         var_counter: &counter_mnger::VarCounter,
     ) {
@@ -647,12 +657,13 @@ impl FuncTree {
                 fn_mod.to_owned(),
                 meta_data.params.clone(),
                 body.to_owned(),
-                Some(ret_ty.to_owned()),
+                Some(meta_data.contract.as_ref().unwrap_or(ret_ty).to_owned()),
                 fn_tmp_ty.to_owned(),
                 meta_data.public,
                 stk_size,
                 var_counter.clone(),
-            ),
+            )
+            .with_ret_size(ret_size),
         );
     }
 
@@ -668,7 +679,13 @@ impl FuncTree {
                 meta_data.module.clone(),
                 meta_data.params.clone(),
                 Vec::new(),
-                Some(meta_data.ret_ty.clone()),
+                Some(
+                    meta_data
+                        .contract
+                        .as_ref()
+                        .unwrap_or(&meta_data.ret_ty)
+                        .clone(),
+                ),
                 meta_data.temp_ty.clone(),
                 meta_data.public,
                 0,
