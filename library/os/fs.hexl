@@ -311,7 +311,7 @@ os_eol(): i64 {
 // 使い終わったら del を呼ぶこと。
 // ---------------------------------------------------------------
 pub struct Buf {
-    val: u8*"unlimit" must=free
+    val: ubyte*"unlimit" must=free
     len: u64
     cap: u64
 
@@ -322,7 +322,7 @@ pub struct Buf {
             n = 16
         }
         ret Self {
-            val: mem::malloc<u8>(n)
+            val: mem::malloc<ubyte>(n)
             len: 0
             cap: n
         }
@@ -333,12 +333,12 @@ pub struct Buf {
     }
 
     // i 番目のバイトを返す。範囲外は 0。
-    pub at(self: Self*, i: u64): u8 {
+    pub at(self: Self*, i: u64): ubyte {
         cond i >= self->len {
             ret 0
         }
         idx: u64 = i
-        r: u8 = [self->val idx else 0]
+        r: ubyte = [self->val idx else 0]
         ret r
     }
 
@@ -354,7 +354,7 @@ pub struct Buf {
     }
 
     pub del(self: Self*) {
-        mem::free<u8>(self->val)
+        mem::free<ubyte>(self->val)
     }
 }
 
@@ -366,7 +366,7 @@ pub buf_reserve(b: Buf*, need: u64) {
         cond newcap < need {
             newcap = need
         }
-        b->val = mem::realloc<u8>(b->val, newcap)
+        b->val = mem::realloc<ubyte>(b->val, newcap)
         p: i64 = b->val
         cond p == 0 {
             b->len = 0
@@ -400,19 +400,19 @@ pub buf_append(b: Buf*, src: i64, n: i64) {
 pub struct File {
     fd: i64
     text: u64
-    buf: u8*"unlimit" must=free
+    buf: ubyte*"unlimit" must=free
     rpos: u64
     rend: u64
     cap: u64
 
     // path は NUL 終端のバイト列
-    pub open(path: u8*, mode: i64, as_text: u64): Self {
+    pub open(path: ubyte*, mode: i64, as_text: u64): Self {
         p: i64 = path
         h: i64 = os_open(p, mode)
         ret Self {
             fd: h
             text: as_text
-            buf: mem::malloc<u8>(4096)
+            buf: mem::malloc<ubyte>(4096)
             rpos: 0
             rend: 0
             cap: 4096
@@ -432,7 +432,7 @@ pub struct File {
             os_close(self->fd)
             self->fd = -1
         }
-        mem::free<u8>(self->buf)
+        mem::free<ubyte>(self->buf)
     }
 }
 
@@ -453,7 +453,7 @@ fill(f: File*): i64 {
 }
 
 // 【バイト指定】最大 n バイトを dst に読む。1回の呼び出しで読めた分だけ返す。
-pub read(f: File*, dst: u8*, n: i64): i64 {
+pub read(f: File*, dst: ubyte*, n: i64): i64 {
     cond n <= 0 {
         ret 0
     }
@@ -475,7 +475,7 @@ pub read(f: File*, dst: u8*, n: i64): i64 {
 }
 
 // 【バイト指定】n バイト揃うか EOF になるまで読む。最初の読み込みが失敗したときだけ負の値。
-pub read_exact(f: File*, dst: u8*, n: i64): i64 {
+pub read_exact(f: File*, dst: ubyte*, n: i64): i64 {
     cond n <= 0 {
         ret 0
     }
@@ -564,7 +564,7 @@ read_line_rec(f: File*, out: Buf*, base: u64): i64 {
         cond f->text == 1 {
             cond out->len > base {
                 li: u64 = out->len - 1
-                last: u8 = [out->val li else 0]
+                last: ubyte = [out->val li else 0]
                 cond last == 13 {
                     out->len -= 1
                 }
@@ -611,7 +611,7 @@ write_all(f: File*, src: i64, n: i64): i64 {
 }
 
 // 【バイト指定】src から n バイトを書く。
-pub write(f: File*, src: u8*, n: i64): i64 {
+pub write(f: File*, src: ubyte*, n: i64): i64 {
     s: i64 = src
     ret write_all(f, s, n)
 }
@@ -625,7 +625,7 @@ pub write_buf(f: File*, b: Buf*): i64 {
 
 // 【一行】src から n バイトを書き、続けて改行を書く。書けた合計バイト数を返す。
 // 改行の元ネタに内部の読み込みバッファを使うので、書き込み専用(mode 1/2)で使うこと。
-pub write_line(f: File*, src: u8*, n: i64): i64 {
+pub write_line(f: File*, src: ubyte*, n: i64): i64 {
     s: i64 = src
     w: i64 = write_all(f, s, n)
     cond w < 0 {
