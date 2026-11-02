@@ -51,7 +51,7 @@ impl IR {
                 inst::Inst::Jmp(format!("L{}", continue_label))
             }
             StmtNode::Break(span) => {
-                let result = self.end_scope(false, &span);
+                let result = self.end_scope(true, &span);
                 self.unwrap_or_report(result);
                 let (_, break_label) = self
                     .loop_labels

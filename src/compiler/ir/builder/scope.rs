@@ -15,7 +15,7 @@ impl IR {
     /// ブロックの終わりで、スコープを終了する
     /// 契約の検査をしたあと、irに`EndScope`を挿入する
     pub(in crate::compiler::ir::builder) fn end_block_scope(&mut self, span: &Rc<err::Span>) {
-        let result = self.end_scope(true, &span);
+        let result = self.end_scope(false, &span);
         self.unwrap_or_report(result);
         self.push_scope_inst(inst::Inst::EndScope);
     }

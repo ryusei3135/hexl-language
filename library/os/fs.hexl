@@ -1,0 +1,695 @@
+#include std::"os/mem.hexl"
+
+// Hexl file library.
+// Build with --linux or --windows so the preprocessor selects one backend.
+//
+// ■ 使い方(概要)
+//   f := File::open(path, 0, 0)        // mode: 0=読み込み 1=書き込み(作成/切り詰め) 2=追記
+//                                      // text: 0=バイナリ 1=テキスト
+//   file::read(&f, dst, 16)            // バイト指定で最大16バイト読む
+//   file::read_exact(&f, dst, 16)      // 16バイト揃うか EOF になるまで読む
+//   file::read_bytes(&f, &buf, 16)     // 16バイトを Buf の末尾に追加で読む
+//   file::read_all(&f, &buf)           // 残りを一括で Buf の末尾に読む
+//   file::read_line(&f, &buf)          // 一行読んで Buf の末尾に追加(改行は含まない)
+//   file::write(&f, src, n)            // バイト列を書く
+//   file::write_line(&f, src, n)       // 一行書く(末尾に改行)
+//   f.close()                          // 必ず1回だけ呼ぶ
+//
+// ■ バイナリ/テキストの違い
+//   バイナリ: バイト列をそのまま読み書きする。write_line の改行は "\n"。
+//   テキスト: read_line が行末の "\r\n" の "\r" を取り除く。
+//             write_line の改行は OS 標準(Windows は "\r\n"、それ以外は "\n")。
+//
+// ■ 戻り値の約束
+//   読み込み系: 読めたバイト数。0 は EOF、負の値はエラー。
+//   read_line : 1=一行読めた、0=EOF(何も読めなかった)、負の値=エラー。
+//   書き込み系: 書けたバイト数。負の値はエラー。
+
+// ---------------------------------------------------------------
+// 内部ヘルパ: メモリコピーと1バイト検索(OSに依存しない)
+// Windows x64 では rsi/rdi が呼び出し先保存レジスタなので push/pop で守る。
+// ---------------------------------------------------------------
+
+// src から dst へ n バイトコピーする。n が 0 以下なら何もしない。
+os_copy(dst: i64, src: i64, n: i64) {
+    cond n > 0 {
+        #asm(gcc_x64) {
+            "movq ${dst + 0}, %rax"
+            "movq ${src + 0}, %rdx"
+            "movq ${n}, %rcx"
+            "pushq %rsi"
+            "pushq %rdi"
+            "movq %rax, %rdi"
+            "movq %rdx, %rsi"
+            "cld"
+            "rep movsb"
+            "popq %rdi"
+            "popq %rsi"
+        }
+    }
+}
+
+// addr から n バイトの中で最初に ch が現れる位置を返す。無ければ n を返す。
+os_find(addr: i64, n: i64, ch: i64): i64 {
+    cond n <= 0 {
+        ret 0
+    }
+    res: i64 = n
+    #asm(gcc_x64) {
+        "movq ${addr + 0}, %rdx"
+        "movq ${n}, %rcx"
+        "movq ${ch}, %rax"
+        "movq %rcx, %r8"
+        "movq %rcx, %r9"
+        "pushq %rdi"
+        "movq %rdx, %rdi"
+        "cld"
+        // al と一致する最初のバイトまで進む。見つかれば ZF=1、rcx は残り個数。
+        "repne scasb"
+        "sete %dl"
+        "popq %rdi"
+        // 見つかった位置 = n - rcx - 1
+        "movq %r8, %rax"
+        "subq %rcx, %rax"
+        "subq $1, %rax"
+        "testb %dl, %dl"
+        "cmovneq %rax, %r9"
+        "movq %r9, ${res}"
+    }
+    ret res
+}
+
+// ---------------------------------------------------------------
+// OS層
+//   os_open(path, mode) : path は NUL 終端。mode 0=読み 1=書き(作成/切り詰め) 2=追記
+//   os_read / os_write  : 読めた/書けたバイト数。0 は EOF、失敗は負の値
+//   os_seek(fd, off, whence): whence 0=先頭 1=現在 2=末尾。新しい位置を返す。失敗は負の値
+//   os_close(fd)
+//   os_eol()            : テキストモードの改行のバイト数(Windows=2、それ以外=1)
+// ---------------------------------------------------------------
+#if #linux
+os_open(path: i64, mode: i64): i64 {
+    flags: i64 = 0
+    // O_WRONLY|O_CREAT|O_TRUNC = 577、O_WRONLY|O_CREAT|O_APPEND = 1089
+    cond mode == 1 {
+        flags = 577
+    }
+    cond mode == 2 {
+        flags = 1089
+    }
+    res: i64 = -1
+    #asm(gcc_x64) {
+        // open(path, flags, 0644)
+        "movq ${path + 0}, %rdi"
+        "movq ${flags}, %rsi"
+        "movq $420, %rdx"
+        "movq $2, %rax"
+        "syscall"
+        "movq %rax, ${res}"
+    }
+    ret res
+}
+
+os_read(fd: i64, buf: i64, n: i64): i64 {
+    res: i64 = -1
+    #asm(gcc_x64) {
+        // read(fd, buf, n)
+        "movq ${fd}, %rdi"
+        "movq ${buf + 0}, %rsi"
+        "movq ${n}, %rdx"
+        "movq $0, %rax"
+        "syscall"
+        "movq %rax, ${res}"
+    }
+    ret res
+}
+
+os_write(fd: i64, buf: i64, n: i64): i64 {
+    res: i64 = -1
+    #asm(gcc_x64) {
+        // write(fd, buf, n)
+        "movq ${fd}, %rdi"
+        "movq ${buf + 0}, %rsi"
+        "movq ${n}, %rdx"
+        "movq $1, %rax"
+        "syscall"
+        "movq %rax, ${res}"
+    }
+    ret res
+}
+
+os_seek(fd: i64, off: i64, whence: i64): i64 {
+    res: i64 = -1
+    #asm(gcc_x64) {
+        // lseek(fd, off, whence)
+        "movq ${fd}, %rdi"
+        "movq ${off}, %rsi"
+        "movq ${whence}, %rdx"
+        "movq $8, %rax"
+        "syscall"
+        "movq %rax, ${res}"
+    }
+    ret res
+}
+
+os_close(fd: i64) {
+    #asm(gcc_x64) {
+        // close(fd)
+        "movq ${fd}, %rdi"
+        "movq $3, %rax"
+        "syscall"
+    }
+}
+
+os_eol(): i64 {
+    ret 1
+}
+
+#elif #windows
+// Windows x64 ABI: Kernel32 の CreateFileA / ReadFile / WriteFile /
+// SetFilePointerEx / CloseHandle を使う。
+// 引数が5つ以上の関数はスタックに積む(32バイトのシャドウスペースの上)。
+// 失敗時は INVALID_HANDLE_VALUE(-1) や -1 を返し、Linux側と同じ「負の値=失敗」にそろえる。
+os_open(path: i64, mode: i64): i64 {
+    // 既定は読み込み: GENERIC_READ、OPEN_EXISTING
+    access: i64 = 2147483648
+    disp: i64 = 3
+    cond mode == 1 {
+        // GENERIC_WRITE、CREATE_ALWAYS
+        access = 1073741824
+        disp = 2
+    }
+    cond mode == 2 {
+        // FILE_APPEND_DATA、OPEN_ALWAYS
+        access = 4
+        disp = 4
+    }
+    res: i64 = -1
+    #asm(gcc_x64) {
+        "subq $56, %rsp"
+        // CreateFileA(path, access, FILE_SHARE_READ, NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL)
+        "movq ${path + 0}, %rcx"
+        "movq ${access}, %rdx"
+        "movq $1, %r8"
+        "movq $0, %r9"
+        "movq ${disp}, %rax"
+        "movq %rax, 32(%rsp)"
+        "movq $128, 40(%rsp)"
+        "movq $0, 48(%rsp)"
+        "call CreateFileA"
+        "movq %rax, ${res}"
+        "addq $56, %rsp"
+    }
+    ret res
+}
+
+os_read(fd: i64, buf: i64, n: i64): i64 {
+    res: i64 = -1
+    #asm(gcc_x64) {
+        "subq $72, %rsp"
+        // ReadFile(fd, buf, n, &read, NULL)  ※ read は 40(%rsp) に置く
+        "movq ${fd}, %rcx"
+        "movq ${buf + 0}, %rdx"
+        "movq ${n}, %r8"
+        "leaq 40(%rsp), %r9"
+        "movq $0, 40(%rsp)"
+        "movq $0, 32(%rsp)"
+        "call ReadFile"
+        // 成功(eax != 0)なら読めたバイト数、失敗なら -1
+        "testl %eax, %eax"
+        "movl 40(%rsp), %edx"
+        "movq $-1, %rax"
+        "cmovneq %rdx, %rax"
+        "movq %rax, ${res}"
+        "addq $72, %rsp"
+    }
+    ret res
+}
+
+os_write(fd: i64, buf: i64, n: i64): i64 {
+    res: i64 = -1
+    #asm(gcc_x64) {
+        "subq $72, %rsp"
+        // WriteFile(fd, buf, n, &written, NULL)  ※ written は 40(%rsp) に置く
+        "movq ${fd}, %rcx"
+        "movq ${buf + 0}, %rdx"
+        "movq ${n}, %r8"
+        "leaq 40(%rsp), %r9"
+        "movq $0, 40(%rsp)"
+        "movq $0, 32(%rsp)"
+        "call WriteFile"
+        "testl %eax, %eax"
+        "movl 40(%rsp), %edx"
+        "movq $-1, %rax"
+        "cmovneq %rdx, %rax"
+        "movq %rax, ${res}"
+        "addq $72, %rsp"
+    }
+    ret res
+}
+
+os_seek(fd: i64, off: i64, whence: i64): i64 {
+    res: i64 = -1
+    #asm(gcc_x64) {
+        "subq $56, %rsp"
+        // SetFilePointerEx(fd, off, &newpos, whence)  ※ newpos は 32(%rsp) に置く
+        "movq ${fd}, %rcx"
+        "movq ${off}, %rdx"
+        "leaq 32(%rsp), %r8"
+        "movq ${whence}, %r9"
+        "call SetFilePointerEx"
+        "testl %eax, %eax"
+        "movq 32(%rsp), %rdx"
+        "movq $-1, %rax"
+        "cmovneq %rdx, %rax"
+        "movq %rax, ${res}"
+        "addq $56, %rsp"
+    }
+    ret res
+}
+
+os_close(fd: i64) {
+    #asm(gcc_x64) {
+        "subq $40, %rsp"
+        "movq ${fd}, %rcx"
+        "call CloseHandle"
+        "addq $40, %rsp"
+    }
+}
+
+os_eol(): i64 {
+    ret 2
+}
+
+#else
+os_open(path: i64, mode: i64): i64 {
+    ret -1
+}
+
+os_read(fd: i64, buf: i64, n: i64): i64 {
+    ret -1
+}
+
+os_write(fd: i64, buf: i64, n: i64): i64 {
+    ret -1
+}
+
+os_seek(fd: i64, off: i64, whence: i64): i64 {
+    ret -1
+}
+
+os_close(fd: i64) {
+}
+
+os_eol(): i64 {
+    ret 1
+}
+#endif
+
+// ---------------------------------------------------------------
+// Buf: 読み込んだバイト列を受け取る、伸びるバッファ(Vec<T> と同じ作り)
+// 使い終わったら del を呼ぶこと。
+// ---------------------------------------------------------------
+pub struct Buf {
+    val: u8*"unlimit" must=free
+    len: u64
+    cap: u64
+
+    // cap バイトぶんの空きを持つバッファを作る。0 なら 16 バイト。
+    pub new(cap: u64): Self {
+        n: u64 = cap
+        cond n == 0 {
+            n = 16
+        }
+        ret Self {
+            val: mem::malloc<u8>(n)
+            len: 0
+            cap: n
+        }
+    }
+
+    pub len(self: Self*): u64 {
+        ret self->len
+    }
+
+    // i 番目のバイトを返す。範囲外は 0。
+    pub at(self: Self*, i: u64): u8 {
+        cond i >= self->len {
+            ret 0
+        }
+        idx: u64 = i
+        r: u8 = [self->val idx else 0]
+        ret r
+    }
+
+    // 先頭のアドレス(write や os_* に渡す用)
+    pub addr(self: Self*): i64 {
+        a: i64 = self->val
+        ret a
+    }
+
+    // 中身を空にする(確保したメモリは残る)。read_line を繰り返すときに使う。
+    pub clear(self mut: Self*) {
+        self->len = 0
+    }
+
+    pub del(self: Self*) {
+        mem::free<u8>(self->val)
+    }
+}
+
+// need バイト入るまで b を広げる。足りなければ倍々で増やす。
+// 確保に失敗したら b は空(len=0, cap=0)になる。
+pub buf_reserve(b: Buf*, need: u64) {
+    cond need > b->cap {
+        newcap: u64 = b->cap * 2
+        cond newcap < need {
+            newcap = need
+        }
+        b->val = mem::realloc<u8>(b->val, newcap)
+        p: i64 = b->val
+        cond p == 0 {
+            b->len = 0
+            b->cap = 0
+        } else {
+            b->cap = newcap
+        }
+    }
+}
+
+// src から n バイトを b の末尾に追加する。
+pub buf_append(b: Buf*, src: i64, n: i64) {
+    cond n > 0 {
+        total: u64 = b->len + n
+        buf_reserve(b, total)
+        cond b->cap >= total {
+            base: i64 = b->val
+            dst: i64 = base + b->len
+            os_copy(dst, src, n)
+            b->len = total
+        }
+    }
+}
+
+// ---------------------------------------------------------------
+// File: 読み込み用の内部バッファ(4096バイト)を持つファイルハンドル
+//   mode: 0=読み込み 1=書き込み(作成/切り詰め) 2=追記
+//   text: 0=バイナリ 1=テキスト
+// 開けなかったときは ok() が 0 を返す。close は成功/失敗に関わらず1回呼ぶ。
+// ---------------------------------------------------------------
+pub struct File {
+    fd: i64
+    text: u64
+    buf: u8*"unlimit" must=free
+    rpos: u64
+    rend: u64
+    cap: u64
+
+    // path は NUL 終端のバイト列
+    pub open(path: u8*, mode: i64, as_text: u64): Self {
+        p: i64 = path
+        h: i64 = os_open(p, mode)
+        ret Self {
+            fd: h
+            text: as_text
+            buf: mem::malloc<u8>(4096)
+            rpos: 0
+            rend: 0
+            cap: 4096
+        }
+    }
+
+    // 開けていれば 1、失敗していれば 0
+    pub ok(self: Self*): u64 {
+        cond self->fd >= 0 {
+            ret 1
+        }
+        ret 0
+    }
+
+    pub close(self mut: Self*) {
+        cond self->fd >= 0 {
+            os_close(self->fd)
+            self->fd = -1
+        }
+        mem::free<u8>(self->buf)
+    }
+}
+
+// ---------------------------------------------------------------
+// 読み込み
+// ---------------------------------------------------------------
+
+// 内部バッファを読み直す。読めたバイト数(0=EOF、負=エラー)を返す。
+fill(f: File*): i64 {
+    b: i64 = f->buf
+    n: i64 = os_read(f->fd, b, f->cap)
+    f->rpos = 0
+    f->rend = 0
+    cond n > 0 {
+        f->rend = n
+    }
+    ret n
+}
+
+// 【バイト指定】最大 n バイトを dst に読む。1回の呼び出しで読めた分だけ返す。
+pub read(f: File*, dst: u8*, n: i64): i64 {
+    cond n <= 0 {
+        ret 0
+    }
+    d: i64 = dst
+    avail: i64 = f->rend - f->rpos
+    // 内部バッファが空なら、バッファを介さず直接読む
+    cond avail <= 0 {
+        ret os_read(f->fd, d, n)
+    }
+    take: i64 = n
+    cond take > avail {
+        take = avail
+    }
+    b: i64 = f->buf
+    src: i64 = b + f->rpos
+    os_copy(d, src, take)
+    f->rpos += take
+    ret take
+}
+
+// 【バイト指定】n バイト揃うか EOF になるまで読む。最初の読み込みが失敗したときだけ負の値。
+pub read_exact(f: File*, dst: u8*, n: i64): i64 {
+    cond n <= 0 {
+        ret 0
+    }
+    got: i64 = read(f, dst, n)
+    cond got <= 0 {
+        ret got
+    }
+    cond got >= n {
+        ret got
+    }
+    d: i64 = dst
+    next: i64 = d + got
+    rest: i64 = read_exact(f, next, n - got)
+    cond rest < 0 {
+        ret got
+    }
+    ret got + rest
+}
+
+// 【バイト指定】n バイトまでを out の末尾に追加で読む。読めたバイト数を返す。
+pub read_bytes(f: File*, out: Buf*, n: i64): i64 {
+    cond n <= 0 {
+        ret 0
+    }
+    need: u64 = out->len + n
+    buf_reserve(out, need)
+    cond out->cap < need {
+        ret -1
+    }
+    b: i64 = out->val
+    dst: i64 = b + out->len
+    got: i64 = read_exact(f, dst, n)
+    cond got > 0 {
+        out->len += got
+    }
+    ret got
+}
+
+// read_all の本体。空きを確保しながら EOF まで読み続ける。
+slurp(f: File*, out: Buf*) {
+    need: u64 = out->len + 4096
+    buf_reserve(out, need)
+    cond out->cap >= need {
+        base: i64 = out->val
+        dst: i64 = base + out->len
+        room: i64 = out->cap - out->len
+        got: i64 = read(f, dst, room)
+        cond got > 0 {
+            out->len += got
+            slurp(f, out)
+        }
+    }
+}
+
+// 【一括】現在位置から EOF までをすべて out の末尾に追加する。追加したバイト数を返す。
+pub read_all(f: File*, out: Buf*): i64 {
+    base: u64 = out->len
+    slurp(f, out)
+    ret out->len - base
+}
+
+// read_line の本体。内部バッファに改行が無ければ out に追記して読み直す。
+read_line_rec(f: File*, out: Buf*, base: u64): i64 {
+    cond f->rpos >= f->rend {
+        got: i64 = fill(f)
+        cond got < 0 {
+            ret got
+        }
+        cond got == 0 {
+            // EOF。途中まで読んでいたら最後の行(改行なし)として扱う
+            cond out->len > base {
+                ret 1
+            }
+            ret 0
+        }
+    }
+    b: i64 = f->buf
+    start: i64 = b + f->rpos
+    avail: i64 = f->rend - f->rpos
+    idx: i64 = os_find(start, avail, 10)
+    cond idx < avail {
+        // 改行(10)が見つかった。改行の手前までを追加する
+        buf_append(out, start, idx)
+        f->rpos += idx + 1
+        // テキストモードでは行末の "\r" を取り除く
+        cond f->text == 1 {
+            cond out->len > base {
+                li: u64 = out->len - 1
+                last: u8 = [out->val li else 0]
+                cond last == 13 {
+                    out->len -= 1
+                }
+            }
+        }
+        ret 1
+    }
+    // 改行が無かった。残りをすべて追加して続きを読む
+    buf_append(out, start, avail)
+    f->rpos = f->rend
+    ret read_line_rec(f, out, base)
+}
+
+// 【一行ずつ】一行を out の末尾に追加する(改行は含まない)。
+// 1=一行読めた(空行も 1)、0=EOF、負=エラー。
+// 次の行を読む前に out->clear() すると、同じ Buf を使い回せる。
+pub read_line(f: File*, out: Buf*): i64 {
+    base: u64 = out->len
+    ret read_line_rec(f, out, base)
+}
+
+// ---------------------------------------------------------------
+// 書き込み
+// ---------------------------------------------------------------
+
+// n バイトを最後まで書く。書けたバイト数、失敗したら -1。
+write_all(f: File*, src: i64, n: i64): i64 {
+    cond n <= 0 {
+        ret 0
+    }
+    got: i64 = os_write(f->fd, src, n)
+    cond got <= 0 {
+        ret -1
+    }
+    cond got >= n {
+        ret got
+    }
+    next: i64 = src + got
+    rest: i64 = write_all(f, next, n - got)
+    cond rest < 0 {
+        ret rest
+    }
+    ret got + rest
+}
+
+// 【バイト指定】src から n バイトを書く。
+pub write(f: File*, src: u8*, n: i64): i64 {
+    s: i64 = src
+    ret write_all(f, s, n)
+}
+
+// Buf の中身をすべて書く。
+pub write_buf(f: File*, b: Buf*): i64 {
+    base: i64 = b->val
+    n: i64 = b->len
+    ret write_all(f, base, n)
+}
+
+// 【一行】src から n バイトを書き、続けて改行を書く。書けた合計バイト数を返す。
+// 改行の元ネタに内部の読み込みバッファを使うので、書き込み専用(mode 1/2)で使うこと。
+pub write_line(f: File*, src: u8*, n: i64): i64 {
+    s: i64 = src
+    w: i64 = write_all(f, s, n)
+    cond w < 0 {
+        ret w
+    }
+    // テキストモードは OS 標準の改行、バイナリは "\n" だけ
+    eol: i64 = 1
+    cond f->text == 1 {
+        eol = os_eol()
+    }
+    i0: u64 = 0
+    i1: u64 = 1
+    [f->buf i0 else 0] = 13
+    [f->buf i1 else 0] = 10
+    b: i64 = f->buf
+    p: i64 = b + 2 - eol
+    e: i64 = write_all(f, p, eol)
+    cond e < 0 {
+        ret e
+    }
+    ret w + e
+}
+
+// ---------------------------------------------------------------
+// 位置の操作
+// ---------------------------------------------------------------
+
+// whence: 0=先頭から 1=現在位置から 2=末尾から。新しい位置を返す。失敗は負の値。
+// 読み込みバッファは捨てる。
+pub seek(f: File*, off: i64, whence: i64): i64 {
+    o: i64 = off
+    cond whence == 1 {
+        // 先読みしてまだ使っていない分は、OS上の位置より手前にある
+        pending: i64 = f->rend - f->rpos
+        o = off - pending
+    }
+    f->rpos = 0
+    f->rend = 0
+    ret os_seek(f->fd, o, whence)
+}
+
+// 現在位置(先頭からのバイト数)。
+pub tell(f: File*): i64 {
+    cur: i64 = os_seek(f->fd, 0, 1)
+    cond cur < 0 {
+        ret cur
+    }
+    pending: i64 = f->rend - f->rpos
+    ret cur - pending
+}
+
+// ファイル全体のバイト数。現在位置は変わらない。
+pub size(f: File*): i64 {
+    cur: i64 = tell(f)
+    cond cur < 0 {
+        ret cur
+    }
+    total: i64 = os_seek(f->fd, 0, 2)
+    cond total < 0 {
+        ret total
+    }
+    back: i64 = seek(f, cur, 0)
+    cond back < 0 {
+        ret back
+    }
+    ret total
+}

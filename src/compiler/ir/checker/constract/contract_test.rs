@@ -3,6 +3,7 @@
 mod constract_ir_test {
     use super::*;
     use crate::compiler::hexl_frontend::{lex, parse};
+    use crate::compiler::ir::IR;
 
     /// 契約のテストで共通して使う関数の定義
     ///
@@ -665,5 +666,29 @@ g(v: int must=d) { d(v) }
     fn borrowed_contract_can_be_used_as_plain_value() {
         // 値として読むだけなら、契約は終了しない
         assert_ok(&format!("{DEFS}\nh(v: {REF_C}): int {{ ret v }}"));
+    }
+
+    #[test]
+    fn borrowed_method_receiver_stays_alive_across_early_return_branch() {
+        assert_ok(
+            "struct Cmdln {
+                value: int
+                new(): Self must=del { ret Self { value: 0 } }
+                get(self: Self*): int { ret self->value }
+                del(self: Self* of new) {}
+            }
+            _start(): int {
+                cond 1 < 0 {
+                    ret 1
+                }
+                orig: Cmdln must=del = Cmdln::new()
+                cond orig.get() < 0 {
+                    orig.del()
+                    ret 1
+                }
+                orig.del()
+                ret 0
+            }",
+        );
     }
 }

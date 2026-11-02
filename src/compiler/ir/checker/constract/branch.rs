@@ -81,7 +81,8 @@ impl IR {
 
             match &result {
                 Some(Exits::RETURN) => {
-                    self.check_all_end_constract(must_vars, fn_name, &expr.span)?;
+                    let branch_vars = Rc::new(RefCell::new(state.clone()));
+                    self.check_all_end_constract(&branch_vars, fn_name, &expr.span)?;
                 }
                 // 反復処理がないのに`break`で抜ける分岐(入れ子の分岐の中の`break`も含む)
                 Some(e) if e.brk && !in_loop => {
