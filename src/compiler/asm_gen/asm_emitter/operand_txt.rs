@@ -107,7 +107,6 @@ impl AsmEmitter {
         member_size: usize,
     ) -> Result<String, err::ErrKind> {
         let size = Self::struct_member_offset(pos, member_size);
-        println!("oooooooooffset {}", size);
         let var_info = self.get_var_all_info(src)?;
 
         // レジスタが足りずスタックに置いたポインタ変数(`is_stack`だが構造体ではない)は、

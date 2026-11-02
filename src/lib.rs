@@ -35,6 +35,13 @@ use std::{
 use crate::compiler::asm_gen::OptMode;
 use crate::compiler::{err::Span, stmt_node::StmtNode::Continue};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CpuKind {
+    X64,
+    Aarch64,
+    Other,
+}
+
 // ---------------------------------------------------------------------------
 // コマンドラインオプション
 // ---------------------------------------------------------------------------
@@ -55,6 +62,7 @@ pub struct OptSettings {
     pub dump_only: bool,
     pub os: Option<String>,
     pub emit_asm: bool,
+    pub cpu: Option<CpuKind>,
 
     opt_flags: Option<OptFlags>,
 }
@@ -68,6 +76,7 @@ impl OptSettings {
             dump_only: false,
             os: None,
             emit_asm: false,
+            cpu: None,
 
             opt_flags: Some(first_flag),
         }
@@ -81,6 +90,7 @@ impl OptSettings {
             dump_only: self.dump_only,
             os: None,
             emit_asm: false,
+            cpu: self.cpu.clone(),
             opt_flags: Some(OptFlags::SetFile),
         }
     }
@@ -163,6 +173,8 @@ pub fn mng_opt_cmd(args: &[&str]) -> OptSettings {
             "--linux" => settings.os = Some("linux".to_string()),
             "--windows" => settings.os = Some("windows".to_string()),
             "-S" => settings.emit_asm = true,
+            "--x64" => settings.cpu = Some(CpuKind::X64),
+            "--aarch64" => settings.cpu = Some(CpuKind::Aarch64),
             val => {
                 if val.ends_with(".hexl") {
                     settings.file_name = Some(val.to_string());
@@ -367,6 +379,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         os.as_str(),
         &err_pool,
         OptMode::O1,
+        settings.cpu.clone()
     )
     // `AsmSettingError` は Display で日本語メッセージになる。`run` がそれを表示する
     .map_err(|e| format!("アセンブリコードの生成に失敗しました: {}", e))?;

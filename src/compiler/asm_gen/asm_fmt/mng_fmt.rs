@@ -28,6 +28,7 @@ impl MngAsmFmt {
         asm_setting: asm_setting::AsmSetting,
         asm_fmt: AsmFmtData,
         os: &str,
+        cpu: CpuKind,
     ) -> Self {
         // === アセンブラのフォーマットの設定 ===
         if let Some(s) = asm_fmt {
@@ -39,7 +40,11 @@ impl MngAsmFmt {
                 fmt: s,
             }
         } else {
-            let s = x64::GCC_X64.to_asm_format();
+            let s = match cpu {
+                CpuKind::X64 => x64::GCC_X64.to_asm_format(),
+                CpuKind::Aarch64 => aarch64::AARCH64.to_asm_format(),
+                CpuKind::Other => panic!("未対応のCPU種別です"),
+            };
             Self {
                 param_fmt: s.args.fmt.get(os).unwrap().clone(),
                 reg_fmt: s.reg.clone(),

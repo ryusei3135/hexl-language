@@ -333,7 +333,6 @@ impl Inst {
     }
 
     pub fn get_param_ty(&self) -> Option<types::Size> {
-        println!("ここでは、文字列の範囲していが直書き、あとで修正");
         match &self {
             inst::Inst::Param(p) => Some(p.clone().ty),
             inst::Inst::GetAddress(..) => Some(types::Size::DQ),

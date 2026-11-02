@@ -18,6 +18,7 @@ use crate::asm_setting;
 use crate::compiler::err::{self, err_pool};
 use crate::compiler::ir::inst::Inst;
 use crate::compiler::ir::types;
+use crate::CpuKind;
 
 pub use var_mnger::VarIndexInfo;
 
@@ -28,6 +29,7 @@ impl AsmEmitter {
         os: &str,
         err_pool: &Rc<RefCell<err_pool::ErrPool>>,
         opt_mode: OptMode,
+        cpu: CpuKind
     ) -> Self {
         let caller = Rc::new(vec![1, 4, 5, 6, 7, 8, 9]);
         let callee = Rc::new(vec![3, 10, 11, 12, 13]);
@@ -42,7 +44,7 @@ impl AsmEmitter {
             expr_vars: Vec::new(),
             reserved_label_name: None,
 
-            asm_fmt: asm_fmt::mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt, os),
+            asm_fmt: asm_fmt::mng_fmt::MngAsmFmt::new(asm_setting, asm_fmt, os, cpu),
             os: os.to_string(),
 
             curr_inst: Vec::new(),

@@ -1016,7 +1016,6 @@ impl Emitter {
 
     fn emit_unary_group(&mut self, operands: &[Operand], group: u8) -> Result<(), String> {
         if operands.len() != 1 {
-            println!("{:?}", operands);
             return Err("instruction requires one operand".into());
         }
 

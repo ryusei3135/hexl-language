@@ -451,7 +451,6 @@ impl AsmEmitter {
         name: &str,
         this_is_self: SelfPtrInfo,
     ) -> Result<(), err::ErrKind> {
-        println!("src/gen/call_func/MemoryValue");
         let val = self.extract_operand_text(*src.last().unwrap(), this_is_self)?;
         let label_name = format!("M{}", self.data_idx.to_string());
         let fmt_data =
