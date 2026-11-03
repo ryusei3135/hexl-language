@@ -127,7 +127,7 @@ os_equal(a: i64, b: i64, n: i64): i64 {
 
 // v を base 進数で buf[pos..] に書く。書いた文字数を返す(0 でも "0" を1文字書く)。
 // upper が 1 のとき、a-f を大文字にする。
-fmt_utoa(buf: byte*"unlimit", pos: u64, v: u64, base: u64, upper: u64): u64 {
+fmt_utoa(buf mut: byte*"unlimit", pos: u64, v: u64, base: u64, upper: u64): u64 {
     n mut: u64 = 0
     x mut: u64 = v
     // 下の桁から順に書く(あとで逆順に直す)
@@ -142,7 +142,7 @@ fmt_utoa(buf: byte*"unlimit", pos: u64, v: u64, base: u64, upper: u64): u64 {
             }
         }
         ip: u64 = pos + n
-        [buf ip else 0] = (byte)dc
+        [buf ip else 0] = dc
         n = n + 1
         x = x / base
         cond x == 0 {
@@ -172,7 +172,7 @@ fmt_utoa(buf: byte*"unlimit", pos: u64, v: u64, base: u64, upper: u64): u64 {
 // buf[pos..pos+n] に書いた文字列を、幅 width に合わせて埋める。埋めた後の文字数を返す。
 // sg は先頭の符号("-" や "0x")の文字数。0埋めのときは、符号の後ろに 0 を入れる。
 // left が 1 のとき左寄せ(右側を空白で埋める)。
-fmt_pad(buf: byte*"unlimit", pos: u64, n: u64, sg: u64, width: u64, left: u64, zero: u64): u64 {
+fmt_pad(buf mut: byte*"unlimit", pos: u64, n: u64, sg: u64, width: u64, left: u64, zero: u64): u64 {
     cond width <= n {
         ret n
     }
@@ -186,7 +186,7 @@ fmt_pad(buf: byte*"unlimit", pos: u64, n: u64, sg: u64, width: u64, left: u64, z
                 break
             }
             ip: u64 = pos + n + k
-            [buf ip else 0] = (byte)0x20
+            [buf ip else 0] = 0x20
             k = k + 1
         }
         ret width
@@ -215,26 +215,26 @@ fmt_pad(buf: byte*"unlimit", pos: u64, n: u64, sg: u64, width: u64, left: u64, z
             break
         }
         ip: u64 = start + m
-        [buf ip else 0] = (byte)fill
+        [buf ip else 0] = fill
         m = m + 1
     }
     ret width
 }
 
 // "(null)" を buf[pos..] に書く。書いた文字数(6)を返す。
-fmt_null(buf: byte*"unlimit", pos: u64): u64 {
+fmt_null(buf mut: byte*"unlimit", pos: u64): u64 {
     p0: u64 = pos
     p1: u64 = pos + 1
     p2: u64 = pos + 2
     p3: u64 = pos + 3
     p4: u64 = pos + 4
     p5: u64 = pos + 5
-    [buf p0 else 0] = (byte)0x28
-    [buf p1 else 0] = (byte)0x6E
-    [buf p2 else 0] = (byte)0x75
-    [buf p3 else 0] = (byte)0x6C
-    [buf p4 else 0] = (byte)0x6C
-    [buf p5 else 0] = (byte)0x29
+    [buf p0 else 0] = 0x28
+    [buf p1 else 0] = 0x6E
+    [buf p2 else 0] = 0x75
+    [buf p3 else 0] = 0x6C
+    [buf p4 else 0] = 0x6C
+    [buf p5 else 0] = 0x29
     ret 6
 }
 
@@ -313,13 +313,13 @@ pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" 
 
             cond t == 0x25 {
                 // %%
-                [buf o else 0] = (byte)0x25
+                [buf o else 0] = 0x25
                 o = o + 1
             } else {
                 cond used == 1 {
                     // 2つ目以降の変換指定は、そのまま出力する
                     o1: u64 = o + 1
-                    [buf o else 0] = (byte)0x25
+                    [buf o else 0] = 0x25
                     [buf o1 else 0] = t
                     o = o + 2
                 } else {
@@ -331,9 +331,9 @@ pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" 
                             // %d %i
                             mag mut: u64 = (u64)a
                             cond a < 0 {
-                                [buf o else 0] = (byte)0x2D
+                                [buf o else 0] = 0x2D
                                 sg = 1
-                                mag = (u64)(0 - a)
+                                mag = 0 - a
                             }
                             os: u64 = o + sg
                             n = sg + fmt_utoa(buf, os, mag, 10, 0)
@@ -357,14 +357,14 @@ pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" 
                             // %p: "0x" + 16進数
                             o1: u64 = o + 1
                             o2: u64 = o + 2
-                            [buf o else 0] = (byte)0x30
-                            [buf o1 else 0] = (byte)0x78
+                            [buf o else 0] = 0x30
+                            [buf o1 else 0] = 0x78
                             sg = 2
                             n = 2 + fmt_utoa(buf, o2, (u64)a, 16, 0)
                         }
                         t == 0x63 => {
                             // %c
-                            [buf o else 0] = (byte)a
+                            [buf o else 0] = a
                             n = 1
                             zero = 0
                         }
@@ -391,7 +391,7 @@ pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" 
                         else => {
                             // 知らない変換は '%' と文字をそのまま出力し、値は使わない
                             o1: u64 = o + 1
-                            [buf o else 0] = (byte)0x25
+                            [buf o else 0] = 0x25
                             [buf o1 else 0] = t
                             n = 2
                             used = 0
@@ -405,7 +405,7 @@ pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" 
     }
 
     // 終端
-    [buf o else 0] = (byte)0
+    [buf o else 0] = 0
     ret buf + o
 }
 
