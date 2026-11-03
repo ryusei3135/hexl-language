@@ -36,7 +36,7 @@ pub fn set_caller(name: &'static str) {
 
 /// 表示してよいか(環境変数`PARSE_ERR_TRACE=0`で無効化)
 fn enabled() -> bool {
-    !matches!(std::env::var("PARSE_ERR_TRACE").as_deref(), Ok("0"))
+    matches!(std::env::var("PARSE_ERR_TRACE").as_deref(), Ok("1"))
 }
 
 /// `crate::a::{impl#0}::f::{{closure}}`のような完全な名前から、
