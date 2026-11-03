@@ -87,8 +87,8 @@ impl IR {
             // 条件ジャンプの飛び先が変わらないよう先に予約する。
             let condition = self.pattern_labels;
             self.pattern_labels += 1;
-            crate::push_jmp_code!(self, ExpectJmp, &condition);
-            let _ = self.gen_expr_ir::<M>(expr, None)?;
+            // `&&` / `||`は、比較ごとの条件ジャンプへ展開する
+            self.gen_cond_jump_ir::<M>(expr, condition)?;
             // もし条件がfalseならendまでジャンプ
             crate::push_jmp_code!(self, Jmp, &end);
             // 条件がtrueのときジャンプする場所
@@ -150,14 +150,15 @@ impl IR {
         // その情報(`binds`)を覚えておく
         let mut binds: Vec<Option<variant_bind::VariantBindInfo>> = Vec::new();
         for (arm, label) in arms.iter().zip(arm_labels.iter()) {
-            crate::push_jmp_code!(self, ExpectJmp, label);
             if let ast::ExprNode::VariantBind(bind) = &(*arm.pattern).node {
+                crate::push_jmp_code!(self, ExpectJmp, label);
                 // `src/ir/builder/variant_bind.rs`
                 let result = self.variant_bind_cond(bind);
                 binds.push(Some(self.unwrap_or_report(result)));
             } else {
                 let cond = build_cond(&arm.pattern);
-                self.gen_expr_ir::<M>(&cond, None)?;
+                // `&&` / `||`は、比較ごとの条件ジャンプへ展開する
+                self.gen_cond_jump_ir::<M>(&cond, *label)?;
                 binds.push(None);
             }
         }
@@ -247,8 +248,7 @@ impl IR {
         let end_label = self.next_pattern_label();
 
         // 条件が真なら`then_label`へ(`ExpectJmp`は条件式より前に置く)
-        crate::push_jmp_code!(self, ExpectJmp, &then_label);
-        let _ = self.gen_expr_ir::<M>(cond, None)?;
+        self.gen_cond_jump_ir::<M>(&*cond, then_label)?;
 
         // 条件が偽のとき
         self.begin_scope();
@@ -379,6 +379,44 @@ mod match_expr_ir_tests {
                 })
             )),
             "|| のIR(OrCalcul)が生成される必要がある: {:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn cond_and_expands_to_branches() {
+        let body = build_func_body(
+            "_start(): int {
+                c: int = 100
+                cond {
+                    c >= 97 && c <= 122 => { a: int = 1 }
+                    else => { a: int = 0 }
+                }
+                ret 1
+            }",
+        );
+
+        // 条件の`&&`は、0/1の値を作らず、比較ごとの条件ジャンプへ展開する
+        assert!(
+            !body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::Expr(inst::ExprInst {
+                    kind: inst::ExprKind::AndCalcul
+                        | inst::ExprKind::SetGreaterThenEq
+                        | inst::ExprKind::SetLessThenEq,
+                    ..
+                })
+            )),
+            "条件の&&にAndCalcul/Set*を使ってはいけない: {:?}",
+            body
+        );
+        // 左辺の条件ジャンプと右辺の条件ジャンプで、`ExpectJmp`が2つ以上ある
+        assert!(
+            body.iter()
+                .filter(|inst| matches!(inst, inst::Inst::ExpectJmp(_)))
+                .count()
+                >= 2,
+            "&&の左右それぞれに条件ジャンプが必要: {:?}",
             body
         );
     }

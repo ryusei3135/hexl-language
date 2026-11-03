@@ -18,6 +18,58 @@ impl IR {
         }
     }
 
+    /// 条件式`cond`が真なら`true_label`へジャンプし、偽ならそのまま次の命令へ進む
+    /// IR(`ExpectJmp`/`Jmp`/`Block`と比較)を生成する
+    ///
+    /// `&&` / `||` / `!(比較や論理式)`は、`Set*`/`AndCalcul`で0/1の値を作らず、
+    /// 比較ごとの条件ジャンプへ展開する(短絡評価。右辺は左辺で決まらないときだけ評価する)。
+    ///
+    /// ```text
+    /// a || b   ExpectJmp(T) a ; ExpectJmp(T) b
+    /// a && b   ExpectJmp(M) a ; Jmp(E) ; Block(M) ; ExpectJmp(T) b ; Block(E)
+    /// !a       ExpectJmp(M) a ; Jmp(T) ; Block(M)
+    /// ```
+    /// それ以外の式は、従来どおり`ExpectJmp(T)`と式だけを生成する。
+    pub(in crate::compiler::ir) fn gen_cond_jump_ir<M: ResultMod>(
+        &mut self,
+        cond: &Expr,
+        true_label: usize,
+    ) -> Result<(), err::ErrKind> {
+        match &cond.node {
+            ExprNode::CmpOr((l, r)) => {
+                self.gen_cond_jump_ir::<M>(&*l, true_label)?;
+                self.gen_cond_jump_ir::<M>(&*r, true_label)
+            }
+            ExprNode::CmpAnd((l, r)) => {
+                // 中の式が発番するラベルと重ならないよう、先にまとめて発番する
+                let left_true = self.next_pattern_label();
+                let end = self.next_pattern_label();
+                self.gen_cond_jump_ir::<M>(&*l, left_true)?;
+                // 左辺が偽なら、右辺を評価せずに終わる
+                crate::push_jmp_code!(self, Jmp, &end);
+                crate::push_jmp_code!(self, Block, &left_true);
+                self.gen_cond_jump_ir::<M>(&*r, true_label)?;
+                crate::push_jmp_code!(self, Block, &end);
+                Ok(())
+            }
+            ExprNode::CmpNot(target)
+                if Self::is_cmp_expr(&*target) || Self::is_logic_expr(&*target) =>
+            {
+                let target_true = self.next_pattern_label();
+                self.gen_cond_jump_ir::<M>(&*target, target_true)?;
+                // `target`が偽のとき(`!target`が真)
+                crate::push_jmp_code!(self, Jmp, &true_label);
+                crate::push_jmp_code!(self, Block, &target_true);
+                Ok(())
+            }
+            _ => {
+                crate::push_jmp_code!(self, ExpectJmp, &true_label);
+                self.gen_expr_ir::<M>(cond, None)?;
+                Ok(())
+            }
+        }
+    }
+
     /// 生成した命令を`ir_tree`へ積み、その命令の番号を返す
     fn push_ternary_inst(&mut self, inst: inst::Inst) -> usize {
         self.ir_tree.push(inst);
