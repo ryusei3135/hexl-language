@@ -95,6 +95,321 @@ os_equal(a: i64, b: i64, n: i64): i64 {
     ret res
 }
 
+
+// Hexl format library.
+//
+// C言語の printf 風の書式で、1つの値を buf へ書き込む。
+//
+//   pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit"
+//
+// - fmt を buf へコピーしながら、最初の変換指定(%d など)を arg で置き換える
+// - buf の末尾に 0(NUL)を書き、その NUL の位置のポインタを返す
+//   (戻り値を次の format の buf に渡すと、続けて書き足せる)
+// - hexl には可変長引数が無いので、1回の呼び出しで置き換える変換指定は1つだけ。
+//   2つ目以降の変換指定(%% 以外)は、そのまま文字として出力する
+// - buf には、出力が入る大きさ(NUL を含む)を呼び出し側が用意すること
+//
+// 対応する書式: %[フラグ][幅][長さ]変換
+//   フラグ : '-'(左寄せ) '0'(0埋め)
+//   幅     : 10進数
+//   長さ   : l h z は読み飛ばす(整数は常に64bitで扱う)
+//   変換   : d i  符号付き10進数      u  符号なし10進数
+//            x X  16進数(小文字/大文字)  o  8進数   b  2進数
+//            c    1文字              s  NUL終端の文字列(arg は先頭アドレス。0なら "(null)")
+//            p    "0x" + 16進数      %  '%' そのもの(arg は使わない)
+//
+// 使い方:
+//   p: byte*"unlimit" = format<i64>(buf, "n=%d ", 42)
+//   p = format<byte*>(p, "name=%s", "abc")
+//
+// 注意: 添字アクセスは Vec と同じ `[ptr idx else 0]` の形を使う。
+//       添字の式は、先に変数へ計算してから渡している。
+
+// v を base 進数で buf[pos..] に書く。書いた文字数を返す(0 でも "0" を1文字書く)。
+// upper が 1 のとき、a-f を大文字にする。
+fmt_utoa(buf: byte*"unlimit", pos: u64, v: u64, base: u64, upper: u64): u64 {
+    n mut: u64 = 0
+    x mut: u64 = v
+    // 下の桁から順に書く(あとで逆順に直す)
+    loop {
+        d: u64 = x % base
+        dc mut: u64 = 0x30 + d
+        cond d >= 10 {
+            cond upper == 1 {
+                dc = 0x37 + d
+            } else {
+                dc = 0x57 + d
+            }
+        }
+        ip: u64 = pos + n
+        [buf ip else 0] = (byte)dc
+        n = n + 1
+        x = x / base
+        cond x == 0 {
+            break
+        }
+    }
+
+    // 書いた桁を逆順に並べ直す
+    lo mut: u64 = 0
+    hi mut: u64 = n - 1
+    loop {
+        cond lo >= hi {
+            break
+        }
+        il: u64 = pos + lo
+        ih: u64 = pos + hi
+        a: byte = [buf il else 0]
+        b: byte = [buf ih else 0]
+        [buf il else 0] = b
+        [buf ih else 0] = a
+        lo = lo + 1
+        hi = hi - 1
+    }
+    ret n
+}
+
+// buf[pos..pos+n] に書いた文字列を、幅 width に合わせて埋める。埋めた後の文字数を返す。
+// sg は先頭の符号("-" や "0x")の文字数。0埋めのときは、符号の後ろに 0 を入れる。
+// left が 1 のとき左寄せ(右側を空白で埋める)。
+fmt_pad(buf: byte*"unlimit", pos: u64, n: u64, sg: u64, width: u64, left: u64, zero: u64): u64 {
+    cond width <= n {
+        ret n
+    }
+    pad: u64 = width - n
+
+    // 左寄せ: 右側を空白で埋める
+    cond left == 1 {
+        k mut: u64 = 0
+        loop {
+            cond k >= pad {
+                break
+            }
+            ip: u64 = pos + n + k
+            [buf ip else 0] = (byte)0x20
+            k = k + 1
+        }
+        ret width
+    }
+
+    // 右寄せ: 埋める位置(start)から後ろの文字を pad 文字ぶん右へずらして、空いた所を埋める
+    start mut: u64 = pos
+    fill mut: u64 = 0x20
+    cond zero == 1 {
+        start = pos + sg
+        fill = 0x30
+    }
+    j mut: u64 = pos + n
+    loop {
+        cond j <= start {
+            break
+        }
+        j = j - 1
+        dst: u64 = j + pad
+        c: byte = [buf j else 0]
+        [buf dst else 0] = c
+    }
+    m mut: u64 = 0
+    loop {
+        cond m >= pad {
+            break
+        }
+        ip: u64 = start + m
+        [buf ip else 0] = (byte)fill
+        m = m + 1
+    }
+    ret width
+}
+
+// "(null)" を buf[pos..] に書く。書いた文字数(6)を返す。
+fmt_null(buf: byte*"unlimit", pos: u64): u64 {
+    p0: u64 = pos
+    p1: u64 = pos + 1
+    p2: u64 = pos + 2
+    p3: u64 = pos + 3
+    p4: u64 = pos + 4
+    p5: u64 = pos + 5
+    [buf p0 else 0] = (byte)0x28
+    [buf p1 else 0] = (byte)0x6E
+    [buf p2 else 0] = (byte)0x75
+    [buf p3 else 0] = (byte)0x6C
+    [buf p4 else 0] = (byte)0x6C
+    [buf p5 else 0] = (byte)0x29
+    ret 6
+}
+
+// 文字列 fmt を buf へ書式化する。詳しくはファイル先頭の説明を参照。
+pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" {
+    a: i64 = arg
+    o mut: u64 = 0
+    i mut: u64 = 0
+    // 値を置き換える変換指定を、すでに1つ使ったか(0/1)
+    used mut: u64 = 0
+
+    loop {
+        c: byte = [fmt i else 0]
+        cond c == 0 {
+            break
+        }
+        cond c != 0x25 {
+            // 普通の文字はそのままコピー
+            [buf o else 0] = c
+            o = o + 1
+            i = i + 1
+        } else {
+            // '%' の次から変換指定を読む
+            i = i + 1
+
+            // フラグ: '-' と '0'
+            left mut: u64 = 0
+            zero mut: u64 = 0
+            loop {
+                f: byte = [fmt i else 0]
+                cond {
+                    f == 0x2D => {
+                        left = 1
+                        i = i + 1
+                    }
+                    f == 0x30 => {
+                        zero = 1
+                        i = i + 1
+                    }
+                    else => {
+                        break
+                    }
+                }
+            }
+
+            // 幅
+            width mut: u64 = 0
+            loop {
+                w: byte = [fmt i else 0]
+                cond w >= 0x30 && w <= 0x39 {
+                    wd: u64 = w
+                    width = width * 10 + (wd - 0x30)
+                    i = i + 1
+                } else {
+                    break
+                }
+            }
+
+            // 長さ(l h z)は読み飛ばす
+            loop {
+                m: byte = [fmt i else 0]
+                cond m == 0x6C || m == 0x68 || m == 0x7A {
+                    i = i + 1
+                } else {
+                    break
+                }
+            }
+
+            // 変換の種類
+            t: byte = [fmt i else 0]
+            cond t == 0 {
+                // "%" で文字列が終わっている
+                break
+            }
+            i = i + 1
+
+            cond t == 0x25 {
+                // %%
+                [buf o else 0] = (byte)0x25
+                o = o + 1
+            } else {
+                cond used == 1 {
+                    // 2つ目以降の変換指定は、そのまま出力する
+                    o1: u64 = o + 1
+                    [buf o else 0] = (byte)0x25
+                    [buf o1 else 0] = t
+                    o = o + 2
+                } else {
+                    used = 1
+                    n mut: u64 = 0
+                    sg mut: u64 = 0
+                    cond {
+                        t == 0x64 || t == 0x69 => {
+                            // %d %i
+                            mag mut: u64 = (u64)a
+                            cond a < 0 {
+                                [buf o else 0] = (byte)0x2D
+                                sg = 1
+                                mag = (u64)(0 - a)
+                            }
+                            os: u64 = o + sg
+                            n = sg + fmt_utoa(buf, os, mag, 10, 0)
+                        }
+                        t == 0x75 => {
+                            n = fmt_utoa(buf, o, (u64)a, 10, 0)
+                        }
+                        t == 0x78 => {
+                            n = fmt_utoa(buf, o, (u64)a, 16, 0)
+                        }
+                        t == 0x58 => {
+                            n = fmt_utoa(buf, o, (u64)a, 16, 1)
+                        }
+                        t == 0x6F => {
+                            n = fmt_utoa(buf, o, (u64)a, 8, 0)
+                        }
+                        t == 0x62 => {
+                            n = fmt_utoa(buf, o, (u64)a, 2, 0)
+                        }
+                        t == 0x70 => {
+                            // %p: "0x" + 16進数
+                            o1: u64 = o + 1
+                            o2: u64 = o + 2
+                            [buf o else 0] = (byte)0x30
+                            [buf o1 else 0] = (byte)0x78
+                            sg = 2
+                            n = 2 + fmt_utoa(buf, o2, (u64)a, 16, 0)
+                        }
+                        t == 0x63 => {
+                            // %c
+                            [buf o else 0] = (byte)a
+                            n = 1
+                            zero = 0
+                        }
+                        t == 0x73 => {
+                            // %s: arg は文字列の先頭アドレス
+                            zero = 0
+                            cond a == 0 {
+                                n = fmt_null(buf, o)
+                            } else {
+                                sp: byte*"unlimit" = a
+                                k mut: u64 = 0
+                                loop {
+                                    ch: byte = [sp k else 0]
+                                    cond ch == 0 {
+                                        break
+                                    }
+                                    ik: u64 = o + k
+                                    [buf ik else 0] = ch
+                                    k = k + 1
+                                }
+                                n = k
+                            }
+                        }
+                        else => {
+                            // 知らない変換は '%' と文字をそのまま出力し、値は使わない
+                            o1: u64 = o + 1
+                            [buf o else 0] = (byte)0x25
+                            [buf o1 else 0] = t
+                            n = 2
+                            used = 0
+                            zero = 0
+                        }
+                    }
+                    o = o + fmt_pad(buf, o, n, sg, width, left, zero)
+                }
+            }
+        }
+    }
+
+    // 終端
+    [buf o else 0] = (byte)0
+    ret buf + o
+}
+
+
 // ---------------------------------------------------------------
 // Str
 // ---------------------------------------------------------------
@@ -233,3 +548,5 @@ reserve(s: Str*, need: u64): u64 {
     }
     ret 0
 }
+
+

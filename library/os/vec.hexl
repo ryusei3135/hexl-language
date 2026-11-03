@@ -37,8 +37,8 @@ pub struct Vec<T> {
         }
     }
 
-    pub get(self: Self, idx: u64) -> T {
-        ret [self->val, idx else 0]
+    pub get(self: Self*, idx: u64): T {
+        ret [self->val idx else 0]
     }
 
     pub len(self: Self*): u64 {

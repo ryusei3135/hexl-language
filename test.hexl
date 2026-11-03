@@ -10,8 +10,8 @@
 }}
 
 struct Name {
-    name: int
-    aa: int
+    pub name: int
+    pub aa: int
 
     f(self mut: Self) {
         self.name = 0
