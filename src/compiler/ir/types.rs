@@ -152,7 +152,9 @@ impl Size {
         let mut struct_ty = Vec::new();
 
         for field in target.fields.iter() {
-            let ty = Box::new((field.name.clone(), (&field.ty).try_into().unwrap()));
+            let size = Self::try_from_or_emit_struct(f, &field.ty)
+                .map_err(|error| error.with_span(std::rc::Rc::clone(&field.span)))?;
+            let ty = Box::new((field.name.clone(), size));
             struct_ty.push(ty);
         }
 
