@@ -80,6 +80,8 @@ pub enum CompileErrKind {
     DuplicateTypeAlias(String),
     /// 型エイリアスが循環している(`type A = B` / `type B = A`など)
     TypeAliasCycle(String),
+    /// `pub` ではない構造体フィールドへ、所有する構造体の外からアクセスした
+    PrivateFieldAccess,
 
     // ---- asm_emitter(アセンブリ生成)で、以前は`panic`していた状況 ----
     /// 構造体/バリアントのメンバーが`MemoryInst::Member`ではない(中身はデバッグ表示)
@@ -469,6 +471,7 @@ impl CompileErrKind {
             Self::IncDecInvalidTarget => "E0038",
             Self::DuplicateTypeAlias(..) => "E0039",
             Self::TypeAliasCycle(..) => "E0040",
+            Self::PrivateFieldAccess => "E0041",
         }
     }
 
@@ -604,6 +607,7 @@ impl CompileErrKind {
             Self::TypeAliasCycle(name) => {
                 format!("型エイリアス`{name}`が循環しています")
             }
+            Self::PrivateFieldAccess => "これはプライベートです".to_string(),
         }
     }
 

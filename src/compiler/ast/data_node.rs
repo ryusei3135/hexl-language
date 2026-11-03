@@ -11,6 +11,8 @@ pub(in crate::compiler) trait Field {
     fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Self;
 
     fn make_field(name: &str, ty: &str, span: Rc<err::Span>) -> Self;
+
+    fn set_public(&mut self, _public: bool) {}
 }
 
 // === 型エイリアス =====
@@ -44,6 +46,8 @@ impl TypeAlias {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructField {
+    /// `pub` が付いているか
+    pub public: bool,
     pub name: String,
     pub ty: TyNode,
     pub span: Rc<err::Span>,
@@ -51,15 +55,25 @@ pub struct StructField {
 
 impl Field for StructField {
     fn new(name: String, ty: TyNode, span: Rc<err::Span>) -> Self {
-        Self { name, ty, span }
+        Self {
+            public: false,
+            name,
+            ty,
+            span,
+        }
     }
 
     fn make_field(name: &str, ty: &str, span: Rc<err::Span>) -> Self {
         Self {
+            public: false,
             name: name.to_string(),
             ty: TyNode::Ty(ty.to_string()),
             span,
         }
+    }
+
+    fn set_public(&mut self, public: bool) {
+        self.public = public;
     }
 }
 

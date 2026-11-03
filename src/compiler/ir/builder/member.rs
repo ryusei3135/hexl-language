@@ -1,4 +1,5 @@
 use crate::compiler::err::undef::UndefKind::*;
+use crate::compiler::err::{compile::CompileErr, CompileErrKind};
 
 use super::*;
 use crate::compiler::ast::{CallInfo, Expr, ExprNode};
@@ -6,6 +7,29 @@ use err_factory::member;
 use std::rc::Rc;
 
 impl IR {
+    pub(in crate::compiler::ir) fn ensure_struct_field_access(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+    ) -> Result<(), err::ErrKind> {
+        let Some(field) = self
+            .struct_tree
+            .get(struct_name)
+            .and_then(|def| def.fields.iter().find(|field| field.name == field_name))
+        else {
+            return Ok(());
+        };
+
+        if !field.public && self.active_struct.as_deref() != Some(struct_name) {
+            return Err(CompileErr::at(
+                CompileErrKind::PrivateFieldAccess,
+                Rc::clone(&self.current_span),
+            ));
+        }
+
+        Ok(())
+    }
+
     pub(super) fn member_is_var(
         &mut self,
         scope: &[&str],
@@ -25,16 +49,18 @@ impl IR {
             .to_string();
         // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
         self.count_var_use(&member_name);
+        let struct_name = self.var_tree.get_ty_name(&member_name)?;
+        self.ensure_struct_field_access(&struct_name, name)?;
         let pos: usize = self.struct_tree.get_pos(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
-            &self.var_tree.get_ty_name(&member_name)?,
+            &struct_name,
             &name,
         );
         let size: types::Size = self.struct_tree.get_mem_size(
             // 変数の名前で登録されている変数の型を取得する
             // （変数）の名前の文字列
-            &self.var_tree.get_ty_name(&member_name)?,
+            &struct_name,
             &name,
         );
         let r = inst::Inst::RefStruct {
@@ -99,6 +125,7 @@ impl IR {
         // `get_ty_name`はポインタ型の変数に対しては、指す先の
         // 構造体名を返す(`src/ir/def_tree.rs`)
         let struct_name = self.var_tree.get_ty_name(ptr_name)?;
+        self.ensure_struct_field_access(&struct_name, name)?;
 
         let pos: usize = self.struct_tree.get_pos(&struct_name, name);
         let size: types::Size = self.struct_tree.get_mem_size(&struct_name, name);
@@ -146,6 +173,7 @@ impl IR {
         // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
         self.count_var_use(var_name);
         let struct_name = self.var_tree.get_ty_name(&var_name)?;
+        self.ensure_struct_field_access(&struct_name, name)?;
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める
         let field_ty = self
@@ -173,6 +201,7 @@ impl IR {
                     return member::arr_index_is_not_num::<inst::Inst>(&val, &(*index).span);
                 }
             }
+
             t => panic!("{:?}", t),
         };
 
@@ -181,5 +210,54 @@ impl IR {
             size: self.try_size_or_emit_struct(&field_ty)?,
             pos: field_pos + index_num * elem_size,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler::ast::{Field, StructDefine, StructField, TyNode};
+
+    #[test]
+    fn private_fields_are_accessible_only_from_their_struct() {
+        let mut ir = super::super::new_test_ir();
+        let mut public_field = StructField::new(
+            "public_field".to_string(),
+            TyNode::Ty("int".to_string()),
+            Rc::clone(&ir.current_span),
+        );
+        public_field.public = true;
+        let Group1Node::StructDefine(def) = StructDefine::new(
+            "Record".to_string(),
+            vec![
+                public_field,
+                StructField::new(
+                    "private_field".to_string(),
+                    TyNode::Ty("int".to_string()),
+                    Rc::clone(&ir.current_span),
+                ),
+            ],
+            Vec::new(),
+            Rc::clone(&ir.current_span),
+        ) else {
+            unreachable!();
+        };
+        ir.struct_tree.add(&def);
+
+        assert!(ir
+            .ensure_struct_field_access("Record", "public_field")
+            .is_ok());
+        let error = ir
+            .ensure_struct_field_access("Record", "private_field")
+            .unwrap_err();
+        let err::ErrKind::CompileErr(error) = error else {
+            panic!("private field access should return a compile error");
+        };
+        assert_eq!(error.kind.title(), "これはプライベートです");
+
+        ir.active_struct = Some("Record".to_string());
+        assert!(ir
+            .ensure_struct_field_access("Record", "private_field")
+            .is_ok());
     }
 }

@@ -47,7 +47,7 @@ c言語を書きたいけどメモリの管理がめんどくさい
 ./a.out
 
 // src
-#include std::"/os/io.hexl"
+#include std::"os/io.hexl"
 #include std::"os/lib.hexl"
 #main{
     msg: byte* = "hello world\n"

@@ -231,6 +231,7 @@ impl Lowerer {
                 let mut fs = Vec::new();
                 for f in &fields {
                     fs.push(StructField {
+                        public: true,
                         name: f.name.clone(),
                         ty: self.to_ty(&f.ty, 0)?,
                         span: span_at(0, &self.self_file_name),

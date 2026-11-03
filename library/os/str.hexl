@@ -99,7 +99,7 @@ os_equal(a: i64, b: i64, n: i64): i64 {
 // Str
 // ---------------------------------------------------------------
 pub struct Str {
-    buf: byte*"unlimit" must=free
+    pub buf: byte*"unlimit" must=free
     len: u64
     cap: u64
 

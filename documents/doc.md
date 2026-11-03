@@ -142,8 +142,8 @@ loop {
 
 ```hexl
 struct Point {
-    x: int
-    y: int
+    pub x: int
+    pub y: int
 }
 
 _start(): int {

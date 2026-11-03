@@ -34,6 +34,8 @@ pub struct IR {
     scope_states: Vec<def_tree::VarTree>,
 
     this_is_self: bool,
+    /// 現在展開中のメソッドが所属する構造体
+    active_struct: Option<String>,
     /// 式や文を生成する際に、一番最初のノードの場合のみtrue
     /// 関数を呼ぶノードが変数に戻り値を代入市内債などに使う
     expr_counter: usize,

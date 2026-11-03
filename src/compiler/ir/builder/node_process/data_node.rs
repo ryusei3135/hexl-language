@@ -316,6 +316,7 @@ impl IR {
         let mut mem_insts = Vec::with_capacity(struct_def.fields.len());
         // フィールドは構造体で定義された順番通りに展開する
         for field in struct_def.fields.clone().iter() {
+            self.ensure_struct_field_access(&struct_name, &field.name)?;
             let field_size = self.size_of(&field.ty);
             // 確保するスタックを増やす
             self.stack_counter(&field.ty);

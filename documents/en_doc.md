@@ -137,8 +137,8 @@ Use a structure to group related data.
 
 ```hexl
 Point {
-    x: int
-    y: int
+    pub x: int
+    pub y: int
 }
 ```
 

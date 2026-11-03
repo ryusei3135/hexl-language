@@ -50,6 +50,7 @@ impl IR {
 
         // メンバーの型(ポインタ/配列)。`get_ty_name`は、ポインタ変数には指す先の構造体名を返す
         let struct_name = self.var_tree.get_ty_name(ptr)?;
+        self.ensure_struct_field_access(&struct_name, member)?;
         let field_ty = self
             .struct_tree
             .get(&struct_name)

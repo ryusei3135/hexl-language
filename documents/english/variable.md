@@ -65,7 +65,7 @@ To access an array that is a member of a structure, use the form `.[name index]`
 
 ```text
 struct Name {
-    arr: [int 5]
+    pub arr: [int 5]
 }
 arr: Name = Name {
     arr: {0, 1, 2, 3, 4}

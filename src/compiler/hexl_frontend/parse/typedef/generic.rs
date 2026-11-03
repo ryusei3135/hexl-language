@@ -762,6 +762,19 @@ mod generic_type_tests {
     }
 
     #[test]
+    fn struct_field_visibility_is_preserved() {
+        let nodes = build(
+            "
+            struct Record<T> { pub visible: T hidden: T }
+            f(record: Record<int>): int { ret 0 }
+            ",
+        );
+        let fields = &structs(&nodes)[0].fields;
+        assert!(fields[0].public);
+        assert!(!fields[1].public);
+    }
+
+    #[test]
     fn struct_used_before_definition() {
         // 使用が定義より前でも作れる
         let nodes = build(

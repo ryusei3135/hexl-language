@@ -42,7 +42,7 @@ b: static[int] = 20
     - 構造体のメンバーとしてアクセスするときは、.[name index]のようにする
     ```
     struct Name {
-        arr: [int 5]
+        pub arr: [int 5]
     }
     variant Name<T> {
         Name1(int)

@@ -30,6 +30,7 @@ impl IR {
             expr_counter: 0,
             // メゾットの処理中`true`
             this_is_self: false,
+            active_struct: None,
             // 関数の情報を初期化
             func_tree: def_tree::FuncTree::new(),
             extern_func_tree: Vec::new(),

@@ -127,6 +127,7 @@ impl IR {
             // これは呼び出し元が`resolve_expect_byte`で代入先がメンバーかを調べているので、Noneっを返す
             _ => return Ok(None),
         };
+        self.ensure_struct_field_access(&struct_name, &member)?;
         if is_arr_elem {
             // 配列メンバーは要素1つ分の型にする(`member_is_arr_ref`と同じ)
             let field_ty = self

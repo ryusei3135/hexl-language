@@ -32,7 +32,7 @@ impl Parser {
                 lex::Tkn::Name(name) => {
                     match self.next_tkn_ref(&[":", "("])? {
                         lex::Tkn::Colon => {
-                            if self.make_field_member_ty::<T>(&mut fields, name)? {
+                            if self.make_field_member_ty::<T>(&mut fields, name, pub_flag)? {
                                 break;
                             }
                             continue;
@@ -160,13 +160,16 @@ impl Parser {
         &mut self,
         fields: &mut Vec<T>,
         name: String,
+        public: bool,
     ) -> Result<bool, err::ErrKind> {
         // フィールドの位置(`name:`の`:`)
         let span = self.build_err_span();
         self.next_tkn(&[])?;
         let ty = self.define_ty_node()?;
 
-        fields.push(T::new(name, ty, span));
+        let mut field = T::new(name, ty, span);
+        field.set_public(public);
+        fields.push(field);
 
         match self.current_tkn() {
             lex::Tkn::Comma => {}

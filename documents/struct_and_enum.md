@@ -8,12 +8,17 @@
 
 ```text
 struct Name {
-    mem: int
-    mem2: int
+    pub mem: int
+    pub mem2: int
 }
 ```
 
 `struct` の後に構造体名を指定し、`{}` の中にメンバを定義します。
+
+メンバは初期状態では非公開です。構造体の外から読み書きするメンバには、
+`pub`を付けます。非公開メンバへの構造体外からのアクセスは
+`これはプライベートです`というコンパイルエラーになります。
+構造体のメソッド内では、自身の構造体の非公開メンバにアクセスできます。
 
 各メンバは、
 
@@ -21,7 +26,7 @@ struct Name {
 name: ty
 ```
 
-の形式で定義します。
+の形式で定義します。公開メンバは`pub name: ty`とします。
 
 ### 初期化方法
 
@@ -33,6 +38,9 @@ a: Name = Name {
     mem2: 10
 }
 ```
+
+この例では両方のメンバが公開されているため、構造体の外から初期化できます。
+非公開メンバは構造体の外から直接初期化できません。
 
 ---
 
@@ -78,7 +86,7 @@ method(self: Self, arg: ty, ..): Self {
 
 ```text
 struct Name {
-    value: int
+    pub value: int
 
     add(self: Self, value: int): Self {
         self.value = self.value + value

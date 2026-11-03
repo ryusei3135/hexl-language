@@ -8,18 +8,25 @@ A structure is a feature that allows multiple members to be grouped together and
 
 ```text
 struct Name {
-    mem: int
-    mem2: int
+    pub mem: int
+    pub mem2: int
 }
 ```
 
 Specify the structure name after `struct`, and define its members inside `{}`.
+
+Members are private by default. Add `pub` to members that should be read or
+written from outside the structure. Accessing a private member from outside
+its structure produces the compile error `これはプライベートです`.
+Methods of a structure can access that structure's private members.
 
 Each member is defined in the following format:
 
 ```text
 name: ty
 ```
+
+For a public member, use `pub name: ty`.
 
 ### Initialization
 
@@ -31,6 +38,9 @@ a: Name = Name {
     mem2: 10
 }
 ```
+
+In this example, both members are public and can be initialized from outside the
+structure. Private members cannot be initialized directly from outside.
 
 ---
 
@@ -74,7 +84,7 @@ For example:
 
 ```text
 struct Name {
-    value: int
+    pub value: int
 
     add(self: Self, value: int): Self {
         self.value = self.value + value

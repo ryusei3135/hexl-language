@@ -208,38 +208,43 @@ impl IR {
         methods: &[ast::Group1Node],
     ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
-        for method in methods {
-            let ast::Group1Node::FuncDefine(method_info) = method else {
-                panic!(
-                    "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
-                    kind, owner, method
-                );
-            };
-            if method_info.is_declaration_only() {
-                continue;
+        let result = (|| {
+            for method in methods {
+                let ast::Group1Node::FuncDefine(method_info) = method else {
+                    panic!(
+                        "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
+                        kind, owner, method
+                    );
+                };
+                if method_info.is_declaration_only() {
+                    continue;
+                }
+
+                self.active_struct = Some(owner.to_string());
+                let mut method_info = method_info.clone();
+                method_info.module = Some(owner.to_string());
+                let method_info = self.resolve_self_ty(&method_info);
+
+                // 関数の情報を登録
+                self.entry_fn_info(&method_info)?;
+
+                self.var_tree = def_tree::VarTree::new();
+
+                let _ = self.push_param_meta_data(&method_info.params)?;
+                self.scope_states.clear();
+                self.gen_inst::<M>(&method_info.body)?;
+
+                // 関数の処理内容をpush
+                self.push_fn_ir_tree(&method_info);
+                // 使うデータを初期化
+                self.ir_tree = Vec::new();
+                self.id_counter = 0;
             }
-
-            let mut method_info = method_info.clone();
-            method_info.module = Some(owner.to_string());
-            let method_info = self.resolve_self_ty(&method_info);
-
-            // 関数の情報を登録
-            self.entry_fn_info(&method_info)?;
-
-            self.var_tree = def_tree::VarTree::new();
-
-            let _ = self.push_param_meta_data(&method_info.params)?;
-            self.scope_states.clear();
-            self.gen_inst::<M>(&method_info.body)?;
-
-            // 関数の処理内容をpush
-            self.push_fn_ir_tree(&method_info);
-            // 使うデータを初期化
-            self.ir_tree = Vec::new();
-            self.id_counter = 0;
-        }
+            Ok(())
+        })();
+        self.active_struct = None;
         self.this_is_self = false;
-        Ok(())
+        result
     }
 
     /// ユーザーのソースコード側の誤りに起因しうる`Result`を、
