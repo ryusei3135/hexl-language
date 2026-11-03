@@ -330,6 +330,13 @@ impl IR {
             return Ok(self.size_of(ty));
         }
         types::Size::try_from_or_emit_struct(&mut |name| self.struct_tree.get_struct_size(name), ty)
+            .map_err(|error| {
+                if error.span().is_none() {
+                    error.with_span(std::rc::Rc::clone(&self.current_span))
+                } else {
+                    error
+                }
+            })
     }
 
     /// `ty`の包みを外した、いちばん内側の型がバリアント型か
@@ -449,8 +456,12 @@ impl IR {
     /// - ポインタは指す先に関わらず`POINTER_BYTES`(8)バイト
     ///
     /// `size_of`と違い、未定義の型や自己参照する型でもpanicせず`Err`を返す
-    pub(in crate::compiler::ir) fn byte_size_of(&self, ty: &TyNode) -> Result<usize, err::ErrKind> {
-        self.byte_size_of_inner(ty, &mut Vec::new())
+    pub(in crate::compiler::ir) fn byte_size_of(
+        &self,
+        ty: &TyNode,
+        span: &std::rc::Rc<err::Span>,
+    ) -> Result<usize, err::ErrKind> {
+        self.byte_size_of_inner(ty, &mut Vec::new(), span)
     }
 
     fn byte_size_of_inner(
@@ -458,6 +469,7 @@ impl IR {
         ty: &TyNode,
         // 値として展開中の構造体/バリアント名(自己参照の検出用)
         visiting: &mut Vec<String>,
+        span: &std::rc::Rc<err::Span>,
     ) -> Result<usize, err::ErrKind> {
         const POINTER_BYTES: usize = 8;
 
@@ -474,7 +486,8 @@ impl IR {
                     return Err(crate::GenUndefErrResult!(
                         UndefStruct,
                         format!("{name} は自分自身を直接含んでいるため、サイズを求められません"),
-                        None
+                        None,
+                        std::rc::Rc::clone(span)
                     ));
                 }
 
@@ -483,7 +496,7 @@ impl IR {
                     visiting.push(name.clone());
                     let mut total = 0usize;
                     for field in struct_def.fields.iter() {
-                        match self.byte_size_of_inner(&field.ty, visiting) {
+                        match self.byte_size_of_inner(&field.ty, visiting, &field.span) {
                             Ok(n) => total += n,
                             Err(e) => {
                                 visiting.pop();
@@ -506,7 +519,7 @@ impl IR {
                     for field in variant_def.fields.iter() {
                         // 型なしメンバーはペイロード0バイト
                         let Some(field_ty) = &field.ty else { continue };
-                        match self.byte_size_of_inner(field_ty, visiting) {
+                        match self.byte_size_of_inner(field_ty, visiting, &field.span) {
                             Ok(n) => payload = payload.max(n),
                             Err(e) => {
                                 visiting.pop();
@@ -526,24 +539,25 @@ impl IR {
                 Err(crate::GenUndefErrResult!(
                     UndefVarTy,
                     name.to_string(),
-                    None
+                    None,
+                    std::rc::Rc::clone(span)
                 ))
             }
             // ポインタは指す先に関わらず固定サイズ(構造体への再帰もここで止まる)
             TyNode::Pointer { .. } => Ok(POINTER_BYTES),
             // スタック/静的領域は、要素のサイズ × 長さ
             TyNode::Stack { name, len } | TyNode::Static { name, len } => {
-                let elem = self.byte_size_of_inner(name, visiting)?;
+                let elem = self.byte_size_of_inner(name, visiting, span)?;
                 Ok(if *len >= 1 { elem * len } else { elem })
             }
             TyNode::RefTy(inner) | TyNode::RefContract(inner) => {
-                self.byte_size_of_inner(inner, visiting)
+                self.byte_size_of_inner(inner, visiting, span)
             }
             TyNode::SelfTy(name) => {
-                self.byte_size_of_inner(&TyNode::Ty(name.to_string()), visiting)
+                self.byte_size_of_inner(&TyNode::Ty(name.to_string()), visiting, span)
             }
             TyNode::ConstractMust(inner) | TyNode::ConstractOf(inner) => {
-                self.byte_size_of_inner(&inner.unwrap_ty(), visiting)
+                self.byte_size_of_inner(&inner.unwrap_ty(), visiting, span)
             }
         }
     }

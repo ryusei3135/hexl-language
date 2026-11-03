@@ -163,7 +163,8 @@ impl IR {
         target: &Expr,
     ) -> Result<inst::Inst, err::ErrKind> {
         let after = match ty {
-            TyNode::Ty(_) => types::Size::try_from(ty)?,
+            TyNode::Ty(_) => types::Size::try_from(ty)
+                .map_err(|error| error.with_span(Rc::clone(&target.span)))?,
             _ => {
                 return Err(err::CompileErr::at(
                     err::CompileErrKind::CastToNonBuiltinType(format!("{:?}", ty)),
