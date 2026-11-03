@@ -243,7 +243,7 @@ impl IR {
                     return None;
                 };
                 let found = (*src, value.len());
-                self.count_var_use(name);
+                self.count_var_use(name, self.id_counter);
                 found
             }
             _ => return None,

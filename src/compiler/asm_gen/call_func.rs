@@ -471,9 +471,14 @@ impl AsmEmitter {
         // ノードの生成でエラーが返ってきたら、`err_pool`へ入れて次のノードへ進む
         // (1つの関数の中の、独立した複数のエラーをまとめて報告するため)
         for (node_idx, node) in self.curr_inst.clone().iter().enumerate() {
+            // ノードをアセンブリ言語に変換
             if let Err(err_node) = self.gen_node_asm(node_idx, node, &ctx) {
                 self.err_pool.borrow_mut().push_err_node(err_node);
             }
+            // これ以降使わないレジスタは解放する
+            fn_meta_data.1.var_counter.locate_del_vars().iter().for_each(|name| {
+                self.used_reg.release_allocation(name.1);
+            });
         }
         self.gen_implicit_ret(ctx.fn_name);
         if let Err(e) = self.fix_callee_saved(prologue_end) {

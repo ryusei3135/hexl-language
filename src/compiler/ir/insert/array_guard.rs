@@ -80,8 +80,8 @@ impl IR {
             src: src_idx,
         });
         // 使用回数0回の変数は生成されないので、比較と`InsertArr`の2回ぶん数える
-        self.var_counter.use_var(&tmp_name);
-        self.var_counter.use_var(&tmp_name);
+        self.var_counter.use_var(&tmp_name, self.id_counter - 1);
+        self.var_counter.use_var(&tmp_name, self.id_counter - 1);
 
         self.insert_range_check_jmp(tmp_idx, guard.lo, guard.hi, else_label, end_label);
 

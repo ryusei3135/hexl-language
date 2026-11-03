@@ -20,7 +20,7 @@ use super::*;
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarCounter {
     /// ローカル変数の名前 → 使われた回数(使われていない変数は載らない)
-    list: HashMap<String, usize>,
+    list: HashMap<String, (usize, usize)>,
     /// 引数の番号(左から0始まり) → 使われた回数
     args: Vec<usize>,
 }
@@ -43,8 +43,15 @@ impl VarCounter {
     }
 
     /// ローカル変数が使われたことを記録する
-    pub fn use_var(&mut self, var_name: &str) {
-        *self.list.entry(var_name.to_string()).or_insert(0) += 1;
+    /// ## 引数
+    /// - `var_name`: 使われた変数の名前
+    /// - `used_inst_id`: その変数がつかわれた場所 これは変数のレジスタ割り当てを決めるために使う
+    pub fn use_var(&mut self, var_name: &str, #[cfg(not(test))] used_inst_id: usize) {
+        *self.list.entry(var_name.to_string()).or_insert((0, 0)) = (
+            self.list.get(var_name).unwrap_or(&(0, 0)).0 + 1,
+            #[cfg(test)] 0,
+            #[cfg(not(test))] used_inst_id,
+        );
     }
 
     /// `index`番目(左から0始まり)の引数が使われたことを記録する
@@ -61,22 +68,34 @@ impl VarCounter {
         let mut vars: Vec<(&str, usize)> = self
             .list
             .iter()
-            .map(|(name, count)| (name.as_str(), *count))
+            .map(|(name, &(count, _))| (name.as_str(), count))
             .collect();
         vars.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
         vars
     }
 
+    /// ローカル変数のレジスタやメモリに置いたときにレジスタなどを解放するIRの場所と名前を
+    /// セットで返す関数
+    #[inline(always)]
+    pub fn locate_del_vars(&self) -> Vec<(usize, &str)> {
+        let mut vars: Vec<(usize, &str)> = self
+            .list
+            .iter()
+            .map(|(name, &(_, id))| (id, name.as_str()))
+            .collect();
+        vars
+    }
+
     /// ローカル変数`var_name`が使われた回数(使われていなければ0)
     #[cfg(test)]
-    pub fn var_use_count(&self, var_name: &str) -> usize {
-        self.list.get(var_name).copied().unwrap_or(0)
+    pub fn var_use_count(&self, var_name: &str) -> (usize, usize) {
+        self.list.get(var_name).copied().unwrap_or((0, 0))
     }
 
     /// `index`番目の引数が使われた回数(使われていなければ0)
     #[cfg(test)]
     pub fn arg_use_count(&self, index: usize) -> usize {
-        self.args.get(index).copied().unwrap_or(0)
+        self.args.get(index).copied().unwrap_or((0, 0)).0
     }
 
     /// 引数を、使われた回数が多い順に`(番号, 回数)`で返す(同じ回数なら番号順)
@@ -94,13 +113,13 @@ impl IR {
     /// 変数が引数なら`args`に、ローカル変数なら`list`に数える。
     /// 登録されていない名前は数えない(未定義エラーは、各所の
     /// 型の取得で報告されるのでここでは扱わない)。
-    pub(in crate::compiler::ir) fn count_var_use(&mut self, var_name: &str) {
+    pub(in crate::compiler::ir) fn count_var_use(&mut self, var_name: &str, used_inst_id: usize) {
         match self.var_tree.find(var_name) {
             Some(def_tree::VarType::Param(index)) => {
                 let index = *index;
                 self.var_counter.use_arg(index);
             }
-            Some(def_tree::VarType::Local(_)) => self.var_counter.use_var(var_name),
+            Some(def_tree::VarType::Local(_)) => self.var_counter.use_var(var_name, used_inst_id),
             None => {}
         }
     }
@@ -113,11 +132,11 @@ mod tests {
     #[test]
     fn counts_start_from_one_use() {
         let mut c = VarCounter::new();
-        assert_eq!(c.var_use_count("a"), 0);
+        assert_eq!(c.var_use_count("a").0, 0);
         c.use_var("a");
-        assert_eq!(c.var_use_count("a"), 1);
+        assert_eq!(c.var_use_count("a").0, 1);
         c.use_var("a");
-        assert_eq!(c.var_use_count("a"), 2);
+        assert_eq!(c.var_use_count("a").0, 2);
     }
 
     #[test]

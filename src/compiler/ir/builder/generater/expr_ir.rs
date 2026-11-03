@@ -198,7 +198,7 @@ impl IR {
                 name, dst, index, ..
             } => {
                 // 配列変数を使ったことを記録(`src/ir/counter_mnger.rs`)
-                self.count_var_use(&name);
+                self.count_var_use(&name, self.id_counter);
                 // 添字が可変: `if lo <= idx < hi { arr[idx] } else { arr[else_idx] }`
                 // の条件分岐を差し込む
                 // `src/ir/insert/array_guard.rs`
@@ -223,7 +223,7 @@ impl IR {
             ast::ExprNode::Var(var_name) => {
                 // 変数(ローカル変数/引数)を使ったことを記録
                 // (`src/ir/counter_mnger.rs`)
-                self.count_var_use(&var_name);
+                self.count_var_use(&var_name, self.id_counter);
 
                 let binding: TyNode = self
                     .var_tree

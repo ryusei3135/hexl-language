@@ -64,7 +64,7 @@ impl IR {
             );
         };
         // `value`の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
-        self.count_var_use(src);
+        self.count_var_use(src, self.id_counter);
 
         let via_ptr = matches!(self.var_tree.get_ty_node(src), Some(TyNode::Pointer { .. }));
         // ポインタ型の変数なら、指す先のバリアント型の名前が返る
