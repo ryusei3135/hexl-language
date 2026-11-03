@@ -265,7 +265,7 @@ impl AsmEmitter {
     fn mov_static_var(&mut self, size: &types::Size, dst: usize, name: Option<&str>) {
         self.insert_var_info(
             name.unwrap(),
-            asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.reg_idx), size, dst),
+            asm_emitter::VarIndexInfo::new_static(RegisterMode::Normal(self.reg_idx), size, dst),
         );
     }
 
@@ -462,7 +462,7 @@ impl AsmEmitter {
         // 子のノードがstaticりょいきの値なので、変数名だけ登録する
         self.insert_var_info(
             &name,
-            asm_emitter::VarIndexInfo::new(
+            asm_emitter::VarIndexInfo::new_static(
                 RegisterMode::Normal(self.reg_idx),
                 this_is_self.as_ref().unwrap(),
                 dst,

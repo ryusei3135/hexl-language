@@ -89,7 +89,7 @@ impl AsmEmitter {
     pub(in crate::compiler::asm_gen) fn is_reg_held_by_var(&self, reg: RegisterMode) -> bool {
         self.var_hash_map
             .iter()
-            .any(|(name, var)| !self.dead_vars.contains(name) && !var.is_stack && var.reg == reg)
+            .any(|(name, var)| !self.dead_vars.contains(name) && var.holds_reg() && var.reg == reg)
     }
 
     /// 変数そのものを参照するオペランドを返す

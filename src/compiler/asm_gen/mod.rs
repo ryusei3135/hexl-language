@@ -9,6 +9,7 @@ mod asm_fmt;
 mod call_func;
 mod emit_fn_name;
 mod inline_asm;
+mod last_use;
 mod lazy_spill;
 mod reg_mnger;
 mod sign;

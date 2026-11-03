@@ -162,3 +162,39 @@
 - `types::Size::Pointer`の`to_bytes()`を、指す先のサイズから8に変更(`types.rs`)。
     構造体のポインタ型メンバーが4バイトと数えられ、`len`のメンバーと重なっていた。
     `ir`側で`Pointer`の`to_bytes()`を「指す先のサイズ」として使っている箇所があれば、`is_pointer()`の`ty`を使うこと。
+
+## 条件付きの反復処理の終了時のレジスタ解放(2026-11-03)
+- `asm_emitter.rs`の`release_loop_cond_regs`(`call_func.rs`の`Inst::Block`の処理から呼ぶ)。
+- `loop <条件>`の条件の式の結果は`StartScope`より前に確保され誰にも消費されないため、`EndScope`では
+    解放されず、反復処理が終わった後も使用中のまま残っていた。
+- 反復処理の終了位置(`Jmp(start)`の直後の`Block(end)`)で、条件の式(`Block(start)`直後の`ExpectJmp`から
+    最初の`Jmp(end)`まで)の一時的な結果を`release_expr_temp`で解放する。変数が持つレジスタは解放しない。
+- 条件のない`loop`、`if`/`match`のラベルは対象外(後ろ向きのジャンプと、先頭直後の`ExpectJmp`で判定)。
+
+## 静的変数がレジスタを占有し続ける不具合の修正(2026-11-03)
+- 静的変数(`is_static_var`/`mov_static_var`)は値をラベル(`M0(%rip)`)で参照し、レジスタを持たないが、
+    `reg = reg_idx`の通常の変数として登録していた。そのため(1)`insert_var_info`がそのレジスタを使用中にして
+    ずっと残り、(2)`is_reg_held_by_var`が同じ番号の一時レジスタ(静的変数のアドレスなど)を「変数が持っている」と
+    見なして`release_expr_temp`が解放しなかった。
+- `VarIndexInfo::new_static`で`in_mem`の変数として登録し、`VarIndexInfo::holds_reg`
+    (`!is_stack && !in_mem`)でレジスタを保持する変数だけを数える。
+    `is_reg_held_by_var`/`end_scope_asm`のレジスタの復元/`inline_asm.rs`のレジスタ付け替えが使う。
+
+## 変数の最後の使用でレジスタを解放(2026-11-03)
+- `last_use.rs`。`build_fn_process`が、関数のIRから変数ごとの最後の使用のノード(`var_last_uses`)を求め、
+    そのノードを生成した後で`release_dead_vars`が、変数を`dead_vars`に入れてレジスタを使用中から外す。
+- 以前は、変数のレジスタがスコープ(`_start`なら関数全体)の最後まで使用中のままで、1回しか使わない
+    変数(`%rcx`の文字列ポインタなど)が、後続の関数呼び出しのたびに退避・復元されていた。
+- 定義より前から続く反復処理の中で最後に使う変数は、反復処理の先頭へ戻る`Jmp`の位置まで延ばす。
+- 対象は`Inst::Mov`で定義したローカル変数のみ(引数・スタック・メモリ上の実体・静的領域は対象外)。
+- `end_scope_asm`は`dead_vars`の変数のレジスタを戻さない。
+- 旧: `locate_del_vars`(`VarCounter`が記録するidは、使われたときの`id_counter`で、値を使うノードより
+    前になることがある)と`release_allocation`の呼び出しは、この仕組みに置き換えた(デバッグの`println!`も削除)。
+
+## 条件ジャンプの式の結果レジスタの解放(2026-11-03)
+- `gen_expr_asm`: 予約したラベル(`ExpectJmp`)がその式で使われた(=`cmp` + `jz`のような条件ジャンプだけを
+    出した)場合、結果のレジスタ(`dst`)は使用中にせず`last_inst_idx`にも記録しない。
+    以前は`if`/`match`/`loop`の条件のたびにレジスタが1つ使用中のまま残り、`StartScope`より前に確保される
+    ため`EndScope`でも解放されず、以降の関数呼び出しで`pushq %rcx`のように退避され続けていた。
+- `loop`の終了位置での条件レジスタの解放(`release_loop_cond_regs`)は、条件ジャンプ以外の式
+    (`Set<比較>`など)の結果が残る場合の保険として残す。

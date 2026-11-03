@@ -257,7 +257,7 @@ impl AsmEmitter {
         let names: Vec<String> = self
             .var_hash_map
             .iter()
-            .filter(|(_, var)| !var.is_stack && var.reg == from)
+            .filter(|(_, var)| var.holds_reg() && var.reg == from)
             .map(|(name, _)| name.clone())
             .collect();
         names
@@ -345,7 +345,7 @@ impl AsmEmitter {
         let from_var = self
             .var_hash_map
             .values()
-            .find(|var| !var.is_stack && var.reg == reg)
+            .find(|var| var.holds_reg() && var.reg == reg)
             .map(|var| var.size.clone());
         let from_expr = self
             .last_inst_idx

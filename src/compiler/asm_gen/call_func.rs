@@ -468,6 +468,9 @@ impl AsmEmitter {
             returned_struct_idx,
             asm_fmt_name: &asm_fmt_name,
         };
+        // 変数の最後の使用のノード(`last_use.rs`)。そのノードを生成した後で
+        // 変数のレジスタを解放する
+        let last_uses = Self::var_last_uses(&self.curr_inst);
         // ノードの生成でエラーが返ってきたら、`err_pool`へ入れて次のノードへ進む
         // (1つの関数の中の、独立した複数のエラーをまとめて報告するため)
         for (node_idx, node) in self.curr_inst.clone().iter().enumerate() {
@@ -475,13 +478,8 @@ impl AsmEmitter {
             if let Err(err_node) = self.gen_node_asm(node_idx, node, &ctx) {
                 self.err_pool.borrow_mut().push_err_node(err_node);
             }
-            // これ以降使わないレジスタは解放する
-            fn_meta_data.1.var_counter.locate_del_vars().iter().for_each(|name| {
-                if node_idx >= name.0 {
-                    println!("JUUU{}", name.1);
-                    self.used_reg.release_allocation(name.1);
-                }
-            });
+            // これ以降使わない変数のレジスタは解放する
+            self.release_dead_vars(node_idx, &last_uses);
         }
         self.gen_implicit_ret(ctx.fn_name);
         if let Err(e) = self.fix_callee_saved(prologue_end) {
@@ -626,6 +624,8 @@ impl AsmEmitter {
             inst::Inst::InitArr(_) => {}
             inst::Inst::Block(name) => {
                 self.asm_text.push_str(&self.asm_fmt.get_label_fmt(name));
+                // 条件付きの反復処理の終了位置なら、条件に使ったレジスタを解放する
+                self.release_loop_cond_regs(node_idx);
             }
             inst::Inst::StartScope => self.start_scope_asm(),
             inst::Inst::EndScope => self.end_scope_asm(),
@@ -953,9 +953,23 @@ impl AsmEmitter {
         let dst = self.alloc_reg(&size)?.unwrap();
         self.reg_idx = dst.index();
 
+        // 予約していたラベルがこの式で使われたら、この式は条件ジャンプ
+        // (`cmpq $0, %rax` + `jz L0`など)を出していて、結果はフラグで渡される。
+        // 結果のレジスタ(`dst`)は書き込まれず、誰にも読まれない
+        let had_label = self.reserved_label_name.is_some();
         let asm = self.format_expr_inst(&expr, Some(size))?;
+        let is_branch_only = had_label && self.reserved_label_name.is_none();
 
         self.asm_text.push_str(&asm);
+
+        if is_branch_only {
+            // 結果のレジスタを使用中にしない。以前は使用中のまま誰も解放せず、
+            // `if`/`match`/`loop`の条件のたびにレジスタが1つずつ塞がっていた
+            // (`StartScope`より前に確保されるので、`EndScope`でも解放されない)
+            self.release_expr_temp(expr.ls);
+            self.release_expr_temp(expr.rs);
+            return Ok(());
+        }
 
         // 式の結果を置いたレジスタを使用中として記録する
         self.used_reg.mark_used(&dst);

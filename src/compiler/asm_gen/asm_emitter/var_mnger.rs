@@ -55,6 +55,32 @@ impl VarIndexInfo {
         }
     }
 
+    /// 静的領域(`MemoryKind::Static`)に実体がある変数として登録する。
+    /// 値はラベル(`M0(%rip)`)で参照するので、レジスタは持たない
+    ///
+    /// `reg`は、オペランドを引く処理が範囲外にならないための値にすぎず、レジスタを
+    /// 保持しているわけではない(`in_mem`と同じ扱い。使用中にも記録しない)。
+    /// 以前は`reg`に`reg_idx`を入れて通常の変数として登録していたため、そのレジスタが
+    /// 使用中のまま解放されず、同じ番号の一時的な結果(静的変数のアドレスなど)も
+    /// 「変数が持っている」と見なされて解放されなかった
+    pub fn new_static(reg: RegisterMode, size: &types::Size, index: usize) -> Self {
+        Self {
+            reg,
+            offset: 0,
+            size: size.clone(),
+            index: index,
+            is_stack: false,
+            arr_base: 0,
+            in_mem: true,
+        }
+    }
+
+    /// この変数が、`reg`のレジスタを実際に保持しているか
+    /// (`%rbp`相対のメモリ・メモリ上の実体(配列/静的領域)の変数は保持しない)
+    pub fn holds_reg(&self) -> bool {
+        !self.is_stack && !self.in_mem
+    }
+
     /// 配列の先頭の位置(`%rbp`からのオフセット)を記録する
     pub fn with_arr_base(mut self, arr_base: usize) -> Self {
         self.arr_base = arr_base;
