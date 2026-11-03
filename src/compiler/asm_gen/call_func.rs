@@ -477,7 +477,10 @@ impl AsmEmitter {
             }
             // これ以降使わないレジスタは解放する
             fn_meta_data.1.var_counter.locate_del_vars().iter().for_each(|name| {
-                self.used_reg.release_allocation(name.1);
+                if node_idx >= name.0 {
+                    println!("JUUU{}", name.1);
+                    self.used_reg.release_allocation(name.1);
+                }
             });
         }
         self.gen_implicit_ret(ctx.fn_name);
