@@ -5,7 +5,6 @@
 //! ```
 //! の`$1`や`%eax`を生成
 
-
 use super::*;
 
 impl AsmEmitter {

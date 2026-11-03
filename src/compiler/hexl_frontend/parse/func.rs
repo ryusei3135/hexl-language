@@ -45,7 +45,11 @@ impl Parser {
                         is_public,
                         Rc::clone(&span),
                         // 契約の型と戻り値の型が同じ場合、契約の型は`None`にする
-                        if ret_ty == contract_ret_ty {None} else {Some(contract_ret_ty)},
+                        if ret_ty == contract_ret_ty {
+                            None
+                        } else {
+                            Some(contract_ret_ty)
+                        },
                     ))
                 } else {
                     crate::err_at!(self.fn_lbrace_not_found())

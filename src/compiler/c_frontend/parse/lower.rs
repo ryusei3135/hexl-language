@@ -347,7 +347,7 @@ impl Lowerer {
             ret_ty,
             !f.is_static,
             span_at(f.line, &self.self_file_name),
-            None
+            None,
         );
         if let Group1Node::FuncDefine(fd) = &mut node {
             for b in body {

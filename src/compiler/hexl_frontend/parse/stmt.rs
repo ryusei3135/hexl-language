@@ -2,11 +2,11 @@
 //! group2は変数の定義や条件分岐など
 pub(in crate::compiler::hexl_frontend::parse) mod parse_loop_control;
 
+use crate::compiler::hexl_frontend::include_list::{IncludeList, IncludeStage, include_key};
 use crate::syntax_err;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::compiler::hexl_frontend::include_list::{IncludeList, IncludeStage, include_key};
 
 use super::*;
 

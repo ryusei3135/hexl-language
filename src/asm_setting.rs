@@ -7,11 +7,11 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::CpuKind;
 use crate::compiler::asm_gen;
 use crate::compiler::asm_gen::OptMode;
 use crate::compiler::err::err_pool;
 use crate::compiler::ir;
-use crate::CpuKind;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Reg {
@@ -263,12 +263,25 @@ pub fn gen_asm_text(
         let asm_settings = load_setting()?;
 
         let asm_fmt = asm_settings.get_asm_fmt(inline_name)?;
-        let mut writer =
-            asm_gen::AsmEmitter::new(asm_settings, Some(asm_fmt), os, &err_pool, opt_mode, cpu.unwrap_or(CpuKind::X64));
+        let mut writer = asm_gen::AsmEmitter::new(
+            asm_settings,
+            Some(asm_fmt),
+            os,
+            &err_pool,
+            opt_mode,
+            cpu.unwrap_or(CpuKind::X64),
+        );
         Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     } else {
         let asm_settings = load_setting()?;
-        let mut writer = asm_gen::AsmEmitter::new(asm_settings, None, os, &err_pool, opt_mode, cpu.unwrap_or(CpuKind::X64));
+        let mut writer = asm_gen::AsmEmitter::new(
+            asm_settings,
+            None,
+            os,
+            &err_pool,
+            opt_mode,
+            cpu.unwrap_or(CpuKind::X64),
+        );
         Ok(writer.to_asm_text(tree, inline_name, &extern_funcs, &global_funcs))
     }
 }

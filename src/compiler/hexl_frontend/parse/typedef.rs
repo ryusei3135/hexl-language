@@ -544,7 +544,7 @@ mod ty_tests {
             TyNode::Ty("int".to_string()),
             false,
             sp(),
-            None
+            None,
         );
         let map: HashMap<String, Box<Expr>> = [
             (
@@ -586,7 +586,7 @@ mod ty_tests {
             TyNode::Ty("ty".to_string()),
             false,
             sp(),
-            None
+            None,
         )];
         let Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();
@@ -685,7 +685,7 @@ mod ty_tests {
             TyNode::Ty("ty".to_string()),
             false,
             sp(),
-            None
+            None,
         )];
         let Group1Node::FuncDefine(func) = f.last_mut().unwrap() else {
             panic!();

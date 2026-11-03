@@ -100,15 +100,19 @@ impl CompilerErr {
 #[macro_export]
 macro_rules! GenCompilerErr {
     ($kind:expr) => {
-        Err($crate::compiler::err::raise(err::ErrKind::CompilerErr(Box::new(CompilerErr {
-            kind: $kind,
-            span: None,
-        }))))
+        Err($crate::compiler::err::raise(err::ErrKind::CompilerErr(
+            Box::new(CompilerErr {
+                kind: $kind,
+                span: None,
+            }),
+        )))
     };
     ($kind:expr, $span:expr) => {
-        Err($crate::compiler::err::raise(err::ErrKind::CompilerErr(Box::new(CompilerErr {
-            kind: $kind,
-            span: Some($span),
-        }))))
+        Err($crate::compiler::err::raise(err::ErrKind::CompilerErr(
+            Box::new(CompilerErr {
+                kind: $kind,
+                span: Some($span),
+            }),
+        )))
     };
 }

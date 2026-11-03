@@ -101,7 +101,8 @@ pub(super) fn emit_directive(
                 return Err(format!("`{}` requires a non-negative value", name));
             }
 
-            e.current_buffer().extend(std::iter::repeat(0u8).take(n as usize));
+            e.current_buffer()
+                .extend(std::iter::repeat(0u8).take(n as usize));
         }
 
         other => return Err(format!("unsupported directive: {}", other)),
@@ -162,10 +163,16 @@ fn emit_data(e: &mut Emitter, name: &str, operands: &[Operand], size: usize) -> 
     Ok(())
 }
 
-fn emit_float(e: &mut Emitter, name: &str, operands: &[Operand], size: usize) -> Result<(), String> {
+fn emit_float(
+    e: &mut Emitter,
+    name: &str,
+    operands: &[Operand],
+    size: usize,
+) -> Result<(), String> {
     for v in float_values(name, operands)? {
         if size == 4 {
-            e.current_buffer().extend_from_slice(&(v as f32).to_le_bytes());
+            e.current_buffer()
+                .extend_from_slice(&(v as f32).to_le_bytes());
         } else {
             e.current_buffer().extend_from_slice(&v.to_le_bytes());
         }
@@ -174,12 +181,7 @@ fn emit_float(e: &mut Emitter, name: &str, operands: &[Operand], size: usize) ->
     Ok(())
 }
 
-fn emit_string(
-    e: &mut Emitter,
-    name: &str,
-    operands: &[Operand],
-    nul: bool,
-) -> Result<(), String> {
+fn emit_string(e: &mut Emitter, name: &str, operands: &[Operand], nul: bool) -> Result<(), String> {
     for s in string_values(name, operands)? {
         e.current_buffer().extend_from_slice(s.as_bytes());
 

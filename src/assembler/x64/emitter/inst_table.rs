@@ -311,7 +311,11 @@ fn string_op_spec(name: &str, no_operands: bool) -> Option<StringOp> {
             _ => return None,
         };
 
-        let opcode = if bits == 8 { byte_opcode } else { byte_opcode + 1 };
+        let opcode = if bits == 8 {
+            byte_opcode
+        } else {
+            byte_opcode + 1
+        };
 
         return Some(StringOp { opcode, bits });
     }
@@ -2602,15 +2606,15 @@ mod string_rep_tests {
     #[test]
     fn rep_is_case_insensitive_and_takes_separate_lines() {
         check(&[("REP MOVSB", "f3a4"), ("RepNe ScasB", "f2ae")]);
-        assert_eq!(hex(&assemble("rep movsb\nrep stosq\n").unwrap()), "f3a4f348ab");
+        assert_eq!(
+            hex(&assemble("rep movsb\nrep stosq\n").unwrap()),
+            "f3a4f348ab"
+        );
     }
 
     #[test]
     fn cld_and_std_encode() {
-        check(&[
-            ("cld", "fc"),
-            ("std", "fd"),
-        ]);
+        check(&[("cld", "fc"), ("std", "fd")]);
     }
 
     #[test]
@@ -2689,7 +2693,8 @@ mod string_rep_tests {
         // `movq $-1, %rax` だけは GNU as (`48 c7 c0 ff ff ff ff`) と符号化が違う。
         // このアセンブラは 64bit レジスタへの即値を常に `movabs` (`48 b8` + imm64) で出す。
         // どちらも同じ意味で、この違いは `rep` / `test` とは無関係の既存の動作。
-        let win_read = "testl %eax, %eax\nmovl 40(%rsp), %edx\nmovq $-1, %rax\ncmovneq %rdx, %rax\n";
+        let win_read =
+            "testl %eax, %eax\nmovl 40(%rsp), %edx\nmovq $-1, %rax\ncmovneq %rdx, %rax\n";
         assert_eq!(
             hex(&assemble(win_read).unwrap()),
             "85c08b54242848b8ffffffffffffffff480f45c2"

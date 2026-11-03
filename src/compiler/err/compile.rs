@@ -139,10 +139,12 @@ pub struct Suggestion {
 #[macro_export]
 macro_rules! GenCompileErr {
     ($kind:ident, $msg:expr, $span:expr) => {
-        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(Box::new(CompileErr {
-            kind: CompileErrKind::$kind($msg.to_string()),
-            span: $span,
-        }))))
+        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(
+            Box::new(CompileErr {
+                kind: CompileErrKind::$kind($msg.to_string()),
+                span: $span,
+            }),
+        )))
     };
 }
 
@@ -151,10 +153,12 @@ macro_rules! GenCompileErr {
 #[macro_export]
 macro_rules! GenCompileErrNode {
     ($kind:ident, $msg:expr, $span:expr) => {
-        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(Box::new(CompileErr {
-            kind: CompileErrKind::$kind($msg.clone()),
-            span: $span,
-        }))))
+        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(
+            Box::new(CompileErr {
+                kind: CompileErrKind::$kind($msg.clone()),
+                span: $span,
+            }),
+        )))
     };
 }
 
@@ -163,10 +167,12 @@ macro_rules! GenCompileErrNode {
 #[macro_export]
 macro_rules! GenCompileErr2 {
     ($kind:expr, $span:expr) => {
-        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(Box::new(CompileErr {
-            kind: $kind,
-            span: $span,
-        }))))
+        Err($crate::compiler::err::raise(err::ErrKind::CompileErr(
+            Box::new(CompileErr {
+                kind: $kind,
+                span: $span,
+            }),
+        )))
     };
 }
 
@@ -299,7 +305,10 @@ impl CompileErr {
     }
 
     pub fn inc_dec_requires_integer(var_name: &str, span: Rc<err::Span>) -> err::ErrKind {
-        Self::at(CompileErrKind::IncDecRequiresInteger(var_name.to_string()), span)
+        Self::at(
+            CompileErrKind::IncDecRequiresInteger(var_name.to_string()),
+            span,
+        )
     }
 
     /// `kind`と位置から、`ErrKind`を作る(`Err(..)`で包まない版)
@@ -719,7 +728,9 @@ impl CompileErrKind {
             Self::IncDecInvalidTarget => {
                 "`a = a + 1`のように代入で書くか、変数/メンバーに対して使ってください".into()
             }
-            Self::DuplicateTypeAlias(..) => "どちらかの`type`を削除するか、名前を変えてください".into(),
+            Self::DuplicateTypeAlias(..) => {
+                "どちらかの`type`を削除するか、名前を変えてください".into()
+            }
             Self::TypeAliasCycle(..) => "循環している`type`の参照を見直してください".into(),
             _ => return None,
         })

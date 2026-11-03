@@ -177,7 +177,10 @@ mod tests {
         l.insert(IncludeStage::Define, "x");
         l.insert(IncludeStage::CFile, "a.c");
         l.insert(IncludeStage::CFile, "b.c");
-        assert_eq!(l.keys(IncludeStage::CFile).collect::<Vec<_>>(), ["b.c", "a.c"]);
+        assert_eq!(
+            l.keys(IncludeStage::CFile).collect::<Vec<_>>(),
+            ["b.c", "a.c"]
+        );
     }
 
     #[test]

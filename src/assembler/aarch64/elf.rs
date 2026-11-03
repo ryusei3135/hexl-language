@@ -9,12 +9,13 @@
 
 use std::collections::HashMap;
 
-use super::emitter::{Emitter, Section};
 use super::super::elf::{
-    r_info, st_info, Elf64Ehdr, Elf64Phdr, Elf64Rela, Elf64Shdr, Elf64Sym, ET_EXEC, ET_REL, PF_R,
-    PF_W, PF_X, PT_LOAD, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE, SHN_UNDEF, SHT_NULL, SHT_PROGBITS,
-    SHT_RELA, SHT_STRTAB, SHT_SYMTAB, STB_GLOBAL, STB_LOCAL, STT_FUNC, STT_NOTYPE, STT_OBJECT,
+    ET_EXEC, ET_REL, Elf64Ehdr, Elf64Phdr, Elf64Rela, Elf64Shdr, Elf64Sym, PF_R, PF_W, PF_X,
+    PT_LOAD, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE, SHN_UNDEF, SHT_NULL, SHT_PROGBITS, SHT_RELA,
+    SHT_STRTAB, SHT_SYMTAB, STB_GLOBAL, STB_LOCAL, STT_FUNC, STT_NOTYPE, STT_OBJECT, r_info,
+    st_info,
 };
+use super::emitter::{Emitter, Section};
 
 pub const EM_AARCH64: u16 = 183;
 

@@ -423,7 +423,11 @@ mod tests {
                 "E0037",
                 "キャスト先の型`Pointer`",
             ),
-            (CompileErrKind::IncDecInvalidTarget, "E0038", "`++`/`--`の対象"),
+            (
+                CompileErrKind::IncDecInvalidTarget,
+                "E0038",
+                "`++`/`--`の対象",
+            ),
             (
                 CompileErrKind::DuplicateTypeAlias("T".into()),
                 "E0039",
@@ -454,7 +458,10 @@ mod tests {
             PreprocErrs::InvalidAsmOperandText("x".into()).to_string(),
             "`${...}`の中の文字列を字句解析できません: x"
         );
-        assert_eq!(PreprocErrs::InvalidAsmOperandText(String::new()).code(), "E0311");
+        assert_eq!(
+            PreprocErrs::InvalidAsmOperandText(String::new()).code(),
+            "E0311"
+        );
     }
 
     #[test]

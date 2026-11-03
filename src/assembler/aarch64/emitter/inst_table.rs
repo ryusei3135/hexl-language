@@ -20,9 +20,9 @@
 //! 番号 31 は `%sp` と `%xzr` / `%wzr` で意味が変わるので、命令ごとに
 //! `Reg::is_sp()` / `Reg::is_zr()` で使えるほうを検査する。
 
-use super::{Emitter, FixupKind};
 use super::super::parse::{AddrMode, Instruction, MemOffset, MemoryOperand, Operand};
 use super::super::reg::Reg;
+use super::{Emitter, FixupKind};
 
 type Res = Result<(), String>;
 
@@ -161,7 +161,11 @@ fn expect_len(ops: &[Operand], min: usize, max: usize) -> Res {
 fn reg(ops: &[Operand], i: usize) -> Result<Reg, String> {
     match ops.get(i) {
         Some(Operand::Register(r)) => Ok(*r),
-        Some(other) => Err(format!("operand {} must be a register, got {:?}", i + 1, other)),
+        Some(other) => Err(format!(
+            "operand {} must be a register, got {:?}",
+            i + 1,
+            other
+        )),
         None => Err(format!("missing operand {}", i + 1)),
     }
 }
@@ -181,7 +185,11 @@ fn imm(ops: &[Operand], i: usize) -> Result<i64, String> {
 fn symbol(ops: &[Operand], i: usize) -> Result<&str, String> {
     match ops.get(i) {
         Some(Operand::Symbol(s)) => Ok(s.as_str()),
-        Some(other) => Err(format!("operand {} must be a label, got {:?}", i + 1, other)),
+        Some(other) => Err(format!(
+            "operand {} must be a label, got {:?}",
+            i + 1,
+            other
+        )),
         None => Err(format!("missing operand {}", i + 1)),
     }
 }
@@ -231,7 +239,11 @@ fn emit_branch_reg(e: &mut Emitter, ops: &[Operand], word: u32) -> Res {
 fn emit_ret(e: &mut Emitter, ops: &[Operand]) -> Res {
     expect_len(ops, 0, 1)?;
 
-    let rn = if ops.is_empty() { 30 } else { reg(ops, 0)?.id() };
+    let rn = if ops.is_empty() {
+        30
+    } else {
+        reg(ops, 0)?.id()
+    };
 
     e.emit_u32(0xd65f_0000 | (rn << 5));
     Ok(())
@@ -454,7 +466,10 @@ fn emit_movwide(e: &mut Emitter, ops: &[Operand], opc: u32) -> Res {
     let max = if rd.is_64() { 48 } else { 16 };
 
     if shift < 0 || shift > max || shift % 16 != 0 {
-        return Err(format!("shift must be 0, 16{}", if rd.is_64() { ", 32 or 48" } else { "" }));
+        return Err(format!(
+            "shift must be 0, 16{}",
+            if rd.is_64() { ", 32 or 48" } else { "" }
+        ));
     }
 
     e.emit_u32(movwide_word(rd, opc, (shift / 16) as u32, v as u32));
@@ -578,7 +593,8 @@ fn emit_addsub(e: &mut Emitter, name: &str, ops: &[Operand]) -> Res {
                 Some(other) => return Err(format!("expected a shift or extend, got {:?}", other)),
             };
 
-            let is_extend = matches!(ext, Some((k, _)) if k != "lsl" && k != "lsr" && k != "asr" && k != "ror");
+            let is_extend =
+                matches!(ext, Some((k, _)) if k != "lsl" && k != "lsr" && k != "asr" && k != "ror");
 
             // rd / rn が %sp のとき、または拡張指定があるときは拡張レジスタ形式
             if rd.is_sp() || rn.is_sp() || is_extend {
@@ -1184,7 +1200,12 @@ fn emit_ldst(e: &mut Emitter, name: &str, ops: &[Operand], force_unscaled: bool)
             return Ok(());
         }
 
-        other => return Err(format!("operand 2 must be a memory operand, got {:?}", other)),
+        other => {
+            return Err(format!(
+                "operand 2 must be a memory operand, got {:?}",
+                other
+            ));
+        }
     };
 
     let rn = mem.base;
@@ -1246,9 +1267,7 @@ fn emit_ldst(e: &mut Emitter, name: &str, ops: &[Operand], force_unscaled: bool)
                 Some(_) => return Err(format!("shift amount must be 0 or {}", size)),
             };
 
-            e.emit_u32(
-                0x3820_0800 | head | (rm.id() << 16) | (option << 13) | (s << 12),
-            );
+            e.emit_u32(0x3820_0800 | head | (rm.id() << 16) | (option << 13) | (s << 12));
             Ok(())
         }
 
@@ -1301,7 +1320,12 @@ fn emit_pair(e: &mut Emitter, ops: &[Operand], load: bool) -> Res {
 
     let mem: &MemoryOperand = match &ops[2] {
         Operand::Memory(m) => m,
-        other => return Err(format!("operand 3 must be a memory operand, got {:?}", other)),
+        other => {
+            return Err(format!(
+                "operand 3 must be a memory operand, got {:?}",
+                other
+            ));
+        }
     };
 
     let rn = mem.base;
@@ -1383,7 +1407,10 @@ mod tests {
         ("mov %sp, %x1", &[0x9100003f]),
         ("mov %x1, %sp", &[0x910003e1]),
         ("mov %x5, $0x12345678", &[0xd28acf05, 0xf2a24685]),
-        ("mov %x5, $0x123456789abcdef0", &[0xd29bde05, 0xf2b35785, 0xf2cacf05, 0xf2e24685]),
+        (
+            "mov %x5, $0x123456789abcdef0",
+            &[0xd29bde05, 0xf2b35785, 0xf2cacf05, 0xf2e24685],
+        ),
         ("movz %x0, $1, lsl $16", &[0xd2a00020]),
         ("movk %x0, $0xbeef, lsl $48", &[0xf2f7dde0]),
         ("movn %w1, $5", &[0x128000a1]),
@@ -1545,8 +1572,8 @@ fwd:
         assert_eq!(
             words(src),
             [
-                0x1400000a, 0xd503201f, 0x97fffffe, 0x54ffffe1, 0xb40000c0, 0x35ffffa1,
-                0x36180082, 0xb747ff63, 0x10ffff44, 0x58000025, 0xd65f03c0
+                0x1400000a, 0xd503201f, 0x97fffffe, 0x54ffffe1, 0xb40000c0, 0x35ffffa1, 0x36180082,
+                0xb747ff63, 0x10ffff44, 0x58000025, 0xd65f03c0
             ]
         );
     }
@@ -1554,26 +1581,26 @@ fwd:
     #[test]
     fn invalid_sources_are_rejected() {
         let bad = [
-            "add %x0, %w1, $1",         // レジスタ幅の不一致
-            "add %x0, %x1, $4097",      // 即値が範囲外
-            "mov %x0, $1, $2",          // オペランド数
-            "mov %w0, $0x100000000",    // 32bit に収まらない
-            "and %x0, %x1, $0",         // ビットマスクで表せない
-            "ldr %x0, [%x1, $40000]",   // オフセットが範囲外
-            "ldr %w0, [%x1, %w2]",      // Wのindexには拡張が必要
-            "ldrb %x0, [%x1]",          // ldrb は %w
-            "ldp %x0, %x1, [%sp, $4]",  // 境界が合わない
-            "tbz %w0, $40, l\nl:",      // %w にはbit 32以上は使えない
-            "b nowhere",                // 未定義シンボル
-            "foo %x0",                  // 未対応の命令
-            "mov %q0, $1",              // 不明なレジスタ
-            "b.xx l\nl:",               // 不明な条件
-            ".data\nnop",               // .data に命令
-            ".bogus 1",                 // 未対応のディレクティブ
-            "l:\nl:",                   // ラベルの重複
-            ".text\n.byte 1\nnop",      // 命令が4バイト境界にない
+            "add %x0, %w1, $1",          // レジスタ幅の不一致
+            "add %x0, %x1, $4097",       // 即値が範囲外
+            "mov %x0, $1, $2",           // オペランド数
+            "mov %w0, $0x100000000",     // 32bit に収まらない
+            "and %x0, %x1, $0",          // ビットマスクで表せない
+            "ldr %x0, [%x1, $40000]",    // オフセットが範囲外
+            "ldr %w0, [%x1, %w2]",       // Wのindexには拡張が必要
+            "ldrb %x0, [%x1]",           // ldrb は %w
+            "ldp %x0, %x1, [%sp, $4]",   // 境界が合わない
+            "tbz %w0, $40, l\nl:",       // %w にはbit 32以上は使えない
+            "b nowhere",                 // 未定義シンボル
+            "foo %x0",                   // 未対応の命令
+            "mov %q0, $1",               // 不明なレジスタ
+            "b.xx l\nl:",                // 不明な条件
+            ".data\nnop",                // .data に命令
+            ".bogus 1",                  // 未対応のディレクティブ
+            "l:\nl:",                    // ラベルの重複
+            ".text\n.byte 1\nnop",       // 命令が4バイト境界にない
             "add %x0, %x1, %x2, ror $1", // add に ror は使えない
-            "sub %x0, %x1, :lo12:sym",  // :lo12: は add だけ
+            "sub %x0, %x1, :lo12:sym",   // :lo12: は add だけ
         ];
 
         for src in bad {

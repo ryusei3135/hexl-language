@@ -100,7 +100,10 @@ pub(in crate::compiler::asm_gen::asm_fmt) static AARCH64: StaticAsmFormat = Stat
     },
 
     args: StaticFuncArgsReg {
-        fmt: &[("linux", &[0, 1, 2, 3, 4, 5, 6, 7]), ("win", &[0, 1, 2, 3, 4, 5, 6, 7])],
+        fmt: &[
+            ("linux", &[0, 1, 2, 3, 4, 5, 6, 7]),
+            ("win", &[0, 1, 2, 3, 4, 5, 6, 7]),
+        ],
     },
 
     section: ".{name}\n",

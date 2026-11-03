@@ -16,7 +16,6 @@ use super::parse::{Program, Statement};
 
 mod inst_table;
 
-
 // ============================================================
 // Section
 // ============================================================
@@ -65,20 +64,20 @@ impl FixupKind {
     /// ELF の再配置タイプ番号 (`Elf64_Rela.r_info` の下位32bit)
     pub fn elf_reloc_type(self) -> u32 {
         match self {
-            FixupKind::Abs64 => 257,        // R_AARCH64_ABS64
-            FixupKind::Abs32 => 258,        // R_AARCH64_ABS32
-            FixupKind::LdrLit19 => 273,     // R_AARCH64_LD_PREL_LO19
-            FixupKind::AdrLo21 => 274,      // R_AARCH64_ADR_PREL_LO21
-            FixupKind::AdrpPage21 => 275,   // R_AARCH64_ADR_PREL_PG_HI21
-            FixupKind::AddLo12 => 277,      // R_AARCH64_ADD_ABS_LO12_NC
-            FixupKind::LdstLo12(0) => 278,  // R_AARCH64_LDST8_ABS_LO12_NC
-            FixupKind::LdstLo12(1) => 284,  // R_AARCH64_LDST16_ABS_LO12_NC
-            FixupKind::LdstLo12(2) => 285,  // R_AARCH64_LDST32_ABS_LO12_NC
-            FixupKind::LdstLo12(_) => 286,  // R_AARCH64_LDST64_ABS_LO12_NC
-            FixupKind::TstBr14 => 279,      // R_AARCH64_TSTBR14
-            FixupKind::CondBr19 => 280,     // R_AARCH64_CONDBR19
-            FixupKind::Jump26 => 282,       // R_AARCH64_JUMP26
-            FixupKind::Call26 => 283,       // R_AARCH64_CALL26
+            FixupKind::Abs64 => 257,       // R_AARCH64_ABS64
+            FixupKind::Abs32 => 258,       // R_AARCH64_ABS32
+            FixupKind::LdrLit19 => 273,    // R_AARCH64_LD_PREL_LO19
+            FixupKind::AdrLo21 => 274,     // R_AARCH64_ADR_PREL_LO21
+            FixupKind::AdrpPage21 => 275,  // R_AARCH64_ADR_PREL_PG_HI21
+            FixupKind::AddLo12 => 277,     // R_AARCH64_ADD_ABS_LO12_NC
+            FixupKind::LdstLo12(0) => 278, // R_AARCH64_LDST8_ABS_LO12_NC
+            FixupKind::LdstLo12(1) => 284, // R_AARCH64_LDST16_ABS_LO12_NC
+            FixupKind::LdstLo12(2) => 285, // R_AARCH64_LDST32_ABS_LO12_NC
+            FixupKind::LdstLo12(_) => 286, // R_AARCH64_LDST64_ABS_LO12_NC
+            FixupKind::TstBr14 => 279,     // R_AARCH64_TSTBR14
+            FixupKind::CondBr19 => 280,    // R_AARCH64_CONDBR19
+            FixupKind::Jump26 => 282,      // R_AARCH64_JUMP26
+            FixupKind::Call26 => 283,      // R_AARCH64_CALL26
         }
     }
 
@@ -103,9 +102,8 @@ impl FixupKind {
     pub fn patch(self, buf: &mut [u8], offset: usize, s: u64, p: u64) -> Result<(), String> {
         let pc_off = s.wrapping_sub(p) as i64;
 
-        let get = |buf: &[u8]| -> u32 {
-            u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
-        };
+        let get =
+            |buf: &[u8]| -> u32 { u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap()) };
 
         let put = |buf: &mut [u8], word: u32| {
             buf[offset..offset + 4].copy_from_slice(&word.to_le_bytes());
@@ -250,10 +248,7 @@ impl Emitter {
                 Statement::Instruction(inst) => {
                     // ニーモニック -> 処理 の対応表は `emitter/inst_table.rs`
                     if self.current_section != Section::Text {
-                        return Err(format!(
-                            "instruction `{}` outside .text",
-                            inst.mnemonic
-                        ));
+                        return Err(format!("instruction `{}` outside .text", inst.mnemonic));
                     }
 
                     if self.text.len() % 4 != 0 {

@@ -379,7 +379,7 @@ pub fn build(settings: &OptSettings) -> Result<Vec<ir::def_tree::FnDefMetaData>,
         os.as_str(),
         &err_pool,
         OptMode::O1,
-        settings.cpu.clone()
+        settings.cpu.clone(),
     )
     // `AsmSettingError` は Display で日本語メッセージになる。`run` がそれを表示する
     .map_err(|e| format!("アセンブリコードの生成に失敗しました: {}", e))?;

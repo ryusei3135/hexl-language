@@ -169,7 +169,7 @@ impl<'a> Lexer<'a> {
                 Some('"') => break,
                 Some('\\') => match self.advance() {
                     None => {
-                        return Err("unterminated string literal (trailing backslash)".to_string())
+                        return Err("unterminated string literal (trailing backslash)".to_string());
                     }
                     Some('n') => value.push('\n'),
                     Some('t') => value.push('\t'),
@@ -630,7 +630,7 @@ impl Parser {
                                 return Err(format!(
                                     "expected shift/extend in memory operand, got {:?}",
                                     token
-                                ))
+                                ));
                             }
                         }
                     }
@@ -658,12 +658,7 @@ impl Parser {
                     offset = MemOffset::Imm(n);
                     mode = AddrMode::PostIndex;
                 }
-                token => {
-                    return Err(format!(
-                        "expected `$imm` for post-index, got {:?}",
-                        token
-                    ))
-                }
+                token => return Err(format!("expected `$imm` for post-index, got {:?}", token)),
             }
         }
 

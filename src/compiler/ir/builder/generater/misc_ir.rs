@@ -317,11 +317,17 @@ mod self_ty_tests {
     use crate::compiler::ArgsNode;
 
     fn make_func(name: &str, params: Vec<ArgsNode>, ret_ty: ast::TyNode) -> ast::FuncDefine {
-        let mut func =
-            match ast::FuncDefine::new(name.to_string(), params, ret_ty, false, test_span(), None) {
-                Group1Node::FuncDefine(func) => func,
-                _ => unreachable!(),
-            };
+        let mut func = match ast::FuncDefine::new(
+            name.to_string(),
+            params,
+            ret_ty,
+            false,
+            test_span(),
+            None,
+        ) {
+            Group1Node::FuncDefine(func) => func,
+            _ => unreachable!(),
+        };
         func.module = Some("Name".to_string());
         func
     }
@@ -565,11 +571,7 @@ mod struct_method_expand_tests {
             ))
         );
 
-        assert!(ir
-            .var_tree
-            .get_ty_node("point")
-            .unwrap()
-            .is_contract_must());
+        assert!(ir.var_tree.get_ty_node("point").unwrap().is_contract_must());
     }
 }
 

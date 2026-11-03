@@ -1,5 +1,5 @@
 use crate::compiler::err::undef::UndefKind::*;
-use crate::compiler::err::{compile::CompileErr, CompileErrKind};
+use crate::compiler::err::{CompileErrKind, compile::CompileErr};
 
 use super::*;
 use crate::compiler::ast::{CallInfo, Expr, ExprNode};
@@ -244,9 +244,10 @@ mod tests {
         };
         ir.struct_tree.add(&def);
 
-        assert!(ir
-            .ensure_struct_field_access("Record", "public_field")
-            .is_ok());
+        assert!(
+            ir.ensure_struct_field_access("Record", "public_field")
+                .is_ok()
+        );
         let error = ir
             .ensure_struct_field_access("Record", "private_field")
             .unwrap_err();
@@ -256,8 +257,9 @@ mod tests {
         assert_eq!(error.kind.title(), "これはプライベートです");
 
         ir.active_struct = Some("Record".to_string());
-        assert!(ir
-            .ensure_struct_field_access("Record", "private_field")
-            .is_ok());
+        assert!(
+            ir.ensure_struct_field_access("Record", "private_field")
+                .is_ok()
+        );
     }
 }
