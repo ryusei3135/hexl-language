@@ -572,6 +572,8 @@ impl AsmEmitter {
     /// IRの値IDから、その式が生成する値の型をたどって取得する。
     pub(super) fn get_expr_ty(&self, node_idx: usize) -> Size {
         match self.curr_inst[node_idx] {
+            // `Set<比較>`の結果は、8bitのレジスタ(`setcc`)のまま(`asm_emitter/set_cc.rs`)
+            inst::Inst::Expr(ref expr) if Self::is_set_cc_kind(&expr.kind) => Size::DB,
             inst::Inst::Expr(ref expr) => self.get_expr_ty(expr.ls),
             inst::Inst::Pointer(inner) => match self.get_expr_ty(inner) {
                 Size::Pointer { ty, .. } => *ty,

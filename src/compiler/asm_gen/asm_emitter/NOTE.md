@@ -116,12 +116,12 @@ IRの並び(`gen_ternary_select_ir` / `gen_ternary_cond_ir`)
 ```text
 cmp    rs, ls          # tcmp
 setcc  dst8            # set_l / set_g / set_l_e / set_g_e / set_e / set_ne
-movzbl dst8, dst32     # movzbl(上位32bitも0になる)
 ```
+(2026-11-03: `movzbl`による32bitへの拡張はやめた。結果は8bitのレジスタのまま、型は`Size::DB`。)
 
 - 結果のレジスタは`ls`/`rs`のレジスタとは別に確保する。`ls`が即値なら、結果のレジスタへ`mov`してから`cmp`する。
 - どちらかのオペランドが符号なしの`<` `>` `<=` `>=`は`setb`/`seta`/`setbe`/`setae`(`get_unsigned_set_tmpl`。`set_b`などのキーがあればそれを使う)。
-- `setcc`/`movzbl`にはサイズ接尾辞を付けない。小数は使えない(`Err(AsmEmitFloatNotSupported)`)。
+- `setcc`にはサイズ接尾辞を付けない。小数は使えない(`Err(AsmEmitFloatNotSupported)`)。
 - フォーマット(`asm_fmt/x64.rs`)のキー: `set_l`/`set_g`/`set_l_e`/`set_g_e`/`set_e`/`set_ne`、符号なし用の`set_b`/`set_a`/`set_b_e`/`set_a_e`、`movzbl`。
 - `asm_fmt/x64.rs`の8bitレジスタ(`db`)の並びが、他(`dw`/`dd`/`dq`)と1つずれていた(`spl`/`bpl`が入っていて、`db[4]`が`sil`ではなく`spl`だった)。
   `setcc`で8bitレジスタ名を使うため`spl`/`bpl`を除いた。`asm_fmts/gcc_x64.yaml`に同じ並びがあれば直す。

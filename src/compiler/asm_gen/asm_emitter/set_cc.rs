@@ -1,22 +1,21 @@
 //! 比較の結果(0/1)を値として得る命令(`Set<比較>`)のアセンブリの生成
 //!
 //! `ExprKind::SetLessThen`などは、`ls`と`rs`を比較して、結果の0/1を
-//! レジスタへ置く。次の3命令になる。
+//! レジスタへ置く。次の2命令になる。
 //!
 //! ```text
 //!   cmp   rs, ls          フラグを設定する(`tcmp`)
 //!   setcc dst8            条件が真なら1、偽なら0を8bitのレジスタへ書く(`set_*`)
-//!   movzbl dst8, dst32    32bitへゼロ拡張する(`movzbl`。上位32bitも0になる)
 //! ```
 //!
-//! - 結果は`ls`の型のレジスタ(`get_expr_ty`)として読まれる。8bit・16bit・32bitの値は
-//!   `dst32`の下位、64bitの値は`movzbl`が上位32bitも0にするので`dst64`としてそのまま読める。
+//! - 結果は8bitのレジスタ(`%cl`など)のまま。32bit/64bitへの拡張(`movzbl`)はしない。
+//!   上位ビットは書き換えられないので、結果は8bitの値(`Size::DB`)として読む
+//!   (`get_expr_ty`が`Set<比較>`の式に`DB`を返す)。
 //! - `<` `>` `<=` `>=`は、どちらかのオペランドが符号なしなら符号なしの比較
 //!   (`setb`/`seta`/`setbe`/`setae`。`get_unsigned_set_tmpl`)。`==`/`!=`は符号に関係ない。
 //! - `cmp`の比較される側(`ls`)は即値にできないので、即値のときは結果のレジスタへ
 //!   一時的に`mov`して使う(`dst`は`ls`/`rs`のレジスタとは別に確保する)。
 //! - `setcc`は`cmp`のフラグを読むだけなので、`cmp`と`setcc`の間に他の命令を挟まない。
-//!   `movzbl`はフラグを変えないが、`setcc`のあとに置く。
 //!
 //! ## 制限
 //! - 小数(`F32`/`F64`)は使えない(`comiss`/`comisd`のフラグはNaNの扱いが整数と違う)
@@ -55,7 +54,7 @@ impl AsmEmitter {
         })
     }
 
-    /// `Set<比較>`: `cmp` → `setcc` → `movzbl`で、結果の0/1をレジスタへ置く
+    /// `Set<比較>`: `cmp` → `setcc`で、結果の0/1を8bitのレジスタへ置く(拡張はしない)
     pub(in crate::compiler::asm_gen) fn gen_set_cc_asm(
         &mut self,
         expr: &inst::ExprInst,
@@ -75,7 +74,6 @@ impl AsmEmitter {
         self.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
         let dst8 = self.get_reg_txt(Some(dst.index()), &Size::DB)?;
-        let dst32 = self.get_reg_txt(Some(dst.index()), &Size::DD)?;
 
         let mut src1 = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
         let src2 = self.extract_operand_text(expr.rs, wrap_size.as_ref())?;
@@ -117,15 +115,9 @@ impl AsmEmitter {
         } else {
             self.asm_fmt.get_opcode_tmpl(key)
         };
-        // `setcc`/`movzbl`にサイズ接尾辞は付けない(オペランドは8bit/32bitのレジスタで決まる)
+        // `setcc`にサイズ接尾辞は付けない(オペランドは8bitのレジスタで決まる)。
+        // 結果は8bitのまま(32bit以上へ拡張しない)
         output.push_str(&set_tmpl.replace("{dst}", &dst8));
-        output.push_str(
-            &self
-                .asm_fmt
-                .get_opcode_tmpl("movzbl")
-                .replace("{src1}", &dst8)
-                .replace("{dst}", &dst32),
-        );
         self.asm_text.push_str(&output);
 
         // 式の結果を置いたレジスタを使用中として記録する

@@ -225,4 +225,52 @@ impl AsmEmitter {
             self.drop_dead_spills();
         }
     }
+
+    /// ノードが持つ、オペランド(他のノードのid)の一覧
+    fn operand_ids(node: &inst::Inst) -> Vec<usize> {
+        fn member_ids(member: &inst::MemoryInst, ids: &mut Vec<usize>) {
+            match member {
+                inst::MemoryInst::Member { value_idx, .. } => ids.push(*value_idx),
+                inst::MemoryInst::Memory { src, dst, .. } => {
+                    ids.extend(src.iter().copied());
+                    ids.push(*dst);
+                }
+                inst::MemoryInst::Byte(_) => {}
+            }
+        }
+        let mut ids = Vec::new();
+        match node {
+            inst::Inst::Expr(expr) => ids.extend([expr.ls, expr.rs]),
+            inst::Inst::Cast { src, .. } | inst::Inst::Mov { src, .. } => ids.push(*src),
+            inst::Inst::Pointer(inner) | inst::Inst::GetAddress(inner) => ids.push(*inner),
+            inst::Inst::InitArr(items) => ids.extend(items.iter().copied()),
+            inst::Inst::CallFunc(meta) => ids.extend(meta.params.iter().copied()),
+            inst::Inst::InsertArr { dst, index, .. } => ids.extend([*dst, *index]),
+            inst::Inst::AssignVar { dst, value, .. } => ids.extend([*dst, *value]),
+            inst::Inst::Ret(idx) => ids.push(*idx),
+            inst::Inst::Comple { lines, .. } => {
+                lines.iter().for_each(|(_, items)| ids.extend(items.iter().copied()))
+            }
+            inst::Inst::Struct { mem, .. } => mem.iter().for_each(|m| member_ids(m, &mut ids)),
+            inst::Inst::Variant { value, .. } => {
+                if let Some(m) = value {
+                    member_ids(m, &mut ids)
+                }
+            }
+            inst::Inst::MemoryValue(member) => member_ids(member, &mut ids),
+            _ => {}
+        }
+        ids
+    }
+
+    /// 式のノード`idx`の結果を、後ろのノードがオペランドとして使うか
+    ///
+    /// 使われない式は、`if`/`match`/`loop`の条件の一番外側の式
+    /// (結果を条件ジャンプで使う)か、結果を捨てる式
+    pub(in crate::compiler::asm_gen) fn is_expr_consumed(&self, idx: usize) -> bool {
+        self.curr_inst
+            .iter()
+            .skip(idx + 1)
+            .any(|node| Self::operand_ids(node).contains(&idx))
+    }
 }

@@ -957,7 +957,7 @@ impl AsmEmitter {
         // (`cmpq $0, %rax` + `jz L0`など)を出していて、結果はフラグで渡される。
         // 結果のレジスタ(`dst`)は書き込まれず、誰にも読まれない
         let had_label = self.reserved_label_name.is_some();
-        let asm = self.format_expr_inst(&expr, Some(size))?;
+        let asm = self.format_expr_inst(&expr, Some(size.clone()))?;
         let is_branch_only = had_label && self.reserved_label_name.is_none();
 
         self.asm_text.push_str(&asm);
@@ -978,7 +978,33 @@ impl AsmEmitter {
         // この式が使い終わった、オペランドの一時的な結果のレジスタを解放する
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);
+
+        // 条件の式なのに条件ジャンプを出していない(`a && b`の`andq`など、値を
+        // 計算するだけの式)場合は、結果が0でなければ予約したラベルへジャンプする
+        if had_label && self.reserved_label_name.is_some() && !self.is_expr_consumed(expr.dst) {
+            self.emit_jump_if_nonzero(dst, &size);
+            self.release_expr_temp(expr.dst);
+        }
         Ok(())
+    }
+
+    /// `dst`のレジスタの値が0でなければ、予約したラベル(`ExpectJmp`)へジャンプする
+    /// (`cmpq $0, %rdi` + `jnz L1`)
+    fn emit_jump_if_nonzero(&mut self, dst: RegisterMode, size: &Size) {
+        let Some(label) = self.reserved_label_name.take() else {
+            return;
+        };
+        let Ok(reg_txt) = self.get_reg_txt(Some(dst.index()), size) else {
+            self.reserved_label_name = Some(label);
+            return;
+        };
+        let tmpl = self
+            .asm_fmt
+            .get_opcode_tmpl("cmp_ne")
+            .replace("{src1}", &reg_txt)
+            .replace("{src2}", &self.asm_fmt.get_fmt_num("0"));
+        let line = self.fmt_one_expr_mnemo_resize(tmpl, size, "cmp", false);
+        self.asm_text.push_str(&line.replace("{label}", &label));
     }
 
     #[inline(always)]
