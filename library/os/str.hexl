@@ -239,7 +239,7 @@ fmt_null(buf mut: byte*"unlimit", pos: u64): u64 {
 }
 
 // 文字列 fmt を buf へ書式化する。詳しくはファイル先頭の説明を参照。
-pub format<T>(buf: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" {
+pub format<T>(buf mut: byte*"unlimit", fmt: byte*"unlimit", arg: T): byte*"unlimit" {
     a: i64 = arg
     o mut: u64 = 0
     i mut: u64 = 0
