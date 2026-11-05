@@ -214,8 +214,7 @@ impl Parser {
                 if let Group1Node::FuncDefine(func) = method {
                     let node = self.one_line_node()?;
                     let span = self.build_err_span();
-                    func.body
-                        .push(node.gen_group_info(span.line, Rc::clone(&span)));
+                    func.add(node.gen_group_info(span.line, Rc::clone(&span)));
                 }
 
                 if self.current_tkn() == &lex::Tkn::RBrace {

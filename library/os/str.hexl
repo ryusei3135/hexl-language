@@ -422,7 +422,7 @@ pub struct Str {
     pub new(init_msg: byte*): Self must=del {
         src: i64 = init_msg
         n: u64 = os_strlen(src)
-        c: u64 = n * 2
+        c mut: u64 = n * 2
         cond c < 16 {
             c = 16
         }
@@ -533,6 +533,10 @@ pub struct Str {
         }
         self->cap = newcap
         ret 1
+    }
+
+    pub del(self: Self* of new) {
+        mem::free<byte>(self->buf)
     }
 }
 

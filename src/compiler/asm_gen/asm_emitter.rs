@@ -125,6 +125,11 @@ impl AsmEmitter {
             if name == "_start" {
                 continue;
             }
+            // 本体が無い関数(`#include`した型のメゾットなど)は生成しない。
+            // 本体は、その型を定義したファイルのアセンブリにある
+            if info.is_declaration {
+                continue;
+            }
             let label = Self::fn_label_of(&info.name, &info.temp_ty);
             self.pending_funcs.insert(label, (name, info));
         }

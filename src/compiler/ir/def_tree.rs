@@ -524,6 +524,10 @@ pub struct FnDefInfo {
     pub var_counter: counter_mnger::VarCounter,
     pub public: bool,
     pub stk_size: usize,
+    /// 署名だけの登録(本体が無い)。`FuncTree::declare`が作った後、
+    /// 本体のIRが`add`で登録されなかった関数(`#include`した型のメゾットなど)。
+    /// アセンブリ言語は生成せず、呼び出しだけを生成する(`asm_gen`)
+    pub is_declaration: bool,
 }
 
 impl FnDefInfo {
@@ -554,6 +558,7 @@ impl FnDefInfo {
             var_counter,
             public,
             stk_size,
+            is_declaration: false,
         }
     }
     /// 第一引数が`Self`型、または`Self`を指すポインタ型
@@ -573,6 +578,11 @@ impl FnDefInfo {
             return types::Size::Void.wrap_dst_size();
         }
         self.ret_size.clone()
+    }
+
+    fn with_declaration(mut self, is_declaration: bool) -> Self {
+        self.is_declaration = is_declaration;
+        self
     }
 
     fn with_ret_size(mut self, ret_size: Option<Size>) -> Self {
@@ -691,6 +701,7 @@ impl FuncTree {
                 0,
                 counter_mnger::VarCounter::new(),
             )
+            .with_declaration(true)
         });
     }
 }

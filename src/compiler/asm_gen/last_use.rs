@@ -93,9 +93,7 @@ impl AsmEmitter {
                     Self::member_var_refs(insts, member, visited, names);
                 }
             }
-            inst::Inst::MemoryValue(member) => {
-                Self::member_var_refs(insts, member, visited, names)
-            }
+            inst::Inst::MemoryValue(member) => Self::member_var_refs(insts, member, visited, names),
             _ => {}
         }
     }
@@ -248,9 +246,9 @@ impl AsmEmitter {
             inst::Inst::InsertArr { dst, index, .. } => ids.extend([*dst, *index]),
             inst::Inst::AssignVar { dst, value, .. } => ids.extend([*dst, *value]),
             inst::Inst::Ret(idx) => ids.push(*idx),
-            inst::Inst::Comple { lines, .. } => {
-                lines.iter().for_each(|(_, items)| ids.extend(items.iter().copied()))
-            }
+            inst::Inst::Comple { lines, .. } => lines
+                .iter()
+                .for_each(|(_, items)| ids.extend(items.iter().copied())),
             inst::Inst::Struct { mem, .. } => mem.iter().for_each(|m| member_ids(m, &mut ids)),
             inst::Inst::Variant { value, .. } => {
                 if let Some(m) = value {

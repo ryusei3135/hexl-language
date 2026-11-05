@@ -49,8 +49,10 @@ impl VarCounter {
     pub fn use_var(&mut self, var_name: &str, #[cfg(not(test))] used_inst_id: usize) {
         *self.list.entry(var_name.to_string()).or_insert((0, 0)) = (
             self.list.get(var_name).unwrap_or(&(0, 0)).0 + 1,
-            #[cfg(test)] 0,
-            #[cfg(not(test))] used_inst_id,
+            #[cfg(test)]
+            0,
+            #[cfg(not(test))]
+            used_inst_id,
         );
     }
 

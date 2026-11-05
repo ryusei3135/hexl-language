@@ -21,14 +21,18 @@ impl IR {
             }
         }
 
-        for (index, param) in func.params.iter().enumerate().skip(1) {
-            if Self::ty_contains_self(&param.ty) {
-                panic!(
-                    "Self型は第一引数以外では使えません: param#{index} {:?}",
-                    param.ty
-                );
-            }
-        }
+        func.params
+            .iter()
+            .enumerate()
+            .skip(1)
+            .for_each(|(index, param)| {
+                if Self::ty_contains_self(&param.ty) {
+                    panic!(
+                        "Self型は第一引数以外では使えません: param#{index} {:?}",
+                        param.ty
+                    );
+                }
+            });
 
         if first_param_is_self {
             func.ret_ty = Self::resolve_self_like_ty(&func.ret_ty);
@@ -208,43 +212,74 @@ impl IR {
         methods: &[ast::Group1Node],
     ) -> Result<(), err::ErrKind> {
         self.this_is_self = true;
-        let result = (|| {
-            for method in methods {
-                let ast::Group1Node::FuncDefine(method_info) = method else {
-                    panic!(
-                        "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
-                        kind, owner, method
-                    );
-                };
-                if method_info.is_declaration_only() {
-                    continue;
-                }
+        // 1つのメゾットでエラーになっても、残りのメゾットは展開を続ける。
+        // 途中で打ち切ると、`declare_methods`が先に登録した本体が空のスタブが
+        // そのまま残り、アセンブリがラベルとスタックフレームだけになる。
+        // 最初のエラーだけを返す
+        let mut first_err: Option<err::ErrKind> = None;
+        for method in methods {
+            let ast::Group1Node::FuncDefine(method_info) = method else {
+                panic!(
+                    "{}`{}`のメゾットに、関数定義以外のノードが渡されました: {:?}",
+                    kind, owner, method
+                );
+            };
+            if method_info.is_declaration_only() {
+                continue;
+            }
+            self.active_struct = Some(owner.to_string());
+            let mut method_info = method_info.clone();
+            method_info.module = Some(owner.to_string());
+            let method_info = self.resolve_self_ty(&method_info);
 
-                self.active_struct = Some(owner.to_string());
-                let mut method_info = method_info.clone();
-                method_info.module = Some(owner.to_string());
-                let method_info = self.resolve_self_ty(&method_info);
-
-                // 関数の情報を登録
-                self.entry_fn_info(&method_info)?;
-
-                self.var_tree = def_tree::VarTree::new();
-
-                let _ = self.push_param_meta_data(&method_info.params)?;
-                self.scope_states.clear();
-                self.gen_inst::<M>(&method_info.body)?;
-
-                // 関数の処理内容をpush
-                self.push_fn_ir_tree(&method_info);
-                // 使うデータを初期化
+            if let Err(e) = self.expand_one_method::<M>(&method_info) {
+                // TODO(調査用): どのメゾットがなぜ展開に失敗したかを表示する
+                eprintln!(
+                    "[expand_methods] {}::{} failed: {:?}",
+                    owner, method_info.name, e
+                );
+                // 失敗したメゾットの途中のIRを、次のメゾットへ持ち越さない
                 self.ir_tree = Vec::new();
                 self.id_counter = 0;
+                self.stk_counter = 0;
+                first_err.get_or_insert(e);
             }
-            Ok(())
-        })();
+        }
+        let result = match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        };
         self.active_struct = None;
         self.this_is_self = false;
         result
+    }
+
+    /// メゾット1つぶんをIRへ展開して`func_tree`へ登録する
+    /// (`init_def_fn_info`と同じ流れ。使用回数の数え直しと`:=`の型推論も行う)
+    fn expand_one_method<M: ResultMod>(
+        &mut self,
+        method_info: &ast::FuncDefine,
+    ) -> Result<(), err::ErrKind> {
+        // 関数ごとに使用回数を数え直す。
+        // (数え直さないと、前のメゾットの回数が混ざったり、引数の回数が
+        //  初期化されなかったりして、レジスタの割り当てと「未使用変数の
+        //  削除」(`asm_gen/reg_mnger.rs`)が壊れる)
+        self.var_counter = counter_mnger::VarCounter::with_arg_count(method_info.params.len());
+        // 関数の情報を登録
+        self.entry_fn_info(method_info)?;
+        self.var_tree = def_tree::VarTree::new();
+        let _ = self.push_param_meta_data(&method_info.params)?;
+        self.scope_states.clear();
+        // `:=`のうち、使われ方から型が決まるものを先に決める
+        let mut body = method_info.body.clone();
+        infer_auto::resolve_auto_by_usage(&mut body, &method_info.params, &method_info.ret_ty);
+        self.gen_inst::<M>(&body)?;
+        // 関数の処理内容をpush
+        self.push_fn_ir_tree(method_info);
+        // 使うデータを初期化
+        self.ir_tree = Vec::new();
+        self.id_counter = 0;
+        Ok(())
     }
 
     /// ユーザーのソースコード側の誤りに起因しうる`Result`を、

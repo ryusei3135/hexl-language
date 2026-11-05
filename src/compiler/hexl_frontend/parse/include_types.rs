@@ -206,6 +206,24 @@ mod tests {
     }
 
     #[test]
+    fn local_struct_method_body_is_registered_as_a_definition() {
+        let nodes = parse_source("pub struct Item { pub get(self: Self): int { ret 0 } }\n");
+        let method = nodes.iter().find_map(|node| match node {
+            Group1Node::StructDefine(def) if def.name == "Item" => {
+                def.methods.iter().find_map(|method| match method {
+                    Group1Node::FuncDefine(def) if def.name == "get" => Some(def),
+                    _ => None,
+                })
+            }
+            _ => None,
+        });
+
+        let method = method.expect("the local method should be parsed");
+        assert!(!method.is_declaration_only());
+        assert!(!method.body.is_empty());
+    }
+
+    #[test]
     fn glob_include_imports_types_but_function_include_does_not() {
         let glob = parse_with_include("#include \"types.hexl\"::*");
         assert!(imported_type_names(&glob).contains(&"Item".to_string()));

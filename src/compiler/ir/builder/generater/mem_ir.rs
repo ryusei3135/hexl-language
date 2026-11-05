@@ -32,10 +32,10 @@ impl IR {
             _ => vec![(*var.value).clone()],
         };
 
-        let mut value_idx = Vec::new();
-        for value in values {
-            value_idx.push(M::handle(self.gen_expr_ir::<M>(&value, Some(&elem_size)))?);
-        }
+        let mut value_idx = values
+            .iter()
+            .map(|v| M::handle(self.gen_expr_ir::<M>(v, Some(&elem_size))))
+            .collect::<Result<Vec<_>, _>>()?;
 
         // メモリ領域の情報を作成
         // 先頭にどの領域(スタック/静的)かを示し、続けて要素分のバイト数を積む
