@@ -45,7 +45,7 @@ impl ContractFlags {
             Ok(())
         } else {
             if self.constract_ret.as_ref().unwrap() != var_ty {
-                panic!("{:?} {:?}", var_ty, self.constract_ret);
+                println!("{:?} {:?}", var_ty, self.constract_ret);
                 Err(var_ty.clone())
             } else {
                 self.reset();

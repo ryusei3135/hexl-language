@@ -431,7 +431,7 @@ pub struct Str {
             len: 0
             cap: c
         }
-        a: i64 = s.buf
+        a: byte* = s.buf
         cond a == 0 {
             s.cap = 0
         } else {
