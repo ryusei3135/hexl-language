@@ -292,7 +292,7 @@ impl Size {
 }
 
 #[inline(always)]
-fn embe_ty_sort(ty_name: &str) -> Result<Size, err::ErrKind> {
+pub(in crate::compiler::ir) fn embe_ty_sort(ty_name: &str) -> Result<Size, err::ErrKind> {
     match ty_name {
         "byte" | "char" => Size::DB,
         "i16" => Size::DW,

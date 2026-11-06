@@ -57,12 +57,17 @@ impl IR {
             &struct_name,
             &name,
         );
-        let size: types::Size = self.struct_tree.get_mem_size(
-            // 変数の名前で登録されている変数の型を取得する
-            // （変数）の名前の文字列
-            &struct_name,
-            &name,
-        );
+        let size: types::Size = 
+            if let Ok(ty) = types::embe_ty_sort(&struct_name) {
+                ty
+            } else {
+                self.struct_tree.get_mem_size(
+                    // 変数の名前で登録されている変数の型を取得する
+                    // （変数）の名前の文字列
+                    &struct_name,
+                    &name,
+                )
+            };
         let r = inst::Inst::RefStruct {
             src: member_name,
             size,
@@ -128,7 +133,17 @@ impl IR {
         self.ensure_struct_field_access(&struct_name, name)?;
 
         let pos: usize = self.struct_tree.get_pos(&struct_name, name);
-        let size: types::Size = self.struct_tree.get_mem_size(&struct_name, name);
+        let size: types::Size = 
+            if let Ok(ty) = types::embe_ty_sort(&struct_name) {
+                ty
+            } else {
+                self.struct_tree.get_mem_size(
+                    // 変数の名前で登録されている変数の型を取得する
+                    // （変数）の名前の文字列
+                    &struct_name,
+                    &name,
+                )
+            };
 
         let r = inst::Inst::RefStructPtr {
             src: ptr_name.to_string(),

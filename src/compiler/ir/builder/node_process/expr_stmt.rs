@@ -146,7 +146,16 @@ impl IR {
                 .clone();
             self.try_size_or_emit_struct(&field_ty).map(|x| Some(x))
         } else {
-            Ok(Some(self.struct_tree.get_mem_size(&struct_name, &member)))
+            Ok(Some(if let Ok(ty) = types::embe_ty_sort(&struct_name) {
+                ty
+            } else {
+                self.struct_tree.get_mem_size(
+                    // 変数の名前で登録されている変数の型を取得する
+                    // （変数）の名前の文字列
+                    &struct_name,
+                    &member,
+                )
+            }))
         }
     }
 

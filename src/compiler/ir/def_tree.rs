@@ -422,7 +422,7 @@ impl StructTree {
         let ty = self
             .tree
             .get(name)
-            .unwrap()
+            .expect(format!("struct name, {}", name).as_str())
             .fields
             .iter()
             .find(|v| &v.name == field_name)
