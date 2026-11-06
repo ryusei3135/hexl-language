@@ -608,6 +608,25 @@ mod struct_method_expand_tests {
 
         assert!(ir.var_tree.get_ty_node("point").unwrap().is_contract_must());
     }
+
+    #[test]
+    fn struct_field_consumes_its_initializer_return_contract() {
+        let nodes = parse_test_source(
+            "struct Holder { \
+                 value: byte*\"unlimit\" must=free \
+                 count: u64 \
+             } \
+             alloc(): byte* must=free { ret 0 } \
+             main(): int { \
+                 holder: Holder = Holder { value: alloc(), count: 0 } \
+                 ret 0 \
+             }",
+        );
+
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+    }
 }
 
 #[cfg(test)]

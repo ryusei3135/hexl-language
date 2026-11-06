@@ -4,6 +4,26 @@ use super::*;
 use crate::compiler::ast::{DefineVar, Expr, ExprNode, TyNode};
 
 impl IR {
+    fn gen_field_value<M: ResultMod>(
+        &mut self,
+        expr: &Expr,
+        ty: &TyNode,
+        size: &types::Size,
+    ) -> Result<usize, err::ErrKind> {
+        let outer_contract_flag = std::mem::replace(
+            &mut self.contract_flag,
+            crate::compiler::ir::checker::ContractFlags::new(),
+        );
+        let result: Result<usize, err::ErrKind> = (|| {
+            let value_idx = self.gen_expr_ir::<M>(expr, Some(size))?;
+            let ty_to_register = self.contract_flag.var_ty_with_return_contract(ty);
+            Self::wrap_put_var_def(&mut self.contract_flag, &ty_to_register, &self.current_span)?;
+            Ok(value_idx)
+        })();
+        self.contract_flag = outer_contract_flag;
+        result
+    }
+
     fn get_ast_len(&self, ast: &Expr) -> Option<usize> {
         match &ast.node {
             ExprNode::Str(value) => Some(value.len()),
@@ -352,7 +372,7 @@ impl IR {
                 )
             });
 
-            let value_idx = self.gen_expr_ir::<M>(&field_expr, Some(&field_size))?;
+            let value_idx = self.gen_field_value::<M>(&field_expr, &field.ty, &field_size)?;
             mem_insts.push(inst::MemoryInst::Member {
                 parent: field.name.clone(),
                 value_idx: value_idx,
@@ -433,7 +453,7 @@ impl IR {
         let value = match field_ty {
             Some(ty) => {
                 let field_size = self.size_of(&ty);
-                let value_idx = self.gen_expr_ir::<M>(&field_expr, Some(&field_size))?;
+                let value_idx = self.gen_field_value::<M>(&field_expr, &ty, &field_size)?;
                 Some(inst::MemoryInst::Member {
                     parent: field_name,
                     value_idx,

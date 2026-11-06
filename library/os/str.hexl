@@ -431,6 +431,9 @@ pub struct Str {
             len: 0
             cap: c
         }
+        // 構造体リテラルの malloc の契約(must=free)が、次の文で変数を定義するまで残るため、
+        // 変数定義を含まない代入文を1つ挟んで、先に消化させる。
+        s.len = 0
         a: byte* = s.buf
         cond a == 0 {
             s.cap = 0

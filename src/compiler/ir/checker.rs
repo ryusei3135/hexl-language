@@ -44,13 +44,43 @@ impl ContractFlags {
             self.def_var = Some(var_ty.clone());
             Ok(())
         } else {
-            if self.constract_ret.as_ref().unwrap() != var_ty {
-                println!("{:?} {:?}", var_ty, self.constract_ret);
+            if !Self::same_contract_type(self.constract_ret.as_ref().unwrap(), var_ty) {
+                println!("ir/checker.rs {:?} {:?}", var_ty, self.constract_ret);
                 Err(var_ty.clone())
             } else {
                 self.reset();
                 Ok(())
             }
+        }
+    }
+
+    /// 戻り値の契約と、変数宣言の契約が同じ型かどうか
+    fn same_contract_type(left: &TyNode, right: &TyNode) -> bool {
+        let (left_contract, right_contract) = match (left, right) {
+            (TyNode::ConstractMust(left), TyNode::ConstractMust(right))
+            | (TyNode::ConstractOf(left), TyNode::ConstractOf(right)) => (left, right),
+            _ => return false,
+        };
+        left_contract.must_name() == right_contract.must_name()
+            && Self::same_contract_value_ty(&left_contract.unwrap_ty(), &right_contract.unwrap_ty())
+    }
+
+    /// 戻り値の契約と、変数宣言の契約が同じ型かどうか
+    fn same_contract_value_ty(left: &TyNode, right: &TyNode) -> bool {
+        match (left, right) {
+            (
+                TyNode::Pointer {
+                    is_const: left_const,
+                    ty_name: left_ty,
+                    ..
+                },
+                TyNode::Pointer {
+                    is_const: right_const,
+                    ty_name: right_ty,
+                    ..
+                },
+            ) => left_const == right_const && Self::same_contract_value_ty(left_ty, right_ty),
+            _ => left == right,
         }
     }
 
@@ -65,7 +95,7 @@ impl ContractFlags {
             _ => return var_ty.clone(),
         };
 
-        if &inner_ty == var_ty {
+        if Self::same_contract_value_ty(&inner_ty, var_ty) {
             return contract_ty.clone();
         }
         let (declared_is_must, declared_contract) = match var_ty {
@@ -87,7 +117,7 @@ impl ContractFlags {
             }
         };
         if declared_is_must == returned_is_must
-            && declared_contract.unwrap_ty() == inner_ty
+            && Self::same_contract_value_ty(&declared_contract.unwrap_ty(), &inner_ty)
             && returned_contract
                 .must_name()
                 .is_some_and(|name| name == &declared_name)
@@ -135,5 +165,34 @@ mod tests {
             flags.var_ty_with_return_contract(&declared_ty),
             flags.constract_ret.clone().unwrap()
         );
+    }
+
+    #[test]
+    fn return_contract_matches_pointer_with_declared_range() {
+        let returned_ty = TyNode::Pointer {
+            is_const: false,
+            ty_name: Box::new(TyNode::Ty("byte".to_string())),
+            range: None,
+        };
+        let declared_ty = TyNode::Pointer {
+            is_const: false,
+            ty_name: Box::new(TyNode::Ty("byte".to_string())),
+            range: Some((0, usize::MAX)),
+        };
+        let mut flags = ContractFlags::new();
+        flags.constract_ret = Some(ConstractTy::new::<{ IS_MUST }>(
+            Some("free".to_string()),
+            None,
+            Box::new(returned_ty),
+        ));
+        let declared_contract =
+            ConstractTy::new::<{ IS_MUST }>(Some("free".to_string()), None, Box::new(declared_ty));
+
+        assert_eq!(
+            flags.var_ty_with_return_contract(&declared_contract),
+            flags.constract_ret.clone().unwrap()
+        );
+        assert!(flags.put_var_def(&declared_contract).is_ok());
+        assert!(flags.constract_ret.is_none());
     }
 }
