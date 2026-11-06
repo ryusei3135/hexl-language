@@ -94,14 +94,20 @@ impl IR {
                 // 登録する型: `register_ty`が指定されていればそちらを、
                 // 無ければ`var.ty`をそのまま使う(加工しない)
                 let declared_ty = register_ty.as_ref().unwrap_or(&var.ty);
-                let ty_to_register = self.constract_flag.var_ty_with_return_contract(declared_ty);
+                let ty_to_register = self.contract_flag.var_ty_with_return_contract(declared_ty);
                 let _ = self.var_tree.push::<'l'>(
                     &var.name,
                     self.id_counter,
                     &ty_to_register,
                     &var_attr,
                     Rc::clone(&self.current_span),
-                    || self.constract_flag.put_var_def(&ty_to_register),
+                    || {
+                        Self::wrap_put_var_def(
+                            &mut self.contract_flag,
+                            &ty_to_register,
+                            &self.current_span,
+                        )
+                    },
                 )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
@@ -131,14 +137,20 @@ impl IR {
                     let value_idx = self.gen_expr_ir::<M>(&array, Some(&array_ty))?;
                     let declared_ty = register_ty.as_ref().unwrap_or(&var.ty);
                     let ty_to_register =
-                        self.constract_flag.var_ty_with_return_contract(declared_ty);
+                        self.contract_flag.var_ty_with_return_contract(declared_ty);
                     self.var_tree.push::<'l'>(
                         &var.name,
                         self.id_counter,
                         &ty_to_register,
                         &var_attr,
                         Rc::clone(&self.current_span),
-                        || self.constract_flag.put_var_def(&ty_to_register),
+                        || {
+                            Self::wrap_put_var_def(
+                                &mut self.contract_flag,
+                                &ty_to_register,
+                                &self.current_span,
+                            )
+                        },
                     )?;
                     Ok(inst::Inst::Mov {
                         name: Some(mem::take(&mut var.name)),
@@ -163,14 +175,20 @@ impl IR {
                 // 登録する型: `register_ty`が指定されていればそちらを、
                 // 無ければ`var.ty`をそのまま使う(加工しない)
                 let declared_ty = register_ty.as_ref().unwrap_or(&var.ty);
-                let ty_to_register = self.constract_flag.var_ty_with_return_contract(declared_ty);
+                let ty_to_register = self.contract_flag.var_ty_with_return_contract(declared_ty);
                 let _ = self.var_tree.push::<'l'>(
                     &var.name,
                     self.id_counter,
                     &ty_to_register,
                     &var_attr,
                     Rc::clone(&self.current_span),
-                    || self.constract_flag.put_var_def(&ty_to_register),
+                    || {
+                        Self::wrap_put_var_def(
+                            &mut self.contract_flag,
+                            &ty_to_register,
+                            &self.current_span,
+                        )
+                    },
                 )?;
                 let inst = inst::Inst::Mov {
                     name: Some(mem::take(&mut var.name)),
@@ -200,7 +218,7 @@ impl IR {
                 // 登録する型: `register_ty`が指定されていればそちらを、
                 // 無ければ`var.ty`をそのまま使う(加工しない)
                 let declared_ty = register_ty.as_ref().unwrap_or(&var.ty);
-                let ty_to_register = self.constract_flag.var_ty_with_return_contract(declared_ty);
+                let ty_to_register = self.contract_flag.var_ty_with_return_contract(declared_ty);
                 // `TyNode::Ty`と同じ理由で、`Mov`自身のindexを登録する
                 // (詳細は上の`TyNode::Ty`分岐のコメントを参照)
                 let _ = self.var_tree.push::<'l'>(
@@ -209,7 +227,13 @@ impl IR {
                     &ty_to_register,
                     &var_attr,
                     Rc::clone(&self.current_span),
-                    || self.constract_flag.put_var_def(&ty_to_register),
+                    || {
+                        Self::wrap_put_var_def(
+                            &mut self.contract_flag,
+                            &ty_to_register,
+                            &self.current_span,
+                        )
+                    },
                 )?;
 
                 // リテラルから長さが取れなかった場合は、たった今`var_tree`へ

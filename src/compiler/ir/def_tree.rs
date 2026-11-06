@@ -78,7 +78,7 @@ impl VarTree {
         var_ty: &TyNode,
         var_attr: &parse::VarMutAttr,
         span: Rc<Span>,
-        mut put_flag: impl FnMut(),
+        mut put_flag: impl FnMut() -> Result<(), err::ErrKind>,
     ) -> Result<(), err::ErrKind> {
         let var = match K {
             'l' => VarType::Local(var_index),
@@ -102,7 +102,7 @@ impl VarTree {
                 }
             };
         }
-        put_flag();
+        put_flag()?;
         self.hash.insert(
             var_name.to_owned(),
             VarMetaData::new(&var, &var_ty, &var_attr),

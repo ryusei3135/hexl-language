@@ -14,7 +14,7 @@ pub(in crate::compiler::ir) use mem::access::ArrIdxGuard;
 use crate::compiler::models::Body;
 
 #[derive(Debug)]
-pub(in crate::compiler::ir) struct ConstractFlags {
+pub(in crate::compiler::ir) struct ContractFlags {
     /// 変数を定義
     /// これは戻り値が契約のフラグを立てたときにtrueならOk
     def_var: Option<TyNode>,
@@ -24,7 +24,7 @@ pub(in crate::compiler::ir) struct ConstractFlags {
 
 /// 一行の式の型をちぇっぅ
 /// 行をまたいでのチェックはしない
-impl ConstractFlags {
+impl ContractFlags {
     pub const fn new() -> Self {
         Self {
             def_var: None,
@@ -39,14 +39,18 @@ impl ConstractFlags {
 
     /// var_treeでフラグを立てる
     #[inline(always)]
-    pub(in crate::compiler::ir) fn put_var_def(&mut self, var_ty: &TyNode) {
+    pub(in crate::compiler::ir) fn put_var_def(&mut self, var_ty: &TyNode) -> Result<(), TyNode> {
         if self.constract_ret.is_none() {
             self.def_var = Some(var_ty.clone());
+            Ok(())
         } else {
             if self.constract_ret.as_ref().unwrap() != var_ty {
                 panic!("{:?} {:?}", var_ty, self.constract_ret);
+                Err(var_ty.clone())
+            } else {
+                self.reset();
+                Ok(())
             }
-            self.reset();
         }
     }
 
@@ -118,7 +122,7 @@ mod tests {
     #[test]
     fn return_contract_qualifies_matching_declared_method_contract() {
         let owner_ty = TyNode::Ty("Cmdln".to_string());
-        let mut flags = ConstractFlags::new();
+        let mut flags = ContractFlags::new();
         flags.constract_ret = Some(ConstractTy::new::<{ IS_MUST }>(
             Some("Cmdln::del".to_string()),
             None,

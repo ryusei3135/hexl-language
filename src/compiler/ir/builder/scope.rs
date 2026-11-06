@@ -140,7 +140,13 @@ impl IR {
                         &self_area_ty,
                         &var_attr,
                         Rc::clone(&(*target).span),
-                        || self.constract_flag.put_var_def(&self_area_ty),
+                        || {
+                            Self::wrap_put_var_def(
+                                &mut self.contract_flag,
+                                &self_area_ty,
+                                &(*target).span,
+                            )
+                        },
                     )?;
 
                     // メゾットの第一引数(`self`)として、今確保した

@@ -185,7 +185,7 @@ impl IR {
             &info.ty,
             &info.var_attr,
             Rc::clone(&self.current_span),
-            || self.constract_flag.put_var_def(&info.ty),
+            || Self::wrap_put_var_def(&mut self.contract_flag, &info.ty, &self.current_span),
         )?;
         self.push_inst(inst::Inst::Mov {
             name: Some(info.bind.clone()),

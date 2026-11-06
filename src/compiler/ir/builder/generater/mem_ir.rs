@@ -69,7 +69,7 @@ impl IR {
             &var.ty,
             &var.var_attr,
             Rc::clone(&self.current_span),
-            || self.constract_flag.put_var_def(&var.ty),
+            || Self::wrap_put_var_def(&mut self.contract_flag, &var.ty, &self.current_span),
         )?;
 
         Ok(inst::Inst::MemoryValue(mem_insts))

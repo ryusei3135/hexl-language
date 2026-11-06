@@ -55,7 +55,7 @@ pub struct IR {
     stk_counter: usize,
     pub(in crate::compiler::ir) current_span: Rc<err::Span>,
 
-    pub(in crate::compiler::ir) constract_flag: checker::ConstractFlags,
+    pub(in crate::compiler::ir) contract_flag: checker::ContractFlags,
 
     var_counter: counter_mnger::VarCounter,
 

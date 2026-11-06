@@ -11,6 +11,7 @@ mod ty_alias;
 mod variant_bind;
 
 use super::*;
+use crate::compiler::TyNode;
 use crate::compiler::ast::Group1Node;
 use crate::compiler::ir::types::*;
 
@@ -40,7 +41,7 @@ impl IR {
             variant_tree: def_tree::VariantTree::new(),
             stk_counter: 0,
             current_span: Rc::new(Span::unknown()),
-            constract_flag: checker::ConstractFlags::new(),
+            contract_flag: checker::ContractFlags::new(),
             var_counter: counter_mnger::VarCounter::new(),
             expr_is_ptr_val: false,
             ternatry: None,
@@ -135,6 +136,17 @@ impl IR {
             }
         }
         Ok(mem::take(&mut self.define_meta_data))
+    }
+
+    /// put_var_defの結果をラップして、`ErrKind`に変換する
+    pub fn wrap_put_var_def(
+        contract_flag: &mut checker::ContractFlags,
+        ty_to_register: &TyNode,
+        span: &Rc<Span>,
+    ) -> Result<(), err::ErrKind> {
+        contract_flag.put_var_def(ty_to_register).map_err(|ty| {
+            CompileErr::make_missing_match_var_ty_err(ty, ty_to_register.clone(), &span)
+        })
     }
 }
 

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
+use crate::compiler::TyNode;
 use crate::compiler::ast;
 
 use crate::compiler::err;
@@ -124,6 +125,10 @@ pub enum CompileErrKind {
     AsmEmitTernaryCondNotFound(String),
     /// 小数は使えない箇所(`setcc`の比較/三項演算子の条件・値)で小数が来た
     AsmEmitFloatNotSupported(String),
+    TypeMismatch {
+        expected: TyNode,
+        found: TyNode,
+    },
 }
 
 /// 「このコードを追加してください」という修正案(Rustの`+++`表示用)
@@ -343,6 +348,21 @@ impl CompileErr {
     pub fn file_name(&self) -> Option<&str> {
         err::span_loc(Some(&self.span)).map(|s| s.file_name())
     }
+
+    #[inline(always)]
+    pub fn make_missing_match_var_ty_err(
+        ty: TyNode,
+        ty_to_register: TyNode,
+        span: &Rc<err::Span>,
+    ) -> err::ErrKind {
+        Self::at(
+            CompileErrKind::TypeMismatch {
+                expected: ty,
+                found: ty_to_register,
+            },
+            Rc::clone(span),
+        )
+    }
 }
 
 impl fmt::Display for CompileErr {
@@ -481,6 +501,7 @@ impl CompileErrKind {
             Self::DuplicateTypeAlias(..) => "E0039",
             Self::TypeAliasCycle(..) => "E0040",
             Self::PrivateFieldAccess => "E0041",
+            Self::TypeMismatch { .. } => "E0042",
         }
     }
 
@@ -617,6 +638,9 @@ impl CompileErrKind {
                 format!("型エイリアス`{name}`が循環しています")
             }
             Self::PrivateFieldAccess => "これはプライベートです".to_string(),
+            Self::TypeMismatch { expected, found } => {
+                format!("型が一致しません: 期待: {expected:?} / 見つかった: {found:?}")
+            }
         }
     }
 

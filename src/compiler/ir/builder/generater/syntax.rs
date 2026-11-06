@@ -11,7 +11,7 @@ impl IR {
         for stmt in node {
             self.current_span = Rc::clone(&stmt.span);
             self.expr_counter = 0;
-            self.constract_flag.reset();
+            self.contract_flag.reset();
             match stmt.get_node().clone() {
                 Group2Node::Expr(expr) => {
                     let _ = self.gen_expr_ir::<M>(&expr, None)?;

@@ -15,7 +15,7 @@ impl IR {
                 &param.ty,
                 &param.var_attr,
                 Rc::clone(&param.span),
-                || self.constract_flag.put_var_def(&param.ty),
+                || Self::wrap_put_var_def(&mut self.contract_flag, &param.ty, &param.span),
             )?;
             // 型がポインタの先に構造体がある場合、その構造体のサイズを取得する
             // types::Struct(struct_ty)
