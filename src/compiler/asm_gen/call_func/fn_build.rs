@@ -92,7 +92,7 @@ impl AsmEmitter {
         // 前の関数の変数・レジスタ・スタックの使用量などの状態を持ち越さない
         // (持ち越すとローカル変数のオフセットなどが正しく計算できない)
         self.reset_fn_state();
-        // 引数のレジスタと名前を登録
+        // 引数のレジスタと名前を登録(レジスタに収まらない引数はスタックから受け取る)
         self.setting_args_reg_alloc(&fn_def.args);
         // 変数の使用頻度に合わせてレジスタを割り当てる(`reg_mnger.rs`)
         // この関数自身の引数のレジスタには、まだ引数の値が入っているので使わない
@@ -100,13 +100,23 @@ impl AsmEmitter {
             .args
             .iter()
             .enumerate()
+            .filter(|(idx, _)| self.param_in_reg(*idx))
             .map(|(idx, arg)| {
                 self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ))
             })
             .collect();
         // 構造体の変数(`s: Name = Name { .. }`)はスタックに置くので、
         // レジスタの割り当てから外し、次の変数に割り当てる
-        let stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_def.body);
+        let mut stack_vars = reg_mnger::UsedRegManager::stack_var_names(&fn_def.body);
+        // レジスタに収まらない引数は、スタックの専用の領域へ受け取るので、レジスタを割り当てない
+        stack_vars.extend(
+            fn_def
+                .args
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| !self.param_in_reg(*idx))
+                .map(|(_, arg)| arg.name.to_string()),
+        );
         self.used_reg.allocation_register(
             &fn_def.var_counter,
             &param_regs,
@@ -150,10 +160,30 @@ impl AsmEmitter {
         }
     }
 
+    /// `index`番目の引数が、引数レジスタで渡されるか(`false`ならスタックで渡される)
+    pub(super) fn param_in_reg(&self, index: usize) -> bool {
+        index < self.asm_fmt.param_reg_count()
+    }
+
+    /// スタックで渡された`index`番目の引数の、呼ばれた側から見たメモリ参照
+    ///
+    /// `push %rbp; mov %rsp, %rbp`の後なので、`8(%rbp)`が戻りアドレス、
+    /// `16(%rbp)`がレジスタに収まらなかった最初の引数、以降8byteずつ上に並ぶ
+    /// (呼び出し側が最後の引数から順に`push`するため。`emit_call_func`)
+    pub(super) fn stack_param_ref(&self, index: usize) -> String {
+        let nth = index - self.asm_fmt.param_reg_count();
+        self.asm_fmt
+            .fmt_ref_operand_up(FRAME_BASE_REG, STACK_PARAM_BASE + 8 * nth)
+    }
+
     /// 関数の引数を名前とセットでレジスタを登録
     /// 引数が構造体などなら必ず64bitのサイズになる
+    /// (レジスタに収まらない引数は対象外。`gen_param_asm`がスタックの値を受け取る)
     fn setting_args_reg_alloc(&mut self, args_def: &[ast::ArgsNode]) {
         args_def.iter().enumerate().for_each(|(idx, arg)| {
+            if !self.param_in_reg(idx) {
+                return;
+            }
             let reg = self.arg_register_mode(idx, &arg.ty.clone().try_into().unwrap_or(Size::DQ));
             self.used_reg.bind_var(&arg.name, &reg);
         });

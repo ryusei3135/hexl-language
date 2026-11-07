@@ -91,9 +91,6 @@ impl AsmEmitter {
             .replace("{src1}", &src1_text)
             .replace("{src2}", &src2_text)
             .to_string();
-        if !prefix.is_empty() {
-            formated = format!("{prefix}{formated}");
-        }
 
         let is_memory_access = self.check_node_is_mem_val(expr.ls).is_some()
             || self.check_node_is_mem_val(expr.rs).is_some();
@@ -124,6 +121,11 @@ impl AsmEmitter {
         {
             let self_move = self.mov_line(&dst_text, &src1_text, &resolved_size, false);
             formated = formated.replacen(&self_move, "", 1);
+        }
+        // 先頭の`mov`は既にサイズ接尾辞が付いているので、サイズの調整の後で付ける
+        // (先に付けると`fmt_one_expr_mnemo_resize`が`mov`をもう一度置き換えて`movqq`になる)
+        if !prefix.is_empty() {
+            formated = format!("{prefix}{formated}");
         }
 
         // サイズがSelfでない場合

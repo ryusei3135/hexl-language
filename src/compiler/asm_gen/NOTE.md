@@ -235,3 +235,35 @@
         `x64.rs`の残りは`GCC_X64`の静的なテーブルなので、これ以上は分割していない。
 - 分割で、元が`pub(super)`だった関数は`pub(in crate::compiler::asm_gen)`にした(`pub(super)`のままだと可視範囲が狭くなるため)。
     分割した`call_func/`内で呼ぶだけの関数は`pub(super)`。
+
+## 引数レジスタが足りない場合はスタックで渡す(2026-11-07)
+引数レジスタの本数(`MngAsmFmt::param_reg_count`、System V なら6本)を超える引数(`param_in_reg(index) == false`)を、
+スタックで渡す。以前は`param_fmt[index]`が範囲外になってpanicしていた。
+
+- **呼び出し側**(`call_func.rs`の`emit_call_func` / `call_func/args.rs`の`build_arg_lines`・`push_arg_asm`)
+    - 収まらない引数は、**最後の引数から順に`push`**する(System V AMD64 ABI)。引数レジスタへ値を書く前に積む。
+    - 積む引数が奇数個なら、先に`sub $8, %rsp`で余白を確保し、`call`の時点で`%rsp`を16byte境界にする
+        (callerレジスタの退避は`caller_save_pair`が16byteの倍数にしている)。
+    - `call`の後、`add $(8 * 個数 + 余白), %rsp`で解放(`get_stack_free_bytes`。テンプレートのキーは`sp_free_n`)。
+        その後でcallerレジスタを復元する。
+    - 値は`%rax`経由で`push`する(整数・ポインタ。`"address"`は`lea`してから)。64bitの整数レジスタは直接`push`。
+        浮動小数点は`xmm`のレジスタなら`sub $8, %rsp` + `movss/movsd`、メモリ・定数は整数のレジスタ経由でビットをコピーする。
+- **呼ばれた側**(`call_func/node_asm.rs`の`gen_param_asm`)
+    - `push %rbp; mov %rsp, %rbp`の後、`16(%rbp)`が収まらなかった最初の引数、以降8byteずつ上(`stack_param_ref`)。
+    - その値を、この関数のスタックの領域(`stk_use_counter`から確保)へ読み込んで、スタックに置いた変数として登録する
+        (`define_spilled_var`)。以降の参照は`-N(%rbp)`になり、再代入・ポインタの参照(`ptr_var_base`)も既存の仕組みで動く。
+    - レジスタの割り当てから外す(`begin_fn_state`が`stack_vars`へ加える)。`setting_args_reg_alloc`も登録しない。
+- 注意・未対応
+    - 構造体を値として渡す7番目以降の引数(`Size::Struct`)は未対応(`is_stack`の構造体の変数と区別できないため)。
+    - インラインアセンブラの`${var}`が、スタックで渡されたポインタ型の引数を指す場合は、指す先ではなくポインタを置いた領域を返す。
+    - 浮動小数点の引数も、整数と同じ引数の番号(`index`)でレジスタに収まるか決める(従来の`get_fmt_param`の規則のまま)。
+
+## 生成した命令の不正の修正(2026-11-07)
+- `call_func/assign_var.rs`の`write_mem`(メモリへの書き込み): 値がレジスタなら、書き込むサイズの名前に直す
+    (`movl %rax, ..`→`movl %eax, ..`、`movb %r8, ..`→`movb %r8b, ..`)。値がメモリ(スタックに置いた変数など)なら、
+    メモリからメモリへは`mov`できないので`%rax`(書き込み先が`%rax`を使うなら`%rdx`)を経由する。
+- `asm_emitter/expr_inst.rs`: 両方のオペランドがメモリのとき、先頭に付ける`mov`(サイズ接尾辞付き)を、
+    サイズの調整(`fmt_one_expr_mnemo_resize`)の後で付ける。以前は`mov`がもう一度置き換えられて`movqq`になっていた。
+- `asm_fmt/x64.rs`の`mul`/`imul`のテンプレート: `mul {src2}`は即値を取れない(`mul $10`は不正)ので、
+    `imul {src2}, %rax`(2オペランド)にした。下位64bitは符号付き・符号なしで同じ。
+

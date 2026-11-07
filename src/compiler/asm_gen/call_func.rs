@@ -17,6 +17,10 @@ const CALLEE_SAVE_MARK: &str = "{callee_save}";
 /// `leave`/`ret`の直前で、退避したレジスタを戻す位置の目印
 const CALLEE_RESTORE_MARK: &str = "{callee_restore}";
 
+/// スタックで渡された最初の引数の、`%rbp`からのオフセット
+/// (`push %rbp`で保存した`%rbp`(8byte)と戻りアドレス(8byte)の上)
+const STACK_PARAM_BASE: usize = 16;
+
 /// 1つの関数のアセンブリを生成している間、各ノードの生成で共通して
 /// 参照する情報(`build_fn_process`で作り、`gen_node_asm`へ渡す)
 struct FnGenCtx<'a> {
@@ -99,12 +103,28 @@ impl AsmEmitter {
 
         // 関数の引数に使ったレジスタを解放するためにスコープを作ったことにする
         self.used_reg.start_scope();
-        let arg_lines = self.build_arg_lines(meta_data, expand_struct_return)?;
+        let (arg_lines, stack_args) = self.build_arg_lines(meta_data, expand_struct_return)?;
+        // 引数レジスタに収まらない引数は、最後の引数から順にスタックへ`push`する。
+        // 引数レジスタへ値を書く前に積む(積む値を読むレジスタが、先に上書きされないように)。
+        // 積んだ量が16byteの奇数倍なら、`call`の時点で`%rsp`が16byte境界になるよう
+        // 8byteの余白を先に確保する(退避は`caller_save_pair`が16byteの倍数にしている)
+        let stack_arg_bytes = stack_args.len() * 8;
+        let pad = if stack_args.len() % 2 == 1 { 8 } else { 0 };
+        if pad != 0 {
+            call_func.push_str(&self.asm_fmt.get_stack_alloc_8());
+        }
+        for push_asm in stack_args.iter().rev() {
+            call_func.push_str(push_asm);
+        }
         call_func.push_str(&self.order_arg_lines(arg_lines)?);
 
         call_func.push_str(&self.asm_fmt.get_call_func_fmt(&fn_label));
         // 引数で使ったレジスタを解放
         self.used_reg.end_scope();
+        // 呼び出し側が、スタックで渡した引数(と余白)を解放する
+        if stack_arg_bytes + pad != 0 {
+            call_func.push_str(&self.asm_fmt.get_stack_free_bytes(stack_arg_bytes + pad));
+        }
 
         // 退避した順の逆順に復元する(余白があれば先に解放する)
         call_func.push_str(&caller_restore_asm);

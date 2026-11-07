@@ -110,6 +110,11 @@ impl AsmEmitter {
         if var_info.size.is_pointer().is_none() {
             return Ok(None);
         }
+        // スタックへ置いた引数(スタックで渡された引数)は、指す先を直接参照できない
+        // (未対応。ポインタを読み込むレジスタが必要なため)。ポインタの値の領域を返す
+        if var_info.is_stack {
+            return self.var_operand(&param.name).map(Some);
+        }
 
         self.ptr_deref_operand(var_info.reg).map(Some)
     }
@@ -132,6 +137,9 @@ impl AsmEmitter {
             }
             inst::Inst::Param(param) => {
                 let var_info = self.get_var_all_info(&param.name)?;
+                if var_info.is_stack {
+                    return self.var_operand(&param.name);
+                }
                 Ok(if var_info.size.is_pointer().is_some() {
                     self.ptr_deref_operand(var_info.reg)?
                 } else {

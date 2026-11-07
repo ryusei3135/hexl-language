@@ -60,14 +60,18 @@ impl AsmEmitter {
 
     /// 各引数を引数レジスタへ設定する命令を作る
     ///
-    /// 戻り値は各引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`
-    /// 並び順は引数の順で、実際の出力順は`order_arg_lines`で決める
+    /// 戻り値は次の2つ。
+    /// - 引数レジスタで渡す引数の`(引数レジスタの番号, 値の読み出し元のテキスト, 生成したasm)`。
+    ///   並び順は引数の順で、実際の出力順は`order_arg_lines`で決める
+    /// - 引数レジスタに収まらない引数(`param_in_reg`が`false`)を、スタックへ積む命令
+    ///   (引数の順。`emit_call_func`が最後の引数から順に出力する。`push_arg_asm`)
     pub(super) fn build_arg_lines(
         &mut self,
         meta_data: &inst::CallFuncMetaData,
         expand_struct_return: bool,
-    ) -> Result<Vec<(RegisterMode, String, String)>, err::ErrKind> {
+    ) -> Result<(Vec<(RegisterMode, String, String)>, Vec<String>), err::ErrKind> {
         let mut arg_lines: Vec<(RegisterMode, String, String)> = Vec::new();
+        let mut stack_args: Vec<String> = Vec::new();
 
         for (index, param) in meta_data.params.iter().enumerate() {
             // 引数の実際の型のサイズ
@@ -76,16 +80,22 @@ impl AsmEmitter {
             let param_ty = self.fn_state.curr_inst[*param]
                 .get_param_ty(&self.fn_state.curr_inst)
                 .ok_or_else(|| err::ErrKind::asm_emit_label_not_found("param type", *param))?;
-            // 引数のレジスタを取得
-            let param_reg = self.asm_fmt.get_fmt_param::<String>(index, &param_ty)?;
+            // 引数のレジスタを取得(レジスタに収まらない引数は`None`)
+            let param_reg = if self.param_in_reg(index) {
+                Some(self.asm_fmt.get_fmt_param::<String>(index, &param_ty)?)
+            } else {
+                None
+            };
             // 引数のレジスタと値のidを挿入
             let src1_idx = if let Some(struct_idx) = self.resolve_struct_idx(*param) {
                 struct_idx
             } else {
                 *param
             };
-            let param_reg_mode = self.arg_register_mode(index, &param_ty);
-            self.used_reg.mark_used(&param_reg_mode);
+            if param_reg.is_some() {
+                let param_reg_mode = self.arg_register_mode(index, &param_ty);
+                self.used_reg.mark_used(&param_reg_mode);
+            }
 
             let opcode = self.arg_opcode(*param, index, expand_struct_return);
 
@@ -99,12 +109,22 @@ impl AsmEmitter {
             // 参照先(`-1(%rdi)`)ではなく、ポインタを持つレジスタを移動する
             let (src1_text, asm) = if let Some(name) = self.ptr_param_name(src1_idx, opcode) {
                 let src_text = self.var_operand(&name)?;
-                // 同じレジスタへの`mov`(`movq %rdi, %rdi`)は何もしない
-                let asm = if src_text == param_reg {
-                    String::new()
-                } else {
-                    let is_stack = self.get_var_all_info(&name)?.is_stack;
-                    self.tmpl_line("mov", &param_reg, &src_text, &Size::DQ, is_stack)
+                let is_stack = self.get_var_all_info(&name)?.is_stack;
+                let asm = match &param_reg {
+                    // 同じレジスタへの`mov`(`movq %rdi, %rdi`)は何もしない
+                    Some(param_reg) if src_text == *param_reg => String::new(),
+                    Some(param_reg) => {
+                        self.tmpl_line("mov", param_reg, &src_text, &Size::DQ, is_stack)
+                    }
+                    None => {
+                        stack_args.push(self.push_arg_asm(
+                            opcode,
+                            &src_text,
+                            &Size::DQ,
+                            is_stack,
+                        )?);
+                        String::new()
+                    }
                 };
                 (src_text, asm)
             } else {
@@ -113,18 +133,86 @@ impl AsmEmitter {
                 let src1_text = self.asm_fmt.resize_reg_operand(&src1_text, &resize_size)?;
 
                 let is_memory = self.check_node_is_mem_val(*param).is_some();
-                let asm = self.tmpl_line(opcode, &param_reg, &src1_text, &resize_size, is_memory);
+                let asm = match &param_reg {
+                    Some(param_reg) => {
+                        self.tmpl_line(opcode, param_reg, &src1_text, &resize_size, is_memory)
+                    }
+                    None => {
+                        stack_args.push(self.push_arg_asm(
+                            opcode,
+                            &src1_text,
+                            &resize_size,
+                            is_memory,
+                        )?);
+                        String::new()
+                    }
+                };
                 (src1_text, asm)
             };
-            let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty)?;
-            let param_reg_num = if param_ty.is_float() {
-                RegisterMode::Float(param_reg_num)
-            } else {
-                RegisterMode::Normal(param_reg_num)
-            };
-            arg_lines.push((param_reg_num, src1_text, asm));
+            if param_reg.is_some() {
+                let param_reg_num = self.asm_fmt.get_fmt_param::<usize>(index, &param_ty)?;
+                let param_reg_num = if param_ty.is_float() {
+                    RegisterMode::Float(param_reg_num)
+                } else {
+                    RegisterMode::Normal(param_reg_num)
+                };
+                arg_lines.push((param_reg_num, src1_text, asm));
+            }
         }
-        Ok(arg_lines)
+        Ok((arg_lines, stack_args))
+    }
+
+    /// `src`の値(引数1つ分)を、8byteの領域としてスタックへ積む命令を作る
+    ///
+    /// 呼ばれた側は、サイズに合わせて`16(%rbp)`などから読むので、積んだ値の
+    /// 上位のビットは使われない。`opcode`は`arg_opcode`が決めた命令の種類
+    ///
+    /// - 整数・ポインタ: `%rax`(`RESERVED_REGS`なので、変数や式の結果には使われていない)へ
+    ///   読み込んで`push`する。64bitのレジスタなら直接`push`する。
+    ///   `"address"`のときは、アドレスを求めて(`lea`)から`push`する
+    /// - 浮動小数点: `xmm`のレジスタなら、領域を確保して`mov`で書き込む。
+    ///   メモリや定数(`M0(%rip)`)は、整数のレジスタ経由でビットをそのまま積む
+    fn push_arg_asm(
+        &mut self,
+        opcode: &str,
+        src: &str,
+        size: &Size,
+        is_memory: bool,
+    ) -> Result<String, err::ErrKind> {
+        let src_is_reg = self
+            .asm_fmt
+            .all_reg_names()?
+            .iter()
+            .any(|(_, name)| name == src);
+
+        // `xmm`のレジスタの浮動小数点数
+        if size.is_float() && src_is_reg {
+            let top = self.asm_fmt.get_stack_top_ref();
+            let store = self.fill_tmpl(Self::float_move_opcode(size), &top, src);
+            return Ok(format!("{}{}", self.asm_fmt.get_stack_alloc_8(), store));
+        }
+
+        // ここからは、整数のレジスタ(%rax)を経由して積む
+        let scratch = RegisterMode::Normal(0);
+        let scratch64 = self.reg64(&scratch)?;
+        let load = if opcode == "address" {
+            self.tmpl_line("address", &scratch64, src, &Size::DQ, is_memory)
+        } else {
+            // 浮動小数点数のメモリは、同じ幅の整数としてビットをコピーする
+            let int_size = match size {
+                Size::F32 => Size::DD,
+                Size::F64 => Size::DQ,
+                _ => Self::value_reg_size(size),
+            };
+            if src_is_reg {
+                // 整数のレジスタは、同じレジスタの64bit版を直接`push`する
+                let src64 = self.asm_fmt.resize_reg_operand(src, &Size::DQ)?;
+                return Ok(self.asm_fmt.get_push(&src64));
+            }
+            let dst = self.reg_mode_operand(scratch, &int_size)?;
+            self.mov_line(&dst, src, &int_size, true)
+        };
+        Ok(format!("{}{}", load, self.asm_fmt.get_push(&scratch64)))
     }
 
     /// 引数レジスタへ値を設定する命令を、レジスタを壊さない順序に並べて返す

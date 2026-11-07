@@ -8,6 +8,15 @@ impl AsmEmitter {
     pub(super) fn param_ref(&mut self, param_name: &str) -> Result<String, err::ErrKind> {
         let var_info = self.get_var_all_info(param_name)?;
 
+        if var_info.is_stack {
+            // スタックで渡された引数(`gen_param_asm`が領域へ受け取ったもの)
+            if var_info.size.is_pointer().is_some() {
+                // ポインタは`%rdx`へ読み込んで、そのレジスタをベースにする
+                return self.ptr_var_base(param_name);
+            }
+            return self.var_operand(param_name);
+        }
+
         if let Some(ty) = var_info.size.is_pointer() {
             // ポインタ型はアドレス(常に8byte)を保持するため、
             // 64bitレジスタ(`%rcx`など)を経由してメモリを参照する

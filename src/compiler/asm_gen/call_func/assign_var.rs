@@ -1,6 +1,48 @@
 use super::*;
 
+/// 命令のオペランドの種類
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OperandKind {
+    Register,
+    Immediate,
+    Memory,
+}
+
 impl AsmEmitter {
+    /// オペランドのテキストが、レジスタ・即値・メモリのどれか
+    fn operand_kind(&self, operand: &str) -> Result<OperandKind, err::ErrKind> {
+        if self
+            .asm_fmt
+            .all_reg_names()?
+            .iter()
+            .any(|(_, name)| name == operand)
+        {
+            return Ok(OperandKind::Register);
+        }
+        let num_prefix = self.asm_fmt.get_fmt_num("0");
+        let num_prefix = num_prefix.trim_end_matches('0');
+        if operand.parse::<i128>().is_ok()
+            || (!num_prefix.is_empty() && operand.starts_with(num_prefix))
+        {
+            return Ok(OperandKind::Immediate);
+        }
+        Ok(OperandKind::Memory)
+    }
+
+    /// メモリからメモリへ値を書くときに、値を経由させる一時レジスタ
+    ///
+    /// `%rax`/`%rdx`(`RESERVED_REGS`なので変数や式の結果には使われていない)のうち、
+    /// 書き込み先のオペランド`dst_operand`が使っていないほうを返す
+    fn mem_copy_scratch(&self, dst_operand: &str) -> Result<RegisterMode, err::ErrKind> {
+        for reg in RESERVED_REGS {
+            let reg = RegisterMode::Normal(reg);
+            if !self.text_reads_reg(dst_operand, reg)? {
+                return Ok(reg);
+            }
+        }
+        Ok(RegisterMode::Normal(RESERVED_REGS[0]))
+    }
+
     /// メモリに値を書き込むアセンブリ言語を生成
     pub(super) fn write_mem(
         &mut self,
@@ -36,7 +78,8 @@ impl AsmEmitter {
             _ => self.get_var_ty(&name)?,
         };
 
-        let text = if mnemonic_size.is_float() {
+        let value_kind = self.operand_kind(&value_operand)?;
+        let text = if mnemonic_size.is_float() && value_kind != OperandKind::Memory {
             let opcode = match mnemonic_size {
                 types::Size::F32 => "float_mov",
                 types::Size::F64 => "f64_mov",
@@ -47,7 +90,33 @@ impl AsmEmitter {
                 .replace("{src1}", &value_operand)
                 .replace("{dst}", &dst_operand)
         } else {
-            self.mov_line(&dst_operand, &value_operand, &mnemonic_size, true)
+            // 浮動小数点数のメモリからメモリへは、同じ幅の整数としてビットをコピーする
+            let store_size = match mnemonic_size {
+                types::Size::F32 => Size::DD,
+                types::Size::F64 => Size::DQ,
+                _ => Self::value_reg_size(&mnemonic_size),
+            };
+            match value_kind {
+                // レジスタは、書き込むサイズの名前にする
+                // (`movb %r8`や`movl %rax`は、サイズが食い違う不正な命令)
+                OperandKind::Register => {
+                    let value = self
+                        .asm_fmt
+                        .resize_reg_operand(&value_operand, &store_size)?;
+                    self.mov_line(&dst_operand, &value, &mnemonic_size, true)
+                }
+                OperandKind::Immediate => {
+                    self.mov_line(&dst_operand, &value_operand, &mnemonic_size, true)
+                }
+                // メモリからメモリへは`mov`できないので、一時レジスタを経由する
+                OperandKind::Memory => {
+                    let scratch = self.mem_copy_scratch(&dst_operand)?;
+                    let scratch_txt = self.reg_mode_operand(scratch, &store_size)?;
+                    let load = self.mov_line(&scratch_txt, &value_operand, &store_size, true);
+                    let store = self.mov_line(&dst_operand, &scratch_txt, &store_size, true);
+                    format!("{load}{store}")
+                }
+            }
         };
         self.asm_text.push_str(&text);
         // 配列の添字を載せていた一時レジスタは、書き込みが終わったので解放する

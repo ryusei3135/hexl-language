@@ -7,6 +7,8 @@ mod constract_ast_emit;
 mod err_factory;
 mod expr;
 mod func;
+/// ジェネリクスの定義(`<T, U>`と`{ .. }`)の切り出しの共通処理
+mod generic_scan;
 /// `#include`先のジェネリクス関数を呼び出し側で実体化するAPIを提供
 mod include_generic;
 /// `#include`先の公開型ノードを呼び出し側へ取り込む
@@ -15,6 +17,8 @@ mod mut_var;
 mod path;
 /// プリプロセッサのノードを作成するAPIを提供
 mod preproc;
+#[cfg(test)]
+mod test_util;
 /// 構造体、列挙型のノードを作成するAPIを提供
 mod typedef;
 

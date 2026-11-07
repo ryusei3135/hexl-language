@@ -151,14 +151,14 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
             "mul",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, %rax\n{space}mul {src2}\n{space}mov %rax, {dst}\n",
+                template: "{space}mov {src1}, %rax\n{space}imul {src2}, %rax\n{space}mov %rax, {dst}\n",
             },
         ),
         (
             "imul",
             StaticOperandInfo {
                 len: 2,
-                template: "{space}mov {src1}, %rax\n{space}mul {src2}\n{space}mov %rax, {dst}\n",
+                template: "{space}mov {src1}, %rax\n{space}imul {src2}, %rax\n{space}mov %rax, {dst}\n",
             },
         ),
         (
@@ -488,6 +488,14 @@ pub(in crate::compiler::asm_gen::asm_fmt) static GCC_X64: StaticAsmFormat = Stat
             StaticOperandInfo {
                 len: 0,
                 template: "{space}add $8, %rsp\n",
+            },
+        ),
+        // スタックで渡した引数の解放(`{src1}`はバイト数)
+        (
+            "sp_free_n",
+            StaticOperandInfo {
+                len: 1,
+                template: "{space}add {src1}, %rsp\n",
             },
         ),
         (

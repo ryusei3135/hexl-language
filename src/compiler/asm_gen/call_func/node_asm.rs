@@ -87,7 +87,7 @@ impl AsmEmitter {
             }
             // メモリに配置されている値の生成
             inst::Inst::MemoryValue(mem_value) => self.mem_val_ir(mem_value)?,
-            inst::Inst::Param(_) => self.gen_param_asm(node),
+            inst::Inst::Param(_) => self.gen_param_asm(node)?,
             inst::Inst::CallFunc(meta_data) => self.gen_call_node_asm(node_idx, meta_data)?,
             _ => {}
         }
@@ -128,17 +128,40 @@ impl AsmEmitter {
     }
 
     /// `Inst::Param`(関数の引数)を変数として登録する
-    fn gen_param_asm(&mut self, node: &inst::Inst) {
+    ///
+    /// 引数レジスタに収まらない引数は、呼び出し側がスタックへ積んだ値を
+    /// (`16(%rbp)`から)読み込み、この関数のスタックの領域へ置いた変数として登録する
+    /// (`define_spilled_var`。以降の参照は`-N(%rbp)`になる)
+    fn gen_param_asm(&mut self, node: &inst::Inst) -> Result<(), err::ErrKind> {
         let inst::Inst::Param(param) = node else {
-            return;
+            return Ok(());
         };
         let ty = param.ty.clone();
+        if !self.param_in_reg(param.num) {
+            let src = self.stack_param_ref(param.num);
+            let size: Size = ty.try_into().unwrap();
+            return self.define_spilled_var(
+                &size.clone(),
+                param.dst,
+                Some(&param.name),
+                move |me, scratch| {
+                    let load_size = Self::value_reg_size(&size);
+                    let dst = me.reg_mode_operand(scratch, &load_size)?;
+                    Ok(if load_size.is_float() {
+                        me.fill_tmpl(Self::float_move_opcode(&load_size), &dst, &src)
+                    } else {
+                        me.mov_line(&dst, &src, &load_size, true)
+                    })
+                },
+            );
+        }
         // 引数に使うレジスタを取得する
         let reg_num = self.arg_register_mode(param.num, &ty);
         self.insert_var_info(
             &param.name,
             asm_emitter::VarIndexInfo::new(reg_num, &ty.try_into().unwrap(), param.dst),
         );
+        Ok(())
     }
 
     /// 関数を呼ぶノード(`Inst::CallFunc`)のアセンブリを生成する

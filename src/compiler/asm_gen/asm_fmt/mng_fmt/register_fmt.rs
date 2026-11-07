@@ -152,6 +152,12 @@ impl MngAsmFmt {
         self.fmt.fmt.static_var.replace("{name}", name)
     }
 
+    /// 引数を渡すレジスタの本数。これを超える引数はスタックで渡す
+    /// (呼び出し側は`push`、呼ばれた側は`16(%rbp)`から参照する)
+    pub(in crate::compiler::asm_gen) fn param_reg_count(&self) -> usize {
+        self.param_fmt.len()
+    }
+
     /// 先頭から`count`個の引数が渡されるレジスタの番号
     pub(in crate::compiler::asm_gen) fn param_regs(&self, count: usize) -> Vec<usize> {
         self.param_fmt.iter().take(count).copied().collect()

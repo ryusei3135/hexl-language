@@ -601,7 +601,9 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "sub" | "subq" | "subl" | "subw" | "subb" => e.emit_sub(&inst.operands),
 
-        "imul" | "imulq" | "imull" | "imulw" => e.emit_imul(&inst.operands),
+        "imul" | "imulq" | "imull" | "imulw" => {
+            e.emit_imul(&inst.operands, mnemonic_suffix_bits(name, "imul"))
+        }
 
         "mul" | "mulq" | "mull" | "mulw" => e.emit_mul(&inst.operands),
 
@@ -1663,6 +1665,139 @@ impl Emitter {
     }
 
     // --------------------------------------------------------
+    // imul
+    //
+    //   imulq %rbx             -> REX.W F7 /5          (1オペランド。rdx:rax = rax * r/m)
+    //   imul  %rbx, %rax       -> REX.W 0F AF /r       (r/m -> r)
+    //   imulq -8(%rbp), %rax   -> REX.W 0F AF /r
+    //   imulq $10, %rax        -> REX.W 6B /r ib       (`imulq $10, %rax, %rax` の短縮記法)
+    //   imull $1000, %ecx      -> 69 /r id
+    //   imulq $10, -8(%rbp), %rax / imul $5, %eax, %ebx
+    //                          -> 6B/69 /r             (3オペランド。元は r/m)
+    //
+    // - サイズは宛先レジスタで決まる (16/32/64bit。8bitのレジスタは2/3オペランド形が無い)。
+    //   接尾辞が付いていて宛先の幅と食い違う場合や、元のレジスタの幅が違う場合はエラー。
+    // - 即値は `-128..=127` なら `6B` (imm8)、そうでなければ `69`
+    //   (16bitはimm16、32/64bitはimm32を符号拡張)。
+    // - `symbol(%rip)` + 即値は、他の即値付き命令と同じ理由で未対応。
+    // --------------------------------------------------------
+    fn emit_imul(&mut self, operands: &[Operand], suffix_bits: Option<u32>) -> Result<(), String> {
+        match operands {
+            [_] => self.emit_unary_group(operands, 5),
+
+            [Operand::Immediate(value), Operand::Register(dst)] => {
+                self.emit_imul_imm(*value, &Operand::Register(*dst), *dst, suffix_bits)
+            }
+            [
+                src @ (Operand::Register(_) | Operand::Memory(_)),
+                Operand::Register(dst),
+            ] => self.emit_imul_rm(src, *dst, suffix_bits),
+
+            [
+                Operand::Immediate(value),
+                src @ (Operand::Register(_) | Operand::Memory(_)),
+                Operand::Register(dst),
+            ] => self.emit_imul_imm(*value, src, *dst, suffix_bits),
+
+            [_, _] | [_, _, _] => Err("imul: invalid operands (destination must be a register, \
+                 source must be a register/memory, immediate form needs an immediate)"
+                .into()),
+            _ => Err("invalid imul operand count".into()),
+        }
+    }
+
+    /// `imul` の宛先のビット幅を確かめる (8bitは不可、接尾辞と一致が必要)
+    fn imul_bits(dst: Reg, suffix_bits: Option<u32>) -> Result<u32, String> {
+        let bits = dst.bits() as u32;
+        if bits == 8 {
+            return Err("imul: 8 bit registers are not supported by the 2/3 operand form".into());
+        }
+        Self::check_suffix("imul", suffix_bits, bits)?;
+        Ok(bits)
+    }
+
+    /// `imul r/m, r` (`0F AF /r`)
+    fn emit_imul_rm(
+        &mut self,
+        src: &Operand,
+        dst: Reg,
+        suffix_bits: Option<u32>,
+    ) -> Result<(), String> {
+        let bits = Self::imul_bits(dst, suffix_bits)?;
+        match src {
+            Operand::Register(src) => {
+                if src.bits() as u32 != bits {
+                    return Err("imul: register size mismatch".into());
+                }
+                self.emit_sized_prefix(bits, dst.id() >= 8, false, src.id() >= 8, false);
+                self.emit_u8(0x0F);
+                self.emit_u8(0xAF);
+                self.emit_u8(0b11_000_000 | ((dst.id() & 7) << 3) | (src.id() & 7));
+                Ok(())
+            }
+            Operand::Memory(mem) => {
+                self.emit_sized_prefix(
+                    bits,
+                    dst.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    false,
+                );
+                self.emit_u8(0x0F);
+                self.emit_u8(0xAF);
+                self.emit_memory_modrm(dst.id(), mem)
+            }
+            _ => Err("imul: invalid source operand".into()),
+        }
+    }
+
+    /// `imul $imm, r/m, r` (`6B /r ib` / `69 /r iw|id`)
+    fn emit_imul_imm(
+        &mut self,
+        value: i64,
+        src: &Operand,
+        dst: Reg,
+        suffix_bits: Option<u32>,
+    ) -> Result<(), String> {
+        let bits = Self::imul_bits(dst, suffix_bits)?;
+        let value = normalize_imm("imul", value, bits)?;
+        let fits_i8 = (-128..=127).contains(&value);
+
+        match src {
+            Operand::Register(src) => {
+                if src.bits() as u32 != bits {
+                    return Err("imul: register size mismatch".into());
+                }
+                self.emit_sized_prefix(bits, dst.id() >= 8, false, src.id() >= 8, false);
+                self.emit_u8(if fits_i8 { 0x6B } else { 0x69 });
+                self.emit_u8(0b11_000_000 | ((dst.id() & 7) << 3) | (src.id() & 7));
+            }
+            Operand::Memory(mem) => {
+                reject_rip_symbol_with_imm("imul", mem)?;
+                self.emit_sized_prefix(
+                    bits,
+                    dst.id() >= 8,
+                    self.memory_index_extended(mem),
+                    self.memory_base_extended(mem),
+                    false,
+                );
+                self.emit_u8(if fits_i8 { 0x6B } else { 0x69 });
+                self.emit_memory_modrm(dst.id(), mem)?;
+            }
+            _ => return Err("imul: invalid source operand".into()),
+        }
+
+        if fits_i8 {
+            self.emit_u8(value as i8 as u8);
+        } else if bits == 16 {
+            self.emit_u16(value as u16);
+        } else {
+            self.emit_i32(value as i32);
+        }
+        Ok(())
+    }
+
+    // --------------------------------------------------------
     // and / or / xor
     //
     //   andl $0xff, %eax       -> 25 ff 00 00 00   (アキュムレータの短縮形)
@@ -2321,6 +2456,73 @@ mod not_tests {
             "notb %ax",
             "not $1",
             "not %xmm0",
+        ] {
+            assert!(assemble(asm).is_err(), "{} should fail", asm);
+        }
+    }
+}
+
+#[cfg(test)]
+mod imul_tests {
+    use crate::assembler::x64::{Lexer, Parser, convert};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize()?;
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// 期待値は GNU as の出力
+    #[test]
+    fn imul_encodes_immediate_memory_and_register_forms() {
+        let cases: &[(&str, &str)] = &[
+            ("imulq $10, %rax", "486bc00a"),
+            ("imul $10, %rax", "486bc00a"),
+            ("imull $1000, %ecx", "69c9e8030000"),
+            ("imulw $3, %ax", "666bc003"),
+            ("imulw $1000, %bx", "6669dbe803"),
+            ("imulq $-1, %r9", "4d6bc9ff"),
+            ("imulq $100000, %r9, %r10", "4d69d1a0860100"),
+            ("imul $5, %eax, %ebx", "6bd805"),
+            ("imulq -8(%rbp), %rax", "480faf45f8"),
+            ("imull 4(%rdx), %r9d", "440faf4a04"),
+            ("imulq $10, -8(%rbp), %rax", "486b45f80a"),
+            ("imul %rbx, %rax", "480fafc3"),
+            ("imulw %cx, %dx", "660fafd1"),
+            ("imulq $10, 8(%rsp,%r9,4), %r11", "4e6b5c8c080a"),
+            ("imulq %rbx", "48f7eb"),
+            ("imull -4(%rbp), %ecx", "0faf4dfc"),
+            ("imulw $1000, 2(%rax), %bx", "66695802e803"),
+        ];
+
+        for (asm, expected) in cases {
+            let bytes = assemble(asm).unwrap_or_else(|err| panic!("{}: {}", asm, err));
+            assert_eq!(hex(&bytes), *expected, "{}", asm);
+        }
+    }
+
+    #[test]
+    fn imul_rejects_invalid_operands() {
+        for asm in [
+            "imul",
+            "imul %al, %bl",
+            "imulq %eax, %ebx",
+            "imulq %rax, %ebx",
+            "imul $10, $5",
+            "imul $10",
+            "imul %rax, -8(%rbp)",
+            "imul $0x1ffffffff, %rax",
+            "imulq $1, foo(%rip), %rax",
+            "imul $1, %rax, %rbx, %rcx",
         ] {
             assert!(assemble(asm).is_err(), "{} should fail", asm);
         }

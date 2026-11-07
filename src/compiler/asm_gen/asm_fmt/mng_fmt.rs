@@ -367,11 +367,7 @@ impl MngAsmFmt {
                 let mut out = String::new();
                 let mut offset = offset;
                 for field in fields {
-                    out.push_str(&self.get_fmt_struct_member(
-                        value.clone(),
-                        &(*field).1,
-                        offset,
-                    ));
+                    out.push_str(&self.get_fmt_struct_member(value.clone(), &(*field).1, offset));
                     offset += (*field).1.to_bytes();
                 }
                 return out;
@@ -565,6 +561,12 @@ impl MngAsmFmt {
     /// `get_stack_alloc_8`で確保したスタックの解放
     pub(in crate::compiler::asm_gen) fn get_stack_free_8(&self) -> String {
         self.tmpl_or_default("sp_free_8")
+    }
+
+    /// スタックで渡した引数(と、16byte境界への余白)`bytes`バイトの解放
+    pub(in crate::compiler::asm_gen) fn get_stack_free_bytes(&self, bytes: usize) -> String {
+        self.tmpl_or_default("sp_free_n")
+            .replace("{src1}", &self.get_fmt_num(&bytes.to_string()))
     }
 
     /// スタックの先頭(`%rsp`)のメモリ参照
