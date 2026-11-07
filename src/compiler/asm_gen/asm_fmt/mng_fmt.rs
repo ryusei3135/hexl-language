@@ -363,6 +363,19 @@ impl MngAsmFmt {
             types::Size::Pointer { .. } => {
                 crate::mov_size_fmt!(self, dq)
             }
+            types::Size::Struct(fields) => {
+                let mut out = String::new();
+                let mut offset = offset;
+                for field in fields {
+                    out.push_str(&self.get_fmt_struct_member(
+                        value.clone(),
+                        &(*field).1,
+                        offset,
+                    ));
+                    offset += (*field).1.to_bytes();
+                }
+                return out;
+            }
             t => panic!("{:?}", t),
         };
         fmted.replace("mov", &format!("mov{}", s_fmt))
