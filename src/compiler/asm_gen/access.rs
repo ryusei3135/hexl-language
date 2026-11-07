@@ -34,7 +34,7 @@ impl AsmEmitter {
     /// 受け取った側が`&mut self`のメソッドを呼んでも借用が衝突しない。
     #[inline(always)]
     pub(in crate::compiler::asm_gen) fn inst_at(&self, idx: usize) -> inst::Inst {
-        self.curr_inst[idx].clone()
+        self.fn_state.curr_inst[idx].clone()
     }
 }
 
@@ -47,11 +47,10 @@ impl AsmEmitter {
         &self,
         name: &str,
     ) -> Result<&asm_emitter::VarIndexInfo, err::ErrKind> {
-        self.var_hash_map.get(name).ok_or(crate::GenUndefErrResult!(
-            UndefVar,
-            name.to_string(),
-            None
-        ))
+        self.fn_state
+            .var_hash_map
+            .get(name)
+            .ok_or(crate::GenUndefErrResult!(UndefVar, name.to_string(), None))
     }
 
     /// 変数の情報を取得する。登録されていなければ`None`
@@ -59,7 +58,7 @@ impl AsmEmitter {
         &self,
         name: &str,
     ) -> Option<&asm_emitter::VarIndexInfo> {
-        self.var_hash_map.get(name)
+        self.fn_state.var_hash_map.get(name)
     }
 
     /// 変数の情報を書き換えるために取得する。登録されていなければpanicする
@@ -67,7 +66,8 @@ impl AsmEmitter {
         &mut self,
         name: &str,
     ) -> &mut asm_emitter::VarIndexInfo {
-        self.var_hash_map
+        self.fn_state
+            .var_hash_map
             .get_mut(name)
             .unwrap_or_else(|| panic!("this var is not found -> {}", name))
     }
@@ -87,9 +87,9 @@ impl AsmEmitter {
 
     /// レジスタ`reg`を、いずれかの変数が保持しているか
     pub(in crate::compiler::asm_gen) fn is_reg_held_by_var(&self, reg: RegisterMode) -> bool {
-        self.var_hash_map
-            .iter()
-            .any(|(name, var)| !self.dead_vars.contains(name) && var.holds_reg() && var.reg == reg)
+        self.fn_state.var_hash_map.iter().any(|(name, var)| {
+            !self.fn_state.dead_vars.contains(name) && var.holds_reg() && var.reg == reg
+        })
     }
 
     /// 変数そのものを参照するオペランドを返す
@@ -168,7 +168,8 @@ impl AsmEmitter {
 impl AsmEmitter {
     /// IRのノード`node_idx`の値を置いた、静的領域のラベル名
     pub(in crate::compiler::asm_gen) fn static_label(&self, node_idx: usize) -> Option<String> {
-        self.data_map
+        self.fn_state
+            .data_map
             .iter()
             .find(|(id, _)| *id == node_idx)
             .map(|(_, label)| label.clone())
@@ -231,7 +232,7 @@ impl AsmEmitter {
     /// `self.ptr[i] = v`が構造体自身へ書き込む(ヒープのポインタが`v`で上書きされる)。
     /// 配列やメンバーのアドレスそのものが欲しい場合(`lea`)とは区別する
     pub(in crate::compiler::asm_gen) fn is_ptr_cell_load(&self, idx: usize) -> bool {
-        match &self.curr_inst[idx] {
+        match &self.fn_state.curr_inst[idx] {
             inst::Inst::RefStruct { size, .. } | inst::Inst::RefStructPtr { size, .. } => {
                 size.is_pointer().is_some()
             }

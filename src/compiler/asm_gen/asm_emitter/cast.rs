@@ -49,7 +49,7 @@ impl AsmEmitter {
         let before = self.get_expr_ty(src);
         let dst = self.alloc_reg(after)?.unwrap();
         self.used_reg.mark_used(&dst);
-        self.reg_idx = dst.index();
+        self.fn_state.reg_idx = dst.index();
 
         let is_imm = matches!(self.inst_at(src), inst::Inst::Num { .. });
         let tmp = if !before.is_float()
@@ -80,7 +80,7 @@ impl AsmEmitter {
         if let Some(tmp) = tmp {
             self.used_reg.release(&tmp);
         }
-        self.last_inst_idx.push((node_idx, dst));
+        self.fn_state.last_inst_idx.push((node_idx, dst));
         // キャスト元が式の一時的な結果なら、使い終わったので解放する
         self.release_expr_temp(src);
         Ok(())

@@ -73,7 +73,7 @@ impl AsmEmitter {
         index_size: &Size,
     ) -> Result<String, err::ErrKind> {
         // 前回の添字用レジスタが解放されていなければ、ここで解放する
-        if let Some(old) = self.arr_index_temp.take() {
+        if let Some(old) = self.fn_state.arr_index_temp.take() {
             self.used_reg.release(&RegisterMode::Normal(old));
         }
 
@@ -94,7 +94,7 @@ impl AsmEmitter {
             ));
         };
         self.used_reg.mark_used(&RegisterMode::Normal(reg_num));
-        self.arr_index_temp = Some(reg_num);
+        self.fn_state.arr_index_temp = Some(reg_num);
 
         let reg64 = self.reg64(&RegisterMode::Normal(reg_num))?;
         self.load_index_reg(index_operand, index_size, reg_num, &reg64)?;

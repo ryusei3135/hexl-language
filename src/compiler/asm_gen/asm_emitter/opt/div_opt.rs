@@ -33,7 +33,7 @@ impl AsmEmitter {
     /// 割る数と割られる数は交換できないので、見るのは右辺だけ。割られる数も定数なら対象外
     fn const_div_shift(&self, expr: &inst::ExprInst, bits: u32) -> Option<u32> {
         let as_const = |idx: usize| -> Option<i128> {
-            match self.curr_inst.get(idx)? {
+            match self.fn_state.curr_inst.get(idx)? {
                 inst::Inst::Num { value, .. } => value.replace('_', "").parse::<i128>().ok(),
                 _ => None,
             }
@@ -63,7 +63,7 @@ impl AsmEmitter {
         &mut self,
         expr: &inst::ExprInst,
     ) -> Result<Option<String>, err::ErrKind> {
-        if expr.kind != inst::ExprKind::Div || expr.is_float(&self.curr_inst) {
+        if expr.kind != inst::ExprKind::Div || expr.is_float(&self.fn_state.curr_inst) {
             return Ok(None);
         }
         let ty = self.get_expr_ty(expr.ls);
@@ -88,7 +88,7 @@ impl AsmEmitter {
         let wrap_size = ty.wrap_dst_size();
         let src = self.extract_operand_text(expr.ls, wrap_size.as_ref())?;
         let is_mem = self.check_node_is_mem_val(expr.ls).is_some();
-        let dst = self.get_reg_txt(Some(self.reg_idx), &size)?;
+        let dst = self.get_reg_txt(Some(self.fn_state.reg_idx), &size)?;
         let count = |n: u32| self.asm_fmt.get_fmt_num(&n.to_string());
 
         // `src`と`dst`が同じレジスタのとき、`mov r, r`は不要
@@ -106,7 +106,7 @@ impl AsmEmitter {
         // 符号付き: 負数のときだけ`2^k - 1`を足してから`sar`する。
         // 補正値の計算に`%rax`を使うので、使用中なら退避する
         let acc = self.asm_fmt.get_fmt_reg(0, &size)?;
-        let saved = self.live_reserved_regs(self.reg_idx).contains(&0);
+        let saved = self.live_reserved_regs(self.fn_state.reg_idx).contains(&0);
         let acc64 = self.asm_fmt.get_fmt_reg(0, &Size::DQ)?;
         if saved {
             asm.push_str(&self.asm_fmt.get_push(&acc64));

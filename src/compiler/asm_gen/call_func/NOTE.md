@@ -7,6 +7,19 @@
 長かった関数を、役割ごとの小さい関数に分けた。**生成されるアセンブリは変えていない**
 (処理の順序・使うレジスタ・スタックの確保の順番はそのまま)。
 
+### ファイル構成(2026-11-07に分割)
+| ファイル | 内容 |
+|----------|------|
+| `call_func.rs` | `emit_call_func` / `emit_callee_fn` / `fn_label_of`、`FnGenCtx`と`CALLEE_*_MARK` |
+| `call_func/caller_save.rs` | `caller_save_pair` / `caller_save_one` / `caller_restore_one` / `is_callee_saved` |
+| `call_func/args.rs` | `build_arg_lines` / `order_arg_lines` / `arg_opcode` / `ptr_param_name` / `text_reads_reg` |
+| `call_func/fn_build.rs` | `build_fn_process` / `begin_fn_state` / `gen_fn_prologue` / `fix_callee_saved` / `gen_implicit_ret` |
+| `call_func/node_asm.rs` | `gen_node_asm` / `gen_mov_node_asm` / `gen_param_asm` / `gen_call_node_asm` |
+| `call_func/expr_asm.rs` | `gen_expr_asm` / `gen_assign_var_asm` / `gen_ret_asm` / `gen_str_asm` など |
+
+以下の表の関数名は、上のファイルに分かれている(`push_caller_saved_regs`/`pop_caller_saved_regs`は
+`caller_save_pair`に統合済み)。
+
 ### `call_func.rs`
 #### `build_fn_process`(関数1つぶんのアセンブリを作る)
 | 順 | 処理 | 関数 |

@@ -139,8 +139,8 @@ impl AsmEmitter {
     /// 変数1つ分(8byte)のスタック領域を確保し、`%rbp`からのオフセットを返す
     /// (`stk_use_counter`を進める。先にある配列などと重ならない)
     fn alloc_var_slot(&mut self) -> usize {
-        let offset = self.stk_use_counter.div_ceil(8) * 8 + 8;
-        self.stk_use_counter = offset;
+        let offset = self.fn_state.stk_use_counter.div_ceil(8) * 8 + 8;
+        self.fn_state.stk_use_counter = offset;
         offset
     }
 
@@ -150,10 +150,11 @@ impl AsmEmitter {
         reg: RegisterMode,
     ) -> Result<bool, err::ErrKind> {
         let var_names: Vec<String> = self
+            .fn_state
             .var_hash_map
             .iter()
             .filter(|(name, var)| {
-                !self.dead_vars.contains(name.as_str())
+                !self.fn_state.dead_vars.contains(name.as_str())
                     && !var.is_stack
                     && !var.in_mem
                     && var.reg == reg
@@ -161,23 +162,24 @@ impl AsmEmitter {
             .map(|(name, _)| name.clone())
             .collect();
         let expr_ids: Vec<usize> = self
+            .fn_state
             .last_inst_idx
             .iter()
             .filter(|(_, result_reg)| *result_reg == reg)
             .map(|(id, _)| *id)
             .collect();
         if var_names.is_empty() && expr_ids.is_empty() {
-            if self.spilled_regs.remove(&reg).is_some() {
+            if self.fn_state.spilled_regs.remove(&reg).is_some() {
                 self.used_reg.release(&reg);
                 return Ok(true);
             }
             return Ok(false);
         }
 
-        if self.spilled_regs.contains_key(&reg) && !expr_ids.is_empty() {
+        if self.fn_state.spilled_regs.contains_key(&reg) && !expr_ids.is_empty() {
             return Ok(false);
         }
-        let spilled_offset = self.spilled_regs.remove(&reg);
+        let spilled_offset = self.fn_state.spilled_regs.remove(&reg);
         let offset = match spilled_offset {
             Some(offset) => offset,
             None => {
@@ -208,8 +210,10 @@ impl AsmEmitter {
             var.is_stack = true;
         }
         for id in expr_ids {
-            self.last_inst_idx.retain(|(node_id, _)| *node_id != id);
-            self.spilled_expr_results.push((id, offset));
+            self.fn_state
+                .last_inst_idx
+                .retain(|(node_id, _)| *node_id != id);
+            self.fn_state.spilled_expr_results.push((id, offset));
         }
         self.used_reg.release(&reg);
         Ok(true)
@@ -307,10 +311,11 @@ impl AsmEmitter {
     /// (呼び出しで第1引数のレジスタが上書きされるので、先に退避する必要がある)
     pub(in crate::compiler::asm_gen) fn needs_self_ptr_save(&self) -> bool {
         let has_call = self
+            .fn_state
             .curr_inst
             .iter()
             .any(|node| matches!(node, inst::Inst::CallFunc(..)));
-        let has_init = self.curr_inst.iter().any(|node| {
+        let has_init = self.fn_state.curr_inst.iter().any(|node| {
             matches!(
                 node,
                 inst::Inst::Struct { .. } | inst::Inst::Variant { .. } | inst::Inst::InitArr(..)
@@ -323,7 +328,7 @@ impl AsmEmitter {
     /// (退避先を`self_ptr_slot`に記録する)
     pub(in crate::compiler::asm_gen) fn save_self_ptr_asm(&mut self) -> String {
         let offset = self.alloc_var_slot();
-        self.self_ptr_slot = Some(offset);
+        self.fn_state.self_ptr_slot = Some(offset);
         self.mov_line(&self.rbp_ref(offset), &self.self_ptr_reg(), &Size::DQ, true)
     }
 
@@ -336,7 +341,7 @@ impl AsmEmitter {
     pub(in crate::compiler::asm_gen) fn self_ptr_base(
         &self,
     ) -> Result<(String, String), err::ErrKind> {
-        match self.self_ptr_slot {
+        match self.fn_state.self_ptr_slot {
             Some(offset) => {
                 let scratch = self.reg64(&RegisterMode::Normal(SPILL_PTR_SCRATCH))?;
                 let load = self.mov_line(&scratch, &self.rbp_ref(offset), &Size::DQ, true);

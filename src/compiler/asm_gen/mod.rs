@@ -8,6 +8,7 @@ mod asm_emitter;
 mod asm_fmt;
 mod call_func;
 mod emit_fn_name;
+mod fn_state;
 mod inline_asm;
 mod last_use;
 mod lazy_spill;
@@ -17,6 +18,7 @@ mod sign;
 use crate::compiler::err::{self, err_pool};
 use crate::compiler::ir::{def_tree, inst, types::Size};
 use crate::compiler::models::AsmFmtData;
+use fn_state::FnState;
 use sign::SizeSign;
 use std::collections::HashMap;
 use std::mem;
@@ -85,37 +87,16 @@ pub struct AsmEmitter {
     pub(in crate::compiler::asm_gen) asm_text: String,
     pub(in crate::compiler::asm_gen) data_sec_text: String,
     pub(in crate::compiler::asm_gen) data_idx: usize,
-    pub(in crate::compiler::asm_gen) reg_idx: usize,
-    pub(in crate::compiler::asm_gen) expr_vars: Vec<String>,
-    pub(in crate::compiler::asm_gen) reserved_label_name: Option<String>,
 
     pub(in crate::compiler::asm_gen) asm_fmt: asm_fmt::mng_fmt::MngAsmFmt,
 
     pub(in crate::compiler::asm_gen) os: String,
 
-    pub(in crate::compiler::asm_gen) curr_inst: Vec<inst::Inst>,
-    // (親のid, 変数の名前)
-    pub(in crate::compiler::asm_gen) data_map: Vec<(usize, String)>,
-    pub(in crate::compiler::asm_gen) last_inst_idx: Vec<(usize, RegisterMode)>,
-    /// スタックへ退避した式の結果ノード -> `%rbp`からのオフセット
-    pub(in crate::compiler::asm_gen) spilled_expr_results: Vec<(usize, usize)>,
-    pub(in crate::compiler::asm_gen) var_hash_map: HashMap<String, asm_emitter::VarIndexInfo>,
+    /// 関数ごとの状態(詳細は`fn_state.rs`)
+    pub(in crate::compiler::asm_gen) fn_state: FnState,
     // 現在使用中のレジスタを管理する
     pub(in crate::compiler::asm_gen) used_reg: reg_mnger::UsedRegManager,
-    /// `StartScope`の時点で既に存在した変数の名前のスタック
-    /// `EndScope`で、スコープの外の変数が使うレジスタを
-    /// 解放してしまわないようにするために使う
-    pub(in crate::compiler::asm_gen) scope_outer_vars: Vec<Vec<String>>,
-    pub(in crate::compiler::asm_gen) stk_use_counter: usize,
-    /// `build_fn_process`が、関数呼び出しのノードとして既に
-    /// アセンブリを生成済みの`Inst::CallFunc`のid。
-    /// 生成済みの呼び出しの戻り値を、後続のノードが値として
-    /// 参照する際(`a: int = func(10)`など)に使う
-    pub(in crate::compiler::asm_gen) emitted_calls: Vec<usize>,
-    /// 使用回数が0回の変数を定義する`Inst::Mov`のノードid。
-    /// `gen_node_asm`はこのノードのアセンブリを生成しない。関数ごとに
-    /// `begin_fn_state`が作り直す([`reg_mnger::UsedRegManager::unused_var_nodes`])
-    pub(in crate::compiler::asm_gen) unused_var_nodes: std::collections::HashSet<usize>,
+
     /// まだ生成していない`_start`以外の関数(ラベル -> 関数の定義)。
     /// `emit_call_func`が呼び出しを生成するときに取り出して、
     /// `build_fn_process`で生成する(呼ばれない関数は残ったまま出力されない)
@@ -126,33 +107,6 @@ pub struct AsmEmitter {
     /// 出力するアセンブリ言語のフォーマットの名前
     /// (呼ばれた関数を`build_fn_process`で生成するときに使う)
     pub(in crate::compiler::asm_gen) asm_fmt_name: Option<String>,
-    /// 配列の添字が構造体のメンバー(`[arr a.a else 0]`など)のとき、
-    /// 添字を載せるために確保した一時レジスタ。
-    /// 配列への書き込みが終わった時点で解放する
-    pub(in crate::compiler::asm_gen) arr_index_temp: Option<usize>,
-    /// 構造体のコンストラクタへ渡す暗黙の`self`(`Inst::GetPtr`)のノードid
-    /// -> 実際に割り当てた`%rbp`からのオフセット。
-    /// IRの`stk`は配列など、エミッタ側(`stk_use_counter`)が割り当てた
-    /// スタック領域と重なることがあるため、構造体の実体は
-    /// `stk_use_counter`から確保し直す。関数ごとにクリアする
-    pub(in crate::compiler::asm_gen) struct_stk_map: HashMap<usize, usize>,
-
-    /// 退避したままの変数のレジスタ -> 退避先の`%rbp`からのオフセット
-    /// (レジスタの中身は壊れている。その変数を参照するノードの生成前に復元する。
-    /// 詳細は`lazy_spill.rs`)。関数ごとの状態
-    pub(in crate::compiler::asm_gen) spilled_regs: std::collections::BTreeMap<RegisterMode, usize>,
-    /// レジスタ -> 退避先のオフセット(関数ごとに、レジスタ1つにつき1回だけ確保する)
-    pub(in crate::compiler::asm_gen) spill_slots: std::collections::BTreeMap<RegisterMode, usize>,
-    /// 暗黙の`self`ポインタ(第1引数のレジスタ`%rdi`など)の退避先の、
-    /// `%rbp`からのオフセット。関数の先頭で退避し、関数の呼び出しで`%rdi`が
-    /// 上書きされても、以降は退避先から読み込んで使う。関数ごとの状態
-    pub(in crate::compiler::asm_gen) self_ptr_slot: Option<usize>,
-    /// 今生成しているノードが参照する変数の名前
-    pub(in crate::compiler::asm_gen) node_vars: std::collections::HashSet<String>,
-    /// 今のノードが参照する変数を調べられない(関数呼び出しで退避したままにしない)
-    pub(in crate::compiler::asm_gen) node_vars_all: bool,
-    /// スコープが終わった変数の名前(`var_hash_map`には残っている)
-    pub(in crate::compiler::asm_gen) dead_vars: std::collections::HashSet<String>,
 
     callee_saved: Rc<Vec<usize>>,
     caller_saved: Rc<Vec<usize>>,

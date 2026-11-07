@@ -101,7 +101,7 @@ impl AsmEmitter {
     /// インラインアセンブラ内の`${var}`が、ポインタ型の引数(`Inst::Param`)
     /// を指している場合のオペランドを返す。
     fn inline_ptr_param_operand(&self, node_idx: usize) -> Result<Option<String>, err::ErrKind> {
-        let inst::Inst::Param(param) = &self.curr_inst[node_idx] else {
+        let inst::Inst::Param(param) = &self.fn_state.curr_inst[node_idx] else {
             return Ok(None);
         };
         let Some(var_info) = self.find_var_info(&param.name) else {
@@ -255,6 +255,7 @@ impl AsmEmitter {
     /// レジスタ`from`を保持している変数と式の結果を、`to`を保持するように切り替える
     fn retarget_reg(&mut self, from: RegisterMode, to: RegisterMode) {
         let names: Vec<String> = self
+            .fn_state
             .var_hash_map
             .iter()
             .filter(|(_, var)| var.holds_reg() && var.reg == from)
@@ -263,7 +264,8 @@ impl AsmEmitter {
         names
             .iter()
             .for_each(|name| self.update_value_reg(name, &to));
-        self.last_inst_idx
+        self.fn_state
+            .last_inst_idx
             .iter_mut()
             .filter(|(_, reg)| *reg == from)
             .for_each(|(_, reg)| *reg = to);
@@ -343,11 +345,13 @@ impl AsmEmitter {
 
     pub(super) fn float_reg_size(&self, reg: RegisterMode) -> Size {
         let from_var = self
+            .fn_state
             .var_hash_map
             .values()
             .find(|var| var.holds_reg() && var.reg == reg)
             .map(|var| var.size.clone());
         let from_expr = self
+            .fn_state
             .last_inst_idx
             .iter()
             .find(|(_, result_reg)| *result_reg == reg)

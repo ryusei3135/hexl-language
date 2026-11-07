@@ -71,7 +71,7 @@ impl AsmEmitter {
         // 結果を置くレジスタ。`ls`/`rs`のレジスタとは別のものになる
         // (それらは、この命令が終わるまで解放しない)
         let dst = self.alloc_reg(&Size::DD)?.unwrap();
-        self.reg_idx = dst.index();
+        self.fn_state.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
         let dst8 = self.get_reg_txt(Some(dst.index()), &Size::DB)?;
 
@@ -121,7 +121,7 @@ impl AsmEmitter {
         self.asm_text.push_str(&output);
 
         // 式の結果を置いたレジスタを使用中として記録する
-        self.last_inst_idx.push((expr.dst, dst));
+        self.fn_state.last_inst_idx.push((expr.dst, dst));
         // 比較し終わったので、オペランドの一時的な結果のレジスタを解放する
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);

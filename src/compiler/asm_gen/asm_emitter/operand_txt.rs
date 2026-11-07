@@ -198,7 +198,7 @@ impl AsmEmitter {
 
         // 配列の要素のサイズは先頭の要素から求める
         // (配列の要素は全て同じ型/サイズであることが前提)
-        let size = match self.curr_inst.get(*first_id) {
+        let size = match self.fn_state.curr_inst.get(*first_id) {
             Some(inst::Inst::Num { size, .. }) => size.clone(),
             other => {
                 return Err(err::ErrKind::asm_emit_invalid_array_elem_node(format!(
@@ -214,9 +214,9 @@ impl AsmEmitter {
         // 要素0を領域の一番下(`%rbp`から最も遠い位置`head_offset`)に置く。
         // 要素`k`のオフセットは`head_offset - k * 要素のサイズ`
         let elem_bytes = size.to_bytes();
-        let arr_start = self.stk_use_counter;
+        let arr_start = self.fn_state.stk_use_counter;
         let head_offset = arr_start + elem_bytes * ids.len();
-        self.stk_use_counter = head_offset;
+        self.fn_state.stk_use_counter = head_offset;
 
         for (k, id) in ids.iter().enumerate() {
             let value = self.extract_operand_text(*id, this_is_self)?;

@@ -81,7 +81,8 @@
 - `emit_call_func`は、呼ぶ関数のラベルが`pending_funcs`にあれば取り出して`emit_callee_fn`で生成する。取り出してから生成するので、再帰呼び出しで二重に生成されない。
 - `emit_callee_fn`は、呼んだ側の生成中の状態(`asm_text`/変数/レジスタ/`curr_inst`/スタック使用量など)を退避してから`build_fn_process`を呼び、終わったら戻す。
     呼ばれた側のアセンブリは`fn_asm_out`へ溜め、`to_asm_text`の最後に`_start`の後ろへ結合する(呼んだ側の関数の途中に挟まらないため)。
-- `AsmEmitter`に状態のフィールドを追加したら、`emit_callee_fn`の退避・復元にも加えること。
+- 関数ごとの状態のフィールドは`FnState`(`fn_state.rs`)に追加する。`emit_callee_fn`が`FnState`を丸ごと退避・復元するので、個別に加える必要は無い(2026-11-07〜)。
+    ただし`used_reg`は`AsmEmitter`のフィールドのままで、`clone`で退避している。
 
 ## 使用回数が0回の変数は生成しない(2026-10-15)
 - `reg_mnger.rs`の`UsedRegManager::unused_var_nodes`が、生成しない変数を定義する`Inst::Mov`のノードidを集める
@@ -99,7 +100,7 @@
     以前は式を含む初期値を対象外にしていたため、`fv`/`f2`が残るバグがあった(2026-10-16修正)。
 - 対象外: 初期値の式に関数の呼び出し/代入/inlineアセンブラがある変数(副作用が消えるため)、
     再代入(`Inst::AssignVar`)がある変数。
-- `AsmEmitter::unused_var_nodes`は関数ごとの状態なので、`emit_callee_fn`で退避・復元する。
+- `FnState::unused_var_nodes`は関数ごとの状態なので、`FnState`ごと`emit_callee_fn`で退避・復元される。
 
 ## 退避した変数は参照されるまで復元しない(2026-10-16)
 - 関数呼び出し(`emit_call_func`)で、`caller_saved`のレジスタに置かれた**生きている変数**は、`push`/`pop`ではなく
@@ -113,8 +114,8 @@
 - 制御フローで状態が食い違わないよう、`Block`/`Jmp`/`ExpectJmp`/インラインアセンブラの前に全て復元する。
     `ExpectJmp`の後(条件ジャンプの条件式の中)の呼び出しは退避したままにしない。
 - `Ret`の後と、`EndScope`で解放されたレジスタ(スコープが終わった変数、`dead_vars`)の退避は、復元せず捨てる。
-- 関数ごとの状態(`spilled_regs`/`spill_slots`/`node_vars`/`node_vars_all`/`dead_vars`)は、`reset_fn_state`で初期化し、
-    `emit_callee_fn`で退避・復元する。
+- 関数ごとの状態(`spilled_regs`/`spill_slots`/`node_vars`/`node_vars_all`/`dead_vars`)は`FnState`のフィールドで、
+    `reset_fn_state`で初期化し、`emit_callee_fn`で退避・復元する。
 
 ## レジスタが足りない変数のスタック配置(2026-10-23)
 - 変数を定義するとき(`call_func/mem_ir.rs`の`bind_var_reg`)、割り当て済みのレジスタも
@@ -213,3 +214,24 @@
     `cmpb $0, %dil` + `jnz`など)は8bitのレジスタを使う。
 - 注意: 結果の上位ビットは書き換えない(ゴミが残る)ので、8bitより広い型の演算のオペランドにすると、
     広い名前で読んだ上位ビットは不定になる。広げて使う場合は`Cast`(`movzbl`)を通すこと。
+
+## 構造の整理(2026-11-07)
+生成するアセンブリは変えていない(ロジックの変更なし。ファイルの分割・状態の集約・重複の削除のみ)。
+
+- **関数ごとの状態を`FnState`へ集約**(`fn_state.rs`)。`AsmEmitter`の関数ごとのフィールド20個
+    (`var_hash_map`/`curr_inst`/`stk_use_counter`など)は`self.fn_state.<名前>`でアクセスする。
+    - `reset_fn_state`は`FnState::default()`への置き換え + `used_reg.clear()`。
+    - `emit_callee_fn`は`mem::take(&mut self.fn_state)`の退避・復元。フィールドの追加時の退避漏れが起きない。
+    - 以前の`reset_fn_state`が初期化していなかった`arr_index_temp`も、関数ごとに`None`へ戻るようになった
+        (前の関数の値が残るのは不具合になるはずなので、正常なコードでは出力は変わらない)。
+- **ファイルの分割**
+    - `call_func.rs`(1175行) → `call_func.rs`(呼び出しの生成) + `call_func/`の`caller_save.rs`(callerレジスタの退避/復元) /
+        `args.rs`(引数の設定) / `fn_build.rs`(`build_fn_process`・プロローグ・`callee_saved`) /
+        `node_asm.rs`(`gen_node_asm`) / `expr_asm.rs`(式・代入・`ret`など)。
+    - `asm_emitter.rs` → `asm_emitter.rs`(`new`・`to_asm_text`・基本操作) + `asm_emitter/`の`scope.rs` / `format_line.rs` /
+        `node_ty.rs` / `expr_inst.rs`。
+    - `reg_mnger.rs` → `reg_mnger/unused_vars.rs`(使用回数0の変数の検出) / `reg_mnger/emitter_regs.rs`(`alloc_reg`など)を分離。
+    - `asm_fmt/x64.rs`と`aarch64.rs`で重複していた`Static*`の型と`to_asm_format`を`asm_fmt/static_fmt.rs`へ共通化。
+        `x64.rs`の残りは`GCC_X64`の静的なテーブルなので、これ以上は分割していない。
+- 分割で、元が`pub(super)`だった関数は`pub(in crate::compiler::asm_gen)`にした(`pub(super)`のままだと可視範囲が狭くなるため)。
+    分割した`call_func/`内で呼ぶだけの関数は`pub(super)`。

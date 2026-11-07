@@ -129,7 +129,11 @@ impl AsmEmitter {
         expr: &inst::ExprInst,
     ) -> Result<(), err::ErrKind> {
         // 条件は、選ぶ命令のひとつ前に置かれる(`ir/builder.rs`)
-        let cond = match expr.dst.checked_sub(1).and_then(|i| self.curr_inst.get(i)) {
+        let cond = match expr
+            .dst
+            .checked_sub(1)
+            .and_then(|i| self.fn_state.curr_inst.get(i))
+        {
             Some(inst::Inst::Expr(cond)) if Self::is_ternary_cmp_kind(&cond.kind) => cond.clone(),
             other => {
                 return Err(err::ErrKind::asm_emit_ternary_cond_not_found(format!(
@@ -151,7 +155,7 @@ impl AsmEmitter {
         // 結果を置くレジスタ。左辺・右辺のレジスタとは別のものになる
         // (それらは、この命令が終わるまで解放しない)
         let dst = self.alloc_reg(&size)?.unwrap();
-        self.reg_idx = dst.index();
+        self.fn_state.reg_idx = dst.index();
         self.used_reg.mark_used(&dst);
         let dst_txt = self.get_reg_txt(Some(dst.index()), &size)?;
 
@@ -201,7 +205,7 @@ impl AsmEmitter {
             self.used_reg.release(&reg);
         }
         // 式の結果を置いたレジスタを使用中として記録する
-        self.last_inst_idx.push((expr.dst, dst));
+        self.fn_state.last_inst_idx.push((expr.dst, dst));
         self.release_expr_temp(expr.ls);
         self.release_expr_temp(expr.rs);
         Ok(())

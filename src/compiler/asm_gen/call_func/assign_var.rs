@@ -11,7 +11,7 @@ impl AsmEmitter {
     ) -> Result<(), err::ErrKind> {
         // 書き込み先のメモリのオペランド
         let dst_operand = self.extract_operand_text(dst, this_is_self)?;
-        let dst_operand = if matches!(self.curr_inst[dst], inst::Inst::Pointer(..)) {
+        let dst_operand = if matches!(self.fn_state.curr_inst[dst], inst::Inst::Pointer(..)) {
             format!("({})", dst_operand)
         } else {
             dst_operand
@@ -25,7 +25,7 @@ impl AsmEmitter {
         // 配列の変数名)の型(`Pointer{ty}`/`Array{size,..}`)がそのまま
         // 書き込む値のサイズを表しているため、`get_var_ty(&name)`で
         // 問題なかった。
-        let mnemonic_size = match &self.curr_inst[dst] {
+        let mnemonic_size = match &self.fn_state.curr_inst[dst] {
             // 構造体のメンバー(`self->len = ..` / `a.len = ..`)は、メンバー自身の型。
             // `name`(`self`など)の型は構造体(またはそのポインタ)なので、
             // ニーモニックのサイズに使えない
@@ -51,7 +51,7 @@ impl AsmEmitter {
         };
         self.asm_text.push_str(&text);
         // 配列の添字を載せていた一時レジスタは、書き込みが終わったので解放する
-        if let Some(reg) = self.arr_index_temp.take() {
+        if let Some(reg) = self.fn_state.arr_index_temp.take() {
             self.used_reg.release(&RegisterMode::Normal(reg));
         }
         Ok(())
@@ -69,7 +69,7 @@ impl AsmEmitter {
         // ポインタ型の変数へ数値リテラル(`ptr = 0`のようなNULL代入)を
         // 再代入する場合は、アドレスを求める`lea`ではなく、ポインタの
         // サイズ(64bit)に合わせた`movq`でそのまま即値を書き込む
-        if matches!(self.curr_inst[value], inst::Inst::Num { .. }) {
+        if matches!(self.fn_state.curr_inst[value], inst::Inst::Num { .. }) {
             let dst_reg = self.reg64(&current_reg)?;
             let value_operand = self.extract_operand_text(value, this_is_self)?;
             return Ok(self.mov_line(&dst_reg, &value_operand, &Size::DQ, false));
@@ -83,7 +83,7 @@ impl AsmEmitter {
         // など)を持っている場合は、それをそのまま`mov`でコピーすれば
         // よく、`lea`をかけると`lea %rdx, %rbx`のような、メモリでは
         // ないソースを持つ不正な命令になってしまう。
-        let (ptr_operand, needs_address) = match &self.curr_inst[value] {
+        let (ptr_operand, needs_address) = match &self.fn_state.curr_inst[value] {
             inst::Inst::GetPtr { stk, .. } => (self.rbp_ref(self.ptr_stk(value, *stk)), true),
             _ => {
                 let operand = self.extract_operand_text(value, this_is_self)?;
@@ -106,11 +106,12 @@ impl AsmEmitter {
         let RegisterMode::Normal(current_reg) = current_reg else {
             panic!("non-floating-point value assigned to a floating-point register");
         };
-        let mnemonic = if self.curr_inst[value].is_pointer() && !self.is_ptr_cell_load(value) {
-            "address"
-        } else {
-            "mov"
-        };
+        let mnemonic =
+            if self.fn_state.curr_inst[value].is_pointer() && !self.is_ptr_cell_load(value) {
+                "address"
+            } else {
+                "mov"
+            };
         self.format_line(mnemonic, Some(current_reg), value, None, this_is_self)
     }
 

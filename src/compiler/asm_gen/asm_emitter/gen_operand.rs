@@ -111,7 +111,7 @@ impl AsmEmitter {
     ) -> Result<String, err::ErrKind> {
         // 関数呼び出しのアセンブリが`build_fn_process`側で
         // 既に生成済みか
-        let already_emitted = self.emitted_calls.contains(&parent_id);
+        let already_emitted = self.fn_state.emitted_calls.contains(&parent_id);
 
         if !already_emitted && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR {
             // 呼び出しを生成する対象ではない
@@ -143,13 +143,19 @@ impl AsmEmitter {
         node: &inst::Inst,
     ) -> Result<String, err::ErrKind> {
         if let Some((_, offset)) = self
+            .fn_state
             .spilled_expr_results
             .iter()
             .find(|(id, _)| *id == parent_id)
         {
             return Ok(self.rbp_ref(*offset));
         }
-        if let Some(result) = self.last_inst_idx.iter().find(|i| i.0 == parent_id) {
+        if let Some(result) = self
+            .fn_state
+            .last_inst_idx
+            .iter()
+            .find(|i| i.0 == parent_id)
+        {
             // 式の結果を持つレジスタは、その式自身の型のサイズで
             // 取得する(常に64bitにすると、`movl %rcx, %edx`の
             // ように32bitの命令へ64bitのレジスタが混ざる)

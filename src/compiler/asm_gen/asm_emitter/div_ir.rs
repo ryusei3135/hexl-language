@@ -47,7 +47,7 @@ impl AsmEmitter {
             return Ok(optimized);
         }
 
-        let dst = self.reg_idx;
+        let dst = self.fn_state.reg_idx;
         let ty = self.get_expr_ty(expr.ls);
         let wrap_size = ty.wrap_dst_size();
         // どちらかのオペランドが符号なしなら符号なしの除算

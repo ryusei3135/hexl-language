@@ -67,7 +67,7 @@ impl AsmEmitter {
         let inst::Inst::InitArr(elems) = self.inst_at(src) else {
             panic!(
                 "配列の初期化式はInitArrである必要があります: {:?}",
-                self.curr_inst[src]
+                self.fn_state.curr_inst[src]
             );
         };
         let elems: Vec<usize> = elems.clone();
@@ -79,8 +79,8 @@ impl AsmEmitter {
         );
 
         let elem_bytes = elem.to_bytes();
-        let arr_base = self.stk_use_counter + elem_bytes * len;
-        self.stk_use_counter = arr_base;
+        let arr_base = self.fn_state.stk_use_counter + elem_bytes * len;
+        self.fn_state.stk_use_counter = arr_base;
 
         let store_size = if elem.is_pointer().is_some() {
             Size::DQ
@@ -108,8 +108,12 @@ impl AsmEmitter {
             };
             self.insert_var_info(
                 var_name,
-                asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.reg_idx), &array_ty, dst)
-                    .with_arr_base(arr_base),
+                asm_emitter::VarIndexInfo::new(
+                    RegisterMode::Normal(self.fn_state.reg_idx),
+                    &array_ty,
+                    dst,
+                )
+                .with_arr_base(arr_base),
             );
         }
         // 初期値が式の結果だった場合、そのレジスタはもう不要
@@ -136,7 +140,7 @@ impl AsmEmitter {
             Some(reg) => reg,
             None => self.try_alloc_reg(size)?,
         };
-        self.reg_idx = reg.index();
+        self.fn_state.reg_idx = reg.index();
         match name {
             Some(var_name) => self.used_reg.bind_var(var_name, &reg),
             None => {
@@ -196,7 +200,7 @@ impl AsmEmitter {
         if let inst::Inst::CallFunc(meta_data) = self.inst_at(src) {
             if let Some(&self_arg) = meta_data.params.get(0) {
                 if let inst::Inst::GetAddress(mem_idx) = self.inst_at(self_arg) {
-                    if matches!(self.curr_inst[mem_idx], inst::Inst::GetPtr { .. }) {
+                    if matches!(self.fn_state.curr_inst[mem_idx], inst::Inst::GetPtr { .. }) {
                         self.alloc_struct_stk(mem_idx, size.to_bytes());
                     }
                 }
@@ -242,7 +246,7 @@ impl AsmEmitter {
         let inst::Inst::CallFunc(meta_data) = self.inst_at(src) else {
             panic!(
                 "構造体を返す初期化式はコンストラクタ呼び出しである必要があります: {:?}",
-                self.curr_inst[src]
+                self.fn_state.curr_inst[src]
             );
         };
         let self_arg_idx = *meta_data
@@ -265,7 +269,11 @@ impl AsmEmitter {
     fn mov_static_var(&mut self, size: &types::Size, dst: usize, name: Option<&str>) {
         self.insert_var_info(
             name.unwrap(),
-            asm_emitter::VarIndexInfo::new_static(RegisterMode::Normal(self.reg_idx), size, dst),
+            asm_emitter::VarIndexInfo::new_static(
+                RegisterMode::Normal(self.fn_state.reg_idx),
+                size,
+                dst,
+            ),
         );
     }
 
@@ -297,6 +305,7 @@ impl AsmEmitter {
             let current_reg = reg;
 
             if self
+                .fn_state
                 .expr_vars
                 .iter()
                 .find(|v| v.as_str() == var_name)
@@ -321,7 +330,7 @@ impl AsmEmitter {
         // アドレスを求める`lea`(="address")命令ではなく、
         // ポインタのサイズ(64bit)に合わせた`movq`で
         // そのまま即値をレジスタへ書き込む
-        let is_literal_num = matches!(self.curr_inst[src], inst::Inst::Num { .. });
+        let is_literal_num = matches!(self.fn_state.curr_inst[src], inst::Inst::Num { .. });
 
         let result = if size.is_pointer().is_some() && self.is_ptr_cell_load(src) {
             // `p: int* = self.ptr`: メモリの中のポインタの値を読み込む(`lea`ではない)
@@ -409,7 +418,7 @@ impl AsmEmitter {
         dst: usize,
     ) -> Result<(), err::ErrKind> {
         let dst_size = size.wrap_dst_size();
-        let base = match &self.curr_inst[dst] {
+        let base = match &self.fn_state.curr_inst[dst] {
             inst::Inst::Pointer(..) | inst::Inst::Param(..) | inst::Inst::GetPtr { .. } => {
                 self.extract_operand_text(dst, dst_size.as_ref())?
             }
@@ -421,8 +430,8 @@ impl AsmEmitter {
         // 先に確保し、要素0を一番下(`arr_base`)に置く。
         // 要素`k`のオフセットは `arr_base - k * 要素のサイズ`
         let elem_bytes = size.to_bytes();
-        let arr_base = self.stk_use_counter + elem_bytes * src.len();
-        self.stk_use_counter = arr_base;
+        let arr_base = self.fn_state.stk_use_counter + elem_bytes * src.len();
+        self.fn_state.stk_use_counter = arr_base;
         for (k, idx) in src.iter().enumerate() {
             let value = self.extract_operand_text(*idx, dst_size.as_ref())?;
             let elem_ref = self
@@ -437,7 +446,7 @@ impl AsmEmitter {
         }
         self.insert_var_info(
             name,
-            asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.reg_idx), size, dst)
+            asm_emitter::VarIndexInfo::new(RegisterMode::Normal(self.fn_state.reg_idx), size, dst)
                 .with_arr_base(arr_base),
         );
         self.asm_text.push_str(txt.as_str());
@@ -457,13 +466,13 @@ impl AsmEmitter {
             self.asm_fmt
                 .get_static_num_fmt(&val, &label_name, this_is_self.as_ref().unwrap());
         self.data_sec_text.push_str(&fmt_data);
-        self.data_map.push((dst, label_name));
+        self.fn_state.data_map.push((dst, label_name));
         self.data_idx += 1;
         // 子のノードがstaticりょいきの値なので、変数名だけ登録する
         self.insert_var_info(
             &name,
             asm_emitter::VarIndexInfo::new_static(
-                RegisterMode::Normal(self.reg_idx),
+                RegisterMode::Normal(self.fn_state.reg_idx),
                 this_is_self.as_ref().unwrap(),
                 dst,
             ),
@@ -487,15 +496,16 @@ impl AsmEmitter {
             // 構造体のポインタは先頭のメンバーを指すので、`alloc_struct_stk`と
             // 同様に、先頭のメンバーがはみ出す分(8byte)を余分に確保する
             let struct_stk_offset = if is_self {
-                self.stk_use_counter
+                self.fn_state.stk_use_counter
             } else {
-                let base = self.stk_use_counter.div_ceil(8) * 8 + 8;
-                self.stk_use_counter = base;
+                let base = self.fn_state.stk_use_counter.div_ceil(8) * 8 + 8;
+                self.fn_state.stk_use_counter = base;
                 base
             };
             let ini_asm = self.emit_struct_init_asm(mem, is_self)?;
             if !is_self {
-                self.stk_use_counter = self
+                self.fn_state.stk_use_counter = self
+                    .fn_state
                     .stk_use_counter
                     .max(struct_stk_offset + size.to_bytes());
             }

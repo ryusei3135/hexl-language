@@ -538,9 +538,6 @@ pub struct Str {
         ret 1
     }
 
-    pub del(self: Self* of new) {
-        mem::free<byte>(self->buf)
-    }
 }
 
 // need バイト入るまで realloc を繰り返す。入れば 1、失敗なら 0。
@@ -555,5 +552,3 @@ reserve(s: Str*, need: u64): u64 {
     }
     ret 0
 }
-
-

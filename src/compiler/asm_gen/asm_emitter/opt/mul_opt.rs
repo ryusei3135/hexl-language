@@ -29,7 +29,7 @@ impl AsmEmitter {
     /// 最適化しない(定数畳み込みの対象)
     fn const_mul_operand(&self, expr: &inst::ExprInst) -> Option<(usize, i128)> {
         let as_const = |idx: usize| -> Option<i128> {
-            match self.curr_inst.get(idx)? {
+            match self.fn_state.curr_inst.get(idx)? {
                 inst::Inst::Num { value, .. } => value.replace('_', "").parse::<i128>().ok(),
                 _ => None,
             }
@@ -59,7 +59,7 @@ impl AsmEmitter {
         expr: &inst::ExprInst,
         size: &Size,
     ) -> Result<Option<String>, err::ErrKind> {
-        if expr.is_float(&self.curr_inst) {
+        if expr.is_float(&self.fn_state.curr_inst) {
             return Ok(None);
         }
         let Some(bits) = Self::int_bits(size) else {
@@ -73,7 +73,7 @@ impl AsmEmitter {
         };
 
         let wrap_size = size.wrap_dst_size();
-        let dst = self.get_reg_txt(Some(self.reg_idx), size)?;
+        let dst = self.get_reg_txt(Some(self.fn_state.reg_idx), size)?;
         let src = self.extract_operand_text(operand_id, wrap_size.as_ref())?;
         let is_mem = self.check_node_is_mem_val(operand_id).is_some();
 
@@ -171,7 +171,7 @@ impl AsmEmitter {
         } else {
             (Size::DD, "l")
         };
-        let dst = self.get_reg_txt(Some(self.reg_idx), &lea_size)?;
+        let dst = self.get_reg_txt(Some(self.fn_state.reg_idx), &lea_size)?;
         let mut line = self
             .asm_fmt
             .tmpl_or_default(key)

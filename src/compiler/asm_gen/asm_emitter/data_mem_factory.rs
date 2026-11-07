@@ -57,7 +57,7 @@ impl AsmEmitter {
             }
         }
         if this_is_self {
-            self.stk_use_counter += add_size;
+            self.fn_state.stk_use_counter += add_size;
         }
 
         Ok(struct_txt)
@@ -160,7 +160,7 @@ impl AsmEmitter {
             member_off
         } else {
             // 既に使用していたスタックのサイズ + 前のメンバーの累積サイズ
-            self.stk_use_counter + member_off
+            self.fn_state.stk_use_counter + member_off
         })
     }
 }

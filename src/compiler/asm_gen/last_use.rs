@@ -206,13 +206,13 @@ impl AsmEmitter {
             let Some(var) = self.find_var_info(name) else {
                 continue;
             };
-            if self.dead_vars.contains(name) || !var.holds_reg() {
+            if self.fn_state.dead_vars.contains(name) || !var.holds_reg() {
                 continue;
             }
             let reg = var.reg;
-            self.dead_vars.insert(name.clone());
+            self.fn_state.dead_vars.insert(name.clone());
             // 別の変数や、まだ使う式の結果がそのレジスタを持っていれば残す
-            let held_by_expr = self.last_inst_idx.iter().any(|(_, r)| *r == reg);
+            let held_by_expr = self.fn_state.last_inst_idx.iter().any(|(_, r)| *r == reg);
             if !self.is_reg_held_by_var(reg) && !held_by_expr {
                 self.used_reg.release(&reg);
                 released_any = true;
@@ -266,7 +266,8 @@ impl AsmEmitter {
     /// 使われない式は、`if`/`match`/`loop`の条件の一番外側の式
     /// (結果を条件ジャンプで使う)か、結果を捨てる式
     pub(in crate::compiler::asm_gen) fn is_expr_consumed(&self, idx: usize) -> bool {
-        self.curr_inst
+        self.fn_state
+            .curr_inst
             .iter()
             .skip(idx + 1)
             .any(|node| Self::operand_ids(node).contains(&idx))

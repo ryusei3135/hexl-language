@@ -30,12 +30,12 @@ impl AsmEmitter {
     /// レジスタ`reg`を退避する領域の`%rbp`からのオフセット
     /// (関数ごとにレジスタ1つにつき1回だけ確保し、`stk_use_counter`を進める)
     fn spill_slot(&mut self, reg: RegisterMode) -> usize {
-        if let Some(offset) = self.spill_slots.get(&reg) {
+        if let Some(offset) = self.fn_state.spill_slots.get(&reg) {
             return *offset;
         }
-        let offset = self.stk_use_counter.div_ceil(8) * 8 + 8;
-        self.stk_use_counter = offset;
-        self.spill_slots.insert(reg, offset);
+        let offset = self.fn_state.stk_use_counter.div_ceil(8) * 8 + 8;
+        self.fn_state.stk_use_counter = offset;
+        self.fn_state.spill_slots.insert(reg, offset);
         offset
     }
 
@@ -77,13 +77,14 @@ impl AsmEmitter {
 
     /// 生きている変数(スコープが終わっていない)で、レジスタ`reg`に置かれているものの名前
     fn live_vars_in_reg(&self, reg: RegisterMode) -> Vec<&str> {
-        self.var_hash_map
+        self.fn_state
+            .var_hash_map
             .iter()
             .filter(|(name, var)| {
                 !var.is_stack
                     && !var.in_mem
                     && var.reg == reg
-                    && !self.dead_vars.contains(name.as_str())
+                    && !self.fn_state.dead_vars.contains(name.as_str())
             })
             .map(|(name, _)| name.as_str())
             .collect()
@@ -91,7 +92,7 @@ impl AsmEmitter {
 
     /// 退避しているレジスタ`reg`を復元する(退避していなければ何もしない)
     fn reload_reg(&mut self, reg: RegisterMode) -> Result<(), err::ErrKind> {
-        if let Some(slot) = self.spilled_regs.remove(&reg) {
+        if let Some(slot) = self.fn_state.spilled_regs.remove(&reg) {
             let asm = self.spill_load_asm(reg, slot)?;
             self.asm_text.push_str(&asm);
         }
@@ -100,7 +101,7 @@ impl AsmEmitter {
 
     /// 退避しているレジスタを全て復元する
     pub(super) fn reload_all_spilled(&mut self) -> Result<(), err::ErrKind> {
-        let regs: Vec<RegisterMode> = self.spilled_regs.keys().copied().collect();
+        let regs: Vec<RegisterMode> = self.fn_state.spilled_regs.keys().copied().collect();
         for reg in regs {
             self.reload_reg(reg)?;
         }
@@ -110,7 +111,9 @@ impl AsmEmitter {
     /// `EndScope`などでレジスタが解放された変数の退避を捨てる(復元しない)
     pub(super) fn drop_dead_spills(&mut self) {
         let used = &self.used_reg;
-        self.spilled_regs.retain(|reg, _| used.is_used(reg));
+        self.fn_state
+            .spilled_regs
+            .retain(|reg, _| used.is_used(reg));
     }
 
     /// ノード`id`が参照する変数の名前を`names`へ集める
@@ -123,7 +126,7 @@ impl AsmEmitter {
         visited: &mut HashSet<usize>,
         names: &mut Vec<String>,
     ) -> bool {
-        let Some(node) = self.curr_inst.get(id) else {
+        let Some(node) = self.fn_state.curr_inst.get(id) else {
             return true;
         };
         if !visited.insert(id) {
@@ -191,8 +194,8 @@ impl AsmEmitter {
         &mut self,
         node: &inst::Inst,
     ) -> Result<(), err::ErrKind> {
-        self.node_vars.clear();
-        self.node_vars_all = false;
+        self.fn_state.node_vars.clear();
+        self.fn_state.node_vars_all = false;
 
         let mut names = Vec::new();
         let known = match node {
@@ -225,7 +228,7 @@ impl AsmEmitter {
         };
 
         if !known {
-            self.node_vars_all = true;
+            self.fn_state.node_vars_all = true;
             self.reload_all_spilled()?;
             return Ok(());
         }
@@ -235,7 +238,7 @@ impl AsmEmitter {
                 R::handle(&self.err_pool, binding)?;
             }
         }
-        self.node_vars.extend(names);
+        self.fn_state.node_vars.extend(names);
         Ok(())
     }
 
@@ -273,8 +276,8 @@ impl AsmEmitter {
     /// (式の一時的な結果は変数の参照で復元できないので、`push`/`pop`のまま)。
     /// 条件ジャンプの条件式の中・参照を調べられないノードの中では退避しない
     pub(super) fn can_spill_lazily(&self, reg: RegisterMode) -> bool {
-        !self.node_vars_all
-            && self.reserved_label_name.is_none()
+        !self.fn_state.node_vars_all
+            && self.fn_state.reserved_label_name.is_none()
             && !self.live_vars_in_reg(reg).is_empty()
     }
 
@@ -282,7 +285,7 @@ impl AsmEmitter {
     pub(super) fn spill_needed_now(&self, reg: RegisterMode) -> bool {
         self.live_vars_in_reg(reg)
             .iter()
-            .any(|name| self.node_vars.contains(*name))
+            .any(|name| self.fn_state.node_vars.contains(*name))
     }
 
     /// 呼び出しの前に`regs`を領域へ退避する命令を返す
@@ -310,7 +313,7 @@ impl AsmEmitter {
             if self.spill_needed_now(*reg) {
                 asm.push_str(&self.spill_load_asm(*reg, slot)?);
             } else {
-                self.spilled_regs.insert(*reg, slot);
+                self.fn_state.spilled_regs.insert(*reg, slot);
             }
         }
         Ok(asm)
