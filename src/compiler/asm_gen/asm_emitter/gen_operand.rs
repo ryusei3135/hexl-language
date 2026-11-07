@@ -113,16 +113,13 @@ impl AsmEmitter {
         // 既に生成済みか
         let already_emitted = self.fn_state.emitted_calls.contains(&parent_id);
 
-        if !already_emitted && call_fn_info.parent != crate::ir::IS_ASSIGN_EXPR {
-            // 呼び出しを生成する対象ではない
-            return Ok(String::new());
-        }
         if !already_emitted {
             let call_asm = self.emit_call_func(
                 call_fn_info,
                 matches!(this_is_self, Some(types::Size::Struct(..))),
             )?;
             self.asm_text.push_str(&call_asm);
+            self.fn_state.emitted_calls.push(parent_id);
         }
         // 戻り値のレジスタ(0番、`%eax`など)を返す。
         // 戻り値を受ける側の型(`this_is_self`)がある
@@ -173,5 +170,32 @@ impl AsmEmitter {
         } else {
             panic!("{:?}", node);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn value_use_emits_unassigned_call_once() {
+        let err_pool = Rc::new(RefCell::new(err_pool::ErrPool::new()));
+        let mut emitter = AsmEmitter::new(
+            asm_setting::load_setting().unwrap(),
+            None,
+            "linux",
+            &err_pool,
+            OptMode::O1,
+            CpuKind::X64,
+        );
+        let call =
+            inst::CallFuncMetaData::new("callee".to_string(), crate::ir::IS_NOT_ASSIGN_EXPR, None);
+
+        let result = emitter.call_result_operand(0, &call, None).unwrap();
+        let repeated_result = emitter.call_result_operand(0, &call, None).unwrap();
+
+        assert!(!result.is_empty());
+        assert_eq!(result, repeated_result);
+        assert_eq!(emitter.asm_text.matches("call").count(), 1);
     }
 }

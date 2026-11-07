@@ -132,7 +132,7 @@ impl AsmEmitter {
         let inst::Inst::Param(param) = node else {
             return;
         };
-        let ty = node.get_param_ty().unwrap();
+        let ty = param.ty.clone();
         // 引数に使うレジスタを取得する
         let reg_num = self.arg_register_mode(param.num, &ty);
         self.insert_var_info(

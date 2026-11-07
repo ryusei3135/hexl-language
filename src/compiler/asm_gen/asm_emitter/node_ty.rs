@@ -29,7 +29,7 @@ impl AsmEmitter {
             }
             inst::Inst::CallFunc(..) => Size::DQ,
             ref node => node
-                .get_param_ty()
+                .get_param_ty(&self.fn_state.curr_inst)
                 .unwrap_or_else(|| panic!("cannot determine expression type: {:?}", node)),
         }
     }

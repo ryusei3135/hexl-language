@@ -230,16 +230,16 @@ mod tests {
     }
 }
 
-/// neg系ニーモニックのサフィックスからオペランドサイズ(bit数)を求める。
-/// サフィックス無しの `neg` は `None` を返す。
+/// neg / not 系ニーモニックのサフィックスからオペランドサイズ(bit数)を求める。
+/// サフィックス無しの `neg` / `not` は `None` を返す。
 /// レジスタ操作ならレジスタ名からサイズが決まるが、`negl -4(%rbp)` のような
 /// メモリ操作ではサフィックスだけが手がかりになる。
 fn neg_suffix_bits(mnemonic: &str) -> Option<u32> {
     match mnemonic {
-        "negb" => Some(8),
-        "negw" => Some(16),
-        "negl" => Some(32),
-        "negq" => Some(64),
+        "negb" | "notb" => Some(8),
+        "negw" | "notw" => Some(16),
+        "negl" | "notl" => Some(32),
+        "negq" | "notq" => Some(64),
         _ => None,
     }
 }
@@ -615,6 +615,10 @@ pub(super) fn dispatch(e: &mut Emitter, inst: &Instruction) -> Result<(), String
 
         "neg" | "negq" | "negl" | "negw" | "negb" => {
             e.emit_neg(&inst.operands, neg_suffix_bits(name))
+        }
+
+        "not" | "notq" | "notl" | "notw" | "notb" => {
+            e.emit_not(&inst.operands, neg_suffix_bits(name))
         }
 
         "movslq" => e.emit_movslq(&inst.operands),
@@ -1271,22 +1275,40 @@ impl Emitter {
     }
 
     // --------------------------------------------------------
-    // neg  (F6 /3, F7 /3)
+    // neg  (F6 /3, F7 /3) / not  (F6 /2, F7 /2)
     //
-    // 2の補数による符号反転 (オペランドを `0 - オペランド` にする)。
+    // neg: 2の補数による符号反転 (オペランドを `0 - オペランド` にする)。
+    // not: 1の補数 (全ビット反転)。フラグは変化しない。
     //
     //   negq %rax        -> REX.W F7 /3
     //   negl -4(%rbp)    -> F7 /3
     //   negb %al         -> F6 /3
+    //   notq %rax        -> REX.W F7 /2
+    //   notb -1(%rbp)    -> F6 /2
     //
     // - レジスタ: サイズはレジスタ名で決まる。サフィックスが付いていて
     //   レジスタ幅と食い違う場合はエラー。
-    // - メモリ  : サイズはサフィックスで決まる。無印 `neg` は `mov` と
+    // - メモリ  : サイズはサフィックスで決まる。無印は `mov` と
     //   同じく32bit扱い。
     // --------------------------------------------------------
     fn emit_neg(&mut self, operands: &[Operand], suffix_bits: Option<u32>) -> Result<(), String> {
+        self.emit_unary_f6f7("neg", 3, operands, suffix_bits)
+    }
+
+    fn emit_not(&mut self, operands: &[Operand], suffix_bits: Option<u32>) -> Result<(), String> {
+        self.emit_unary_f6f7("not", 2, operands, suffix_bits)
+    }
+
+    /// `F6 /digit` (8bit) / `F7 /digit` (16/32/64bit) の1オペランド命令 (neg / not)
+    fn emit_unary_f6f7(
+        &mut self,
+        name: &str,
+        digit: u8,
+        operands: &[Operand],
+        suffix_bits: Option<u32>,
+    ) -> Result<(), String> {
         if operands.len() != 1 {
-            return Err("neg requires one operand".into());
+            return Err(format!("{} requires one operand", name));
         }
 
         match &operands[0] {
@@ -1296,8 +1318,8 @@ impl Emitter {
                 if let Some(suffix) = suffix_bits {
                     if suffix != bits {
                         return Err(format!(
-                            "neg: operand size suffix ({} bit) does not match register size ({} bit)",
-                            suffix, bits
+                            "{}: operand size suffix ({} bit) does not match register size ({} bit)",
+                            name, suffix, bits
                         ));
                     }
                 }
@@ -1318,7 +1340,7 @@ impl Emitter {
                 }
 
                 self.emit_u8(if bits == 8 { 0xF6 } else { 0xF7 });
-                self.emit_u8(0b11_000_000 | (3 << 3) | (reg.id() & 7));
+                self.emit_u8(0b11_000_000 | (digit << 3) | (reg.id() & 7));
 
                 Ok(())
             }
@@ -1339,10 +1361,10 @@ impl Emitter {
 
                 self.emit_u8(if bits == 8 { 0xF6 } else { 0xF7 });
 
-                self.emit_memory_modrm(3, mem)
+                self.emit_memory_modrm(digit, mem)
             }
 
-            _ => Err("invalid neg operand".into()),
+            _ => Err(format!("invalid {} operand", name)),
         }
     }
 
@@ -2239,6 +2261,66 @@ mod inc_dec_tests {
             "inc (%rax)",
             "inc $1",
             "dec %xmm0",
+        ] {
+            assert!(assemble(asm).is_err(), "{} should fail", asm);
+        }
+    }
+}
+
+#[cfg(test)]
+mod not_tests {
+    use crate::assembler::x64::{Lexer, Parser, convert};
+
+    use super::*;
+
+    fn assemble(source: &str) -> Result<Vec<u8>, String> {
+        let tokens = Lexer::new(source).tokenize()?;
+        let ast = Parser::new(tokens).parse()?;
+        let program = convert::convert_program(&ast)?;
+        let mut emitter = Emitter::new();
+        emitter.emit_program(&program)?;
+        Ok(emitter.text)
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// 期待値は GNU as の出力
+    #[test]
+    fn not_encodes_register_and_memory_widths() {
+        let cases: &[(&str, &str)] = &[
+            ("notb %al", "f6d0"),
+            ("notb %spl", "40f6d4"),
+            ("notw %ax", "66f7d0"),
+            ("notl %eax", "f7d0"),
+            ("notq %rax", "48f7d0"),
+            ("not %rbx", "48f7d3"),
+            ("notl %r9d", "41f7d1"),
+            ("notq %r9", "49f7d1"),
+            ("notw %r8w", "6641f7d0"),
+            ("notb -1(%rbp)", "f655ff"),
+            ("notw 2(%rax)", "66f75002"),
+            ("notl 8(%r12)", "41f7542408"),
+            ("notq -8(%rbp)", "48f755f8"),
+            ("notq 8(%rsp,%r9,4)", "4af7548c08"),
+        ];
+
+        for (asm, expected) in cases {
+            let bytes = assemble(asm).unwrap_or_else(|err| panic!("{}: {}", asm, err));
+            assert_eq!(hex(&bytes), *expected, "{}", asm);
+        }
+    }
+
+    #[test]
+    fn not_rejects_invalid_operands() {
+        for asm in [
+            "not",
+            "not %eax, %ebx",
+            "notq %eax",
+            "notb %ax",
+            "not $1",
+            "not %xmm0",
         ] {
             assert!(assemble(asm).is_err(), "{} should fail", asm);
         }

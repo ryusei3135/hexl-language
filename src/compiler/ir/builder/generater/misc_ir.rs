@@ -378,12 +378,14 @@ mod self_ty_tests {
                 ArgsNode {
                     name: "self".to_string(),
                     ty: ast::TyNode::SelfTy("Name".to_string()),
+                    unsafe_contract_ptr_arithmetic: false,
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
                 ArgsNode {
                     name: "param".to_string(),
                     ty: ast::TyNode::Ty("int".to_string()),
+                    unsafe_contract_ptr_arithmetic: false,
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
@@ -416,12 +418,14 @@ mod self_ty_tests {
                 ArgsNode {
                     name: "param".to_string(),
                     ty: ast::TyNode::Ty("int".to_string()),
+                    unsafe_contract_ptr_arithmetic: false,
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
                 ArgsNode {
                     name: "self".to_string(),
                     ty: ast::TyNode::SelfTy("Name".to_string()),
+                    unsafe_contract_ptr_arithmetic: false,
                     var_attr: parse::VarMutAttr::Invar,
                     span: test_span(),
                 },
@@ -442,6 +446,7 @@ mod self_ty_tests {
             vec![ArgsNode {
                 name: "self".to_string(),
                 ty: ast::TyNode::SelfTy("Name".to_string()),
+                unsafe_contract_ptr_arithmetic: false,
                 var_attr: parse::VarMutAttr::Invar,
                 span: test_span(),
             }],
@@ -660,6 +665,40 @@ mod method_call_via_member_tests {
             body.iter().any(|inst| matches!(
                 inst,
                 inst::Inst::CallFunc(inst::CallFuncMetaData{name, ..}) if name == "get_num"
+            )),
+            "{:?}",
+            body
+        );
+    }
+
+    #[test]
+    fn calling_method_on_struct_field_passes_field_address_as_self() {
+        let nodes = parse_test_source(
+            "struct Inner { \
+                 pub get_num(self: Self*): int { ret 7 } \
+             } \
+             struct Outer { \
+                 inner: Inner \
+                 pub get_inner_num(self: Self*): int { ret self->inner.get_num() } \
+             } \
+             main(): int { ret 0 }",
+        );
+
+        let mut ir = new_test_ir();
+        ir.builder::<crate::compiler::ir::result_mod::PanicErr>(&nodes)
+            .unwrap();
+
+        let body = ir.test_only_get_method_body("Outer", "get_inner_num");
+        assert!(
+            body.iter()
+                .any(|inst| matches!(inst, inst::Inst::GetAddress(_))),
+            "the field address must be passed as the implicit self argument: {:?}",
+            body
+        );
+        assert!(
+            body.iter().any(|inst| matches!(
+                inst,
+                inst::Inst::CallFunc(inst::CallFuncMetaData { name, .. }) if name == "get_num"
             )),
             "{:?}",
             body

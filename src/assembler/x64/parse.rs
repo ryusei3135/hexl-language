@@ -492,9 +492,15 @@ impl Parser {
         if !matches!(self.current(), Token::NewLine | Token::Eof) {
             loop {
                 if is_directive {
-                    operands.push(self.parse_directive_operand()?);
+                    operands.push(
+                        self.parse_directive_operand()
+                            .map_err(|err| format!("{}: {}", name, err))?,
+                    );
                 } else {
-                    operands.push(self.parse_operand()?);
+                    operands.push(
+                        self.parse_operand()
+                            .map_err(|err| format!("{}: {}", name, err))?,
+                    );
                 }
 
                 if matches!(self.current(), Token::Comma) {
@@ -821,6 +827,12 @@ mod robustness_tests {
     fn unexpected_character_is_error() {
         assert!(Lexer::new("mov @, %rax").tokenize().is_err());
         assert!(Lexer::new("mov \u{3042}").tokenize().is_err());
+    }
+
+    #[test]
+    fn invalid_operand_error_includes_instruction_name() {
+        let err = parse("mov , %rax").unwrap_err();
+        assert!(err.contains("mov: invalid operand: Comma"));
     }
 
     #[test]

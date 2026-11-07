@@ -89,7 +89,7 @@ impl OptSettings {
             dump: self.dump,
             dump_only: self.dump_only,
             os: None,
-            emit_asm: false,
+            emit_asm: self.emit_asm,
             cpu: self.cpu.clone(),
             opt_flags: Some(OptFlags::SetFile),
         }
@@ -515,5 +515,18 @@ pub fn run(args: impl IntoIterator<Item = String>) -> process::ExitCode {
             eprintln!("エラー: {}", e);
             process::ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod opt_settings_tests {
+    use super::*;
+
+    #[test]
+    fn new_file_preserves_assembly_output_flag() {
+        let mut settings = OptSettings::new(OptFlags::SetFile);
+        settings.emit_asm = true;
+
+        assert!(settings.new_file("library.hexl").emit_asm);
     }
 }

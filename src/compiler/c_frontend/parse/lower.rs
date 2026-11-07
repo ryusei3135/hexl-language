@@ -309,6 +309,7 @@ impl Lowerer {
             params.push(ArgsNode {
                 name,
                 ty: self.to_ty(&p.ty, f.line)?,
+                unsafe_contract_ptr_arithmetic: false,
                 var_attr: if p.ty.is_const() {
                     VarMutAttr::Invar
                 } else {

@@ -182,6 +182,16 @@ impl IR {
             ExprTy::Plain | ExprTy::Unresolved => None,
         };
         let Some(held) = held else {
+            if param.unsafe_contract_ptr_arithmetic {
+                if let Some(base) = self.contract_ptr_arithmetic_base(arg, expected) {
+                    if let Some(var_name) = Self::contract_var_name(base) {
+                        self.var_tree
+                            .ensure_contract_alive(var_name, Rc::clone(&arg.span))
+                            .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
+                    }
+                    return Ok(());
+                }
+            }
             return CompileErr::constract_of_requires_must(
                 &fn_name,
                 &param.name,
@@ -211,6 +221,30 @@ impl IR {
                 .map_err(|err| err.with_span(Rc::clone(&self.current_span)))?;
         }
         Ok(())
+    }
+
+    fn contract_ptr_arithmetic_base<'a>(
+        &self,
+        arg: &'a Expr,
+        expected: Option<&String>,
+    ) -> Option<&'a Expr> {
+        if let ExprTy::Known(ty) = self.expr_ty_node(arg) {
+            if let Some(contract) = ty.as_contract_must() {
+                let name_matches = expected.map_or(true, |expected| {
+                    contract.must_name().map(String::as_str) == Some(expected)
+                });
+                if name_matches && matches!(contract.unwrap_ty(), TyNode::Pointer { .. }) {
+                    return Some(arg);
+                }
+            }
+        }
+
+        match &arg.node {
+            ExprNode::Add((left, right)) | ExprNode::Sub((left, right)) => self
+                .contract_ptr_arithmetic_base(left, expected)
+                .or_else(|| self.contract_ptr_arithmetic_base(right, expected)),
+            _ => None,
+        }
     }
 
     /// 契約を持つ値を渡す変数の名前(`&x` / `*x`のように包まれていても中身を辿る)

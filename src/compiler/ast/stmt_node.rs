@@ -21,6 +21,8 @@ pub enum FuncDefInfo {
 pub struct ArgsNode {
     pub name: String,
     pub ty: TyNode,
+    /// `RefContract`引数で、契約付きポインタの加減算結果を受け取れるか
+    pub unsafe_contract_ptr_arithmetic: bool,
     pub var_attr: VarMutAttr,
     pub span: NodeSpan,
 }

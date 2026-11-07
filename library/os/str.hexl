@@ -27,7 +27,7 @@
 // ---------------------------------------------------------------
 
 // src から dst へ n バイトコピーする。n が 0 以下なら何もしない。
-os_copy(dst: i64, src: i64, n: i64) {
+os_copy(dst: byte*[must=free]"unsafe", src: i64, n: i64) {
     cond n > 0 {
         #asm(gcc_x64) {
             "movq ${dst + 0}, %rax"
@@ -426,22 +426,19 @@ pub struct Str {
         cond c < 16 {
             c = 16
         }
-        s mut := Self {
-            buf: mem::malloc<byte>(c)
-            len: 0
+        buf: byte* must=free = mem::malloc<byte>(c)
+        len mut: u64 = n
+        cond buf == 0 {
+            c = 0
+            len = 0
+        } else {
+            os_copy(buf, src, n)
+        }
+        ret Self {
+            buf: buf
+            len: len
             cap: c
         }
-        // 構造体リテラルの malloc の契約(must=free)が、次の文で変数を定義するまで残るため、
-        // 変数定義を含まない代入文を1つ挟んで、先に消化させる。
-        s.len = 0
-        a: byte* = s.buf
-        cond a == 0 {
-            s.cap = 0
-        } else {
-            os_copy(a, src, n)
-            s.len = n
-        }
-        ret s
     }
 
     pub del(self: Self*of new) {
@@ -450,8 +447,7 @@ pub struct Str {
 
     // 末尾に1バイト追加する。再確保に失敗したら何もしない。
     pub push(self mut: Self*, chr: byte) {
-        ok: u64 = reserve(self, self->len + 1)
-        cond ok == 1 {
+        cond reserve(self, self->len + 1) == 1 {
             l: u64 = self->len
             [self->buf l else 0] = chr
             self->len += 1
@@ -504,14 +500,11 @@ pub struct Str {
 
     // 末尾に str(NUL 終端)を追加する。再確保に失敗したら何もしない。
     pub push_str(self mut: Self*, str: byte*) {
-        src: i64 = str
+        src: u64 = str
         m: u64 = os_strlen(src)
         cond m > 0 {
-            ok: u64 = reserve(self, self->len + m)
-            cond ok == 1 {
-                base: i64 = self->buf
-                dst: i64 = base + self->len
-                os_copy(dst, src, m)
+            cond reserve(self, self->len + m) == 1 {
+                os_copy(self->buf + self->len, src, m)
                 self->len += m
             }
         }
@@ -546,8 +539,7 @@ reserve(s: Str*, need: u64): u64 {
     cond s->cap >= need {
         ret 1
     }
-    ok: bool = s->realloc()
-    cond ok == 1 {
+    cond s->realloc() == 1 {
         ret reserve(s, need)
     }
     ret 0

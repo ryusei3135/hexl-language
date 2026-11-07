@@ -13,8 +13,11 @@ impl AsmEmitter {
             "mov"
         } else if self.fn_state.curr_inst[param].is_pointer() {
             "address"
-        } else if self.fn_state.curr_inst[param].is_float(&self.fn_state.curr_inst) {
-            match self.fn_state.curr_inst[param].get_param_ty() {
+        } else if self.fn_state.curr_inst[param]
+            .get_param_ty(&self.fn_state.curr_inst)
+            .is_some_and(|ty| ty.is_float())
+        {
+            match self.fn_state.curr_inst[param].get_param_ty(&self.fn_state.curr_inst) {
                 Some(types::Size::F32) => "float_mov",
                 Some(types::Size::F64) => "f64_mov",
                 _ => panic!("floating-point argument has non-floating-point type"),
@@ -43,7 +46,12 @@ impl AsmEmitter {
         }
         let node = &self.fn_state.curr_inst[idx];
         match node {
-            inst::Inst::Param(param) if node.get_param_ty()?.is_pointer().is_some() => {
+            inst::Inst::Param(param)
+                if node
+                    .get_param_ty(&self.fn_state.curr_inst)?
+                    .is_pointer()
+                    .is_some() =>
+            {
                 Some(param.name.to_string())
             }
             _ => None,
@@ -66,7 +74,7 @@ impl AsmEmitter {
             // (レジスタの取得だけでなく、後段のニーモニックの
             //  サイズ決定にも同じサイズを使う必要がある)
             let param_ty = self.fn_state.curr_inst[*param]
-                .get_param_ty()
+                .get_param_ty(&self.fn_state.curr_inst)
                 .ok_or_else(|| err::ErrKind::asm_emit_label_not_found("param type", *param))?;
             // 引数のレジスタを取得
             let param_reg = self.asm_fmt.get_fmt_param::<String>(index, &param_ty)?;

@@ -2,7 +2,7 @@ use crate::compiler::err::undef::UndefKind::*;
 use crate::compiler::err::{CompileErrKind, compile::CompileErr};
 
 use super::*;
-use crate::compiler::ast::{CallInfo, Expr, ExprNode};
+use crate::compiler::ast::{CallInfo, Expr, ExprNode, TyNode};
 use err_factory::member;
 use std::rc::Rc;
 
@@ -49,7 +49,14 @@ impl IR {
             .to_string();
         // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
         self.count_var_use(&member_name, self.id_counter);
-        let struct_name = self.var_tree.get_ty_name(&member_name)?;
+        let struct_name = self.var_tree.get_ty_name(&member_name).map_err(|_| {
+            crate::GenUndefErrResult!(
+                UndefVar,
+                member_name.to_string(),
+                None,
+                Rc::clone(&self.current_span)
+            )
+        })?;
         self.ensure_struct_field_access(&struct_name, name)?;
         let pos: usize = self.struct_tree.get_pos(
             // 変数の名前で登録されている変数の型を取得する
@@ -95,21 +102,105 @@ impl IR {
             .last()
             // スコープ内に関数が存在しない
             .ok_or_else(|| crate::GenUndefErrResult!(UndefMemberInFn, "none".to_string(), None))?;
-        let struct_name = self.var_tree.get_ty_name(&var_name)?;
 
         let mut call_info = call_func_info.clone();
         let self_span = std::rc::Rc::new(self.current_span.clone());
-        let self_var = Expr::new(
-            ExprNode::Var(var_name.to_owned()),
-            std::rc::Rc::clone(&self_span),
-        );
-        call_info.args.insert(
-            0,
-            Expr::new(
-                ExprNode::GetAddress(Box::new(self_var)),
+        let field_receiver = if scope.len() == 2 {
+            Some((scope[0].to_owned(), scope[1].to_owned()))
+        } else if scope.len() == 1 && self.var_tree.get_ty_node(var_name).is_none() {
+            self.active_struct.as_deref().and_then(|owner| {
+                let base_name = [owner, "self"].into_iter().find(|name| {
+                    self.var_tree
+                        .get_ty_name(name)
+                        .is_ok_and(|ty_name| ty_name == owner)
+                })?;
+                self.struct_tree
+                    .get(owner)
+                    .is_some_and(|def| def.fields.iter().any(|field| field.name == var_name))
+                    .then(|| (base_name.to_owned(), var_name.to_owned()))
+            })
+        } else {
+            None
+        };
+        let (struct_name, self_value) = if let Some((base_name, field_name)) = field_receiver {
+            let base_name = base_name.as_str();
+            let field_name = field_name.as_str();
+            let base_ty = self
+                .var_tree
+                .get_ty_node(base_name)
+                .ok_or_else(|| {
+                    crate::GenUndefErrResult!(
+                        UndefVar,
+                        base_name.to_string(),
+                        None,
+                        Rc::clone(&self.current_span)
+                    )
+                })?;
+            let base_struct = self.var_tree.get_ty_name(base_name).map_err(|_| {
+                crate::GenUndefErrResult!(
+                    UndefVar,
+                    base_name.to_string(),
+                    None,
+                    Rc::clone(&self.current_span)
+                )
+            })?;
+            self.ensure_struct_field_access(&base_struct, field_name)?;
+            let field_ty = self
+                .struct_tree
+                .get(&base_struct)
+                .and_then(|def| def.fields.iter().find(|field| field.name == field_name))
+                .ok_or_else(|| member::this_member_is_not_found_struct(field_name).unwrap_err())?
+                .ty
+                .clone();
+
+            let member = Expr::new(
+                if matches!(&base_ty, TyNode::Pointer { .. }) {
+                    ExprNode::PtrMember {
+                        name: base_name.to_owned(),
+                        index: None,
+                        else_idx: None,
+                        target: Box::new(
+                            ExprNode::Var(field_name.to_owned()).with_span(Rc::clone(&self_span)),
+                        ),
+                    }
+                } else {
+                    ExprNode::Member {
+                        scope: vec![base_name.to_owned()],
+                        target: Box::new(
+                            ExprNode::Var(field_name.to_owned()).with_span(Rc::clone(&self_span)),
+                        ),
+                    }
+                },
                 Rc::clone(&self_span),
-            ),
-        );
+            );
+            (
+                field_ty.get_ty_str_name(),
+                Expr::new(
+                    ExprNode::GetAddress(Box::new(member)),
+                    Rc::clone(&self_span),
+                ),
+            )
+        } else {
+            let struct_name = self.var_tree.get_ty_name(var_name).map_err(|_| {
+                crate::GenUndefErrResult!(
+                    UndefVar,
+                    var_name.to_string(),
+                    None,
+                    Rc::clone(&self.current_span)
+                )
+            })?;
+            (
+                struct_name,
+                Expr::new(
+                    ExprNode::GetAddress(Box::new(Expr::new(
+                        ExprNode::Var(var_name.to_owned()),
+                        Rc::clone(&self_span),
+                    ))),
+                    Rc::clone(&self_span),
+                ),
+            )
+        };
+        call_info.args.insert(0, self_value);
 
         let r = self.gen_call_fn_ir::<M>(Some(&struct_name.to_owned()), &call_info, None)?;
         Ok(r)
@@ -129,7 +220,14 @@ impl IR {
         self.count_var_use(ptr_name, self.id_counter);
         // `get_ty_name`はポインタ型の変数に対しては、指す先の
         // 構造体名を返す(`src/ir/def_tree.rs`)
-        let struct_name = self.var_tree.get_ty_name(ptr_name)?;
+        let struct_name = self.var_tree.get_ty_name(ptr_name).map_err(|_| {
+            crate::GenUndefErrResult!(
+                UndefVar,
+                ptr_name.to_string(),
+                None,
+                Rc::clone(&self.current_span)
+            )
+        })?;
         self.ensure_struct_field_access(&struct_name, name)?;
 
         let pos: usize = self.struct_tree.get_pos(&struct_name, name);
@@ -163,7 +261,14 @@ impl IR {
         ptr_name: &str,
         call_func_info: &CallInfo,
     ) -> Result<inst::Inst, err::ErrKind> {
-        let struct_name = self.var_tree.get_ty_name(ptr_name)?;
+        let struct_name = self.var_tree.get_ty_name(ptr_name).map_err(|_| {
+            crate::GenUndefErrResult!(
+                UndefVar,
+                ptr_name.to_string(),
+                None,
+                Rc::clone(&self.current_span)
+            )
+        })?;
 
         let mut call_info = call_func_info.clone();
         call_info.args.insert(
@@ -187,7 +292,14 @@ impl IR {
         let var_name: &str = &scope.last().unwrap();
         // 構造体の変数を使ったことを記録(`src/ir/counter_mnger.rs`)
         self.count_var_use(var_name, self.id_counter);
-        let struct_name = self.var_tree.get_ty_name(&var_name)?;
+        let struct_name = self.var_tree.get_ty_name(var_name).map_err(|_| {
+            crate::GenUndefErrResult!(
+                UndefVar,
+                var_name.to_string(),
+                None,
+                Rc::clone(&self.current_span)
+            )
+        })?;
         self.ensure_struct_field_access(&struct_name, name)?;
 
         // 対象メンバーの型を取得し、要素1つ分のサイズを求める

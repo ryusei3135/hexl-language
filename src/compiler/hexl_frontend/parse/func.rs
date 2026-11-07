@@ -119,10 +119,18 @@ impl Parser {
                     let mut ty = self.define_ty_node()?;
                     // 引数の型が契約か調べ上書き
                     ty = self.contract_after_ty(ty)?;
+                    let unsafe_contract_ptr_arithmetic = match self.current_tkn() {
+                        lex::Tkn::Str(option) if option == "unsafe" => {
+                            self.next_tkn(&[])?;
+                            true
+                        }
+                        _ => false,
+                    };
 
                     args_params.push(ArgsNode {
                         name: name.clone(),
                         ty,
+                        unsafe_contract_ptr_arithmetic,
                         var_attr,
                         span,
                     });

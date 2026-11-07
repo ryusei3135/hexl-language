@@ -626,6 +626,38 @@ g(v: int must=d) { d(v) }
     }
 
     #[test]
+    fn unsafe_borrow_accepts_pointer_arithmetic_without_moving_contract() {
+        assert_ok(
+            "allocate(): int* must=release { ret 0 }
+            release(ptr: int* of release) {}
+            borrow(ptr: int*[must=release]\"unsafe\") {}
+            _start(): int {
+                ptr: int* must=release = allocate()
+                borrow(ptr + 1)
+                borrow((ptr + 1) + 1)
+                release(ptr)
+                ret 0
+            }",
+        );
+    }
+
+    #[test]
+    fn pointer_arithmetic_still_requires_unsafe_borrow_annotation() {
+        assert_err_kind(
+            "allocate(): int* must=release { ret 0 }
+            release(ptr: int* of release) {}
+            borrow(ptr: int*[must=release]) {}
+            _start(): int {
+                ptr: int* must=release = allocate()
+                borrow(ptr + 1)
+                release(ptr)
+                ret 0
+            }",
+            "ContractOfRequiresMust",
+        );
+    }
+
+    #[test]
     fn borrowing_with_other_contract_name_is_error() {
         // `must=c`の契約は、`must=d`の契約を借りる引数へ渡せない
         assert_err(&ref_main_with("x: int must=c = a()\nrd(x)\nc(x)"));
