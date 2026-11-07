@@ -399,16 +399,20 @@ impl StructTree {
         field_name: &str,
     ) -> usize {
         let mut byte_counter = 0;
-        for ref member in self.tree.get(name).expect(name).fields.iter() {
-            let ty = types::Size::try_from_or_emit_struct(
-                &mut |name| self.get_struct_size(name),
-                &member.ty,
-            )
-            .unwrap();
-            byte_counter += ty.to_bytes();
-            if member.name == field_name {
-                return byte_counter;
+        if let Some(struct_def) = self.tree.get(name) {
+            for ref member in struct_def.fields.iter() {
+                let ty = types::Size::try_from_or_emit_struct(
+                    &mut |name| self.get_struct_size(name),
+                    &member.ty,
+                )
+                .unwrap();
+                byte_counter += ty.to_bytes();
+                if member.name == field_name {
+                    return byte_counter;
+                }
             }
+        } else {
+            return types::embe_ty_sort(name).unwrap().to_bytes();
         }
 
         panic!();

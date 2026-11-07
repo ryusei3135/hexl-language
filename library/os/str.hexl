@@ -426,7 +426,7 @@ pub struct Str {
         cond c < 16 {
             c = 16
         }
-        s := Self {
+        s mut := Self {
             buf: mem::malloc<byte>(c)
             len: 0
             cap: c
@@ -523,7 +523,7 @@ pub struct Str {
 
     // 容量を倍にする(0 のときは 16)。失敗したら 0 を返し、buf は空になる。
     realloc(self mut: Self*): bool {
-        newcap: u64 = self->cap * 2
+        newcap mut: u64 = self->cap * 2
         cond newcap < 16 {
             newcap = 16
         }
