@@ -121,6 +121,11 @@ impl AsmEmitter {
             self.asm_text.push_str(&call_asm);
             self.fn_state.emitted_calls.push(parent_id);
         }
+        // 構造体の戻り値は隠しポインタ経由で呼び出し先が書き込む。
+        // `mov_struct_var`は呼び出し自体だけが必要で、戻り値レジスタは参照しない。
+        if matches!(this_is_self, Some(types::Size::Struct(..))) {
+            return Ok(String::new());
+        }
         // 戻り値のレジスタ(0番、`%eax`など)を返す。
         // 戻り値を受ける側の型(`this_is_self`)がある
         // 場合はそのサイズ、なければ64bit(`%rax`)
@@ -196,6 +201,32 @@ mod tests {
 
         assert!(!result.is_empty());
         assert_eq!(result, repeated_result);
+        assert_eq!(emitter.asm_text.matches("call").count(), 1);
+    }
+
+    #[test]
+    fn struct_return_call_does_not_request_a_register() {
+        let err_pool = Rc::new(RefCell::new(err_pool::ErrPool::new()));
+        let mut emitter = AsmEmitter::new(
+            asm_setting::load_setting().unwrap(),
+            None,
+            "linux",
+            &err_pool,
+            OptMode::O1,
+            CpuKind::X64,
+        );
+        let call = inst::CallFuncMetaData::new(
+            "constructor".to_string(),
+            crate::ir::IS_NOT_ASSIGN_EXPR,
+            None,
+        );
+        let struct_ty = types::Size::Struct(Vec::new());
+
+        let result = emitter
+            .call_result_operand(0, &call, Some(&struct_ty))
+            .unwrap();
+
+        assert!(result.is_empty());
         assert_eq!(emitter.asm_text.matches("call").count(), 1);
     }
 }

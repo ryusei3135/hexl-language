@@ -240,6 +240,10 @@ impl FnDefMetaData {
         self.module.as_ref().map(|x| x.as_str())
     }
 
+    pub(in crate::compiler::ir) fn owner(&self) -> Option<&str> {
+        self.owner.as_deref()
+    }
+
     pub(in crate::compiler::ir) fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
         FnDefInfo::new(
             self.name.clone(),

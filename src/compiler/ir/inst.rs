@@ -172,7 +172,10 @@ pub enum Inst {
         after: types::Size,
     },
 
-    ExternFunc(String),
+    ExternFunc {
+        name: String,
+        self_ty: Option<String>,
+    },
     Expr(ExprInst),
     /// スコープの開始位置
     /// アセンブリ言語の生成時、これ以降に使用中として登録された

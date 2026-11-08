@@ -85,8 +85,10 @@ impl IR {
     /// アセンブリ言語を出力する際にだけ使う
     pub(super) fn make_extern_func_inst(&mut self, fn_tree: &[def_tree::FnDefMetaData]) {
         fn_tree.iter().for_each(|func| {
-            self.extern_funcs
-                .push(inst::Inst::ExternFunc(func.name.clone()));
+            self.extern_funcs.push(inst::Inst::ExternFunc {
+                name: func.name.clone(),
+                self_ty: func.owner().map(str::to_owned),
+            });
         });
     }
 

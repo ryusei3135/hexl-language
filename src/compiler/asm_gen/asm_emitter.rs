@@ -187,9 +187,8 @@ impl AsmEmitter {
     #[inline(always)]
     fn gen_extern_func_asm(&mut self, extern_funcs: &[inst::Inst]) {
         extern_funcs.iter().for_each(|func| {
-            if let inst::Inst::ExternFunc(name) = func {
-                // 外部の関数は、型の情報を持たない
-                let label = emit_fn_name_id(name, None);
+            if let inst::Inst::ExternFunc { name, self_ty } = func {
+                let label = emit_fn_name_id(name, self_ty.as_deref());
                 self.asm_text
                     .push_str(self.asm_fmt.get_extern_func(&label).as_str());
             } else {

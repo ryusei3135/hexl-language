@@ -255,6 +255,10 @@ mod tests {
             emit_fn_name_id("Foo::bar", Some("Foo")),
             "_RNvMC4hexlNtC4hexl3Foo3bar"
         );
+        assert_eq!(
+            emit_fn_name_id("new", Some("Cmdln")),
+            "_RNvMC4hexlNtC4hexl5Cmdln3new"
+        );
     }
 
     #[test]
