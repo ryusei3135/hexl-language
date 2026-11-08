@@ -198,7 +198,14 @@ impl FuncTree {
 
 #[derive(Clone, Debug)]
 pub struct FnDefMetaData {
+    /// `#include`した側から見たモジュール名(エイリアスやファイル名由来)。
+    /// 呼び出しの関数を探すキーに使う。`add_self_module_name`で上書きされる
     module: Option<String>,
+    /// 関数を定義したファイルでの`FnDefInfo::module`と同じ値
+    /// (構造体のメゾットなら構造体の名前、それ以外は`None`)。
+    /// `module`と違い`#include`で上書きされない。関数のラベル(`asm_gen`)は
+    /// 定義したファイルで作られるので、呼び出し側もこの値で作る
+    owner: Option<String>,
     pub name: String,
     params: Vec<ArgsNode>,
     ret_ty: Option<TyNode>,
@@ -214,6 +221,7 @@ impl FnDefMetaData {
     pub(in crate::compiler::ir) fn new(info: &FuncDefine, module: Option<&String>) -> Self {
         Self {
             module: module.map(|v| v.clone()),
+            owner: info.module.clone(),
             name: info.name.clone(),
             params: info.params.clone(),
             ret_ty: Some(info.ret_ty.clone()),
@@ -235,7 +243,9 @@ impl FnDefMetaData {
     pub(in crate::compiler::ir) fn gen_fn_def(&self, stk_size: usize) -> FnDefInfo {
         FnDefInfo::new(
             self.name.clone(),
-            None,
+            // 定義したファイルでのラベルと同じになるよう、`#include`のモジュール名ではなく
+            // 構造体の名前(メゾットでなければ`None`)を入れる
+            self.owner.clone(),
             self.params.clone(),
             Vec::new(),
             self.ret_ty.clone(),

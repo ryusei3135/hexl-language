@@ -94,6 +94,9 @@ pub struct CallFuncMetaData {
     pub path: Vec<String>,
     pub public: bool,
     pub name: String,
+    /// 呼ぶ関数が属しているモジュール名。構造体のメゾットの場合は、構造体の名前
+    /// (`FnDefInfo::module`と同じ値。`asm_gen`で関数のラベルを作るのに使う)
+    pub module: Option<String>,
     pub temp_ty: Vec<TyNode>,
     pub params: Vec<ValueId>,
 
@@ -111,6 +114,7 @@ impl CallFuncMetaData {
             path: Vec::new(),
             public: false,
             name,
+            module: None,
             temp_ty: Vec::new(),
             params: Vec::new(),
             parent: start_expr,

@@ -85,7 +85,8 @@ impl fmt::Display for UndefErrs {
             f,
             err::CAT_UNDEF,
             &self.title(),
-            err::span_loc(self.span.as_ref()).map(|s| s as &dyn fmt::Display),
+            // 位置が分からないときも、`Span::unknown()`の位置を表示する
+            &err::span_display(self.span.as_ref()),
         )
     }
 }

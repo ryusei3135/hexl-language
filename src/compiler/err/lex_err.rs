@@ -26,12 +26,7 @@ pub struct LexErrs {
 
 impl fmt::Display for LexErrs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_err(
-            f,
-            CAT_LEX,
-            &self.kind,
-            span_loc(Some(&self.span)).map(|s| s as &dyn fmt::Display),
-        )
+        write_err(f, CAT_LEX, &self.kind, &*self.span)
     }
 }
 

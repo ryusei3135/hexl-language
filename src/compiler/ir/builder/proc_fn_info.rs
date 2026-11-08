@@ -139,6 +139,10 @@ impl IR {
             },
         );
         func_meta_data.temp_ty = meta_data.temp_ty.clone();
+        // 構造体のメゾットなら、構造体の名前(関数のラベルに含める)。
+        // `io::exit(..)`の`io`のような`#include`のモジュール名は、関数を定義した
+        // ファイルのラベルに含まれないので、`module_name`ではなく定義の`module`を使う
+        func_meta_data.module = defined_func_data.module.clone();
 
         if return_var_name.is_some() {
             let ret_ty = defined_func_data

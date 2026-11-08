@@ -144,7 +144,8 @@ impl fmt::Display for Span {
 // エラー表示の共通部品
 //
 // すべてのエラーの`Display`は `{種別}: {メッセージ} [{位置}]` に統一する。
-// 位置が無い(または`Span::unknown()`の)ときは ` [{位置}]` を省く。
+// 位置は必ず表示する。位置が分からない(`None`または`Span::unknown()`の)ときも
+// ` [{位置}]` を省かず、`Span::unknown()`の位置(`<unknown>の0行目 0文字目`)を出す。
 // ---------------------------------------------------------------------
 
 pub const CAT_SYNTAX: &str = "構文エラー";
@@ -156,21 +157,26 @@ pub const CAT_INTERNAL: &str = "内部エラー";
 pub const CAT_OPT: &str = "オプションエラー";
 
 /// 位置が分かっているときだけ`Some`を返す
+///
+/// 表示には使わない(表示は[`span_display`]で、位置不明でも必ず出す)。
+/// 「ファイル名が分かるか」の判定(`file_name()`など)に使う
 pub(crate) fn span_loc(span: Option<&Rc<Span>>) -> Option<&Span> {
     span.map(|s| &**s).filter(|s| !s.is_unknown())
 }
 
-/// `{種別}: {メッセージ} [{位置}]` を書き出す
+/// 表示用の位置を必ず返す。`None`のときは`Span::unknown()`と同じ位置になる
+pub(crate) fn span_display(span: Option<&Rc<Span>>) -> Span {
+    span.map(|s| (**s).clone()).unwrap_or_else(Span::unknown)
+}
+
+/// `{種別}: {メッセージ} [{位置}]` を書き出す(位置は必ず出す)
 pub(crate) fn write_err(
     f: &mut fmt::Formatter<'_>,
     category: &str,
     msg: &dyn fmt::Display,
-    loc: Option<&dyn fmt::Display>,
+    loc: &dyn fmt::Display,
 ) -> fmt::Result {
-    match loc {
-        Some(loc) => write!(f, "{}: {} [{}]", category, msg, loc),
-        None => write!(f, "{}: {}", category, msg),
-    }
+    write!(f, "{}: {} [{}]", category, msg, loc)
 }
 
 /// エラーが「どこで(`Span`)」「どの関数で」発生したかをまとめた情報。
@@ -255,19 +261,20 @@ pub enum ErrKind {
 impl fmt::Display for ErrKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NotFoundTkn(t) => {
-                write_err(f, CAT_SYNTAX, &format!("`{:?}`が見つかりません", t), None)
+            // 位置を持たないエラーも、`Span::unknown()`の位置を表示する
+            Self::NotFoundTkn(t) => write_err(
+                f,
+                CAT_SYNTAX,
+                &format!("`{:?}`が見つかりません", t),
+                &Span::unknown(),
+            ),
+            Self::UnexpectedToken => {
+                write_err(f, CAT_SYNTAX, &"予期しないトークンです", &Span::unknown())
             }
-            Self::UnexpectedToken => write_err(f, CAT_SYNTAX, &"予期しないトークンです", None),
             Self::Syntax(e) => write!(f, "{}", e),
             Self::Preproc(e) => write!(f, "{}", e),
             Self::CompileErr(e) => write!(f, "{}", e),
-            Self::CompileErrAt(e) => write_err(
-                f,
-                CAT_COMPILE,
-                &e.error.kind.title(),
-                span_loc(Some(&e.span)).map(|s| s as &dyn fmt::Display),
-            ),
+            Self::CompileErrAt(e) => write_err(f, CAT_COMPILE, &e.error.kind.title(), &*e.span),
             Self::Undef(e) => write!(f, "{}", e),
             Self::CompilerErr(e) => write!(f, "{}", e),
         }
@@ -361,7 +368,11 @@ mod tests {
     #[test]
     fn undef_err_gets_span_from_with_span() {
         let e = undef::UndefErrs::undef_fn("foo");
-        assert_eq!(e.to_string(), "未定義エラー: 関数`foo`が見つかりません");
+        // 位置が未設定でも、位置(`Span::unknown()`)は必ず表示される
+        assert_eq!(
+            e.to_string(),
+            "未定義エラー: 関数`foo`が見つかりません [<test>の0行目 0文字目]"
+        );
         let e = e.with_span(Rc::new(Span::new(
             2,
             5,
@@ -392,7 +403,17 @@ mod tests {
             CompileErrKind::BreakOutsideLoop,
             Rc::new(Span::unknown()),
         )));
-        assert!(!e.to_string().contains('['));
+        // 位置が分からなくても、位置(`Span::unknown()`)は必ず表示される
+        assert_eq!(
+            e.to_string(),
+            format!(
+                "コンパイルエラー: {} [{}]",
+                CompileErrKind::BreakOutsideLoop.title(),
+                Span::unknown()
+            )
+        );
+        assert!(e.to_string().ends_with("[<test>の0行目 0文字目]"));
+        // ファイル名は、位置が分からないので`None`のまま
         assert_eq!(e.file_name(), None);
     }
 
@@ -452,7 +473,7 @@ mod tests {
         );
         assert_eq!(
             e.to_string(),
-            "内部エラー: `add_path`は、文字列リテラルの`#include`のパスには使えません"
+            "内部エラー: `add_path`は、文字列リテラルの`#include`のパスには使えません [<test>の0行目 0文字目]"
         );
         assert_eq!(
             PreprocErrs::InvalidAsmOperandText("x".into()).to_string(),

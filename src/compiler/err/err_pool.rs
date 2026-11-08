@@ -15,6 +15,8 @@
 //! エラー箇所のソースコードを表示するには、先に[`ErrPool::add_source`]で
 //! ファイル名(`Span`が持つファイル名と同じ文字列)とソースコードを登録する。
 //! 登録されていないファイルは、位置(`file:line:pos`)だけを表示する。
+//! 位置(`-->`の行)は、どのエラーでも必ず表示する。位置が分からないエラーは
+//! `Span::unknown()`の位置(`<unknown>:0:0`)を表示する。
 
 use crate::compiler::err;
 
@@ -46,6 +48,13 @@ struct Diag {
     help: Option<String>,
     /// 追加するコードの修正案(`(見出し, コード)`)。エラーの行の次の行に挿入する形で出す
     suggestion: Option<(String, String)>,
+}
+
+impl Diag {
+    /// 位置が分かるか(`Span::is_unknown`の逆)
+    fn is_located(&self) -> bool {
+        !(self.line == 0 && self.pos == 0)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -160,7 +169,7 @@ impl ErrPool {
     /// `CompileErr`(型・契約・配列の範囲などの意味解析のエラー)を表示する
     ///
     /// ファイル名は`Span`が持っている。`Span::unknown()`(アセンブリ生成の段階など)の
-    /// ときは、`-->`とソース行は出さない
+    /// ときも`-->`は出す(ソース行だけ出さない)
     fn render_compile_err(&self, n: &err::CompileErr, color: bool) -> String {
         let (file, line, pos) = pos_of(&n.span);
         self.render_diag(
@@ -181,13 +190,10 @@ impl ErrPool {
 
     /// 未定義のエラー(変数・関数・型・メンバーなど)を表示する
     ///
-    /// `UndefErrs`の位置(`span`)が分かっていれば`-->`とソース行も出す。
-    /// 分からない(`None`)ときは、`= note:`/`= help:`だけを出す
+    /// `-->`は必ず出す。`UndefErrs`の位置(`span`)が分からない(`None`)ときは
+    /// `Span::unknown()`の位置を出し、ソース行は出さない
     fn render_undef_err(&self, n: &err::undef::UndefErrs, color: bool) -> String {
-        let (file, line, pos) = match err::span_loc(n.span.as_ref()) {
-            Some(span) => pos_of(span),
-            None => (String::new(), 0, 0),
-        };
+        let (file, line, pos) = pos_of(&err::span_display(n.span.as_ref()));
         self.render_diag(
             &Diag {
                 code: n.code().to_string(),
@@ -225,10 +231,7 @@ impl ErrPool {
 
     /// コンパイラ自身のエラー(内部エラー)を表示する
     fn render_compiler_err(&self, n: &err::CompilerErr, color: bool) -> String {
-        let (file, line, pos) = match err::span_loc(n.span.as_ref()) {
-            Some(span) => pos_of(span),
-            None => (String::new(), 0, 0),
-        };
+        let (file, line, pos) = pos_of(&err::span_display(n.span.as_ref()));
         self.render_diag(
             &Diag {
                 code: n.kind.code().to_string(),
@@ -245,15 +248,16 @@ impl ErrPool {
         )
     }
 
-    /// コードも位置も無いエラーを表示する
+    /// コードも位置も無いエラーを表示する(位置は`Span::unknown()`のものを出す)
     fn render_simple_err(&self, title: String, color: bool) -> String {
+        let (file, line, pos) = pos_of(&Span::unknown());
         self.render_diag(
             &Diag {
                 code: String::new(),
                 title,
-                file: String::new(),
-                line: 0,
-                pos: 0,
+                file,
+                line,
+                pos,
                 label: String::new(),
                 notes: Vec::new(),
                 help: None,
@@ -283,27 +287,33 @@ impl ErrPool {
             bold(&format!(": {}", title), color)
         ));
 
-        let line_no = d.line.saturating_sub(LINE_BASE) + 1; // 表示する行番号(1始まり)
-        let col_no = d.pos.saturating_sub(POS_BASE) + 1; // 表示する列(1始まり)
+        // 位置が分かるか(`Span::is_unknown`と同じ判定)。分からないときも`-->`は出すが、
+        // 行・列は`0:0`のまま出し(1始まりへ直さない)、ソース行は出さない
+        let has_loc = d.is_located();
+        let line_no = if has_loc {
+            d.line.saturating_sub(LINE_BASE) + 1 // 表示する行番号(1始まり)
+        } else {
+            0
+        };
+        let col_no = if has_loc {
+            d.pos.saturating_sub(POS_BASE) + 1 // 表示する列(1始まり)
+        } else {
+            0
+        };
         let width = line_no.to_string().len();
         let pad = " ".repeat(width);
         let bar = paint("|", BLUE_BOLD, color);
         let eq = paint("=", BLUE_BOLD, color);
 
-        // 位置が無いエラー(`file`が空)は、`-->`とソース行を出さない
-        let has_loc = !file.is_empty();
-        let pad = if has_loc { pad } else { " ".to_string() };
-        // --> file:line:col
-        if has_loc {
-            out.push_str(&format!(
-                "{}{} {}:{}:{}\n",
-                pad,
-                paint("-->", BLUE_BOLD, color),
-                file,
-                line_no,
-                col_no
-            ));
-        }
+        // --> file:line:col(位置は必ず出す)
+        out.push_str(&format!(
+            "{}{} {}:{}:{}\n",
+            pad,
+            paint("-->", BLUE_BOLD, color),
+            file,
+            line_no,
+            col_no
+        ));
 
         let has_tail = !d.notes.is_empty() || d.help.is_some() || d.suggestion.is_some();
         match self.source_line(file, line_no).filter(|_| has_loc) {
@@ -390,7 +400,7 @@ impl ErrPool {
         let line_no = d.line.saturating_sub(LINE_BASE) + 1;
         let src = self
             .source_line(&d.file, line_no)
-            .filter(|_| !d.file.is_empty());
+            .filter(|_| d.is_located());
         let Some(src_line) = src else {
             return format!(
                 "  {} {}: {}: `{}`\n",
@@ -499,14 +509,10 @@ impl ErrPool {
 
 /// `Span`から`(ファイル名, 行, 文字)`を取り出す
 ///
-/// `Span::unknown()`(位置が分からない)のときは、ファイル名を空にして
-/// `-->`とソース行を出さないようにする
+/// `Span::unknown()`(位置が分からない)のときも、そのまま(`<unknown>`, 0, 0)を返す。
+/// 表示側(`render_diag`)が、位置が分からない場合はソース行だけを省く
 fn pos_of(span: &Span) -> (String, usize, usize) {
-    if span.is_unknown() {
-        (String::new(), 0, 0)
-    } else {
-        (span.file_name().to_string(), span.line, span.pos)
-    }
+    (span.file_name().to_string(), span.line, span.pos)
 }
 
 // ---------------------------------------------------------------------

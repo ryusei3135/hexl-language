@@ -24,7 +24,11 @@ impl AsmEmitter {
         let this_is_self = fn_meta_data.1.first_param_is_self();
         let fn_ret_ty = fn_meta_data.1.get_ret_ty();
         // 新しく関数の作成、
-        let fn_label = Self::fn_label_of(&fn_meta_data.1.name, &fn_meta_data.1.temp_ty);
+        let fn_label = Self::fn_label_of(
+            &fn_meta_data.1.name,
+            fn_meta_data.1.module.as_deref(),
+            &fn_meta_data.1.temp_ty,
+        );
         self.asm_text
             .push_str(&self.asm_fmt.get_label_fmt(&fn_label));
         self.begin_fn_state(&fn_meta_data.1);

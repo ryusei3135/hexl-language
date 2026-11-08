@@ -334,14 +334,9 @@ impl CompileErr {
     /// ```
     ///
     /// 位置は`ファイル名:行:文字`の形式(`Span`が持つファイル名を使う)。
-    /// 位置が分からない(`Span::unknown()`)ときは`-->`の行を出さない
+    /// 位置が分からない(`Span::unknown()`)ときも、`-->`の行は必ず出す
     pub fn message(&self) -> String {
-        let location = if self.span.is_unknown() {
-            String::new()
-        } else {
-            self.span.location()
-        };
-        self.kind.render(&location)
+        self.kind.render(&self.span.location())
     }
 
     /// エラーが発生したソースファイルの名前(位置が分からないときは`None`)
@@ -367,12 +362,7 @@ impl CompileErr {
 
 impl fmt::Display for CompileErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        err::write_err(
-            f,
-            err::CAT_COMPILE,
-            &self.kind.title(),
-            err::span_loc(Some(&self.span)).map(|s| s as &dyn fmt::Display),
-        )
+        err::write_err(f, err::CAT_COMPILE, &self.kind.title(), &*self.span)
     }
 }
 
@@ -777,13 +767,12 @@ impl CompileErrKind {
         }
     }
 
-    /// Rust風の表示を組み立てる。`location`は`ファイル名:行:文字`の文字列(空なら出さない)
+    /// Rust風の表示を組み立てる。`location`は`ファイル名:行:文字`の文字列
+    ///
+    /// 位置は必ず`-->`の行に出す(位置が分からないときは`Span::unknown()`の位置を渡す)
     pub fn render(&self, location: &str) -> String {
         let mut out = format!("error[{}]: {}", self.code(), self.title());
-        // 位置が分からないときは`-->`の行を出さない
-        if !location.is_empty() {
-            out.push_str(&format!("\n  --> {}", location));
-        }
+        out.push_str(&format!("\n  --> {}", location));
         if let Some(note) = self.note() {
             out.push_str(&format!("\n   = note: {note}"));
         }

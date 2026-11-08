@@ -94,7 +94,39 @@ impl AsmEmitter {
 
         let mut start_func = func_tree.func.remove_entry("_start");
 
-        self.gen_global_func_asm(&global_funcs);
+        // 公開する関数のラベル。構造体のメゾットは、`FnDefInfo::module`(構造体の名前)も
+        // ラベルに含める。`pending_funcs`のキーと同じ`fn_label_of`で作るので、
+        // 生成する関数のラベルと必ず一致する。
+        // `fn_name`は、`func`のキー(`Foo::bar`)か、関数の名前(`bar`)のどちらでも探せる
+        // (名前で探すときは、モジュールを持たない関数を優先する)
+        let global_labels: Vec<String> = global_funcs
+            .iter()
+            .map(|fn_name| {
+                let info = func_tree.func.get(fn_name.as_str()).or_else(|| {
+                    let mut same_name = func_tree
+                        .func
+                        .values()
+                        .filter(|info| info.name == *fn_name && !info.is_declaration);
+                    let first = same_name.next();
+                    // 同名が複数あるときは、モジュールを持たないものを優先する
+                    func_tree
+                        .func
+                        .values()
+                        .find(|info| {
+                            info.name == *fn_name && !info.is_declaration && info.module.is_none()
+                        })
+                        .or(first)
+                });
+                match info {
+                    Some(info) => {
+                        Self::fn_label_of(&info.name, info.module.as_deref(), &info.temp_ty)
+                    }
+                    None => emit_fn_name_id(fn_name, None),
+                }
+            })
+            .collect();
+
+        self.gen_global_func_asm(&global_labels);
         self.gen_extern_func_asm(&extern_funcs);
 
         // `_start`以外の関数は、`call_func.rs`の`emit_call_func`が
@@ -115,7 +147,7 @@ impl AsmEmitter {
             if info.is_declaration {
                 continue;
             }
-            let label = Self::fn_label_of(&info.name, &info.temp_ty);
+            let label = Self::fn_label_of(&info.name, info.module.as_deref(), &info.temp_ty);
             self.pending_funcs.insert(label, (name, info));
         }
 
@@ -125,9 +157,8 @@ impl AsmEmitter {
         }
 
         // 公開する関数(未生成のもの)
-        for fn_name in global_funcs {
-            let label = emit_fn_name_id(fn_name);
-            if let Some(mut meta_data) = self.pending_funcs.remove(&label) {
+        for label in &global_labels {
+            if let Some(mut meta_data) = self.pending_funcs.remove(label) {
                 self.emit_callee_fn(&mut meta_data);
             }
         }
@@ -145,12 +176,11 @@ impl AsmEmitter {
     }
 
     #[inline(always)]
-    fn gen_global_func_asm(&mut self, global_funcs: &[String]) {
-        // 自身が公開する関数を生成
-        global_funcs.iter().for_each(|fn_name| {
-            let label = emit_fn_name_id(fn_name);
+    fn gen_global_func_asm(&mut self, global_labels: &[String]) {
+        // 自身が公開する関数を生成(`global_labels`は、関数のラベル)
+        global_labels.iter().for_each(|label| {
             self.asm_text
-                .push_str(self.asm_fmt.get_global_fmt(&label).as_str());
+                .push_str(self.asm_fmt.get_global_fmt(label).as_str());
         });
     }
 
@@ -158,7 +188,8 @@ impl AsmEmitter {
     fn gen_extern_func_asm(&mut self, extern_funcs: &[inst::Inst]) {
         extern_funcs.iter().for_each(|func| {
             if let inst::Inst::ExternFunc(name) = func {
-                let label = emit_fn_name_id(name);
+                // 外部の関数は、型の情報を持たない
+                let label = emit_fn_name_id(name, None);
                 self.asm_text
                     .push_str(self.asm_fmt.get_extern_func(&label).as_str());
             } else {

@@ -37,16 +37,23 @@ struct FnGenCtx<'a> {
 }
 
 impl AsmEmitter {
-    /// 関数のラベル名を作る。ジェネリクス関数は型引数を名前に含める
-    pub(super) fn fn_label_of<T: std::fmt::Debug>(name: &str, temp_ty: &[T]) -> String {
+    /// 関数のラベル名を作る(Rustの`v0`マングリング。詳細は`emit_fn_name.rs`)
+    ///
+    /// `self_ty`は、構造体のメゾットのときの構造体の名前(`FnDefInfo::module` / `CallFuncMetaData::module`)。
+    /// ジェネリクス関数は型引数を名前に含める
+    pub(super) fn fn_label_of<T: std::fmt::Debug>(
+        name: &str,
+        self_ty: Option<&str>,
+        temp_ty: &[T],
+    ) -> String {
         if temp_ty.is_empty() {
-            emit_fn_name_id(name)
+            emit_fn_name_id(name, self_ty)
         } else {
             let generic_args = temp_ty
                 .iter()
                 .map(|ty| format!("{:?}", ty))
                 .collect::<Vec<_>>();
-            emit_generic_fn_name_id(name, &generic_args)
+            emit_generic_fn_name_id(name, self_ty, &generic_args)
         }
     }
 
@@ -64,7 +71,11 @@ impl AsmEmitter {
     ) -> Result<String, err::ErrKind> {
         // 呼ぶ関数がまだ生成されていなければ、ここで`build_fn_process`で生成する
         // (呼んだ側の生成中の状態は退避・復元するので影響しない)
-        let fn_label = Self::fn_label_of(&meta_data.name, &meta_data.temp_ty);
+        let fn_label = Self::fn_label_of(
+            &meta_data.name,
+            meta_data.module.as_deref(),
+            &meta_data.temp_ty,
+        );
         if let Some(mut callee) = self.pending_funcs.remove(&fn_label) {
             self.emit_callee_fn(&mut callee);
         }

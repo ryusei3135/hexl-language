@@ -1,6 +1,6 @@
 //! 構文ではなくこのhexlコンパイラ自身のエラー
 
-use super::{CAT_INTERNAL, Span, span_loc, write_err};
+use super::{CAT_INTERNAL, Span, span_display, write_err};
 use crate::compiler::ir::types;
 use std::fmt;
 use std::rc::Rc;
@@ -80,7 +80,8 @@ impl fmt::Display for CompilerErr {
             f,
             CAT_INTERNAL,
             &self.kind,
-            span_loc(self.span.as_ref()).map(|s| s as &dyn fmt::Display),
+            // 位置が分からないときも、`Span::unknown()`の位置を表示する
+            &span_display(self.span.as_ref()),
         )
     }
 }
