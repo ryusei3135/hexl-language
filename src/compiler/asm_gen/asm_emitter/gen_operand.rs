@@ -92,7 +92,7 @@ impl AsmEmitter {
                 Ok(String::new())
             }
             inst::Inst::CallFunc(call_fn_info) => {
-                self.call_result_operand(parent_id, &call_fn_info, this_is_self)
+                self.call_result_operand(parent_id, &call_fn_info)
             }
             inst::Inst::Pointer(index) => self.extract_operand_text(index, this_is_self),
             t => self.expr_result_operand(parent_id, &t),
@@ -107,29 +107,28 @@ impl AsmEmitter {
         &mut self,
         parent_id: usize,
         call_fn_info: &inst::CallFuncMetaData,
-        this_is_self: SelfPtrInfo,
     ) -> Result<String, err::ErrKind> {
         // 関数呼び出しのアセンブリが`build_fn_process`側で
         // 既に生成済みか
         let already_emitted = self.fn_state.emitted_calls.contains(&parent_id);
+        let is_struct_return = matches!(&call_fn_info.ret_ty, Some(types::Size::Struct(..)));
 
         if !already_emitted {
-            let call_asm = self.emit_call_func(
-                call_fn_info,
-                matches!(this_is_self, Some(types::Size::Struct(..))),
-            )?;
+            let call_asm = self.emit_call_func(call_fn_info, is_struct_return)?;
             self.asm_text.push_str(&call_asm);
             self.fn_state.emitted_calls.push(parent_id);
         }
         // 構造体の戻り値は隠しポインタ経由で呼び出し先が書き込む。
         // `mov_struct_var`は呼び出し自体だけが必要で、戻り値レジスタは参照しない。
-        if matches!(this_is_self, Some(types::Size::Struct(..))) {
+        if is_struct_return {
             return Ok(String::new());
         }
-        // 戻り値のレジスタ(0番、`%eax`など)を返す。
-        // 戻り値を受ける側の型(`this_is_self`)がある
-        // 場合はそのサイズ、なければ64bit(`%rax`)
-        let ret_size = this_is_self.map(Self::value_reg_size).unwrap_or(Size::DQ);
+        // 呼び出し先の戻り値型に対応するレジスタを返す。
+        let ret_size = call_fn_info
+            .ret_ty
+            .as_ref()
+            .map(Self::value_reg_size)
+            .unwrap_or(Size::DQ);
         if ret_size.is_float() {
             self.asm_fmt.get_fmt_float_reg(0, &ret_size)
         } else {
@@ -196,11 +195,35 @@ mod tests {
         let call =
             inst::CallFuncMetaData::new("callee".to_string(), crate::ir::IS_NOT_ASSIGN_EXPR, None);
 
-        let result = emitter.call_result_operand(0, &call, None).unwrap();
-        let repeated_result = emitter.call_result_operand(0, &call, None).unwrap();
+        let result = emitter.call_result_operand(0, &call).unwrap();
+        let repeated_result = emitter.call_result_operand(0, &call).unwrap();
 
         assert!(!result.is_empty());
         assert_eq!(result, repeated_result);
+        assert_eq!(emitter.asm_text.matches("call").count(), 1);
+    }
+
+    #[test]
+    fn call_uses_its_return_type_instead_of_the_enclosing_function_type() {
+        let err_pool = Rc::new(RefCell::new(err_pool::ErrPool::new()));
+        let mut emitter = AsmEmitter::new(
+            asm_setting::load_setting().unwrap(),
+            None,
+            "linux",
+            &err_pool,
+            OptMode::O1,
+            CpuKind::X64,
+        );
+        let mut call = inst::CallFuncMetaData::new(
+            "constructor".to_string(),
+            crate::ir::IS_NOT_ASSIGN_EXPR,
+            None,
+        );
+        call.ret_ty = Some(types::Size::DD);
+
+        let result = emitter.call_result_operand(0, &call).unwrap();
+
+        assert_eq!(result, "%eax");
         assert_eq!(emitter.asm_text.matches("call").count(), 1);
     }
 
@@ -215,16 +238,14 @@ mod tests {
             OptMode::O1,
             CpuKind::X64,
         );
-        let call = inst::CallFuncMetaData::new(
+        let mut call = inst::CallFuncMetaData::new(
             "constructor".to_string(),
             crate::ir::IS_NOT_ASSIGN_EXPR,
             None,
         );
-        let struct_ty = types::Size::Struct(Vec::new());
+        call.ret_ty = Some(types::Size::Struct(Vec::new()));
 
-        let result = emitter
-            .call_result_operand(0, &call, Some(&struct_ty))
-            .unwrap();
+        let result = emitter.call_result_operand(0, &call).unwrap();
 
         assert!(result.is_empty());
         assert_eq!(emitter.asm_text.matches("call").count(), 1);

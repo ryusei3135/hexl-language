@@ -573,7 +573,9 @@ impl CompileErrKind {
                 format!("メンバーの命令(`MemoryInst::Member`)ではありません: {found}")
             }
             Self::AsmEmitNotInitArr(id) => {
-                format!("値が空ですが、配列の初期化(`InitArr`)のノードでもありません: node {id}")
+                format!(
+                    "構造体のメンバーの値を作れません(node {id})。構造体を返す関数(`Cmdln::new()`など)を、構造体リテラルのメンバー値には使えません"
+                )
             }
             Self::AsmEmitMemberOffsetUnderflow { total, member } => format!(
                 "メンバーのオフセットを計算できません(累積サイズ{total}byte < メンバーのサイズ{member}byte)"
@@ -692,9 +694,11 @@ impl CompileErrKind {
             | Self::AsmEmitNotTernaryCondKind(..)
             | Self::AsmEmitTernaryCondNotFound(..)
             | Self::AsmEmitNotMemberInst(..)
-            | Self::AsmEmitNotInitArr(..)
             | Self::AsmEmitMemberOffsetUnderflow { .. } => {
                 "IRの並びがアセンブリ生成の前提と合っていません。コンパイラ内部の問題の可能性があります".into()
+            }
+            Self::AsmEmitNotInitArr(..) => {
+                "構造体のメンバーに構造体を値で持たせ、`Name::new()`で初期化する書き方はまだ未対応です(メンバーの配置が重なるため)".into()
             }
             _ => return None,
         })
@@ -703,6 +707,9 @@ impl CompileErrKind {
     /// `= help:`に出す修正案
     pub fn help(&self) -> Option<String> {
         Some(match self {
+            Self::AsmEmitNotInitArr(..) => {
+                "`x: Name = Name::new()`のようにローカル変数へ先に束縛するか、メンバーをポインタ(`Name*`)にしてください".into()
+            }
             Self::InvalidIndexUnsigned(name) => {
                 format!("`{name}`を符号なし整数型(例: `u64`)で定義してください")
             }

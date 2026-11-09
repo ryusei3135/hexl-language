@@ -98,6 +98,8 @@ pub struct CallFuncMetaData {
     /// (`FnDefInfo::module`と同じ値。`asm_gen`で関数のラベルを作るのに使う)
     pub module: Option<String>,
     pub temp_ty: Vec<TyNode>,
+    /// 呼ぶ関数の戻り値の型。構造体は隠しポインタ経由で返すため、戻り値レジスタは使わない
+    pub ret_ty: Option<types::Size>,
     pub params: Vec<ValueId>,
 
     /// 関数を呼ぶ際に、代入する変数があるかをbooleanで表現
@@ -116,6 +118,7 @@ impl CallFuncMetaData {
             name,
             module: None,
             temp_ty: Vec::new(),
+            ret_ty: None,
             params: Vec::new(),
             parent: start_expr,
             stk_capacity,

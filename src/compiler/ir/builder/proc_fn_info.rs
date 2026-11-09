@@ -141,21 +141,25 @@ impl IR {
             },
         );
         func_meta_data.temp_ty = meta_data.temp_ty.clone();
+        let ret_ty = defined_func_data
+            .ret_ty
+            .as_ref()
+            .map(|ret_ty| match ret_ty {
+                TyNode::ConstractMust(contract) | TyNode::ConstractOf(contract) => {
+                    contract.unwrap_ty()
+                }
+                ty => ty.clone(),
+            });
+        func_meta_data.ret_ty = ret_ty
+            .as_ref()
+            .map(|ty| self.try_size_or_emit_struct(ty))
+            .transpose()?;
         // 構造体のメゾットなら、構造体の名前(関数のラベルに含める)。
         // `io::exit(..)`の`io`のような`#include`のモジュール名は、関数を定義した
         // ファイルのラベルに含まれないので、`module_name`ではなく定義の`module`を使う
         func_meta_data.module = defined_func_data.module.clone();
 
         if return_var_name.is_some() {
-            let ret_ty = defined_func_data
-                .ret_ty
-                .as_ref()
-                .map(|ret_ty| match ret_ty {
-                    TyNode::ConstractMust(contract) | TyNode::ConstractOf(contract) => {
-                        contract.unwrap_ty()
-                    }
-                    ty => ty.clone(),
-                });
             if let Some(TyNode::Ty(struct_name)) = ret_ty.as_ref() {
                 if let Some(struct_info) = self.struct_tree.get(&struct_name).cloned() {
                     let size = struct_info

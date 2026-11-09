@@ -22,10 +22,18 @@ impl IR {
                     name
                 )
             }),
-            ExprNode::Add((l, r)) => self.eval_expr(l) + self.eval_expr(r),
-            ExprNode::Sub((l, r)) => self.eval_expr(l) - self.eval_expr(r),
-            ExprNode::Mul((l, r)) => self.eval_expr(l) * self.eval_expr(r),
-            ExprNode::Div((l, r)) => self.eval_expr(l) / self.eval_expr(r),
+            // 変数の記録値は、ループや分岐を考えずに上から順にたどった値なので、
+            // `n mut: u64 = 0`のあとに`n - 1`が来るような式でも、ここで
+            // オーバーフローしてコンパイラが落ちてはいけない。
+            // 実行時の`u64`と同じ折り返し(wrapping)で計算する。
+            // 0での割り算も落とさず0にする
+            ExprNode::Add((l, r)) => self.eval_expr(l).wrapping_add(self.eval_expr(r)),
+            ExprNode::Sub((l, r)) => self.eval_expr(l).wrapping_sub(self.eval_expr(r)),
+            ExprNode::Mul((l, r)) => self.eval_expr(l).wrapping_mul(self.eval_expr(r)),
+            ExprNode::Div((l, r)) => self
+                .eval_expr(l)
+                .checked_div(self.eval_expr(r))
+                .unwrap_or(0),
             _ => panic!(),
         }
     }

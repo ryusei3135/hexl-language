@@ -71,6 +71,14 @@ impl AsmEmitter {
         for (node_idx, node) in self.fn_state.curr_inst.clone().iter().enumerate() {
             // ノードをアセンブリ言語に変換
             if let Err(err_node) = self.gen_node_asm(node_idx, node, &ctx) {
+                // 環境変数`HEXL_DEBUG_ERR`がある場合だけ、エラーが起きた関数とノードを
+                // 標準エラー出力へ出す(エラーに位置情報が無いときの調査用)
+                if std::env::var_os("HEXL_DEBUG_ERR").is_some() {
+                    eprintln!(
+                        "[HEXL_DEBUG_ERR] fn=`{}` node={} inst={:?}",
+                        fn_meta_data.0, node_idx, node
+                    );
+                }
                 self.err_pool.borrow_mut().push_err_node(err_node);
             }
             // これ以降使わない変数のレジスタは解放する
