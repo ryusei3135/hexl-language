@@ -60,6 +60,10 @@ pub struct IR {
     var_counter: counter_mnger::VarCounter,
 
     expr_is_ptr_val: bool,
+    /// 構造体リテラルのメンバー値(`orig: Cmdln::new()`)として、構造体を値で返す関数を
+    /// 呼ぶ直前に`true`にする。呼び出し先が書き込む領域(隠しの`self`引数)を
+    /// 呼び出しに付けるために、`gen_call_fn_ir`が最初に消費する
+    struct_member_ctor: bool,
     /// Someのとき
     /// 参考演算子を処理しているときに、これは例`cmovcc`に変換可能かなどを
     /// 追跡する、もしtrueのままなら参考演算子のIRを生成し

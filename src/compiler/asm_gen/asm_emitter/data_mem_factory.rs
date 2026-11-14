@@ -24,6 +24,30 @@ impl AsmEmitter {
 
             let member_size = Some(size);
 
+            // メンバーが構造体を返す関数の呼び出し(`orig: Cmdln::new()`)の場合、
+            // 呼び出し先が書き込む領域(隠しの`self`ポインタが指す先)を、
+            // 別のスタック領域ではなく、外側の構造体の中のこのメンバーの位置にする。
+            // 呼び出しは`extract_operand_text`で生成されるので、その前に位置を決める
+            if let Some((arg_idx, ptr_idx)) = self.nested_struct_ctor_ptr(*value_idx, this_is_self)
+            {
+                add_size += size.to_bytes();
+                let offset = self.make_member_offset(this_is_self, add_size, size)?;
+                if this_is_self {
+                    // `self`ポインタ(`offset`は`self`からのオフセット)を元に、
+                    // 引数を作る時点でアドレスを計算する
+                    self.fn_state.nested_self_arg.insert(arg_idx, offset);
+                } else {
+                    self.fn_state.struct_stk_map.insert(ptr_idx, offset);
+                }
+                // ここまでのメンバーの書き込みを、呼び出しより先に出力する
+                // (呼び出しでレジスタが壊れ、先のメンバーの値が失われないように)
+                self.asm_text.push_str(&struct_txt);
+                struct_txt.clear();
+                // 呼び出しのアセンブリは`asm_text`へ積まれる。戻り値のオペランドは空
+                let _ = self.extract_operand_text(*value_idx, member_size)?;
+                continue;
+            }
+
             let value = self
                 .extract_operand_text(*value_idx, member_size)?
                 .to_string();
@@ -61,6 +85,28 @@ impl AsmEmitter {
         }
 
         Ok(struct_txt)
+    }
+
+    /// `value_idx`が構造体を返す関数の呼び出しなら、
+    /// `(隠しの`self`引数のノードid, その参照先の`GetPtr`のノードid)`を返す
+    ///
+    /// `this_is_self`のときは、引数を`self`ポインタから計算するので、
+    /// 引数が隠しの`self`だけの呼び出し(`Cmdln::new()`など)に限る
+    fn nested_struct_ctor_ptr(&self, value_idx: usize, this_is_self: bool) -> Option<(usize, usize)> {
+        let inst::Inst::CallFunc(meta_data) = self.inst_at(value_idx) else {
+            return None;
+        };
+        if !matches!(&meta_data.ret_ty, Some(types::Size::Struct(..))) {
+            return None;
+        }
+        if this_is_self && meta_data.params.len() != 1 {
+            return None;
+        }
+        let self_arg = *meta_data.params.get(0)?;
+        let inst::Inst::GetAddress(mem_idx) = self.inst_at(self_arg) else {
+            return None;
+        };
+        matches!(self.inst_at(mem_idx), inst::Inst::GetPtr { .. }).then_some((self_arg, mem_idx))
     }
 
     /// バリアント(`E::a`など)をスタック領域に配置するコードを生成

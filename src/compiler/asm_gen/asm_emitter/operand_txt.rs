@@ -26,7 +26,10 @@ impl AsmEmitter {
             // Result型を返している
             match var_info.reg {
                 RegisterMode::Float(idx) => self.asm_fmt.get_fmt_float_reg(idx, &var_info.size),
-                RegisterMode::Normal(idx) => self.asm_fmt.get_fmt_reg(idx, &var_info.size),
+                // 構造体など値としてレジスタに載る型はアドレス(64bit)を持つ
+                RegisterMode::Normal(idx) => self
+                    .asm_fmt
+                    .get_fmt_reg(idx, &Self::value_reg_size(&var_info.size)),
             }
         }
     }

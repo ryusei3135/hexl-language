@@ -15,7 +15,12 @@ impl IR {
             crate::compiler::ir::checker::ContractFlags::new(),
         );
         let result: Result<usize, err::ErrKind> = (|| {
-            let value_idx = self.gen_expr_ir::<M>(expr, Some(size))?;
+            // メンバーが構造体を値で持つ場合、その値を作る呼び出し(`Cmdln::new()`)は、
+            // 外側の構造体の中へ直接書き込めるよう、隠しの`self`引数を付けて呼ぶ
+            self.struct_member_ctor = matches!(size, types::Size::Struct(..));
+            let value_idx = self.gen_expr_ir::<M>(expr, Some(size));
+            self.struct_member_ctor = false;
+            let value_idx = value_idx?;
             let ty_to_register = self.contract_flag.var_ty_with_return_contract(ty);
             Self::wrap_put_var_def(&mut self.contract_flag, &ty_to_register, &self.current_span)?;
             Ok(value_idx)

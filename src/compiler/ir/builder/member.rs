@@ -154,7 +154,13 @@ impl IR {
                 .clone();
 
             let member = Expr::new(
-                if matches!(&base_ty, TyNode::Pointer { .. }) {
+                if match &base_ty {
+                    // `self: Self*of new`のように契約が付いた型は、内側の型で判定する
+                    TyNode::ConstractMust(c) | TyNode::ConstractOf(c) => {
+                        matches!(c.unwrap_ty(), TyNode::Pointer { .. })
+                    }
+                    t => matches!(t, TyNode::Pointer { .. }),
+                } {
                     ExprNode::PtrMember {
                         name: base_name.to_owned(),
                         index: None,

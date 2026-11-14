@@ -514,10 +514,6 @@ pub struct Str {
         ret self->len
     }
 
-    pub del(self: Self*of new) {
-        mem::free<byte>(self->buf)
-    }
-
     // 容量を倍にする(0 のときは 16)。失敗したら 0 を返し、buf は空になる。
     realloc(self mut: Self*): bool {
         newcap mut: u64 = self->cap * 2

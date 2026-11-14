@@ -49,6 +49,12 @@ pub(in crate::compiler::asm_gen) struct FnState {
     /// スタック領域と重なることがあるため、構造体の実体は
     /// `stk_use_counter`から確保し直す
     pub(in crate::compiler::asm_gen) struct_stk_map: HashMap<usize, usize>,
+    /// `self`ポインタ経由で書き込む構造体(`ret Self { orig: Cmdln::new() .. }`)の
+    /// メンバーとして構造体を返す関数を呼ぶとき、その隠しの`self`引数のノードid
+    /// -> メンバーの`self`ポインタからのオフセット。
+    /// 呼び出し先が書き込む領域のアドレスは`self`ポインタの値から決まるので、
+    /// 引数を作る時点(`build_arg_lines`)で`self`ポインタを元に計算する
+    pub(in crate::compiler::asm_gen) nested_self_arg: HashMap<usize, usize>,
 
     /// 退避したままの変数のレジスタ -> 退避先の`%rbp`からのオフセット
     /// (レジスタの中身は壊れている。その変数を参照するノードの生成前に復元する。

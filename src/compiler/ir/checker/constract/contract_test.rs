@@ -723,4 +723,65 @@ g(v: int must=d) { d(v) }
             }",
         );
     }
+
+    #[test]
+    fn owned_field_can_be_ended_by_its_struct_method() {
+        assert_ok(
+            "struct Child {
+                value: int
+                new(): Self must=del { ret Self { value: 0 } }
+                del(self: Self* of new) {}
+            }
+            struct Parent {
+                child: Child
+                new(): Self must=del { ret Self { child: Child::new() } }
+                del(self: Self* of new) { self->child.del() }
+            }
+            _start(): int {
+                parent: Parent must=del = Parent::new()
+                parent.del()
+                ret 0
+            }",
+        );
+    }
+
+    #[test]
+    fn owned_field_can_be_ended_by_differently_named_struct_method() {
+        // 契約名が`del`以外でも、修飾名("Child::close")で照合されて通る
+        assert_ok(
+            "struct Child {
+                value: int
+                new(): Self must=close { ret Self { value: 0 } }
+                close(self: Self* of new) {}
+            }
+            struct Parent {
+                child: Child
+                new(): Self must=del { ret Self { child: Child::new() } }
+                del(self: Self* of new) { self->child.close() }
+            }
+            _start(): int {
+                parent: Parent must=del = Parent::new()
+                parent.del()
+                ret 0
+            }",
+        );
+    }
+
+    #[test]
+    fn owned_field_requires_its_matching_destructor_method() {
+        assert_err_kind(
+            "struct Child {
+                value: int
+                new(): Self must=close { ret Self { value: 0 } }
+                close(self: Self* of new) {}
+                del(self: Self* of new) {}
+            }
+            struct Parent {
+                child: Child
+                new(): Self must=del { ret Self { child: Child::new() } }
+                del(self: Self* of new) { self->child.del() }
+            }",
+            "ContractOfRequiresMust",
+        );
+    }
 }

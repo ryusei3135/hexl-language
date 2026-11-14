@@ -1,0 +1,30 @@
+{
+  "name": "hexl-language",
+  "displayName": "Hexl Language Support",
+  "description": "Syntax highlighting for Hexl",
+  "version": "1.3.1",
+  "publisher": "hexl",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "hexl",
+        "aliases": ["Hexl", "hexl"],
+        "extensions": [".hexl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hexl",
+        "scopeName": "source.hexl",
+        "path": "./syntaxes/hexl.tmLanguage.json"
+      }
+    ]
+  }
+}

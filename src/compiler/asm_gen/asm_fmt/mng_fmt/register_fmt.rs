@@ -77,6 +77,8 @@ impl MngAsmFmt {
             Size::DD | Size::UDD => &self.reg_fmt.dd,
             Size::DQ | Size::UDQ => &self.reg_fmt.dq,
             Size::Pointer { .. } => &self.reg_fmt.dq,
+            // 構造体の値は、レジスタ上ではアドレス(64bit)として扱う
+            Size::Struct(..) => &self.reg_fmt.dq,
             t => {
                 crate::GenCompilerErr!(CompilerErrKind::ThisTyIsCantConvertRegsiter(size.clone()))?
             }

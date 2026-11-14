@@ -405,7 +405,8 @@ impl MngAsmFmt {
         size: &types::Size,
         is_memory_access: bool,
     ) -> String {
-        if matches!(size, types::Size::Pointer { .. }) {
+        // 構造体の値は、レジスタ上ではアドレス(64bit)として扱う(`get_fmt_reg`と同じ)
+        if matches!(size, types::Size::Pointer { .. } | types::Size::Struct(..)) {
             return self.fmt_mnemonic_resize_inner(
                 mnemonic,
                 value,

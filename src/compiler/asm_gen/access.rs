@@ -119,7 +119,10 @@ impl AsmEmitter {
         let size = var.size.clone();
         match var.reg {
             RegisterMode::Float(idx) => self.asm_fmt.get_fmt_float_reg(idx, &size),
-            RegisterMode::Normal(idx) => self.asm_fmt.get_fmt_reg(idx, &size),
+            // 構造体など値としてレジスタに載る型はアドレス(64bit)を持つ
+            RegisterMode::Normal(idx) => self
+                .asm_fmt
+                .get_fmt_reg(idx, &Self::value_reg_size(&size)),
         }
     }
 

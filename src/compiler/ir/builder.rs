@@ -44,6 +44,7 @@ impl IR {
             contract_flag: checker::ContractFlags::new(),
             var_counter: counter_mnger::VarCounter::new(),
             expr_is_ptr_val: false,
+            struct_member_ctor: false,
             ternatry: None,
             // エラーのノードをスタック
             err_pool: Rc::clone(&err_pool),

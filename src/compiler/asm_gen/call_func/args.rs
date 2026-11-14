@@ -97,6 +97,24 @@ impl AsmEmitter {
                 self.used_reg.mark_used(&param_reg_mode);
             }
 
+            // `self`ポインタ経由で書き込む構造体のメンバーとして呼ぶ場合、
+            // 隠しの`self`引数は`self`ポインタからのオフセット(`-off(%self)`)のアドレス
+            if expand_struct_return && index == 0 {
+                if let (Some(member_off), Some(param_reg)) =
+                    (self.fn_state.nested_self_arg.get(param).copied(), &param_reg)
+                {
+                    // 退避している場合は、退避先から一時レジスタへ読み込んだものをベースにする
+                    let (load, base) = self.self_ptr_base()?;
+                    let operand = self.rbp_ref(member_off).replace(FRAME_BASE_REG, &base);
+                    let lea = self.tmpl_line("address", param_reg, &operand, &Size::DQ, true);
+                    let reg_mode = RegisterMode::Normal(
+                        self.asm_fmt.get_fmt_param::<usize>(index, &param_ty)?,
+                    );
+                    arg_lines.push((reg_mode, operand, format!("{load}{lea}")));
+                    continue;
+                }
+            }
+
             let opcode = self.arg_opcode(*param, index, expand_struct_return);
 
             let resize_size = if opcode == "address" || param_ty.is_pointer().is_some() {

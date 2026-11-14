@@ -67,6 +67,12 @@ impl IR {
             ExprTy::Known(ty) => ty.as_contract_must(),
             ExprTy::Plain | ExprTy::Unresolved => None,
         };
+        // A struct field's ownership is tracked by its containing struct, not
+        // by the field's declared type. Its matching constructor-backed method
+        // may therefore end that field's contract without a `must` type here.
+        if self.is_owned_method_field_receiver(fn_name, fn_module, param, arg, &arg_ty) {
+            return Ok(());
+        }
         // 通常の`self: Self*`は受け手を借りるだけで、所有契約を移動しない
         if arg_must.is_some() && Self::is_borrowed_method_receiver(fn_module, param) {
             if let Some(var_name) = Self::contract_var_name(arg) {
@@ -139,6 +145,69 @@ impl IR {
             }
             (None, None) => Ok(()),
         }
+    }
+
+    fn is_owned_method_field_receiver(
+        &self,
+        fn_name: &str,
+        fn_module: Option<&str>,
+        param: &ArgsNode,
+        arg: &Expr,
+        arg_ty: &ExprTy,
+    ) -> bool {
+        let Some(owner) = fn_module else {
+            return false;
+        };
+        if param.name != "self" {
+            return false;
+        }
+        let Some(contract) = param.ty.as_contract_of() else {
+            return false;
+        };
+        let Some(constructor_name) = contract.of_name() else {
+            return false;
+        };
+        let TyNode::Pointer { ty_name, .. } = contract.unwrap_ty() else {
+            return false;
+        };
+        if ty_name.get_ty_str_name() != owner {
+            return false;
+        }
+
+        let is_pointer_field = matches!(
+            &arg.node,
+            ExprNode::GetAddress(target)
+                if matches!(
+                    &target.node,
+                    ExprNode::PtrMember { target, .. }
+                        if matches!(target.node, ExprNode::Var(_))
+                )
+        );
+        if !is_pointer_field
+            || !matches!(arg_ty, ExprTy::Known(ty) if ty.get_ty_str_name() == owner)
+        {
+            return false;
+        }
+
+        // `#include`した別ファイルの構造体は`func_tree`ではなく
+        // `extern_func_tree`にあるので、そちらも探す
+        self.func_tree
+            .get(constructor_name, Some(owner))
+            .and_then(|constructor| constructor.ret_ty)
+            .or_else(|| {
+                self.extern_func_tree
+                    .iter()
+                    .find(|f| f.name.as_str() == constructor_name && f.module() == Some(owner))
+                    .and_then(|f| f.gen_fn_def(0).ret_ty)
+            })
+            .as_ref()
+            .and_then(|ret_ty| ret_ty.as_contract_must().map(|must| must.must_name()))
+            .flatten()
+            .is_some_and(|must_name| {
+                // メソッドの契約名は所属型で修飾される(`Cmdln::del`)。修飾なしの名前とも照合する
+                must_name.as_str() == fn_name
+                    || must_name.as_str() == format!("{owner}::{fn_name}")
+            })
     }
 
     fn is_borrowed_method_receiver(fn_module: Option<&str>, param: &ArgsNode) -> bool {

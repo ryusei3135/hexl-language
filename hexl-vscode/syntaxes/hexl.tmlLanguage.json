@@ -1,0 +1,114 @@
+{
+  "scopeName": "source.hexl",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#preprocessor"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#contracts"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.hexl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.hexl",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+
+    "strings": {
+      "name": "string.quoted.double.hexl",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.hexl",
+          "match": "\\\\."
+        }
+      ]
+    },
+
+    "preprocessor": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.hexl",
+          "match": "#(include|macro|if|else|comptime)\\b"
+        }
+      ]
+    },
+
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.hexl",
+          "match": "\\b(if|else|loop|ret|break|continue|where)\\b"
+        },
+        {
+          "name": "keyword.other.hexl",
+          "match": "\\b(must|of|move|const|mut)\\b"
+        }
+      ]
+    },
+
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.hexl",
+          "match": "\\b(bool|byte|ubyte|char|u16|i16|int|uint|u64|i64|float|f64)\\b"
+        }
+      ]
+    },
+
+    "contracts": {
+      "patterns": [
+        {
+          "name": "keyword.operator.contract.hexl",
+          "match": "\\b(must|of)\\b"
+        }
+      ]
+    },
+
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.hexl",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hexl",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    }
+  }
+}

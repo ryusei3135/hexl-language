@@ -121,6 +121,8 @@ impl IR {
                 }
             }
         };
+        // 構造体リテラルのメンバー値として呼ばれたか(この呼び出し自身にだけ有効)
+        let as_struct_member = std::mem::take(&mut self.struct_member_ctor);
         // もし戻り値が契約ならフラグを立てる
         self.is_constract_ret(&defined_func_data);
 
@@ -128,7 +130,8 @@ impl IR {
         // 関数のノードを作成
         let mut func_meta_data = inst::CallFuncMetaData::new(
             meta_data.name.clone(),
-            if self.expr_counter == 1 {
+            // メンバー値として呼ぶ場合は、構造体の初期化が呼び出しを生成する
+            if self.expr_counter == 1 && !as_struct_member {
                 IS_NOT_ASSIGN_EXPR
             } else {
                 IS_ASSIGN_EXPR
@@ -159,7 +162,7 @@ impl IR {
         // ファイルのラベルに含まれないので、`module_name`ではなく定義の`module`を使う
         func_meta_data.module = defined_func_data.module.clone();
 
-        if return_var_name.is_some() {
+        if return_var_name.is_some() || as_struct_member {
             if let Some(TyNode::Ty(struct_name)) = ret_ty.as_ref() {
                 if let Some(struct_info) = self.struct_tree.get(&struct_name).cloned() {
                     let size = struct_info
